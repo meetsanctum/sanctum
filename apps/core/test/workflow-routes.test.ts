@@ -9,10 +9,9 @@ import { ActionCallError } from "../src/app-host/errors.js";
 import type { Principal } from "../src/auth/clients.js";
 import { workflowRules } from "../src/workflows/workflows.js";
 import { lampsCore, personWithClient } from "./devices-support.js";
-import { claimed, get, post, sharedClient, testCore } from "./support.js";
+import { get, post, sharedClient } from "./support.js";
 import {
   addWorkflow,
-  lightsOff,
   sample,
   samplePackage,
   noteStep,
@@ -39,34 +38,6 @@ const morning = steps(
 );
 
 describe("saving a workflow", () => {
-  it("keeps an automatic name until a caller supplies a name", async () => {
-    const core = await testCore();
-    const { token } = await claimed(core);
-    const graph = steps(
-      trigger("t", "time", { time: "07:00" }),
-      lightsOff("lights", { kind: "home" }),
-    );
-    const added = await post(
-      core,
-      "/api/workflows/add",
-      { name: "At 07:00 every day", automaticName: true, graph },
-      { token },
-    );
-    expect(added.statusCode).toBe(200);
-    const { id } = added.json() as WorkflowInfo;
-
-    const set = async (changes: object) =>
-      (
-        await post(core, "/api/workflows/update", { id, ...changes }, { token })
-      ).json();
-    expect(await set({ enabled: false })).toMatchObject({
-      automaticName: true,
-    });
-    const renamed = await set({ name: "Morning" });
-    expect(renamed.name).toBe("Morning");
-    expect(renamed).not.toHaveProperty("automaticName");
-  });
-
   it("refuses a graph that is not whole, saying why", async () => {
     const { core, token, lamp } = await home();
     const refused = async (graph: unknown) => {

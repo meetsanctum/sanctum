@@ -50,7 +50,7 @@ import {
 } from "./chooser";
 import { pieceOf, problemOf, type Automations } from "./data";
 import { FieldControl, type Home } from "./fields";
-import { autoName, graphOf, isSimple, needsValue, workflowName } from "./graph";
+import { autoName, graphOf, isSimple, needsValue } from "./graph";
 import { PieceIcon, Sentence } from "./parts";
 import {
   capitalize,
@@ -68,8 +68,7 @@ import {
 // what starts it until someone names it.
 
 type Draft = {
-  // Undefined keeps a saved automatic name. An empty field uses the default.
-  name: string | undefined;
+  name: string;
   enabled: boolean;
   runMode: RunMode;
   nodes: WorkflowNode[];
@@ -106,7 +105,7 @@ const runModes: { mode: RunMode; label: string }[] = [
 function draftOf(workflow: WorkflowInfo | undefined): Draft {
   return workflow
     ? {
-        name: workflow.automaticName ? undefined : workflow.name,
+        name: workflow.name,
         enabled: workflow.enabled,
         runMode: workflow.runMode,
         nodes: graphOf(workflow.graph.nodes).nodes,
@@ -210,22 +209,19 @@ export function EditorPage(props: {
   const save = async () => {
     setSaving(true);
     setProblem(undefined);
-    const typedName = draft.name?.trim();
-    const name = typedName || automatic || workflow?.name || "New automation";
+    const name = draft.name.trim() || automatic || "New automation";
     const graph = graphOf(draft.nodes);
     try {
       if (workflow) {
         await props.automations.update({
           id: workflow.id,
           name,
-          ...(!typedName && { automaticName: true }),
           runMode: draft.runMode,
           graph,
         });
       } else {
         await props.automations.add({
           name,
-          ...(!typedName && { automaticName: true }),
           enabled: draft.enabled,
           runMode: draft.runMode,
           graph,
@@ -340,7 +336,7 @@ export function EditorPage(props: {
         <PageSection id="editor-name" title="Name">
           <Input
             aria-label="Name"
-            value={draft.name ?? automatic ?? workflow?.name ?? ""}
+            value={draft.name}
             disabled={readOnly}
             placeholder={
               automatic ?? "Named after what it does, until you name it"
@@ -542,9 +538,7 @@ export function EditorPage(props: {
       <Dialog open={deleting} onOpenChange={setDeleting}>
         <DialogContent showCloseButton={false}>
           <DialogHeader>
-            <DialogTitle>
-              Delete {workflow && workflowName(workflow, pieces, props.names)}?
-            </DialogTitle>
+            <DialogTitle>Delete {workflow?.name}?</DialogTitle>
             <DialogDescription>
               It stops running, and its history goes with it. This can't be
               undone.

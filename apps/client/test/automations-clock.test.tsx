@@ -14,14 +14,13 @@ vi.mock("../src/core-fetch", async (original) => ({
   coreJson: vi.fn(),
 }));
 
-it("writes the schedule card and automatic name in the home's hour format", async () => {
+it("writes a schedule's time on its card in the home's hour format", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const container = document.createElement("div");
   const root = createRoot(container);
   const scheduled = workflow({
     id: "scheduled",
-    name: "At 2:30 PM every day",
-    automaticName: true,
+    name: "Lights off in the afternoon",
     graph: {
       version: 1,
       nodes: [
@@ -36,14 +35,13 @@ it("writes the schedule card and automatic name in the home's hour format", asyn
       edges: [{ from: "t", to: "s" }],
     },
   });
-  const named = { ...scheduled, id: "named", automaticName: undefined };
   vi.mocked(coreJson).mockImplementation(async (path) => {
-    if (path === "/api/workflows") return [scheduled, named];
+    if (path === "/api/workflows") return [scheduled];
     if (path === "/api/workflows/pieces") return pieces;
     return [];
   });
   const live = createLiveFeed();
-  const show = async (hourCycle: "12h" | "24h", id?: string) => {
+  const show = async (hourCycle: "12h" | "24h") => {
     await act(async () =>
       root.render(
         <HomeTimeZoneProvider
@@ -51,8 +49,8 @@ it("writes the schedule card and automatic name in the home's hour format", asyn
           hourCycle={hourCycle}
         >
           <AutomationsPage
-            page={id ? "automation" : "main"}
-            params={id ? { id } : {}}
+            page="main"
+            params={{}}
             open={() => {}}
             back={() => {}}
             apps={[]}
@@ -79,15 +77,9 @@ it("writes the schedule card and automatic name in the home's hour format", asyn
   try {
     await show("12h");
     expect(texts("li button span")).toContain("2:30 PM");
-    expect(texts("li button span")).toContain("At 2:30 PM every day");
 
     await show("24h");
     expect(texts("li button span")).toContain("14:30");
-    expect(texts("li button span")).toContain("At 14:30 every day");
-    expect(texts("li button span")).toContain(named.name);
-
-    await show("24h", scheduled.id);
-    expect(texts("h1")).toContain("At 14:30 every day");
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

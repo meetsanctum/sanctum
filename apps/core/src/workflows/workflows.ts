@@ -67,7 +67,6 @@ const id = z.string().min(1).max(64);
 
 export const newWorkflow = z.strictObject({
   name,
-  automaticName: z.boolean().optional(),
   enabled: z.boolean().default(true),
   runMode: z.enum(runModes).default("single"),
   graph: workflowGraph,
@@ -75,7 +74,6 @@ export const newWorkflow = z.strictObject({
 export const workflowChanges = z.strictObject({
   id,
   name: name.optional(),
-  automaticName: z.boolean().optional(),
   enabled: z.boolean().optional(),
   runMode: z.enum(runModes).optional(),
   graph: workflowGraph.optional(),
@@ -262,7 +260,6 @@ export function createWorkflows(
       return {
         id: workflow.id,
         name: workflow.name,
-        ...(workflow.automaticName && { automaticName: true }),
         enabled: workflow.enabled,
         runMode: workflow.runMode,
         graph: workflow.graph,
@@ -391,7 +388,6 @@ export function createWorkflows(
           .values({
             id: workflowId,
             name: input.name,
-            automaticName: input.automaticName,
             enabled: input.enabled,
             runMode: input.runMode,
             graph: input.graph,
@@ -437,9 +433,6 @@ export function createWorkflows(
         db.update(workflows)
           .set({
             ...(input.name !== undefined && { name: input.name }),
-            automaticName:
-              input.automaticName ??
-              (input.name === undefined ? undefined : false),
             ...(input.enabled !== undefined && { enabled: input.enabled }),
             ...(input.runMode !== undefined && { runMode: input.runMode }),
             ...(graphChanged && {

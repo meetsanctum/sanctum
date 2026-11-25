@@ -24,7 +24,6 @@ import type { Names } from "./words";
 
 export type NewWorkflow = {
   name: string;
-  automaticName?: boolean;
   enabled?: boolean;
   runMode?: WorkflowInfo["runMode"];
   graph: WorkflowGraph;

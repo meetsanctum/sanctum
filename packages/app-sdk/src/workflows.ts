@@ -371,8 +371,6 @@ export type WorkflowProblem = {
 export type WorkflowInfo = {
   id: string;
   name: string;
-  /** Derive the displayed name from the trigger when it is available. */
-  automaticName?: boolean;
   enabled: boolean;
   runMode: RunMode;
   graph: WorkflowGraph;

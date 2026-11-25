@@ -186,19 +186,6 @@ describe("the words for AI agents", () => {
     );
   });
 
-  it("shows the offsets when the home clock repeats an agent's creation time", () => {
-    const zurich = homeClock({ timeZone: "Europe/Zurich", hourCycle: "12h" });
-    const first = { ...codex, createdAt: "2026-10-25T00:15:03Z" };
-    const second = { ...codex, id: "again", createdAt: "2026-10-25T01:15:03Z" };
-    const agents = [first, second];
-    expect(agentDetail(zurich, first, agents, now)).toContain(
-      "25 Oct at 2:15:03 AM (UTC+02:00)",
-    );
-    expect(agentDetail(zurich, second, agents, now)).toContain(
-      "25 Oct at 2:15:03 AM (UTC+01:00)",
-    );
-  });
-
   it("says what an item needs that's off", () => {
     const [, create] = canUseWith().offers;
     expect(missingWords(create!, canUseWith().offers)).toEqual({

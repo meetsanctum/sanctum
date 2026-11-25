@@ -362,14 +362,6 @@ export function wallTimeText(time: string, hourCycle: HourCycle = "24h") {
   return timeText(Date.UTC(1970, 0, 1, hour, minute), "UTC", hourCycle);
 }
 
-/** A clock's offset from UTC at an instant, such as UTC+02:00. */
-export function utcOffsetText(at: Date | number, timeZone: string) {
-  const offset = offsetAt(Number(at), timeZone) / 60_000;
-  const hours = pad(Math.floor(Math.abs(offset) / 60));
-  const minutes = pad(Math.floor(Math.abs(offset) % 60));
-  return `UTC${offset < 0 ? "−" : "+"}${hours}:${minutes}`;
-}
-
 /** An hour on its own, as an axis or a column of hours writes it: 16:00, or 4 PM with 12 hours. */
 export function hourText(
   at: Date | number,

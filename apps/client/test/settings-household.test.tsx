@@ -191,7 +191,9 @@ describe("Settings → Household", () => {
     expect(
       document.getElementById(hours().getAttribute("aria-describedby")!)
         ?.textContent,
-    ).toBe("How the home writes times, as 14:30 or 2:30 PM.");
+    ).toBe(
+      "How the home writes times, as 14:30 or 2:30 PM: on every screen and device.",
+    );
     expect(button("Save").disabled).toBe(true);
 
     await act(async () => hours().click());

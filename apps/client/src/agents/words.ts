@@ -13,7 +13,7 @@ import {
   type AiOfferInfo,
   type AppInfo,
 } from "@meetsanctum/app-sdk";
-import { utcOffsetText, type HomeClock } from "@meetsanctum/app-sdk/clock";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import type { AgentInfo } from "@meetsanctum/auth-protocol";
 
 import { isGivenUp } from "../app-state";
@@ -168,28 +168,15 @@ export function agentDetail(
   );
   const date = clock.dayText(added);
   const time = clock.timeText(added);
-  const sameMinute = twins
-    .map((other) => new Date(other.createdAt))
-    .filter(
-      (other) =>
-        clock.dayText(other) === date && clock.timeText(other) === time,
+  const sharesMinute = twins.some((other) => {
+    const otherAdded = new Date(other.createdAt);
+    return (
+      clock.dayText(otherAdded) === date && clock.timeText(otherAdded) === time
     );
-  let when = date;
-  if (twins.length) {
-    const shownTime = sameMinute.length ? clock.secondsText(added) : time;
-    when = `${date} at ${shownTime}`;
-    const second = Math.floor(added.getTime() / 1000);
-    if (
-      sameMinute.some(
-        (other) =>
-          clock.secondsText(other) === shownTime &&
-          Math.floor(other.getTime() / 1000) !== second &&
-          clock.date(other) === clock.date(added),
-      )
-    ) {
-      when += ` (${utcOffsetText(added, clock.timeZone)})`;
-    }
-  }
+  });
+  const when = twins.length
+    ? `${date} at ${sharesMinute ? clock.secondsText(added) : time}`
+    : date;
   const by = agent.addedBy.name
     ? agent.addedBy.kind === "person"
       ? ` by ${agent.addedBy.name}`

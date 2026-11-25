@@ -26,7 +26,8 @@ import { CoreError, coreJson } from "./core-fetch";
 // when someone presses its button, and fills the fields for them to check
 // and save. The temperature unit is how the home shows temperatures, in
 // rooms, sensors and Weather alike; what sensors and forecasts say stays in
-// Celsius. 24-hour time is how the home writes times, 14:30 or 2:30 PM.
+// Celsius. 24-hour time is how the home writes times, 14:30 or 2:30 PM, on
+// every screen and device alike.
 
 type Coordinates = {
   latitude: number;
@@ -391,7 +392,8 @@ function HomeForm() {
           />
         </div>
         <span id={`${ids}-hours-hint`} className={label}>
-          How the home writes times, as 14:30 or 2:30 PM.
+          How the home writes times, as 14:30 or 2:30 PM: on every screen and
+          device.
         </span>
       </div>
       {(note || problem) && (

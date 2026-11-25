@@ -12,7 +12,6 @@ import { useState } from "react";
 
 import { blockedBy, blockedLine } from "./blocked";
 import { pieceOf, problemOf, type Automations } from "./data";
-import { workflowName } from "./graph";
 import { PieceIcon, Status, TriggerCard } from "./parts";
 import { listStatus, nextOf } from "./when";
 import {
@@ -85,7 +84,7 @@ function rowsOf(
           ? `${config.event === "sunrise" ? 0 : 1}${String(
               Number(config.offsetMinutes ?? 0) + 1000,
             ).padStart(5, "0")}`
-          : workflowName(workflow, pieces, names).toLocaleLowerCase();
+          : workflow.name.toLocaleLowerCase();
     groups.set(group, [
       ...(groups.get(group) ?? []),
       { workflow, group, order },
@@ -231,8 +230,7 @@ export function AutomationsList(props: {
       </div>
       {next?.nextRun && (
         <p className="sr-only">
-          Next: {workflowName(next, pieces, props.names)} at{" "}
-          {clock.timeText(new Date(next.nextRun))}
+          Next: {next.name} at {clock.timeText(new Date(next.nextRun))}
         </p>
       )}
     </>
@@ -252,7 +250,7 @@ function AutomationRow(props: {
 }) {
   const clock = useHomeClock();
   const { workflow, pieces, names } = props;
-  const name = workflowName(workflow, pieces, names);
+  const { name } = workflow;
   const triggers = triggersOf(workflow);
   const first = triggers[0];
   const piece = first && pieceOf(pieces, first);

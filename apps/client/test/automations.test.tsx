@@ -446,11 +446,9 @@ describe("the editor", () => {
       .mocked(coreJson)
       .mock.calls.find(([path]) => path === "/api/workflows/add")![1]!.json as {
       name: string;
-      automaticName?: boolean;
       graph: WorkflowGraph;
     };
     expect(added.name).toBe("At sunset");
-    expect(added.automaticName).toBe(true);
     expect(
       added.graph.nodes.map((node) => [node.kind, node.piece, node.config]),
     ).toEqual([
