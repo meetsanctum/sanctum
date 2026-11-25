@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { AvailableApp } from "@meetsanctum/app-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -9,6 +10,9 @@ import { DeleteAppData, deletingWords } from "../src/app-delete-data";
 import { productName } from "../src/brand";
 import { CoreError, coreJson } from "../src/core-fetch";
 import { entry } from "./activity-fixtures";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 // Deleting a removed app's data at once, from its row under Add apps: what
 // the dialog says goes, what Delete sends, and what the activity log says.
@@ -176,6 +180,7 @@ describe("deleting a removed app's data", () => {
   it("is in the activity log, by Sanctum once its days are over", () => {
     expect(
       activityWords(
+        clock,
         entry({
           kind: "setup",
           source: "sanctum.example",

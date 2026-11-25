@@ -1,12 +1,11 @@
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
+
 import {
   durationText,
   durationWeekHeadline,
   joinedSpans,
-  midnight,
   onWithin,
   spanTimes,
-  timeText,
-  weekday,
   type Day,
   type Span,
 } from "./device-history-data";
@@ -35,6 +34,7 @@ export function poweredWithin(
  * nothing has.
  */
 export function playedHeadline(
+  clock: HomeClock,
   spans: readonly Span[],
   from: number,
   to: number,
@@ -44,7 +44,7 @@ export function playedHeadline(
   const first = spans.find((span) => span.known);
   if (known === 0 || !first) return "Not known yet";
   return first.from > from + 60_000
-    ? `Nothing played since ${timeText(first.from)}`
+    ? `Nothing played since ${clock.timeText(first.from)}`
     : "Nothing played";
 }
 
@@ -55,6 +55,7 @@ export function playedHeadline(
  * week it last did; nothing where it hasn't all week.
  */
 export function mediaSentence(
+  clock: HomeClock,
   spans: readonly Span[],
   days: readonly Day[],
   from: number,
@@ -67,7 +68,7 @@ export function mediaSentence(
   const latest = joined.at(-1);
   if (latest?.offline) {
     return latest.from > from
-      ? `Offline since ${timeText(latest.from)}`
+      ? `Offline since ${clock.timeText(latest.from)}`
       : "Offline the whole time";
   }
   if (!joined.some((span) => span.known)) return null;
@@ -81,20 +82,22 @@ export function mediaSentence(
       if (previous.powered !== false || previous.to !== since) break;
       since = previous.from;
     }
-    return since > from ? `Off since ${timeText(since)}` : "Off the whole time";
+    return since > from
+      ? `Off since ${clock.timeText(since)}`
+      : "Off the whole time";
   }
   const played = [...joined].reverse().find((span) => span.on);
   if (played && played === latest && played.to >= now) {
     return played.from > from
-      ? `Playing since ${timeText(played.from)}`
+      ? `Playing since ${clock.timeText(played.from)}`
       : "Playing the whole time";
   }
-  if (played) return `Last played ${spanTimes(played, now)}`;
-  const today = midnight(now);
+  if (played) return `Last played ${spanTimes(clock, played, now)}`;
+  const today = clock.startOfDay(now);
   const lastDay = [...days]
     .reverse()
     .find((day) => day.start !== today && day.on > 0);
-  return lastDay ? `Last played on ${weekday.format(lastDay.start)}` : null;
+  return lastDay ? `Last played on ${clock.weekdayText(lastDay.start)}` : null;
 }
 
 /** What a span is, as the band's readout and a screen reader say it. */
@@ -121,8 +124,12 @@ export function aboutDuration(seconds: number) {
  * days that have ended; until one has, how long today; or since when
  * nothing has played.
  */
-export function playedWeekHeadline(days: readonly Day[], now: number) {
-  return durationWeekHeadline(days, now, {
+export function playedWeekHeadline(
+  clock: HomeClock,
+  days: readonly Day[],
+  now: number,
+) {
+  return durationWeekHeadline(clock, days, now, {
     average: (seconds) => `Played about ${aboutDuration(seconds)} a day`,
     today: (duration) => `Played ${duration} today`,
     // "All week" only of a week known throughout; otherwise since the
@@ -131,11 +138,11 @@ export function playedWeekHeadline(days: readonly Day[], now: number) {
       days.every(
         (day) =>
           day.known >=
-          (Math.min(midnight(day.start, -1), now) - day.start) / 1000,
+          (Math.min(clock.startOfDay(day.start, -1), now) - day.start) / 1000,
       )
         ? "Nothing played all week"
         : known[0]!.start === today
           ? "Nothing played today"
-          : `Nothing played since ${weekday.format(known[0]!.start)}`,
+          : `Nothing played since ${clock.weekdayText(known[0]!.start)}`,
   });
 }

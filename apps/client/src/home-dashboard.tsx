@@ -1,5 +1,11 @@
 import type { AppInfo, Floor, Room } from "@meetsanctum/app-sdk";
-import { Button, DeviceTile, icons, type Tile } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  DeviceTile,
+  icons,
+  useHomeClock,
+  type Tile,
+} from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import {
   memo,
@@ -58,6 +64,7 @@ export function HomeRooms(props: {
 }) {
   const { devices, entities } = props;
   const { onToggle, onDim } = useTileHandlers(devices);
+  const clock = useHomeClock();
   const places = homePlaces(devices, props.onHome);
   const unit = unitOf(devices);
   const now = Date.now();
@@ -73,7 +80,7 @@ export function HomeRooms(props: {
           roomLightsButton(lights, room, devices),
         )
       : null;
-    const motion = room ? placeMotionText(own, now) : null;
+    const motion = room ? placeMotionText(clock, own, now) : null;
     const contact = room ? placeContacts(own) : null;
     const readings = room ? readingsOf(sensorReadings(own), unit) : [];
     const hasLine = !!motion || !!contact || readings.length > 0;

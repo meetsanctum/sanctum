@@ -1,5 +1,10 @@
 import type { DeviceInfo } from "@meetsanctum/app-sdk";
-import { Button, type LiveFeed, type SwipePage } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  useHomeClock,
+  type LiveFeed,
+  type SwipePage,
+} from "@meetsanctum/ui-sdk";
 import { List } from "lucide-react";
 import { useId } from "react";
 
@@ -57,6 +62,7 @@ function DeviceActivity(props: {
     limit: shown,
   });
   const headingId = useId();
+  const clock = useHomeClock();
   const entries = activity.entries.slice(0, shown);
   const last = entries.find((entry) =>
     isRemote
@@ -81,7 +87,7 @@ function DeviceActivity(props: {
           {activity.state === "loading"
             ? " "
             : last
-              ? lastChangeWords(last)
+              ? lastChangeWords(clock, last)
               : isRemote
                 ? "Not pressed lately"
                 : "Nothing changed it lately"}
@@ -95,7 +101,7 @@ function DeviceActivity(props: {
           onRetry={activity.retry}
         />
       ) : (
-        daysOf(entries).map((day) => (
+        daysOf(clock, entries).map((day) => (
           <section key={day.key} className="flex flex-col gap-2">
             <h3 className="m-0 text-[13px] leading-[18px] font-medium text-(--silver)">
               {day.heading}

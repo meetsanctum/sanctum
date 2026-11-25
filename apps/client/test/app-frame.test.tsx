@@ -7,7 +7,7 @@ import {
   type CoreBridge,
   type ToFrame,
 } from "@meetsanctum/ui-sdk";
-import { act } from "react";
+import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -97,7 +97,12 @@ afterEach(() => {
 });
 
 async function show(
-  options: { app?: AppInfo; isAway?: boolean; shown?: string } = {},
+  options: {
+    app?: AppInfo;
+    isAway?: boolean;
+    shown?: string;
+    household?: ComponentProps<typeof AppFrame>["household"];
+  } = {},
 ) {
   await act(async () => {
     root.render(
@@ -110,7 +115,7 @@ async function show(
         back={() => {}}
         openSettings={() => {}}
         mode="day"
-        household={undefined}
+        household={options.household}
         isAway={options.isAway ?? false}
       />,
     );
@@ -147,6 +152,29 @@ function hello() {
 }
 
 describe("an app's page in its frame", () => {
+  it("sends the home's zone and hours, so the page writes times as the home does", async () => {
+    await show({
+      household: {
+        temperatureUnit: "celsius",
+        timeZone: "Europe/Zurich",
+        hourCycle: "12h",
+      },
+    });
+    const port = hello();
+    const said: ToFrame[] = [];
+    port.onmessage = (event: MessageEvent<ToFrame>) => said.push(event.data);
+    try {
+      await vi.waitFor(() =>
+        expect(said[0]).toMatchObject({
+          type: "setup",
+          context: { timeZone: "Europe/Zurich", hourCycle: "12h" },
+        }),
+      );
+    } finally {
+      port.close();
+    }
+  });
+
   it("sends the shell's effects and motion settings on setup and on separate changes", async () => {
     document.documentElement.dataset.effects = "reduced";
     document.documentElement.dataset.motion = "reduced";
@@ -173,6 +201,7 @@ describe("an app's page in its frame", () => {
             motion: "reduced",
             temperatureUnit: null,
             timeZone: null,
+            hourCycle: null,
           },
         }),
       );
@@ -188,6 +217,7 @@ describe("an app's page in its frame", () => {
             motion: "regular",
             temperatureUnit: null,
             timeZone: null,
+            hourCycle: null,
           },
         }),
       );

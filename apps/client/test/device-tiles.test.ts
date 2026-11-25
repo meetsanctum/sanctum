@@ -521,6 +521,25 @@ describe("a motion sensor's tile", () => {
     expect(tiles[1]?.motion).toEqual({ motion: false, changedAt: ago(12) });
   });
 
+  it("says since when on the home's clock, wherever the device is", () => {
+    const quiet = (home: Partial<(typeof places)["home"]>) =>
+      tilesOf(
+        [
+          device("hall", "Hall motion sensor", "living", [
+            // 13:05 in Zurich, 08:05 in New York.
+            motionCapability(false, "2026-10-31T12:05:00.000Z"),
+          ]),
+        ],
+        { ...places, home: { ...places.home, ...home } },
+        new Map(),
+        Date.parse("2026-10-31T14:00:00.000Z"),
+      )[0]?.status;
+    expect(quiet({ timeZone: "Europe/Zurich" })).toBe("Quiet since 13:05");
+    expect(quiet({ timeZone: "America/New_York", hourCycle: "12h" })).toBe(
+      "Quiet since 8:05 AM",
+    );
+  });
+
   it("waits for its first report, and says when it is offline", () => {
     const tiles = tilesOf(
       [

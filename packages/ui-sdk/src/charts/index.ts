@@ -1,8 +1,10 @@
 // @meetsanctum/ui-sdk/charts: Sanctum's charts, whole, for the shell and
 // apps' pages alike. Each is drawn in SVG on whole pixels, takes plain
 // times and values, and brings its own readout, which a tap pins, and list
-// for screen readers. The kit serves them as a module of their own, so a
-// page that charts nothing loads none of them.
+// for screen readers. Their days, hours and times are the home clock's
+// (useHomeClock), so a device away from home charts the home's day. The kit
+// serves them as a module of their own, so a page that charts nothing loads
+// none of them.
 
 export {
   DayBandChart,

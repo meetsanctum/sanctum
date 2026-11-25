@@ -1,3 +1,4 @@
+import type { Places } from "@meetsanctum/app-sdk";
 import {
   frameBridge,
   useReducedEffects,
@@ -28,6 +29,11 @@ import { forgetPageTicket, pageAddress } from "./page-ticket";
 export type FramePhase =
   "opening" | "ready" | "late" | "files" | "stopped" | "mismatch";
 
+export type FrameHousehold = Pick<
+  Places["home"],
+  "temperatureUnit" | "timeZone" | "hourCycle"
+>;
+
 const loaderAfterMs = 400;
 const answerWithinMs = 10_000;
 
@@ -38,22 +44,27 @@ export function useFrame(options: {
     Extract<ToFrame, { type: "setup" }>,
     "page" | "params" | "device"
   >;
-  context: Omit<FrameContext, "effects" | "motion">;
+  mode: FrameContext["mode"];
+  household: FrameHousehold | undefined;
   /** Whether the home is away, as while it updates. */
   isAway: boolean;
   /** What else the page says: its bar, where to go, its size, a key. */
   on?: (event: FrameEvent) => void;
 }) {
-  const { app, context: pageContext } = options;
+  const { app, mode, household } = options;
+  const { temperatureUnit, timeZone, hourCycle } = household ?? {};
   const reducedEffects = useReducedEffects();
   const reducedMotion = useReducedMotion();
   const context = useMemo<FrameContext>(
     () => ({
-      ...pageContext,
+      mode,
+      temperatureUnit: temperatureUnit ?? null,
+      timeZone: timeZone ?? null,
+      hourCycle: hourCycle ?? null,
       effects: reducedEffects ? "reduced" : "regular",
       motion: reducedMotion ? "reduced" : "regular",
     }),
-    [pageContext, reducedEffects, reducedMotion],
+    [mode, temperatureUnit, timeZone, hourCycle, reducedEffects, reducedMotion],
   );
   const [attempt, setAttempt] = useState(0);
   const [phase, setPhase] = useState<FramePhase>("opening");

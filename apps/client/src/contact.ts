@@ -1,6 +1,5 @@
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import type { ContactShownAs, Tile } from "@meetsanctum/ui-sdk";
-
-import { midnight, timeText } from "./device-history-data";
 
 // What contact sensors say, in words: on a sensor's tile, in a room's line
 // under its name, in the home's status and on Security's summary cards,
@@ -14,17 +13,13 @@ import { midnight, timeText } from "./device-history-data";
 const minute = 60_000;
 const hour = 60 * minute;
 
-const date = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-});
-
 /**
  * What a contact sensor says while it answers: "Closed", or for how long
- * it has been open, short enough for a tile ("Open since yesterday"). One
- * that has not said when it opened says only "Open".
+ * it has been open, short enough for a tile ("Open since yesterday"), by
+ * the home clock. One that has not said when it opened says only "Open".
  */
 export function contactText(
+  clock: HomeClock,
   open: boolean,
   changedAt: string | null,
   now: number,
@@ -35,9 +30,11 @@ export function contactText(
   if (now - since < hour) {
     return `Open for ${Math.floor((now - since) / minute)} min`;
   }
-  if (since >= midnight(now)) return `Open since ${timeText(since)}`;
-  if (since >= midnight(now, 1)) return "Open since yesterday";
-  return `Open since ${date.format(since)}`;
+  if (since >= clock.startOfDay(now)) {
+    return `Open since ${clock.timeText(since)}`;
+  }
+  if (since >= clock.startOfDay(now, 1)) return "Open since yesterday";
+  return `Open since ${clock.dayText(since)}`;
 }
 
 /**
@@ -45,19 +42,22 @@ export function contactText(
  * while closed since when, which a tile leaves out: "Closed since 13:56".
  */
 export function contactNowText(
+  clock: HomeClock,
   open: boolean,
   changedAt: string | null,
   now: number,
 ) {
-  if (open) return contactText(true, changedAt, now);
+  if (open) return contactText(clock, true, changedAt, now);
   const since = changedAt === null ? NaN : Date.parse(changedAt);
   if (Number.isNaN(since) || now - since < minute) return "Closed";
   if (now - since < hour) {
     return `Closed for ${Math.floor((now - since) / minute)} min`;
   }
-  if (since >= midnight(now)) return `Closed since ${timeText(since)}`;
-  if (since >= midnight(now, 1)) return "Closed since yesterday";
-  return `Closed since ${date.format(since)}`;
+  if (since >= clock.startOfDay(now)) {
+    return `Closed since ${clock.timeText(since)}`;
+  }
+  if (since >= clock.startOfDay(now, 1)) return "Closed since yesterday";
+  return `Closed since ${clock.dayText(since)}`;
 }
 
 /** How some contact sensors are: how many are open, closed and not known. */

@@ -1,3 +1,4 @@
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { DeviceHistory } from "@meetsanctum/app-sdk";
 import { lightColour } from "@meetsanctum/ui-sdk";
 import { describe, expect, it } from "vitest";
@@ -6,14 +7,15 @@ import {
   dayHeadline,
   daysOf,
   durationText,
-  midnight,
   onWithin,
   spansOf,
   spanText,
-  timeText,
   weekHeadline,
   type Day,
 } from "../src/device-history-data";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 // A device's History page: its last day as spans from core History's
 // changes, and its week from the hourly roll-ups.
@@ -139,7 +141,7 @@ describe("a device's history", () => {
   });
 
   it("shows Invalid Date when a timestamp cannot be parsed", () => {
-    expect(timeText(Date.parse("invalid"))).toBe("Invalid Date");
+    expect(clock.timeText(Date.parse("invalid"))).toBe("Invalid Date");
   });
 
   it("lets refreshed history replace older live changes and keeps newer ones", () => {
@@ -170,8 +172,8 @@ describe("a device's history", () => {
   });
 
   it("makes each of the last 7 days from the hours, and since the last hour from the spans", () => {
-    const today = midnight(now);
-    const yesterdayNoon = midnight(now, 1) + 12 * hour;
+    const today = clock.startOfDay(now);
+    const yesterdayNoon = clock.startOfDay(now, 1) + 12 * hour;
     // The last hour rolled up ended an hour ago; the light has been on
     // since two hours ago.
     const spans = spansOf(
@@ -180,6 +182,7 @@ describe("a device's history", () => {
       now,
     );
     const days = daysOf(
+      clock,
       {
         fields: {
           on: [
@@ -206,7 +209,7 @@ describe("a device's history", () => {
 
     expect(days).toHaveLength(7);
     expect(days.map((day) => day.start)).toEqual(
-      [6, 5, 4, 3, 2, 1, 0].map((back) => midnight(now, back)),
+      [6, 5, 4, 3, 2, 1, 0].map((back) => clock.startOfDay(now, back)),
     );
     expect(days.at(-1)!.start).toBe(today);
     expect(days.at(-2)).toMatchObject({ on: 1800, known: 3600 });
@@ -216,24 +219,25 @@ describe("a device's history", () => {
 
   it("says what the day and the week come to, and since when it is off once history begins", () => {
     const on = spansOf(history([[from + hour, "online", warm]]), from, now);
-    expect(dayHeadline(on, from, now)).toBe("On for 23 h");
+    expect(dayHeadline(clock, on, from, now)).toBe("On for 23 h");
     const off = spansOf(
       history([[now - 25 * minute, "online", { ...warm, on: false }]]),
       from,
       now,
     );
-    expect(dayHeadline(off, from, now)).toMatch(/^Off since \d\d:\d\d$/);
-    expect(dayHeadline([], from, now)).toBe("Not known yet");
+    expect(dayHeadline(clock, off, from, now)).toMatch(/^Off since \d\d:\d\d$/);
+    expect(dayHeadline(clock, [], from, now)).toBe("Not known yet");
 
     const week = (values: [number, number][]): Day[] =>
       values.map(([on, known], index) => ({
-        start: midnight(now, 6 - index),
+        start: clock.startOfDay(now, 6 - index),
         on,
         known,
       }));
     // Today, with 4 hours on so far, does not count.
     expect(
       weekHeadline(
+        clock,
         week([
           [0, 0],
           [0, 0],
@@ -248,25 +252,34 @@ describe("a device's history", () => {
     ).toBe("1 h a day");
     // Until a day has ended, today is all there is.
     expect(
-      weekHeadline(week([...Array(6).fill([0, 0]), [2 * 3600, 3 * 3600]]), now),
+      weekHeadline(
+        clock,
+        week([...Array(6).fill([0, 0]), [2 * 3600, 3 * 3600]]),
+        now,
+      ),
     ).toBe("On for 2 h today");
     expect(
-      weekHeadline(week([...Array(6).fill([0, 86400]), [3600, 3600]]), now),
+      weekHeadline(
+        clock,
+        week([...Array(6).fill([0, 86400]), [3600, 3600]]),
+        now,
+      ),
     ).toBe("On for 1 h today");
-    expect(weekHeadline(week(Array(7).fill([0, 86400])), now)).toBe(
+    expect(weekHeadline(clock, week(Array(7).fill([0, 86400])), now)).toBe(
       "Off all week",
     );
-    expect(weekHeadline(week([...Array(6).fill([0, 0]), [0, 600]]), now)).toBe(
-      "Off today",
-    );
-    expect(weekHeadline(week([...Array(7).fill([20, 86400])]), now)).toBe(
-      "Under a minute a day",
-    );
+    expect(
+      weekHeadline(clock, week([...Array(6).fill([0, 0]), [0, 600]]), now),
+    ).toBe("Off today");
+    expect(
+      weekHeadline(clock, week([...Array(7).fill([20, 86400])]), now),
+    ).toBe("Under a minute a day");
   });
 
   it("shares an hour that local midnight splits between its two days", () => {
-    const today = midnight(now);
+    const today = clock.startOfDay(now);
     const days = daysOf(
+      clock,
       {
         fields: {
           on: [

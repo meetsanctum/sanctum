@@ -6,6 +6,7 @@ import type {
   WidgetSize,
   WidgetValue,
 } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import { Check } from "lucide-react";
 import {
   useId,
@@ -16,7 +17,7 @@ import {
 } from "react";
 
 import { Button } from "./components/ui/button";
-import { useHomeTimeZone } from "./home-time-zone";
+import { useHomeClock } from "./home-clock";
 import { showFailed } from "./show-failed";
 import { useTemperatureUnit } from "./temperature-unit";
 import { formatLightLevel, formatNumber, formatTemperature } from "./units";
@@ -25,13 +26,13 @@ import { widgetIconOf } from "./widget-icons";
 // A widget's card, which the shell draws from what its app shows, on
 // dashboards and on the app's own pages alike: frosted Carbon glass, its
 // title in the app's colour, then its blocks in the app's order. Values
-// arrive typed and are written here, in the household's unit, the home's
-// time zone and this device's language, so no app writes a unit, a time or a
-// weekday itself. While it can't be used, as when its app isn't running, it
+// arrive typed and are written here, in the household's unit, by the home
+// clock (its zone and its 24 or 12 hours) and in this device's language, so
+// no app writes a unit, a time or a weekday itself. While it can't be used, as when its app isn't running, it
 // says so beside its title and what it shows dims.
 
 /** How the shell writes a card's values. */
-type Shown = { unit: TemperatureUnit; timeZone: string | undefined };
+type Shown = { unit: TemperatureUnit; clock: HomeClock };
 
 /** A card's value as the household reads it, such as "8°", "07:04" or "Wed". */
 export function formatWidgetValue(value: WidgetValue, shown: Shown) {
@@ -44,11 +45,7 @@ export function formatWidgetValue(value: WidgetValue, shown: Shown) {
     });
   }
   if ("time" in value) {
-    return new Intl.DateTimeFormat(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-      timeZone: shown.timeZone,
-    }).format(new Date(value.time));
+    return shown.clock.timeText(new Date(value.time));
   }
   if ("date" in value) {
     return new Intl.DateTimeFormat(
@@ -99,9 +96,9 @@ export function WidgetCard(props: {
 }) {
   const titleId = useId();
   const unit = useTemperatureUnit();
-  const timeZone = useHomeTimeZone();
+  const clock = useHomeClock();
   // Until the unit is known, no temperature shows in the other one.
-  const shown = unit === undefined ? null : { unit, timeZone };
+  const shown = unit === undefined ? null : { unit, clock };
   return (
     <article
       aria-labelledby={titleId}

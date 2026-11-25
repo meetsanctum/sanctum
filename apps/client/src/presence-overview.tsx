@@ -3,7 +3,13 @@ import type {
   DeviceHistory,
   DeviceInfo,
 } from "@meetsanctum/app-sdk";
-import { icons, SectionHeading, type Tile } from "@meetsanctum/ui-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
+import {
+  icons,
+  SectionHeading,
+  useHomeClock,
+  type Tile,
+} from "@meetsanctum/ui-sdk";
 import { DayBandMarks, DayTimeAxis } from "@meetsanctum/ui-sdk/charts";
 import { useEffect, useId, useRef, useState } from "react";
 
@@ -163,8 +169,8 @@ function useLastDay(sensors: readonly Sensor[]) {
  * What a room's row says now: its motion as its line does, or while none
  * of its sensors answers, what they all say ("Offline"), else "No readings".
  */
-function roomStatus(tiles: readonly Tile[], now: number) {
-  const motion = placeMotionText(tiles, now);
+function roomStatus(clock: HomeClock, tiles: readonly Tile[], now: number) {
+  const motion = placeMotionText(clock, tiles, now);
   if (motion) return motion;
   const statuses = new Set(tiles.map((tile) => tile.status));
   return statuses.size === 1 ? [...statuses][0]! : "No readings";
@@ -176,6 +182,7 @@ export function PresenceOverview(props: {
 }) {
   const { devices } = props;
   const headingId = useId();
+  const clock = useHomeClock();
   const rooms = devices.places?.rooms ?? [];
   const placed = new Set(rooms.map((room) => room.id));
   const sensors = devices.devices.flatMap((device) =>
@@ -209,7 +216,7 @@ export function PresenceOverview(props: {
       {
         room,
         spans,
-        status: roomStatus(tiles, now),
+        status: roomStatus(clock, tiles, now),
         active: tiles.some((tile) => !tile.disabled && tile.motion?.motion),
       },
     ];
@@ -266,10 +273,11 @@ function RoomRow(props: {
   onOpen: () => void;
 }) {
   const { spans, from, to } = props;
+  const clock = useHomeClock();
   return (
     <button
       type="button"
-      aria-label={`${props.name}, ${props.status}. ${motionSentence(spans, from, to)}`}
+      aria-label={`${props.name}, ${props.status}. ${motionSentence(clock, spans, from, to)}`}
       onClick={props.onOpen}
       className="flex w-full flex-col gap-2 rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) frosted outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 @lg/day:flex-row @lg/day:items-center @lg/day:gap-3"
     >

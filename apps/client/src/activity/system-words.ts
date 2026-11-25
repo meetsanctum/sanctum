@@ -1,7 +1,8 @@
 import type { ActivityInfo } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 
 import { productName } from "../brand";
-import { durationText, timeText } from "../device-history-data";
+import { durationText } from "../device-history-data";
 import { formatBytes, serviceName } from "../system-status";
 import { byWords } from "./actor-words";
 import type { Words } from "./words";
@@ -99,7 +100,10 @@ function versionEntry(entry: ActivityInfo): Words {
       };
 }
 
-export function systemEntry(entry: ActivityInfo): Words | null {
+export function systemEntry(
+  clock: HomeClock,
+  entry: ActivityInfo,
+): Words | null {
   const detail = entry.detail;
   switch (entry.action) {
     case "version.update":
@@ -111,7 +115,7 @@ export function systemEntry(entry: ActivityInfo): Words | null {
         : null;
       const off =
         stoppedAt !== null
-          ? `It was off from ${timeText(stoppedAt)}, for ${durationText((Date.parse(entry.at) - stoppedAt) / 1000)}`
+          ? `It was off from ${clock.timeText(stoppedAt)}, for ${durationText((Date.parse(entry.at) - stoppedAt) / 1000)}`
           : detail?.unexpected
             ? "It had stopped unexpectedly"
             : `Version ${String(detail?.version ?? "")}`;
@@ -121,7 +125,7 @@ export function systemEntry(entry: ActivityInfo): Words | null {
       return {
         title:
           entry.outcome === "ok" ? "Update started" : "Update couldn't start",
-        detail: byWords(entry),
+        detail: byWords(clock, entry),
         problem: entry.outcome !== "ok",
       };
     case "sanctum.restart":
@@ -130,7 +134,7 @@ export function systemEntry(entry: ActivityInfo): Words | null {
           entry.outcome === "ok"
             ? `Restarted ${productName}`
             : `Couldn't restart ${productName}`,
-        detail: byWords(entry),
+        detail: byWords(clock, entry),
         problem: entry.outcome !== "ok",
       };
     case "sanctum.shutdown":
@@ -139,7 +143,7 @@ export function systemEntry(entry: ActivityInfo): Words | null {
           entry.outcome === "ok"
             ? `Shut ${productName} down`
             : `Couldn't shut ${productName} down`,
-        detail: byWords(entry),
+        detail: byWords(clock, entry),
         problem: entry.outcome !== "ok",
       };
     case "sanctum.space.free": {
@@ -151,7 +155,7 @@ export function systemEntry(entry: ActivityInfo): Words | null {
             : typeof freed === "number"
               ? `Freed ${formatBytes(freed)}`
               : "Freed up space",
-        detail: byWords(entry),
+        detail: byWords(clock, entry),
         problem: entry.outcome !== "ok",
       };
     }
@@ -167,7 +171,7 @@ export function systemEntry(entry: ActivityInfo): Words | null {
     case "restore.dismiss":
       return {
         title: "Put the restore notice away",
-        detail: byWords(entry),
+        detail: byWords(clock, entry),
         problem: false,
       };
     case "service.start":

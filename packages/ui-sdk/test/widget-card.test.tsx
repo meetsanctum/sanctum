@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import type { TemperatureUnit, WidgetContent } from "@meetsanctum/app-sdk";
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HomeTimeZoneProvider } from "../src/home-time-zone";
+import { HomeTimeZoneProvider } from "../src/home-clock";
 import { TemperatureUnitProvider } from "../src/temperature-unit";
 import {
   WidgetCard,
@@ -13,10 +14,11 @@ import {
 } from "../src/widget-card";
 
 // A widget's card as the shell draws it: what its app shows, with values
-// written in the household's unit, the home's time zone and this device's
+// written in the household's unit, by the home clock and in this device's
 // language, and the rows' checks and the button running the app's actions.
 
-const celsius = { unit: "celsius" as const, timeZone: "Europe/Zurich" };
+const zurich = homeClock({ timeZone: "Europe/Zurich" });
+const celsius = { unit: "celsius" as const, clock: zurich };
 
 describe("a card's values", () => {
   it.each([
@@ -39,16 +41,23 @@ describe("a card's values", () => {
     ).toBe("47°");
   });
 
-  it("writes times in the home's time zone, and days as the day they are", () => {
+  it("writes times as the home clock does, and days as the day they are", () => {
     const time = { time: "2026-11-03T06:04:00Z" };
-    expect(formatWidgetValue(time, celsius)).toMatch(/^0?7:04/);
-    expect(
-      formatWidgetValue(time, { ...celsius, timeZone: "America/New_York" }),
-    ).toMatch(/^0?1:04/);
+    expect(formatWidgetValue(time, celsius)).toBe("07:04");
+    const newYork = homeClock({
+      timeZone: "America/New_York",
+      hourCycle: "12h",
+    });
+    expect(formatWidgetValue(time, { ...celsius, clock: newYork })).toBe(
+      "1:04 AM",
+    );
     // A day is the same day wherever the home is.
     for (const timeZone of ["Pacific/Kiritimati", "Pacific/Pago_Pago"]) {
       expect(
-        formatWidgetValue({ date: "2026-11-04" }, { ...celsius, timeZone }),
+        formatWidgetValue(
+          { date: "2026-11-04" },
+          { ...celsius, clock: homeClock({ timeZone }) },
+        ),
       ).toBe(
         new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(
           new Date(2026, 10, 4),

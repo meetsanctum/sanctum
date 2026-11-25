@@ -3,7 +3,7 @@ import type {
   AppIcon as AppIconInfo,
   AppInfo,
 } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, useHomeClock } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import {
   ArchiveRestore,
@@ -27,7 +27,6 @@ import { memo, useId, useState } from "react";
 import { AppIcon } from "../app-icon";
 import { productName } from "../brand";
 import { Avatar } from "../components";
-import { timeText } from "../device-history-data";
 import type { ActivityState, Folded } from "./data";
 import { activityWords, type RoomNames, type Where } from "./words";
 import { automationsApp } from "../system-apps";
@@ -115,7 +114,8 @@ export const ActivityRow = memo(function ActivityRow(props: {
   context: ListContext;
 }) {
   const { entry, context } = props;
-  const words = activityWords(entry, context.where, context.rooms);
+  const clock = useHomeClock();
+  const words = activityWords(clock, entry, context.where, context.rooms);
   return (
     <div className="flex min-h-9 min-w-0 items-center gap-3">
       <Mark entry={entry} apps={context.apps} />
@@ -141,7 +141,7 @@ export const ActivityRow = memo(function ActivityRow(props: {
         dateTime={entry.at}
         className="shrink-0 text-[13px] font-medium text-muted-foreground tabular-nums"
       >
-        {timeText(Date.parse(entry.at))}
+        {clock.timeText(Date.parse(entry.at))}
       </time>
     </div>
   );

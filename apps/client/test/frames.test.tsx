@@ -6,6 +6,7 @@ import {
   PageBar,
   startFrame,
   useAppClient,
+  useHomeClock,
   useReducedEffects,
   useReducedMotion,
   type AppUi,
@@ -80,6 +81,30 @@ describe("a page in its frame", () => {
     // Its title is the shell's to show; the frame draws none.
     expect(document.querySelector("h1")).toBeNull();
     expect(document.documentElement.dataset.mode).toBe("day");
+  });
+
+  it("writes the home time on setup and follows a change of hour format", async () => {
+    const start = Date.parse("2026-11-16T17:30:00Z");
+    function Schedule() {
+      return <time>{useHomeClock().timeText(start)}</time>;
+    }
+    const setupContext = {
+      ...context,
+      timeZone: "Europe/Zurich",
+      hourCycle: "12h",
+    } as const;
+    const { bridge } = framed(
+      async () => ({ default: { ...ui, pages: { main: Schedule } } }),
+      info,
+      setupContext,
+    );
+    const shown = () => document.querySelector("time")?.textContent;
+    await vi.waitFor(() => expect(shown()).toBe("6:30 PM"));
+    bridge.send({
+      type: "context",
+      context: { ...setupContext, hourCycle: "24h" },
+    });
+    await vi.waitFor(() => expect(shown()).toBe("18:30"));
   });
 
   it("applies Reduce effects to a framed input on setup and context updates", async () => {

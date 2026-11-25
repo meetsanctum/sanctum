@@ -24,6 +24,21 @@ const importsOf = (path: string) =>
     join(path, "..", from!),
   );
 
+// What a module loads, through what it loads.
+const reached = (from: string) => {
+  const found = new Set<string>();
+  const reach = (path: string) => {
+    for (const next of importsOf(path)) {
+      if (!found.has(next)) {
+        found.add(next);
+        reach(next);
+      }
+    }
+  };
+  reach(from);
+  return found;
+};
+
 beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), "sanctum-kit-"));
   kit = await buildKit(dir);
@@ -80,6 +95,22 @@ describe("the kit", { timeout: 60_000 }, () => {
     expect(importsOf("ui-sdk.js")).not.toContain("charts.js");
   });
 
+  it("gives the charts the home clock without zod, which ui-sdk's validation needs", () => {
+    const charts = ["charts.js", ...reached("charts.js")];
+    // zod's own words for a value of the wrong type.
+    expect(charts.some((path) => read(path).includes("invalid_type"))).toBe(
+      false,
+    );
+    // The clock, in a module the charts and ui-sdk's both load, so a page's
+    // charts and widget cards read the one home clock its frame sets.
+    const [clock] = [...reached("charts.js")].filter((path) =>
+      read(path).includes("formatToParts"),
+    );
+    expect(clock).toBeDefined();
+    expect(importsOf("charts.js")).toContain(clock);
+    expect(importsOf("ui-sdk.js")).toContain(clock);
+  });
+
   it("exports each public chart from the built module an app imports", async () => {
     const charts = await import(pathToFileURL(join(dir, "charts.js")).href);
     expect(Object.keys(charts).sort()).toEqual([
@@ -98,20 +129,6 @@ describe("the kit", { timeout: 60_000 }, () => {
       path.includes("chunks/react-"),
     );
     expect(react).toBeDefined();
-    // What a module loads, through what it loads.
-    const reached = (from: string) => {
-      const found = new Set<string>();
-      const reach = (path: string) => {
-        for (const next of importsOf(path)) {
-          if (!found.has(next)) {
-            found.add(next);
-            reach(next);
-          }
-        }
-      };
-      reach(from);
-      return found;
-    };
     expect(reached("react-dom-client.js")).toContain(react);
     expect(importsOf("ui-sdk.js")).toContain(react);
     expect(importsOf("charts.js")).toContain(react);

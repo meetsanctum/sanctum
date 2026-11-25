@@ -1,4 +1,5 @@
 import type { CapabilityInfo, DeviceInfo } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 
 import { DayAndWeek } from "./day-and-week";
 import { motionText } from "./motion";
@@ -15,10 +16,15 @@ import {
 type Motion = Extract<CapabilityInfo, { kind: "motion" }>;
 
 /** What it says now, as its tile does. */
-function nowText(device: DeviceInfo, capability: Motion, now: number) {
+function nowText(
+  clock: HomeClock,
+  device: DeviceInfo,
+  capability: Motion,
+  now: number,
+) {
   if (device.availability === "offline") return "Offline";
   if (!capability.state) return "Waiting for a reading";
-  return motionText(capability.state.motion, capability.changedAt, now);
+  return motionText(clock, capability.state.motion, capability.changedAt, now);
 }
 
 export function MotionPage(props: { device: DeviceInfo; capability: Motion }) {
@@ -29,7 +35,7 @@ export function MotionPage(props: { device: DeviceInfo; capability: Motion }) {
       capability={capability}
       words={{
         field: "motion",
-        now: (now) => nowText(device, capability, now),
+        now: (clock, now) => nowText(clock, device, capability, now),
         sentence: motionSentence,
         band: "Motion over the last 24 hours",
         span: motionSpanText,

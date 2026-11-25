@@ -1,7 +1,8 @@
 import type { DeviceStatistics, HistoryStatistic } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import type { WeekRange } from "@meetsanctum/ui-sdk/charts";
 
-import { dayMs, midnight } from "./device-history-data";
+import { dayMs } from "./device-history-data";
 
 // What a sensor's detail charts, from core History's roll-ups: the last 24
 // hours as a line through each 5 minutes' mean, broken where nothing was
@@ -79,8 +80,9 @@ export function dayLine(
   };
 }
 
-/** The last 7 local days, today last, from the hourly roll-ups and what it reads now. */
+/** The home's last 7 days, today last, from the hourly roll-ups and what it reads now. */
 export function weekRanges(
+  clock: HomeClock,
   statistics: Pick<DeviceStatistics, "fields"> | null,
   now: number,
   current: number | null,
@@ -88,9 +90,9 @@ export function weekRanges(
   const hours: HistoryStatistic[] = statisticsOf(statistics);
   const days: WeekRange[] = [];
   for (let back = 6; back >= 0; back--) {
-    const start = midnight(now, back);
-    const end = midnight(now, back - 1);
-    // An hour that local midnight splits counts on the day it starts.
+    const start = clock.startOfDay(now, back);
+    const end = clock.startOfDay(now, back - 1);
+    // An hour that the home's midnight splits counts on the day it starts.
     const own = hours.filter((hour) => {
       const at = Date.parse(hour.start);
       return at >= start && at < end;

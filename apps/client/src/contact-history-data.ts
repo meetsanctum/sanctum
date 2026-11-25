@@ -1,12 +1,12 @@
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
+
 import {
   comingsOn,
   countedWeekHeadline,
   durationText,
   joinedSpans,
-  midnight,
   onWithin,
   sensedWeekHeadline,
-  timeText,
   type Day,
   type Span,
 } from "./device-history-data";
@@ -23,6 +23,7 @@ import {
  * not to the count. "Not opened" is said only of a day known throughout.
  */
 export function contactSentence(
+  clock: HomeClock,
   spans: readonly Span[],
   from: number,
   now: number,
@@ -44,12 +45,12 @@ export function contactSentence(
   if (openings.length === 0) {
     return isOpenNow
       ? `Open ${total}`
-      : `Open ${total}, until ${timeText(last.to)}`;
+      : `Open ${total}, until ${clock.timeText(last.to)}`;
   }
   const counted = `Opened ${openings.length === 1 ? "once" : `${openings.length} times`}, ${total}`;
   return isOpenNow
-    ? `${counted}, this time since ${timeText(last.from)}`
-    : `${counted}, the last at ${timeText(openings.at(-1)!.from)}`;
+    ? `${counted}, this time since ${clock.timeText(last.from)}`
+    : `${counted}, the last at ${clock.timeText(openings.at(-1)!.from)}`;
 }
 
 /** What a span is, as the band's readout and a screen reader say it. */
@@ -64,17 +65,21 @@ export function contactSpanText(span: Span) {
  * days that have ended; until one has, how long today; or since when it
  * has not been open.
  */
-export function contactWeekHeadline(days: readonly Day[], now: number) {
-  return sensedWeekHeadline(days, now, {
+export function contactWeekHeadline(
+  clock: HomeClock,
+  days: readonly Day[],
+  now: number,
+) {
+  return sensedWeekHeadline(clock, days, now, {
     aDay: (about) => `Open ${about} a day`,
     today: (duration) => `Open for ${duration} today`,
-    none: neverOpened(days, now),
+    none: neverOpened(clock, days, now),
   });
 }
 
 // "Not opened" is said only of days known throughout, from the first day
 // anything is known of.
-function neverOpened(days: readonly Day[], now: number) {
+function neverOpened(clock: HomeClock, days: readonly Day[], now: number) {
   const firstKnown = days.find((day) => day.known > 0);
   const isKnownThroughout =
     firstKnown !== undefined &&
@@ -83,7 +88,7 @@ function neverOpened(days: readonly Day[], now: number) {
       .every(
         (day) =>
           day.known >=
-          (Math.min(midnight(day.start, -1), now) - day.start) / 1000,
+          (Math.min(clock.startOfDay(day.start, -1), now) - day.start) / 1000,
       );
   return isKnownThroughout ? "Not opened" : "Not seen open";
 }
@@ -97,10 +102,14 @@ export const openedTimes = (count: number) =>
  * the days that have ended; while that is less than once a day, how often
  * in all; or since when it has not been opened.
  */
-export function doorWeekHeadline(days: readonly Day[], now: number) {
-  return countedWeekHeadline(days, now, {
+export function doorWeekHeadline(
+  clock: HomeClock,
+  days: readonly Day[],
+  now: number,
+) {
+  return countedWeekHeadline(clock, days, now, {
     aDay: (about) => `Opened ${about} a day`,
     times: openedTimes,
-    none: neverOpened(days, now),
+    none: neverOpened(clock, days, now),
   });
 }

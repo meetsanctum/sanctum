@@ -1,4 +1,6 @@
 import type { CapabilityInfo, DeviceInfo } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
+import { useHomeClock } from "@meetsanctum/ui-sdk";
 import { DayBandChart, WeekColumnsChart } from "@meetsanctum/ui-sdk/charts";
 import { useId } from "react";
 
@@ -17,7 +19,6 @@ import {
   dayMs,
   daysOf,
   joinedSpans,
-  midnight,
   spansOf,
   type Day,
   type Span,
@@ -36,20 +37,25 @@ import { Battery } from "./sensor-detail";
 // sensor's Readings. Which value of its history it reads and every word it
 // says are the sensor's own (motion-detail.tsx, contact-detail.tsx).
 
-/** What such a page reads and says for one kind of sensor. */
+/** What such a page reads and says for one kind of sensor, by the home clock. */
 export type DayAndWeekWords = {
   /** The value of its history that the band draws White. */
   field: "motion" | "open";
   /** What it says now. */
-  now: (now: number) => string;
+  now: (clock: HomeClock, now: number) => string;
   /** The line under that, which says what the band shows on its own. */
-  sentence: (spans: readonly Span[], from: number, now: number) => string;
+  sentence: (
+    clock: HomeClock,
+    spans: readonly Span[],
+    from: number,
+    now: number,
+  ) => string;
   /** What the band is, for a screen reader. */
   band: string;
   /** What a span is, in the band's readout. */
   span: (span: Span) => string;
   /** What the last 7 days come to. */
-  week: (days: readonly Day[], now: number) => string;
+  week: (clock: HomeClock, days: readonly Day[], now: number) => string;
   columns: ColumnWords;
   /**
    * Whether the week counts how often it came on each day, as a door's
@@ -71,16 +77,18 @@ export function DayAndWeek(props: {
     words.counted,
   );
   const dayId = useId();
+  const clock = useHomeClock();
   const from = now - dayMs;
   const spans = loaded ? spansOf(loaded.states, from, now, live) : [];
   const timed = loaded
-    ? daysOf(loaded.statistics, spans, now, words.field)
+    ? daysOf(clock, loaded.statistics, spans, now, words.field)
     : [];
   const days =
     loaded && words.counted
       ? countedDays(
+          clock,
           timed,
-          spansOf(loaded.states, midnight(now, 6) - 1, now, live),
+          spansOf(loaded.states, clock.startOfDay(now, 6) - 1, now, live),
         )
       : timed;
 
@@ -96,7 +104,9 @@ export function DayAndWeek(props: {
         >
           Last 24 hours
         </h3>
-        <p className="m-0 text-2xl leading-8 font-light">{words.now(now)}</p>
+        <p className="m-0 text-2xl leading-8 font-light">
+          {words.now(clock, now)}
+        </p>
         {loaded && !loaded.states.kept ? (
           <div className="mt-4">
             <Notice>
@@ -111,7 +121,7 @@ export function DayAndWeek(props: {
         ) : (
           <>
             <p className="m-0 mb-4 text-[15px] leading-[22px] text-(--silver)">
-              {words.sentence(spans, from, now)}
+              {words.sentence(clock, spans, from, now)}
             </p>
             <DayBandChart
               spans={joinedSpans(spans)
@@ -126,7 +136,7 @@ export function DayAndWeek(props: {
         )}
       </section>
       {loaded?.states.kept && (
-        <Part title="Last 7 days" headline={words.week(days, now)}>
+        <Part title="Last 7 days" headline={words.week(clock, days, now)}>
           <WeekColumnsChart now={now} {...columnsOf(days, words.columns)} />
         </Part>
       )}

@@ -4,7 +4,12 @@ import type {
   DeviceInfo,
   Places,
 } from "@meetsanctum/app-sdk";
-import { Button, SegmentedControl, type LiveFeed } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  SegmentedControl,
+  useHomeClock,
+  type LiveFeed,
+} from "@meetsanctum/ui-sdk";
 import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -80,6 +85,7 @@ export function ActivityPage(props: {
   const [kind, setKind] = useState<ActivityKind | "all">("all");
   const [device, setDevice] = useState(props.device);
   const { places, devices } = usePlacesAndDevices();
+  const clock = useHomeClock();
   const activity = useActivity(
     { device, kind: kind === "all" ? undefined : kind },
     props.live,
@@ -96,11 +102,14 @@ export function ActivityPage(props: {
     const byEntry = new Map<string, Folded>(
       rows.map((row) => [row.entry.id, row]),
     );
-    return daysOf(rows.map((row) => row.entry)).map((day) => ({
+    return daysOf(
+      clock,
+      rows.map((row) => row.entry),
+    ).map((day) => ({
       ...day,
       rows: day.entries.map((entry) => byEntry.get(entry.id)!),
     }));
-  }, [activity.entries]);
+  }, [activity.entries, clock]);
   const deviceName =
     devices.find((each) => each.id === device)?.name ??
     activity.entries.find((entry) => entry.subject?.id === device)?.subject

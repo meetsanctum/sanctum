@@ -387,6 +387,11 @@ describe("apps' widgets", () => {
       card({
         blocks: [
           { kind: "headline", icon: "cloud-sun", value: { temperature: 8.2 } },
+          {
+            kind: "line",
+            text: "Updated {time}",
+            values: { time: { time: "2026-11-03T18:30:00Z" } },
+          },
           { kind: "note", text: "No forecast yet." },
         ],
       }),
@@ -394,7 +399,7 @@ describe("apps' widgets", () => {
     await refresh();
 
     const shown = cardOnHome()!;
-    expect(shown.textContent).toBe("Weather8°No forecast yet.");
+    expect(shown.textContent).toBe("Weather8°Updated 18:30No forecast yet.");
     expect(shown.querySelector("h2")?.style.color).toBe("var(--sky-text)");
     // Last on Home, after the rooms.
     expect(shown.parentElement).toBe(
@@ -411,7 +416,26 @@ describe("apps' widgets", () => {
         },
       }),
     );
-    expect(cardOnHome()?.textContent).toBe("Weather47°No forecast yet.");
+    expect(cardOnHome()?.textContent).toBe(
+      "Weather47°Updated 18:30No forecast yet.",
+    );
+
+    await act(async () =>
+      pushLive({
+        type: "places",
+        places: {
+          ...places,
+          home: {
+            ...places.home,
+            temperatureUnit: "fahrenheit",
+            hourCycle: "12h",
+          },
+        },
+      }),
+    );
+    expect(cardOnHome()?.textContent).toBe(
+      "Weather47°Updated 6:30 PMNo forecast yet.",
+    );
 
     await act(async () =>
       pushLive({

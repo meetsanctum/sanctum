@@ -2,7 +2,7 @@ import { memo } from "react";
 
 import { SpokenPin } from "./cursor";
 import { plotClass, Readout, useWidth } from "./frame";
-import { dateText } from "./time";
+import { useHomeClock } from "../home-clock";
 import { useWeekCursor, WeekNames, weekSlots } from "./week";
 
 // A week as a column a day, as tall as that day's value on a round scale
@@ -12,8 +12,9 @@ import { useWeekCursor, WeekNames, weekSlots } from "./week";
 // screen readers.
 
 /**
- * A day of a week's columns, from its local midnight: its value, in hours
- * or a count, 0 where it had none, or null where nothing was known of it.
+ * A day of a week's columns, from the start of its day on the home clock:
+ * its value, in hours or a count, 0 where it had none, or null where
+ * nothing was known of it.
  */
 export type WeekColumn = { start: number; value: number | null };
 
@@ -89,7 +90,8 @@ export type WeekColumnsChartProps<Day extends WeekColumn> = {
 export function WeekColumnsChart<Day extends WeekColumn>(
   props: WeekColumnsChartProps<Day>,
 ) {
-  const { days, now, text, date = dateText } = props;
+  const clock = useHomeClock();
+  const { days, now, text, date = clock.dateText } = props;
   const page = props.tone === "page";
   const labelClass = page ? "text-muted-foreground" : "text-(--pewter)";
   const { box, width } = useWidth(props.width);

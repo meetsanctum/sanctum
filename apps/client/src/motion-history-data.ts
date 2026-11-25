@@ -1,10 +1,11 @@
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
+
 import {
   durationText,
   joinedSpans,
   onWithin,
   sensedWeekHeadline,
   sentence,
-  timeText,
   type Day,
   type Span,
 } from "./device-history-data";
@@ -19,6 +20,7 @@ import {
  * since when.
  */
 export function motionSentence(
+  clock: HomeClock,
   spans: readonly Span[],
   from: number,
   now: number,
@@ -30,8 +32,8 @@ export function motionSentence(
   const joined = joinedSpans(spans);
   const last = [...joined].reverse().find((span) => span.on)!;
   return last === joined.at(-1) && last.to >= now
-    ? `${total}, this time since ${timeText(last.from)}`
-    : `${total}, the last at ${timeText(last.to)}`;
+    ? `${total}, this time since ${clock.timeText(last.from)}`
+    : `${total}, the last at ${clock.timeText(last.to)}`;
 }
 
 /**
@@ -88,8 +90,12 @@ export function motionSpanText(span: Span) {
  * over the days that have ended; until one has, how long there has been
  * motion today; or since when there has been none.
  */
-export function motionWeekHeadline(days: readonly Day[], now: number) {
-  return sensedWeekHeadline(days, now, {
+export function motionWeekHeadline(
+  clock: HomeClock,
+  days: readonly Day[],
+  now: number,
+) {
+  return sensedWeekHeadline(clock, days, now, {
     aDay: (about) => sentence(`${about} a day`),
     today: (duration) => sentence(`${duration} today`),
     none: "No motion",

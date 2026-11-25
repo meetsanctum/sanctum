@@ -12,6 +12,7 @@ import {
   type SensorMeasure,
   type TemperatureUnit,
 } from "@meetsanctum/app-sdk";
+import { homeClock, type HomeClock } from "@meetsanctum/app-sdk/clock";
 import {
   formatLightLevelRange,
   formatTemperatureRange,
@@ -261,6 +262,7 @@ function motionTile(
   capability: Motion,
   several: boolean,
   roomId: string | null,
+  clock: HomeClock,
   now: number,
   isQuiet: boolean,
 ): Tile {
@@ -285,7 +287,7 @@ function motionTile(
   const { motion } = capability.state;
   return {
     ...base,
-    status: motionText(motion, capability.changedAt, now),
+    status: motionText(clock, motion, capability.changedAt, now),
     on: motion,
     look: motion ? "on" : "off",
     motion: { motion, changedAt: capability.changedAt },
@@ -345,6 +347,7 @@ function contactTile(
   capability: Contact,
   several: boolean,
   roomId: string | null,
+  clock: HomeClock,
   now: number,
   isQuiet: boolean,
 ): Tile {
@@ -372,7 +375,7 @@ function contactTile(
   const { open } = capability.state;
   return {
     ...base,
-    status: contactText(open, capability.changedAt, now),
+    status: contactText(clock, open, capability.changedAt, now),
     on: open,
     look: open ? "on" : "off",
     contact: { open, changedAt: capability.changedAt },
@@ -457,7 +460,8 @@ export const sensorReadings = (tiles: readonly Tile[]) =>
  * the devices have, as tiles, and one for each device with none of them,
  * with each button's press of the last few seconds by its tile's key, and
  * how long motion sensors have been quiet and contact sensors open by
- * `now`, which also says which devices on a battery have gone quiet.
+ * `now` on the home clock, which also says which devices on a battery have
+ * gone quiet.
  */
 export function tilesOf(
   devices: DeviceInfo[],
@@ -467,6 +471,10 @@ export function tilesOf(
 ) {
   const rooms = new Set((places?.rooms ?? []).map((room) => room.id));
   const unit = places?.home.temperatureUnit ?? "celsius";
+  const clock = homeClock({
+    timeZone: places?.home.timeZone,
+    hourCycle: places?.home.hourCycle,
+  });
   return devices.flatMap((device) => {
     const roomId =
       device.roomId && rooms.has(device.roomId) ? device.roomId : null;
@@ -495,7 +503,15 @@ export function tilesOf(
       ),
       // A motion sensor that measures has both tiles, its motion's first.
       ...motion.map((capability) =>
-        motionTile(device, capability, motion.length > 1, roomId, now, isQuiet),
+        motionTile(
+          device,
+          capability,
+          motion.length > 1,
+          roomId,
+          clock,
+          now,
+          isQuiet,
+        ),
       ),
       ...contacts.map((capability) =>
         contactTile(
@@ -503,6 +519,7 @@ export function tilesOf(
           capability,
           contacts.length > 1,
           roomId,
+          clock,
           now,
           isQuiet,
         ),

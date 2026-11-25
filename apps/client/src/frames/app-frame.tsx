@@ -1,4 +1,3 @@
-import type { TemperatureUnit } from "@meetsanctum/app-sdk";
 import {
   Button,
   PageBar,
@@ -7,14 +6,14 @@ import {
 } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { CircleAlert } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { NoticeCard } from "../app-state";
 import type { HostedApp } from "../apps";
 import { KnotLoader } from "../knot-loader";
 import { PageDoesntMatch } from "../page-mismatch";
 import type { FrameEvent } from "./bridge";
-import { possessive, useFrame } from "./use-frame";
+import { possessive, useFrame, type FrameHousehold } from "./use-frame";
 
 // An app's page in a frame of its own (use-frame.ts). Until the page says
 // it's ready the top bar shows the app's name and the page stays in its
@@ -32,8 +31,8 @@ export function AppFrame(props: {
   back: () => void;
   openSettings: () => void;
   mode: FrameContext["mode"];
-  household:
-    { temperatureUnit: TemperatureUnit; timeZone: string | null } | undefined;
+  /** How the household reads things: its unit, its zone and its hours. */
+  household: FrameHousehold | undefined;
   /** Whether the home is away, as while it updates. */
   isAway: boolean;
 }) {
@@ -42,14 +41,6 @@ export function AppFrame(props: {
   // The page's own title and actions for the top bar, once it says them.
   const [bar, setBar] = useState<Extract<FrameEvent, { type: "bar" }>>();
   const title = bar?.title;
-  const context = useMemo<FrameContext>(
-    () => ({
-      mode,
-      temperatureUnit: household?.temperatureUnit ?? null,
-      timeZone: household?.timeZone ?? null,
-    }),
-    [mode, household?.temperatureUnit, household?.timeZone],
-  );
   const latest = useRef(props);
   useEffect(() => {
     latest.current = props;
@@ -57,7 +48,8 @@ export function AppFrame(props: {
 
   const shown = useFrame({
     app,
-    context,
+    mode,
+    household,
     isAway: props.isAway,
     setup: () => ({
       page: latest.current.page,

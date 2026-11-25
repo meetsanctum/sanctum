@@ -1,5 +1,5 @@
 import { useCursor } from "./cursor";
-import { midnight, weekdayText } from "./time";
+import { useHomeClock } from "../home-clock";
 
 // What a week's charts share: a slot a day across the plot, a mark up to 24
 // px wide in the middle of each, and the days' names under them, today's as
@@ -21,8 +21,9 @@ export function WeekNames(props: {
   today?: string;
   dayName?: (start: number) => string;
 }) {
-  const { days, plot, slot, dayName = weekdayText } = props;
-  const today = midnight(props.now);
+  const clock = useHomeClock();
+  const { days, plot, slot, dayName = clock.weekdayText } = props;
+  const today = clock.startOfDay(props.now);
   return (
     <div
       aria-hidden="true"

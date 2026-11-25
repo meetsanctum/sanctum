@@ -3,6 +3,7 @@ import {
   permissionWords,
   type ActivityInfo,
 } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 
 import { productName } from "../brand";
 import { providerNames } from "../models/words";
@@ -25,8 +26,8 @@ function sourceWords(detail: ActivityInfo["detail"]) {
   return provider ? `${model} with ${providerNames[provider]}` : model;
 }
 
-export function aiEntry(entry: ActivityInfo): Words | null {
-  const by = byWords(entry);
+export function aiEntry(clock: HomeClock, entry: ActivityInfo): Words | null {
+  const by = byWords(clock, entry);
   const name = entry.subject?.name;
   const said = (title: string) => ({
     title,

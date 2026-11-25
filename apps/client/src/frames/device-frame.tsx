@@ -1,14 +1,14 @@
-import type { DeviceInfo, TemperatureUnit } from "@meetsanctum/app-sdk";
-import { Button, type FrameContext } from "@meetsanctum/ui-sdk";
+import type { DeviceInfo } from "@meetsanctum/app-sdk";
+import { Button } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { CircleAlert } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { NoticeCard } from "../app-state";
 import type { HostedApp } from "../apps";
 import { KnotLoader } from "../knot-loader";
 import { PageDoesntMatch } from "../page-mismatch";
-import { possessive, useFrame } from "./use-frame";
+import { possessive, useFrame, type FrameHousehold } from "./use-frame";
 
 // An app's page for a device, in the device's detail, in a frame of its own
 // (use-frame.ts). It lies over the detail in Evening, transparent, as tall
@@ -22,22 +22,14 @@ export function DeviceFrame(props: {
   page: string;
   title: string;
   device: DeviceInfo;
-  household:
-    { temperatureUnit: TemperatureUnit; timeZone: string | null } | undefined;
+  /** How the household reads things: its unit, its zone and its hours. */
+  household: FrameHousehold | undefined;
   isAway: boolean;
   onEscape: () => void;
 }) {
   const { app, household } = props;
   const { name } = app.info;
   const [height, setHeight] = useState<number>();
-  const context = useMemo<FrameContext>(
-    () => ({
-      mode: "evening",
-      temperatureUnit: household?.temperatureUnit ?? null,
-      timeZone: household?.timeZone ?? null,
-    }),
-    [household?.temperatureUnit, household?.timeZone],
-  );
   const latest = useRef(props);
   useEffect(() => {
     latest.current = props;
@@ -45,7 +37,8 @@ export function DeviceFrame(props: {
 
   const shown = useFrame({
     app,
-    context,
+    mode: "evening",
+    household,
     isAway: props.isAway,
     setup: () => ({
       page: latest.current.page,

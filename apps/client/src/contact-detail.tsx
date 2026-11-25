@@ -3,6 +3,7 @@ import {
   type CapabilityInfo,
   type DeviceInfo,
 } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 
 import { contactNowText } from "./contact";
 import {
@@ -27,6 +28,7 @@ type Contact = Extract<CapabilityInfo, { kind: "contact" }>;
  * otherwise whether it is open, with since when it has been closed.
  */
 export function contactNow(
+  clock: HomeClock,
   device: DeviceInfo,
   capability: Contact,
   now: number,
@@ -36,7 +38,12 @@ export function contactNow(
   }
   if (maintenanceOf(device, now) === "quiet") return "Not heard from";
   if (!capability.state) return "Waiting for a reading";
-  return contactNowText(capability.state.open, capability.changedAt, now);
+  return contactNowText(
+    clock,
+    capability.state.open,
+    capability.changedAt,
+    now,
+  );
 }
 
 export function ContactPage(props: {
@@ -51,7 +58,7 @@ export function ContactPage(props: {
       capability={capability}
       words={{
         field: "open",
-        now: (now) => contactNow(device, capability, now),
+        now: (clock, now) => contactNow(clock, device, capability, now),
         sentence: contactSentence,
         band: "Open and closed over the last 24 hours",
         span: contactSpanText,

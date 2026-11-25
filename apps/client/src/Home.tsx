@@ -1,4 +1,5 @@
 import type { TemperatureUnit } from "@meetsanctum/app-sdk";
+import type { HourCycle } from "@meetsanctum/app-sdk/clock";
 import type { Me } from "@meetsanctum/auth-protocol";
 import {
   createLiveFeed,
@@ -468,6 +469,7 @@ function HomeScreen(
     <Household
       temperatureUnit={devicesSummary.temperatureUnit}
       timeZone={devicesSummary.timeZone}
+      hourCycle={devicesSummary.hourCycle}
     >
       <OverlayHostProvider value={overlayHost}>
         <ShellFrame
@@ -639,16 +641,20 @@ function HomeScreen(
   );
 }
 
-// The unit the household shows temperatures in, and the home's time zone,
-// in which widgets' cards write times.
+// The unit the household shows temperatures in, and the home clock, in
+// which the shell and widgets' cards work out and write days and times.
 function Household(props: {
   temperatureUnit: TemperatureUnit | undefined;
   timeZone: string | undefined;
+  hourCycle: HourCycle | undefined;
   children: ReactNode;
 }) {
   return (
     <TemperatureUnitProvider unit={props.temperatureUnit}>
-      <HomeTimeZoneProvider timeZone={props.timeZone}>
+      <HomeTimeZoneProvider
+        timeZone={props.timeZone}
+        hourCycle={props.hourCycle}
+      >
         {props.children}
       </HomeTimeZoneProvider>
     </TemperatureUnitProvider>

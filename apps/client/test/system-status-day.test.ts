@@ -1,6 +1,6 @@
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import { describe, expect, it } from "vitest";
 
-import { timeText } from "../src/device-history-data";
 import {
   memoryChart,
   memorySummary,
@@ -11,6 +11,9 @@ import {
   temperatureSummary,
   type HostPoint,
 } from "../src/system-status-day";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 // Status' last 24 hours (system-status-day.ts): each 5 minutes the manager
 // keeps as a line, broken where nothing was read, and what the day came to
@@ -53,14 +56,18 @@ describe("the host's day", () => {
     const middle = update + 2.5 * minute;
     expect(usage.highest).toEqual({ value: 0.62, at: middle });
     expect(usage.since).toBeNull();
-    expect(processorSummary(usage)).toBe(
-      `4% on average · busiest at ${timeText(middle)}, 62%`,
+    expect(processorSummary(clock, usage)).toBe(
+      `4% on average · busiest at ${clock.timeText(middle)}, 62%`,
     );
     expect(
-      temperatureSummary(readingDay(points, "celsius", now, 80), "celsius"),
-    ).toBe(`56°C on average · warmest at ${timeText(middle)}, 67°C`);
-    expect(memorySummary(readingDay(points, "memoryUsed", now))).toBe(
-      `652 MB on average · most at ${timeText(middle)}, 1.2 GB`,
+      temperatureSummary(
+        clock,
+        readingDay(points, "celsius", now, 80),
+        "celsius",
+      ),
+    ).toBe(`56°C on average · warmest at ${clock.timeText(middle)}, 67°C`);
+    expect(memorySummary(clock, readingDay(points, "memoryUsed", now))).toBe(
+      `652 MB on average · most at ${clock.timeText(middle)}, 1.2 GB`,
     );
   });
 
@@ -73,8 +80,8 @@ describe("the host's day", () => {
     const usage = readingDay(points, "usage", now);
     expect(usage.line.runs).toHaveLength(2);
     expect(usage.gap).toEqual({ from, to });
-    expect(processorSummary(usage)).toContain(
-      `no readings from ${timeText(from)} to ${timeText(to)}`,
+    expect(processorSummary(clock, usage)).toContain(
+      `no readings from ${clock.timeText(from)} to ${clock.timeText(to)}`,
     );
   });
 
@@ -87,8 +94,8 @@ describe("the host's day", () => {
       80,
     );
     expect(celsius.since).toBe(since);
-    expect(temperatureSummary(celsius, "celsius")).toMatch(
-      new RegExp(`^56°C on average since ${timeText(since)} · warmest`),
+    expect(temperatureSummary(clock, celsius, "celsius")).toMatch(
+      new RegExp(`^56°C on average since ${clock.timeText(since)} · warmest`),
     );
   });
 
@@ -97,8 +104,8 @@ describe("the host's day", () => {
     const points = day((at) => (at >= from ? { celsius: null } : {}));
     const celsius = readingDay(points, "celsius", now + minute, 80);
     expect(celsius.gap).toEqual({ from, to: now });
-    expect(temperatureSummary(celsius, "celsius")).toContain(
-      `no readings from ${timeText(from)} to ${timeText(now)}`,
+    expect(temperatureSummary(clock, celsius, "celsius")).toContain(
+      `no readings from ${clock.timeText(from)} to ${clock.timeText(now)}`,
     );
     expect(
       readingDay(
@@ -131,8 +138,8 @@ describe("the host's day", () => {
       from: Date.parse("2026-11-02T15:10:00Z"),
       to: Date.parse("2026-11-02T16:00:00Z"),
     });
-    expect(temperatureSummary(celsius, "fahrenheit")).toBe(
-      `Too hot from ${timeText(celsius.over!.from)} to ${timeText(celsius.over!.to)} · warmest at ${timeText(celsius.highest!.at)}, 183°F`,
+    expect(temperatureSummary(clock, celsius, "fahrenheit")).toBe(
+      `Too hot from ${clock.timeText(celsius.over!.from)} to ${clock.timeText(celsius.over!.to)} · warmest at ${clock.timeText(celsius.highest!.at)}, 183°F`,
     );
   });
 
@@ -142,8 +149,8 @@ describe("the host's day", () => {
     expect(usage.line.runs).toHaveLength(1);
     expect(usage.line.runs[0]!.at(-1)).toEqual({ at: now, value: 0.9 });
     expect(usage.line.max).toBe(0.9);
-    expect(processorSummary(usage)).toBe(
-      processorSummary(readingDay(points, "usage", now)),
+    expect(processorSummary(clock, usage)).toBe(
+      processorSummary(clock, readingDay(points, "usage", now)),
     );
   });
 
@@ -174,7 +181,7 @@ describe("the host's day", () => {
   });
 
   it("says nothing was read before the first 5 minutes end", () => {
-    expect(processorSummary(readingDay([], "usage", now))).toBe(
+    expect(processorSummary(clock, readingDay([], "usage", now))).toBe(
       "Nothing read yet",
     );
   });

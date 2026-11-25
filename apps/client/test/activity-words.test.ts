@@ -1,9 +1,14 @@
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { ActivityInfo } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
+import { triggerWords } from "../src/activity/actor-words";
 import { activityWords, lastChangeWords } from "../src/activity/words";
 import { productName } from "../src/brand";
 import { entry } from "./activity-fixtures";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 // How each entry of the activity log reads in the client, in a device's list
 // and the home's.
@@ -26,6 +31,7 @@ describe("an entry's words", () => {
     [{ hue: 20, saturation: 80 }, "Set to a colour"],
   ])("says what a command asked for (%j)", (asked, title) => {
     const words = activityWords(
+      clock,
       entry({ detail: { capability: "light", asked } }),
       "device",
     );
@@ -35,18 +41,21 @@ describe("an entry's words", () => {
   it("says which way a remote's hold moved a light, and a stop that failed", () => {
     expect(
       activityWords(
+        clock,
         entry({ detail: { capability: "light", move: "down" } }),
         "device",
       ).title,
     ).toBe("Dimmed while held");
     expect(
       activityWords(
+        clock,
         entry({ detail: { capability: "light", move: "up" } }),
         "home",
       ).title,
     ).toBe("Lamp brightened while held");
     expect(
       activityWords(
+        clock,
         entry({
           outcome: "failed",
           reason: "app_failed",
@@ -61,6 +70,7 @@ describe("an entry's words", () => {
     const device = { kind: "device" as const };
     const shown = (detail: Record<string, unknown>) =>
       activityWords(
+        clock,
         entry({ action: "device.update", who: device, detail }),
         "device",
       ).title;
@@ -81,6 +91,7 @@ describe("an entry's words", () => {
     const device = { kind: "device" as const };
     expect(
       activityWords(
+        clock,
         entry({ action: "device.quiet", who: device, detail: { battery: 6 } }),
         "home",
       ),
@@ -91,12 +102,14 @@ describe("an entry's words", () => {
     });
     expect(
       activityWords(
+        clock,
         entry({ action: "device.quiet", who: device, detail: null }),
         "device",
       ).detail,
     ).toBe("Not heard from");
     expect(
       activityWords(
+        clock,
         entry({
           action: "device.battery.low",
           who: device,
@@ -112,6 +125,7 @@ describe("an entry's words", () => {
     // The device said so itself, at no charge that is low.
     expect(
       activityWords(
+        clock,
         entry({ action: "device.battery.low", who: device }),
         "home",
       ),
@@ -122,6 +136,7 @@ describe("an entry's words", () => {
     });
     expect(
       activityWords(
+        clock,
         entry({
           action: "device.battery.new",
           who: device,
@@ -137,7 +152,9 @@ describe("an entry's words", () => {
   });
 
   it("starts with the device's name in the home's list", () => {
-    expect(activityWords(entry(), "home").title).toBe("Lamp turned on at 80%");
+    expect(activityWords(clock, entry(), "home").title).toBe(
+      "Lamp turned on at 80%",
+    );
   });
 
   it("names the press, the automation and the app behind a command", () => {
@@ -149,11 +166,11 @@ describe("an entry's words", () => {
       trigger: { piece: "press", app: null },
     };
     expect(
-      activityWords(entry({ who: press, app: moods }), "device").detail,
+      activityWords(clock, entry({ who: press, app: moods }), "device").detail,
     ).toBe("Office button, single press, with Moods");
-    expect(activityWords(entry({ who: press, run }), "device").detail).toBe(
-      "Office button, single press, through Desk focus",
-    );
+    expect(
+      activityWords(clock, entry({ who: press, run }), "device").detail,
+    ).toBe("Office button, single press, through Desk focus");
     const sunset = {
       ...run,
       name: "Evening",
@@ -166,6 +183,7 @@ describe("an entry's words", () => {
     };
     expect(
       activityWords(
+        clock,
         entry({
           who: { kind: "workflow", id: "evening", name: "Evening" },
           run: sunset,
@@ -175,6 +193,7 @@ describe("an entry's words", () => {
     ).toBe("Evening, 20 min before sunset");
     expect(
       activityWords(
+        clock,
         entry({
           who: { kind: "client", id: "tablet", name: "Hallway tablet" },
         }),
@@ -182,12 +201,24 @@ describe("an entry's words", () => {
       ).detail,
     ).toBe("Hallway tablet");
     expect(
-      activityWords(entry({ who: { kind: "device" } }), "device").detail,
+      activityWords(clock, entry({ who: { kind: "device" } }), "device").detail,
     ).toBe("Outside Sanctum, at the device or its switch");
+  });
+
+  it("writes the scheduled wall time in the home's hour format", () => {
+    const zurich = homeClock({ timeZone: "Europe/Zurich", hourCycle: "12h" });
+    const at = "2026-03-29T01:30:00Z";
+    const trigger = { piece: "time", app: null };
+    // The configured 02:30 is in the spring's missing hour.
+    expect(triggerWords(zurich, { ...trigger, time: "02:30" }, at)).toBe(
+      "at 2:30 AM",
+    );
+    expect(triggerWords(zurich, trigger, at)).toBe("at 3:30 AM");
   });
 
   it("joins a morning of adjustments into one", () => {
     const words = activityWords(
+      clock,
       entry({
         count: 12,
         at: "2026-10-31T08:10:00",
@@ -212,6 +243,7 @@ describe("an entry's words", () => {
   it("says when a device didn't answer, as a problem", () => {
     expect(
       activityWords(
+        clock,
         entry({
           outcome: "failed",
           reason: "no_answer",
@@ -232,9 +264,9 @@ describe("an entry's words", () => {
   ] as const)("says a command went again (%s)", (outcome, title, problem) => {
     const detail = { asked: { on: false }, resent: true };
     const reason = outcome === "failed" ? "no_answer" : null;
-    expect(activityWords(entry({ outcome, reason, detail }), "device")).toEqual(
-      { title, detail: "Alex · Sent again", problem },
-    );
+    expect(
+      activityWords(clock, entry({ outcome, reason, detail }), "device"),
+    ).toEqual({ title, detail: "Alex · Sent again", problem });
   });
 
   it("says a device left its network, naming the network by its app", () => {
@@ -246,12 +278,12 @@ describe("an entry's words", () => {
       app: { id: "sanctum.zigbee", name: "Zigbee" },
       subject: { type: "device", id: "plug", name: "Hall plug", gone: false },
     });
-    expect(activityWords(left, "home")).toEqual({
+    expect(activityWords(clock, left, "home")).toEqual({
       title: "Hall plug left the Zigbee network",
       detail: "Its network no longer has it, as after a reset",
       problem: false,
     });
-    expect(activityWords({ ...left, app: null }, "device").title).toBe(
+    expect(activityWords(clock, { ...left, app: null }, "device").title).toBe(
       "Left its network",
     );
   });
@@ -268,7 +300,7 @@ describe("an entry's words", () => {
       app: { id: "sanctum.example", name: "Example" },
       subject: { type: "device", id: "plug", name: "Hall plug", gone: false },
     });
-    expect(activityWords(found, "home")).toEqual({
+    expect(activityWords(clock, found, "home")).toEqual({
       title: "Hall plug has a problem",
       detail: "Its encryption key doesn't match",
       problem: true,
@@ -285,7 +317,7 @@ describe("an entry's words", () => {
       outcome,
       detail: { name: "Hall plug" },
     });
-    expect(activityWords(repaired, "device")).toMatchObject({
+    expect(activityWords(clock, repaired, "device")).toMatchObject({
       title,
       problem,
     });
@@ -309,13 +341,17 @@ describe("an entry's words", () => {
           gone: false,
         },
       });
-      expect(activityWords(added, "home")).toMatchObject({ title, problem });
+      expect(activityWords(clock, added, "home")).toMatchObject({
+        title,
+        problem,
+      });
     },
   );
 
   it("says what a press did", () => {
     const pressed = (fields: Partial<ActivityInfo>) =>
       activityWords(
+        clock,
         entry({
           action: "device.press",
           who: press,
@@ -359,6 +395,7 @@ describe("an entry's words", () => {
   it("says how the system's things went, in the household's words", () => {
     const system = (fields: Partial<ActivityInfo>) =>
       activityWords(
+        clock,
         entry({
           kind: "system",
           source: "manager",
@@ -422,6 +459,7 @@ describe("an entry's words", () => {
   it("words restarting an app, and a restart that was refused", () => {
     expect(
       activityWords(
+        clock,
         entry({
           source: "sanctum.moods",
           action: "restart",
@@ -432,6 +470,7 @@ describe("an entry's words", () => {
     ).toMatchObject({ title: "Restarted the app", problem: false });
     expect(
       activityWords(
+        clock,
         entry({
           source: "sanctum.moods",
           action: "restart",
@@ -447,6 +486,7 @@ describe("an entry's words", () => {
   it("words settings changes and refused updates without claiming success", () => {
     expect(
       activityWords(
+        clock,
         entry({
           source: "sanctum.moods",
           action: "settings.update",
@@ -461,6 +501,7 @@ describe("an entry's words", () => {
     });
     expect(
       activityWords(
+        clock,
         entry({
           source: "system",
           action: "update.start",
@@ -474,6 +515,7 @@ describe("an entry's words", () => {
   it("says a run the core stopped during didn't finish", () => {
     expect(
       activityWords(
+        clock,
         entry({
           kind: "automations",
           source: "workflows",
@@ -502,15 +544,20 @@ describe("an entry's words", () => {
       entry({ kind: "setup", source: "dashboards", action, detail });
 
     expect(
-      activityWords(home("device.home.add", { dashboard: "Home" }), "device")
-        .title,
+      activityWords(
+        clock,
+        home("device.home.add", { dashboard: "Home" }),
+        "device",
+      ).title,
     ).toBe("Added to Home");
     expect(
-      activityWords(home("device.home.remove", { dashboard: "Overview" }))
-        .title,
+      activityWords(
+        clock,
+        home("device.home.remove", { dashboard: "Overview" }),
+      ).title,
     ).toBe("Lamp removed from Overview");
     expect(
-      activityWords({
+      activityWords(clock, {
         ...home("dashboard.order", null),
         subject: { type: "dashboard", id: "home", name: "Home", gone: false },
       }),
@@ -520,6 +567,7 @@ describe("an entry's words", () => {
   it("says an app's update and going back ended, by the name kept once it's gone", () => {
     const ended = (fields: Partial<ActivityInfo>) =>
       activityWords(
+        clock,
         entry({
           kind: "system",
           source: "sanctum.moods",
@@ -565,6 +613,7 @@ describe("an entry's words", () => {
   it("says who added an app, by the name kept once it's gone", () => {
     const added = (fields: Partial<ActivityInfo>) =>
       activityWords(
+        clock,
         entry({
           kind: "setup",
           source: "sanctum.moods",
@@ -588,6 +637,7 @@ describe("an entry's words", () => {
   it("reads an app's action by its title", () => {
     expect(
       activityWords(
+        clock,
         entry({
           kind: "setup",
           source: "sanctum.moods",
@@ -606,7 +656,7 @@ describe("an entry's words", () => {
   });
 
   it("says the last change as a sentence", () => {
-    expect(lastChangeWords(entry({ at: "2026-10-31T21:52:00" }))).toBe(
+    expect(lastChangeWords(clock, entry({ at: "2026-10-31T21:52:00" }))).toBe(
       "Alex turned it on at 21:52",
     );
   });

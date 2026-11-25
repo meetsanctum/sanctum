@@ -1,10 +1,10 @@
 import type { AppInfo, TemperatureUnit } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import { formatTemperature } from "@meetsanctum/ui-sdk";
 import { useEffect, useState } from "react";
 
 import { productName } from "./brand";
 import { coreJson } from "./core-fetch";
-import { timeText } from "./device-history-data";
 import type { Channel } from "./system-update";
 import { isShown, onShown } from "./while-shown";
 
@@ -280,13 +280,13 @@ export function temperatureWord(celsius: number) {
 const temperature = (celsius: number, unit: TemperatureUnit) =>
   formatTemperature(celsius, unit, { whole: true });
 
-/** "18:40", or "1 Nov, 18:40" before today. */
-export function lastAtText(iso: string, now = new Date()) {
+/** "18:40", or "1 Nov, 18:40" before the home's today. */
+export function lastAtText(clock: HomeClock, iso: string, now = new Date()) {
   const at = new Date(iso);
-  const time = timeText(at.getTime());
-  return at.toDateString() === now.toDateString()
+  const time = clock.timeText(at);
+  return clock.date(at) === clock.date(now)
     ? time
-    : `${at.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}, ${time}`;
+    : `${clock.dayText(at)}, ${time}`;
 }
 
 // What an app's name is, for the fix of a problem with its data.
@@ -382,13 +382,14 @@ export function addDevicesHint(
 
 /** What to do about a problem, under its title. */
 export function problemFix(
+  clock: HomeClock,
   problem: HostProblem,
   appName: AppNames,
   now = new Date(),
 ) {
   switch (problem.kind) {
     case "power":
-      return `Use the official one: too little power can damage ${productName}'s data. Last at ${lastAtText(problem.lastLowAt, now)}`;
+      return `Use the official one: too little power can damage ${productName}'s data. Last at ${lastAtText(clock, problem.lastLowAt, now)}`;
     case "storage":
       return `An update needs 1.5 GB free: move ${productName} to a larger card or drive`;
     case "heat":

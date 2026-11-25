@@ -4,7 +4,8 @@ import type {
   DeviceInfo,
   DeviceStatistics,
 } from "@meetsanctum/app-sdk";
-import type { SwipePage } from "@meetsanctum/ui-sdk";
+import { startOfDay } from "@meetsanctum/app-sdk/clock";
+import { useHomeClock, type SwipePage } from "@meetsanctum/ui-sdk";
 import {
   DayStripChart,
   WeekColumnsChart,
@@ -21,7 +22,6 @@ import {
   daysOf,
   durationText,
   hourMs,
-  midnight,
   sentence,
   spansOf,
   spanText,
@@ -78,7 +78,8 @@ type Loaded = { states: DeviceHistory; statistics: DeviceStatistics };
  * A capability's changes over the last 24 hours and its hourly roll-ups
  * over the last 7 days, read when it is shown and every 5 minutes, with
  * every change seen live since, and the page's sense of now, a minute
- * fresh. A motion sensor's Motion page reads them too (motion-detail.tsx).
+ * fresh, its days the home clock's. A motion sensor's Motion page reads
+ * them too (motion-detail.tsx).
  * A page that counts changes by day reads its changes over the 7 days
  * (`weekOfChanges`), which the roll-ups do not hold.
  */
@@ -91,12 +92,14 @@ export function useDayAndWeek(
   const [failed, setFailed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   useChartClock(setNow);
+  const { timeZone } = useHomeClock();
 
   useEffect(() => {
     let current = true;
     const load = async () => {
       const to = Date.now();
-      const weekStart = midnight(to, 6);
+      const weekStart = startOfDay(to, timeZone, 6);
+      const firstHour = Math.floor(weekStart / hourMs) * hourMs;
       const query = (more: Record<string, string>) =>
         new URLSearchParams({
           device: device.id,
@@ -117,10 +120,8 @@ export function useDayAndWeek(
           coreJson<DeviceStatistics>(
             `/api/history/statistics?${query({
               period: "hour",
-              // Include the UTC hour that overlaps the first local midnight.
-              from: new Date(
-                Math.floor(weekStart / hourMs) * hourMs,
-              ).toISOString(),
+              // Include the UTC hour that overlaps the week's first midnight.
+              from: new Date(firstHour).toISOString(),
             })}`,
           ),
         ]);
@@ -141,7 +142,7 @@ export function useDayAndWeek(
       current = false;
       stopReloads();
     };
-  }, [device.id, capability.id, weekOfChanges]);
+  }, [device.id, capability.id, weekOfChanges, timeZone]);
 
   // Keep every change seen since the last history read. The next read
   // replaces these with the core's recorded times.
@@ -176,6 +177,7 @@ function DeviceHistoryPage(props: {
 }) {
   const { capability } = props;
   const { loaded, failed, now, live } = useDayAndWeek(props.device, capability);
+  const clock = useHomeClock();
 
   if (loaded && !loaded.states.kept) {
     return (
@@ -193,14 +195,17 @@ function DeviceHistoryPage(props: {
   const spans = loaded ? spansOf(loaded.states, from, now, live) : [];
   const dims =
     capability.kind === "light" && capability.features.brightness === true;
-  const days = loaded ? daysOf(loaded.statistics, spans, now) : [];
+  const days = loaded ? daysOf(clock, loaded.statistics, spans, now) : [];
 
   return (
     <div
       data-loading={loaded ? undefined : ""}
       className={`${width} flex flex-col gap-10 transition-opacity [--history-width:520px] data-loading:opacity-0`}
     >
-      <Part title="Last 24 hours" headline={dayHeadline(spans, from, now)}>
+      <Part
+        title="Last 24 hours"
+        headline={dayHeadline(clock, spans, from, now)}
+      >
         <DayStripChart
           spans={spans.map(stripSpan)}
           from={from}
@@ -209,7 +214,7 @@ function DeviceHistoryPage(props: {
           text={spanText}
         />
       </Part>
-      <Part title="Last 7 days" headline={weekHeadline(days, now)}>
+      <Part title="Last 7 days" headline={weekHeadline(clock, days, now)}>
         <WeekColumnsChart now={now} {...columnsOf(days)} />
       </Part>
     </div>

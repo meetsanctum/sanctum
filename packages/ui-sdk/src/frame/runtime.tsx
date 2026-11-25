@@ -6,7 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { AppScope, type AppUi, type PageParams } from "../app-ui";
 import { deviceKindsOf, type AppClient, type LiveListener } from "../client";
 import type { PressCaptureListener } from "../presses";
-import { HomeTimeZoneProvider } from "../home-time-zone";
+import { HomeTimeZoneProvider } from "../home-clock";
 import { PageBarSink, type PageBarAction } from "../page-bar";
 import { TemperatureUnitProvider } from "../temperature-unit";
 import {
@@ -359,7 +359,10 @@ function Framed(props: {
       <TemperatureUnitProvider
         unit={shown.context.temperatureUnit ?? undefined}
       >
-        <HomeTimeZoneProvider timeZone={shown.context.timeZone ?? undefined}>
+        <HomeTimeZoneProvider
+          timeZone={shown.context.timeZone}
+          hourCycle={shown.context.hourCycle}
+        >
           <PageBarSink.Provider value={sayBar}>
             <Provider>
               {DevicePage && device ? (

@@ -3,7 +3,7 @@ import { Fragment, memo, useMemo } from "react";
 import { TimeTicks } from "./axis";
 import { SpokenPin, useCursor } from "./cursor";
 import { plotClass, Readout, useWidth } from "./frame";
-import { timeText } from "./time";
+import { useHomeClock } from "../home-clock";
 
 // A day as a strip: each span on filled in its own colour, as high as its
 // level where the strip shows levels, off as a hairline along its foot and
@@ -111,7 +111,7 @@ export type DayStripChartProps<Span extends StripSpan> = {
   text?: (span: Span | undefined) => string;
   /** The top of a strip with levels: 100% unless said. */
   full?: string;
-  /** A time of day as the chart says it: 07:30 unless said. */
+  /** A time of day as the chart says it: as the home writes it, 07:30 or 7:30 AM, unless said. */
   time?: (at: number) => string;
   /** Its width in px; without one it measures its box. */
   width?: number;
@@ -121,13 +121,14 @@ export type DayStripChartProps<Span extends StripSpan> = {
 export function DayStripChart<Span extends StripSpan>(
   props: DayStripChartProps<Span>,
 ) {
+  const clock = useHomeClock();
   const {
     spans,
     from,
     to,
     levels = false,
     text = markText,
-    time = timeText,
+    time = clock.timeText,
   } = props;
   const { box, width } = useWidth(props.width);
   const plot = Math.max(0, width - (levels ? gutter : 0));
@@ -227,7 +228,7 @@ export function DayStripChart<Span extends StripSpan>(
         from={from}
         to={to}
         plot={plot}
-        time={time}
+        time={props.time}
         className="mt-2 text-(--pewter)"
       />
       <SpokenPin
