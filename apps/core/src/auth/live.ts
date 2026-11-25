@@ -36,6 +36,21 @@ export function createConnections(options: { now?: () => Date } = {}) {
     }
   }
 
+  // Sends every open connection what `message` builds for its principal;
+  // nothing where it builds nothing.
+  function publish(message: (principal: Principal) => object | undefined) {
+    for (const [socket, { principal }] of open) {
+      const built = message(principal);
+      if (built) {
+        try {
+          socket.send(JSON.stringify(built));
+        } catch {
+          // A connection on its way out; its close event releases it.
+        }
+      }
+    }
+  }
+
   return {
     add(principal: Principal, socket: Socket) {
       open.set(socket, { principal, since: now() });
@@ -63,25 +78,19 @@ export function createConnections(options: { now?: () => Date } = {}) {
       close((principal) => principal.client.id === clientId);
     },
 
+    // Sends one client's open connections `message`.
+    tell(clientId: string, message: object) {
+      publish((principal) =>
+        principal.client.id === clientId ? message : undefined,
+      );
+    },
+
     // A removed person's clients are gone with them.
     closePerson(personId: string) {
       close((principal) => principal.person?.id === personId);
     },
 
-    // Sends every open connection what `message` builds for its principal;
-    // nothing where it builds nothing.
-    publish(message: (principal: Principal) => object | undefined) {
-      for (const [socket, { principal }] of open) {
-        const built = message(principal);
-        if (built) {
-          try {
-            socket.send(JSON.stringify(built));
-          } catch {
-            // A connection on its way out; its close event releases it.
-          }
-        }
-      }
-    },
+    publish,
   };
 }
 

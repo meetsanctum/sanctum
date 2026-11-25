@@ -35,6 +35,10 @@ const admin: Me = {
     lastSeenAt: null,
     connectedSince: null,
     current: true,
+    reduceEffects: "automatic",
+    reduceMotion: "automatic",
+    drawingRevision: 0,
+    drawn: null,
   },
   person: {
     id: "maya",

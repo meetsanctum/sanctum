@@ -1,6 +1,6 @@
 import type { ClientInfo, PersonInfo } from "@meetsanctum/auth-protocol";
 import { Button, Input } from "@meetsanctum/ui-sdk";
-import { EllipsisVertical, House, Pencil, Trash2 } from "lucide-react";
+import { EllipsisVertical, Gauge, House, Pencil, Trash2 } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -29,6 +29,7 @@ import {
 } from "./components/ui/dropdown-menu";
 import { coreJson } from "./core-fetch";
 import { platformNames } from "./platforms";
+import { ClientDrawing, drawnText } from "./settings-client-drawing";
 import { everyWhileShown } from "./while-shown";
 
 // Settings → Clients: every client with its kind, person, platform and
@@ -75,10 +76,17 @@ export function clientDetail(
       : client.connectedSince
         ? "Connected now"
         : seenText(client.lastSeenAt, now),
-  ].join(" · ");
+    drawnText(client),
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
-type Editing = { action: "rename" | "remove"; client: ClientInfo };
+type EditNameOrRemove = {
+  action: "rename" | "remove";
+  client: ClientInfo;
+};
+type Editing = EditNameOrRemove | { action: "drawing"; client: ClientInfo };
 
 export function ClientsSection(props: {
   // The way back of Settings' Clients page, which it is the whole of.
@@ -88,15 +96,38 @@ export function ClientsSection(props: {
   const [people, setPeople] = useState<PersonInfo[]>([]);
   const [editing, setEditing] = useState<Editing>();
   const [adding, setAdding] = useState(false);
+  const refreshId = useRef(0);
+  const lastAppliedRefresh = useRef(0);
 
   const refresh = useCallback(async () => {
+    const id = ++refreshId.current;
     const [nextClients, nextPeople] = await Promise.all([
       coreJson<ClientInfo[]>("/api/auth/clients"),
       coreJson<PersonInfo[]>("/api/people"),
     ]);
+    if (id < lastAppliedRefresh.current) return;
+    lastAppliedRefresh.current = id;
     setClients(nextClients);
     setPeople(nextPeople);
   }, []);
+
+  const drawingChanged = (saved: ClientInfo) => {
+    // A read already under way can still contain the old choices.
+    lastAppliedRefresh.current = ++refreshId.current;
+    setClients((current) =>
+      current?.map((client) =>
+        client.id === saved.id && client.drawingRevision < saved.drawingRevision
+          ? {
+              ...client,
+              reduceEffects: saved.reduceEffects,
+              reduceMotion: saved.reduceMotion,
+              drawingRevision: saved.drawingRevision,
+              drawn: saved.drawn,
+            }
+          : client,
+      ),
+    );
+  };
 
   // A device approved here shows up once it collects its token, and
   // last-seen times move on.
@@ -145,8 +176,18 @@ export function ClientsSection(props: {
           })}
         </ul>
       )}
+      <ClientDrawing
+        client={
+          editing?.action === "drawing"
+            ? (clients?.find(({ id }) => id === editing.client.id) ??
+              editing.client)
+            : undefined
+        }
+        onClose={() => setEditing(undefined)}
+        onChanged={drawingChanged}
+      />
       <EditClient
-        editing={editing}
+        editing={editing?.action === "drawing" ? undefined : editing}
         onClose={() => setEditing(undefined)}
         onDone={() => void refresh().catch(() => undefined)}
       />
@@ -180,6 +221,10 @@ function ClientMenu(props: {
           <Pencil />
           Rename
         </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => props.onEdit("drawing")}>
+          <Gauge />
+          Effects and motion
+        </DropdownMenuItem>
         {/* Signing out of this device is in the account menu. */}
         {!props.client.current && (
           <DropdownMenuItem
@@ -197,12 +242,12 @@ function ClientMenu(props: {
 
 // Renaming a client, or removing it after saying what that does.
 function EditClient(props: {
-  editing?: Editing;
+  editing?: EditNameOrRemove;
   onClose: () => void;
   onDone: () => void;
 }) {
   // What the dialog showed stays while it closes.
-  const last = useRef<Editing>(undefined);
+  const last = useRef<EditNameOrRemove>(undefined);
   if (props.editing) last.current = props.editing;
   const editing = last.current;
   const [name, setName] = useState("");

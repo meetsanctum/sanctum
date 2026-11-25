@@ -2,6 +2,10 @@
 import { act } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
+import { setCredential } from "../src/core-fetch";
+import { setCoreBaseUrl } from "../src/core-url";
+import { followEffects } from "../src/effects";
+import { host } from "./home-shell-fixtures";
 import {
   mockCoreJson,
   pushLiveState,
@@ -68,4 +72,66 @@ it("checks the token while hidden if the live connection is down", async () => {
   expect(requests("/api/auth/me")).toBe(1);
   expect(requests("/api/apps")).toBe(0);
   expect(requests("/api/devices")).toBe(0);
+});
+
+it("applies drawing choices from a live notice, reading only Me", async () => {
+  let receive!: (data: object) => void;
+  vi.stubGlobal(
+    "WebSocket",
+    class {
+      onmessage?: (event: MessageEvent) => void;
+      constructor() {
+        receive = (data) =>
+          this.onmessage?.(
+            new MessageEvent("message", { data: JSON.stringify(data) }),
+          );
+      }
+      close() {}
+    },
+  );
+  setCredential(host);
+  setCoreBaseUrl(host.url);
+  const stopEffects = followEffects();
+  try {
+    const live =
+      await vi.importActual<typeof import("../src/live")>("../src/live");
+    const { connectLive } = await import("../src/live");
+    vi.mocked(connectLive).mockImplementationOnce(live.connectLive);
+    const original = mockCoreJson.getMockImplementation()!;
+    let me = {
+      client: {
+        id: host.clientId,
+        reduceEffects: "automatic",
+        reduceMotion: "off",
+        drawingRevision: 0,
+      },
+      person: null,
+    };
+    mockCoreJson.mockImplementation((path, init) =>
+      path === "/api/auth/me"
+        ? Promise.resolve(me)
+        : path === "/api/auth/me/drawn"
+          ? Promise.resolve(undefined)
+          : original(path, init),
+    );
+    await remountHome();
+    expect(document.documentElement.dataset.motion).toBeUndefined();
+    mockCoreJson.mockClear();
+
+    me = {
+      ...me,
+      client: { ...me.client, reduceMotion: "on", drawingRevision: 1 },
+    };
+    await act(async () => receive({ type: "client" }));
+
+    expect(requests("/api/auth/me")).toBe(1);
+    expect(requests("/api/apps")).toBe(0);
+    expect(document.documentElement.dataset.motion).toBe("reduced");
+  } finally {
+    stopEffects();
+    delete document.documentElement.dataset.motion;
+    delete document.documentElement.dataset.effects;
+    setCoreBaseUrl(null);
+    setCredential(null);
+  }
 });

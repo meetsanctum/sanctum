@@ -142,6 +142,136 @@ describe("clients", () => {
     ).toBe(401);
   });
 
+  it("draw as any client chooses, and say what they draw with", async () => {
+    const core = await testCore();
+    const claim = await claimed(core);
+    const display = sharedClient(core);
+    // The display hears the change at once over its live connection.
+    const heard: unknown[] = [];
+    core.auth.connections.add(core.auth.clients.authenticate(display.token)!, {
+      close() {},
+      send: (message) => heard.push(JSON.parse(String(message))),
+    });
+    const heardByEditor: unknown[] = [];
+    core.auth.connections.add(core.auth.clients.authenticate(claim.token)!, {
+      close() {},
+      send: (message) => heardByEditor.push(JSON.parse(String(message))),
+    });
+    const me = async () =>
+      (await get(core, "/api/auth/me", { token: display.token })).json().client;
+    const automatic = await me();
+    expect(automatic).toMatchObject({
+      reduceEffects: "automatic",
+      reduceMotion: "automatic",
+      drawingRevision: 0,
+      drawn: null,
+    });
+
+    const set = await post(
+      core,
+      "/api/auth/clients/drawing",
+      { id: display.id, reduceEffects: "on", reduceMotion: "on" },
+      { token: claim.token },
+    );
+    expect(set.json()).toMatchObject({
+      id: display.id,
+      reduceEffects: "on",
+      reduceMotion: "on",
+      current: false,
+    });
+    expect(heard).toEqual([{ type: "client" }]);
+    expect(heardByEditor).toEqual([]);
+    // A choice left out stays as it is.
+    await post(
+      core,
+      "/api/auth/clients/drawing",
+      { id: display.id, reduceMotion: "off" },
+      { token: claim.token },
+    );
+    const saved = await me();
+    expect(saved).toMatchObject({
+      reduceEffects: "on",
+      reduceMotion: "off",
+      drawingRevision: 2,
+    });
+
+    const drawn = { effects: "reduced", motion: "regular", slowDevice: true };
+    const say = (report: typeof drawn, drawingRevision: number) =>
+      post(
+        core,
+        "/api/auth/me/drawn",
+        { ...report, drawingRevision },
+        { token: display.token },
+      );
+    const said = await say(drawn, saved.drawingRevision);
+    expect(said.statusCode).toBe(204);
+    await say({ ...drawn, motion: "reduced" }, set.json().drawingRevision);
+    const listed = (
+      await get(core, "/api/auth/clients", { token: claim.token })
+    ).json();
+    expect(
+      listed.find((client: { id: string }) => client.id === display.id),
+    ).toMatchObject({ drawn });
+
+    // A new choice forgets it until the display says again; the same one
+    // keeps it.
+    await post(
+      core,
+      "/api/auth/clients/drawing",
+      { id: display.id, reduceEffects: "on" },
+      { token: claim.token },
+    );
+    expect(await me()).toMatchObject({ drawn });
+    expect(heard).toEqual([{ type: "client" }, { type: "client" }]);
+    await post(
+      core,
+      "/api/auth/clients/drawing",
+      { id: display.id, reduceEffects: "automatic" },
+      { token: claim.token },
+    );
+    expect(await me()).toMatchObject({ drawn: null });
+  });
+
+  it("refuse a choice they don't know, and an agent's drawing", async () => {
+    const core = await testCore();
+    const claim = await claimed(core);
+    const display = sharedClient(core);
+    for (const body of [
+      { id: display.id, reduceEffects: "sometimes" },
+      { id: display.id, reduceMotion: true },
+    ]) {
+      const refused = await post(core, "/api/auth/clients/drawing", body, {
+        token: claim.token,
+      });
+      expect(refused.statusCode).toBe(400);
+    }
+    const said = await post(
+      core,
+      "/api/auth/me/drawn",
+      {
+        effects: "plain",
+        motion: "regular",
+        slowDevice: false,
+        drawingRevision: 0,
+      },
+      { token: display.token },
+    );
+    expect(said.statusCode).toBe(400);
+
+    const agent = core.auth.clients.createAgent({
+      name: "Codex on the office Mac",
+      platform: "macos",
+      addedBy: { kind: "person", id: claim.client.personId! },
+    });
+    const refused = await post(
+      core,
+      "/api/auth/clients/drawing",
+      { id: agent.client.id, reduceEffects: "on" },
+      { token: claim.token },
+    );
+    expect(refused.statusCode).toBe(404);
+  });
+
   it("of someone else are managed by everyone, shared clients too", async () => {
     const core = await testCore();
     const claim = await claimed(core);

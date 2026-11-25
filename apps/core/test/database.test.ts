@@ -111,7 +111,7 @@ describe("the core's database", () => {
     onTestFinished(after.close);
     const clients = createClients(after.db, {
       record: () => "unused",
-      connections: { closeClient() {}, connectedSince: () => null },
+      connections: { closeClient() {}, connectedSince: () => null, tell() {} },
       now: () => new Date(),
     });
     expect(

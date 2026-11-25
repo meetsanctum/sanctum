@@ -3,6 +3,7 @@ import {
   liveInvalidTokenCode,
   livePath,
   type LiveAuth,
+  type LiveClientChanged,
 } from "@meetsanctum/auth-protocol";
 
 import { coreFetch, tokenFor } from "./core-fetch";
@@ -12,13 +13,16 @@ import { coreUrl } from "./core-url";
 // the token the fetch helper would send to the same core, and reconnects
 // while the token is held, waiting longer each time, or at once when told
 // the core is back. Once it is live, the core's updates reach onMessage,
-// which hands them to the apps' pages in their frames (frames/bridge.ts).
+// which hands them to the apps' pages in their frames (frames/bridge.ts),
+// apart from a change to this client's own record, such as how it draws,
+// which goes to onClientChanged.
 
 export type LiveState = "connecting" | "live" | "offline";
 
 export function connectLive(
   onState: (state: LiveState) => void,
   onMessage: (message: LiveMessage) => void = () => undefined,
+  onClientChanged: () => void = () => undefined,
 ) {
   let stopped = false;
   let socket: WebSocket | undefined;
@@ -38,10 +42,12 @@ export function connectLive(
       socket?.send(JSON.stringify({ type: "auth", token } satisfies LiveAuth));
     socket.onmessage = (event) => {
       const message = JSON.parse(String(event.data)) as
-        { type: "ready" } | LiveMessage;
+        { type: "ready" } | LiveClientChanged | LiveMessage;
       if (message.type === "ready") {
         delay = 1_000;
         onState("live");
+      } else if (message.type === "client") {
+        onClientChanged();
       } else {
         onMessage(message);
       }

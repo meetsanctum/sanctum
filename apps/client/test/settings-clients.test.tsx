@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { ClientInfo } from "@meetsanctum/auth-protocol";
+import type { ClientInfo, SetClientDrawing } from "@meetsanctum/auth-protocol";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -33,6 +33,10 @@ const macbook: ClientInfo = {
   lastSeenAt: "2026-10-28T11:59:30Z",
   connectedSince: null,
   current: true,
+  reduceEffects: "automatic",
+  reduceMotion: "automatic",
+  drawingRevision: 0,
+  drawn: null,
 };
 const tablet: ClientInfo = {
   id: "tablet",
@@ -44,6 +48,10 @@ const tablet: ClientInfo = {
   lastSeenAt: null,
   connectedSince: null,
   current: false,
+  reduceEffects: "automatic",
+  reduceMotion: "automatic",
+  drawingRevision: 0,
+  drawn: null,
 };
 
 describe("a client's detail", () => {
@@ -63,21 +71,40 @@ describe("a client's detail", () => {
     );
     expect(clientDetail(macbook, maya, now)).toBe("Maya · macOS · This device");
   });
+
+  it.each([
+    ["reduced", "reduced", " · Reduced effects and motion"],
+    ["reduced", "regular", " · Reduced effects"],
+    ["regular", "reduced", " · Reduced motion"],
+    ["regular", "regular", ""],
+  ] as const)(
+    "says what it draws with, effects %s and motion %s",
+    (effects, motion, said) => {
+      const drawn = { effects, motion, slowDevice: false };
+      expect(clientDetail({ ...tablet, drawn }, undefined, now)).toBe(
+        `Shared · Web browser · Never seen${said}`,
+      );
+    },
+  );
 });
 
 describe("Settings → Clients", () => {
   let root: Root;
   let container: HTMLDivElement;
   let approved: unknown[];
+  let drawing: unknown[];
+  let shownTablet: ClientInfo;
 
   beforeEach(async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     approved = [];
+    drawing = [];
+    shownTablet = tablet;
     vi.mocked(coreJson).mockReset();
     vi.mocked(coreJson).mockImplementation(async (path, init = {}) => {
       switch (path) {
         case "/api/auth/clients":
-          return [macbook, tablet];
+          return [macbook, shownTablet];
         case "/api/people":
           return [maya];
         case "/api/auth/pair/lookup":
@@ -95,6 +122,15 @@ describe("Settings → Clients", () => {
         case "/api/auth/pair/approve":
           approved.push(init.json);
           return undefined;
+        case "/api/auth/clients/drawing":
+          drawing.push(init.json);
+          shownTablet = {
+            ...shownTablet,
+            ...(init.json as SetClientDrawing),
+            drawingRevision: shownTablet.drawingRevision + 1,
+            drawn: null,
+          };
+          return shownTablet;
         default:
           throw new Error(`Unexpected request: ${path}`);
       }
@@ -109,6 +145,7 @@ describe("Settings → Clients", () => {
     await act(async () => root.unmount());
     container.remove();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   // Sets an input's value the way typing does, so React sees it.
@@ -142,6 +179,115 @@ describe("Settings → Clients", () => {
     ].find((candidate) => candidate.textContent === action)!;
     await act(async () => item.click());
   }
+
+  // A choice in the Effects and motion dialog, by its setting's name.
+  function choice(setting: string, option: string) {
+    const name = [...document.querySelectorAll("[role=dialog] span")].find(
+      (span) => span.textContent === setting,
+    )!;
+    const group = document.querySelector(`[aria-labelledby="${name.id}"]`)!;
+    return [...group.querySelectorAll("button")].find(
+      (each) => each.textContent === option,
+    )!;
+  }
+
+  it("sets a client's effects and motion, Reduce motion turning on with Reduce effects", async () => {
+    await editClient("Kitchen tablet", "Effects and motion");
+    const dialog = document.querySelector<HTMLElement>("[role=dialog]")!;
+    expect(dialog.textContent).toContain("Effects and motion");
+    expect(choice("Reduce effects", "Automatic").dataset.state).toBe("on");
+    expect(dialog.textContent).toContain(
+      "On where Kitchen tablet is known to be slow or asks for reduced transparency.",
+    );
+
+    await act(async () => choice("Reduce effects", "On").click());
+    expect(drawing).toEqual([
+      { id: "tablet", reduceEffects: "on", reduceMotion: "on" },
+    ]);
+    expect(choice("Reduce motion", "On").dataset.state).toBe("on");
+    expect(dialog.textContent).toContain(
+      "On with Reduce effects. You can turn it off on its own.",
+    );
+
+    // Reduce motion keeps its own choice from then on.
+    await act(async () => choice("Reduce motion", "Off").click());
+    expect(drawing.at(-1)).toEqual({ id: "tablet", reduceMotion: "off" });
+    expect(dialog.textContent).toContain(
+      "Every movement, even where Kitchen tablet asks for less.",
+    );
+    await act(async () => choice("Reduce effects", "Off").click());
+    expect(drawing.at(-1)).toEqual({ id: "tablet", reduceEffects: "off" });
+    expect(choice("Reduce motion", "Off").dataset.state).toBe("on");
+
+    await act(async () => button("Done").click());
+    expect(document.querySelector("[role=dialog]")).toBeNull();
+  });
+
+  it("puts a choice back where it couldn't be saved", async () => {
+    await editClient("Kitchen tablet", "Effects and motion");
+    vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(500, "unknown"));
+    await act(async () => choice("Reduce effects", "On").click());
+    expect(choice("Reduce effects", "Automatic").dataset.state).toBe("on");
+    expect(choice("Reduce motion", "Automatic").dataset.state).toBe("on");
+    expect(
+      document.querySelector("[role=dialog] [role=alert]")!.textContent,
+    ).toBe("That did not work. Try again.");
+  });
+
+  it("lets a pick go while a save is on its way, and keeps its failure out of a reopened dialog", async () => {
+    await editClient("Kitchen tablet", "Effects and motion");
+    let refuseSave!: (error: Error) => void;
+    const save = new Promise<ClientInfo>((_, reject) => {
+      refuseSave = reject;
+    });
+    vi.mocked(coreJson).mockReturnValueOnce(save);
+    await act(async () => choice("Reduce effects", "On").click());
+    await act(async () => choice("Reduce motion", "Off").click());
+    expect(drawing).toEqual([]);
+
+    await act(async () => button("Done").click());
+    await editClient("Kitchen tablet", "Effects and motion");
+    await act(async () => refuseSave(new CoreError(500, "unknown")));
+    expect(document.querySelector("[role=dialog] [role=alert]")).toBeNull();
+    expect(choice("Reduce effects", "Automatic").dataset.state).toBe("on");
+  });
+
+  it("updates the open dialog when choices are changed elsewhere", async () => {
+    await editClient("Kitchen tablet", "Effects and motion");
+    const visibility = vi.spyOn(document, "visibilityState", "get");
+    const refresh = async () => {
+      visibility.mockReturnValue("hidden");
+      document.dispatchEvent(new Event("visibilitychange"));
+      visibility.mockReturnValue("visible");
+      await act(async () =>
+        document.dispatchEvent(new Event("visibilitychange")),
+      );
+    };
+    shownTablet = {
+      ...shownTablet,
+      reduceMotion: "on",
+      drawingRevision: 1,
+      drawn: { effects: "reduced", motion: "reduced", slowDevice: false },
+    };
+    await refresh();
+    expect(choice("Reduce motion", "On").dataset.state).toBe("on");
+    expect(document.querySelector("[role=dialog]")?.textContent).toContain(
+      "On now, since Kitchen tablet asks for reduced transparency.",
+    );
+    shownTablet = {
+      ...shownTablet,
+      reduceMotion: "off",
+      drawingRevision: 2,
+      drawn: null,
+    };
+    await refresh();
+    expect(choice("Reduce motion", "Off").dataset.state).toBe("on");
+
+    await act(async () => choice("Reduce effects", "On").click());
+    expect(drawing).toEqual([
+      { id: "tablet", reduceEffects: "on", reduceMotion: "on" },
+    ]);
+  });
 
   it("lists every client, marking those never seen", () => {
     expect(container.textContent).toContain("Maya's MacBook");

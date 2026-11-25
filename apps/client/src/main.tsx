@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./App";
+import { followStoredDrawing } from "./drawing";
 import { followEffects } from "./effects";
 import { reloadOnFailedImports } from "./module-reload";
 // Inter ships with the client, so the page reaches nothing but its home.
@@ -12,6 +13,7 @@ import "./styles.css";
 
 reloadOnFailedImports();
 followEffects();
+void followStoredDrawing();
 
 const root = document.getElementById("root");
 if (!root) {

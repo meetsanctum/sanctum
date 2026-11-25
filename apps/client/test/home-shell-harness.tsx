@@ -43,14 +43,16 @@ const socket = vi.hoisted(() => ({
   state: (_state: LiveState) => {},
 }));
 vi.mock("../src/live", () => ({
-  connectLive: (
-    onState: (state: LiveState) => void,
-    onMessage: (message: LiveMessage) => void,
-  ) => {
-    socket.push = onMessage;
-    socket.state = onState;
-    return { stop() {}, retryNow() {} };
-  },
+  connectLive: vi.fn(
+    (
+      onState: (state: LiveState) => void,
+      onMessage: (message: LiveMessage) => void,
+    ) => {
+      socket.push = onMessage;
+      socket.state = onState;
+      return { stop() {}, retryNow() {} };
+    },
+  ),
 }));
 
 export function publishCoreStatus(status: CoreStatus) {

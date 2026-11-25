@@ -22,6 +22,7 @@ import { usePermissionSheet } from "./permission-sheet";
 import { hasDefaultPage, hostedApps, showsPage, type Route } from "./apps";
 import { appsPage, listedApps } from "./apps-page";
 import { appBackdrop } from "./default-app-page";
+import { useDrawing } from "./drawing";
 import { useInstalledApps } from "./installed-apps";
 import { followHost, forgetHost, moveHost } from "./auth/session";
 import { usePrefersDark } from "./color-scheme";
@@ -134,6 +135,8 @@ function HomeScreen(
   const [certificateNotValid, setCertificateNotValid] = useState(false);
   const [reachedCore, setReachedCore] = useState(false);
   const [me, setMe] = useState<Me>();
+  // This client draws as chosen for it on any client.
+  useDrawing(me);
   const [routes, setRoutes] = useState<Route[]>([]);
   // A device's detail covers the screen, inside it.
   const [screen, setScreen] = useState<HTMLDivElement | null>(null);
@@ -231,6 +234,17 @@ function HomeScreen(
     if (nextMe.status === "fulfilled") setMe(nextMe.value);
   }, [readApps]);
 
+  // Only Me, when the core says this client's own record changed, such as
+  // how it draws: nothing else needs reading again for that.
+  const readMe = useCallback(() => {
+    const requestId = ++refreshId.current;
+    void coreJson<Me>("/api/auth/me")
+      .then((next) => {
+        if (requestId === refreshId.current) setMe(next);
+      })
+      .catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     if (!found) {
       return;
@@ -274,11 +288,15 @@ function HomeScreen(
     // The apps read again whenever the connection comes back, and follow
     // its updates in between. Revoking this client elsewhere closes it at
     // once; any other close asks whether the core is still there.
-    const connection = connectLive((state) => {
-      isLive = state === "live";
-      if (isLive) update();
-      if (state === "offline") checkNow();
-    }, live.publish);
+    const connection = connectLive(
+      (state) => {
+        isLive = state === "live";
+        if (isLive) update();
+        if (state === "offline") checkNow();
+      },
+      live.publish,
+      readMe,
+    );
     liveConnection.current = connection;
     return () => {
       refreshId.current += 1;
@@ -289,7 +307,7 @@ function HomeScreen(
       connection.stop();
       liveConnection.current = undefined;
     };
-  }, [found, refresh, stopApps, live, host.url, host.token, checkNow]);
+  }, [found, refresh, readMe, stopApps, live, host.url, host.token, checkNow]);
 
   // Back after a restart or an outage: reconnect at once and read
   // everything again, rather than wait for the next try.
