@@ -128,6 +128,27 @@ afterEach(async () => {
 });
 
 describe("a colour light's colour", () => {
+  it.each([
+    ["fly out from the middle", undefined, 8],
+    ["stay still under Reduce motion", "reduced", 0],
+  ])("has its circles %s", async (_, motion, moving) => {
+    const animate = vi.fn();
+    Element.prototype.animate = animate;
+    if (motion) document.documentElement.dataset.motion = motion;
+    try {
+      await render(colourLight, orange);
+      const circles = [...container.querySelectorAll("[data-fly]")];
+      expect(
+        animate.mock.contexts.filter((element) =>
+          circles.includes(element as Element),
+        ),
+      ).toHaveLength(moving);
+    } finally {
+      delete document.documentElement.dataset.motion;
+      delete (Element.prototype as Partial<Element>).animate;
+    }
+  });
+
   it("rings eight colours around the current one, nearest pressed", async () => {
     await render(colourLight, orange);
     expect(labels("[data-fly]")).toEqual([

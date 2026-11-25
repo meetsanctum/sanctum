@@ -1,3 +1,4 @@
+import { useReducedMotion } from "@meetsanctum/ui-sdk";
 import {
   useCallback,
   useEffect,
@@ -22,7 +23,6 @@ import { getShell } from "./shell";
 const dockQuery = "(min-width: 960px)";
 // A pointer that hovers can bring it in from the left edge.
 const hoverQuery = "(hover: hover) and (pointer: fine)";
-const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
 
 // The sidebar's width, how far it and the traffic lights slide as it docks
 // or collapses, over 300 ms (shell-frame.css). Floating, it slides 264 px,
@@ -58,7 +58,7 @@ export type Floating = "peek" | "open" | null;
 export function useSidebarLayout(isVeiled = false) {
   const canDock = useMedia(dockQuery, true);
   const canHover = useMedia(hoverQuery, false);
-  const reducedMotion = useMedia(reducedMotionQuery, false);
+  const reducedMotion = useReducedMotion();
   // Docked until this device's choice is read.
   const [collapsed, setCollapsed] = useState(false);
   const [floating, setFloating] = useState<Floating>(null);

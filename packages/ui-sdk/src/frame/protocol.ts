@@ -27,6 +27,7 @@ export type FramePort = { sanctum: "port"; bridge: number };
 export type FrameContext = {
   mode: "day" | "evening";
   effects?: "regular" | "reduced";
+  motion?: "regular" | "reduced";
   temperatureUnit: TemperatureUnit | null;
   timeZone: string | null;
 };

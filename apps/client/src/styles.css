@@ -274,7 +274,7 @@ body {
   stroke-width: 4;
 }
 
-@media (prefers-reduced-motion: no-preference) {
+:where(:root:not([data-motion="reduced"])) {
   .knot-loader g {
     transform-origin: center;
     animation: knot-turns 19.2s step-end infinite;
@@ -294,7 +294,7 @@ body {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+:where([data-motion="reduced"]) {
   .knot-loader {
     animation: knot-breathe 2.4s ease-in-out infinite;
   }
@@ -621,7 +621,7 @@ body {
   opacity: 0;
 }
 
-@media (prefers-reduced-motion: no-preference) {
+:where(:root:not([data-motion="reduced"])) {
   .add-devices-halo {
     animation: add-devices-breathe 4.8s ease-in-out infinite;
   }
@@ -702,7 +702,7 @@ body {
   animation: add-devices-glow 2.6s ease 0.5s both;
 }
 
-@media (prefers-reduced-motion: no-preference) {
+:where(:root:not([data-motion="reduced"])) {
   .add-devices-sweep::before {
     animation: add-devices-sweep 1.5s cubic-bezier(0.3, 0.1, 0.2, 1) 0.5s both;
   }

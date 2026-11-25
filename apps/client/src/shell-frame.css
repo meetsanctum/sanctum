@@ -184,7 +184,7 @@
   transition: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
+:where([data-motion="reduced"]) {
   .sidebar-column,
   .sidebar-column[data-shown],
   .frame-neutral,
@@ -215,8 +215,8 @@
    widens as it goes, as a Mac app's does beside its sidebar, and none of it
    leaves the window (src/sidebar-state.ts). Only where it docks, the width
    of the dock query there. */
-@media (width >= 960px) and (prefers-reduced-motion: no-preference) {
-  .home-screen[data-sliding] .panel {
+@media (width >= 960px) {
+  :where(:root:not([data-motion="reduced"])) .home-screen[data-sliding] .panel {
     transition: left 300ms cubic-bezier(0.32, 0.72, 0, 1);
   }
 }

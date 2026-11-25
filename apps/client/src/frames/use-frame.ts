@@ -1,6 +1,7 @@
 import {
   frameBridge,
   useReducedEffects,
+  useReducedMotion,
   type FrameContext,
   type ToFrame,
 } from "@meetsanctum/ui-sdk";
@@ -37,17 +38,22 @@ export function useFrame(options: {
     Extract<ToFrame, { type: "setup" }>,
     "page" | "params" | "device"
   >;
-  context: Omit<FrameContext, "effects">;
+  context: Omit<FrameContext, "effects" | "motion">;
   /** Whether the home is away, as while it updates. */
   isAway: boolean;
   /** What else the page says: its bar, where to go, its size, a key. */
   on?: (event: FrameEvent) => void;
 }) {
   const { app, context: pageContext } = options;
-  const reduced = useReducedEffects();
+  const reducedEffects = useReducedEffects();
+  const reducedMotion = useReducedMotion();
   const context = useMemo<FrameContext>(
-    () => ({ ...pageContext, effects: reduced ? "reduced" : "regular" }),
-    [pageContext, reduced],
+    () => ({
+      ...pageContext,
+      effects: reducedEffects ? "reduced" : "regular",
+      motion: reducedMotion ? "reduced" : "regular",
+    }),
+    [pageContext, reducedEffects, reducedMotion],
   );
   const [attempt, setAttempt] = useState(0);
   const [phase, setPhase] = useState<FramePhase>("opening");

@@ -442,11 +442,10 @@ describe("a tile a command failed for", () => {
   });
 
   it("only turns red where motion is reduced", async () => {
-    vi.stubGlobal("matchMedia", (query: string) => ({
-      matches: query === "(prefers-reduced-motion: reduce)",
-    }));
+    document.documentElement.dataset.motion = "reduced";
     await render(lamp);
     await render({ ...lamp, failures: 1 });
+    delete document.documentElement.dataset.motion;
     expect(moved()).toEqual([
       { on: expect.any(HTMLSpanElement), moves: ["opacity", "offset"] },
     ]);

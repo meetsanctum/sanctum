@@ -14,6 +14,7 @@ export * from "./page-bar";
 export * from "./page-section";
 export * from "./presses";
 export * from "./reduce-effects";
+export * from "./reduce-motion";
 export * from "./section-button";
 export * from "./section-tile";
 export * from "./segmented-control";
