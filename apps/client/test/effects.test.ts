@@ -1,7 +1,15 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 
-import { effectsOf, followEffects, motionOf } from "../src/effects";
+import type { Drawn } from "@meetsanctum/auth-protocol";
+
+import {
+  chooseDrawing,
+  effectsOf,
+  followDrawn,
+  followEffects,
+  motionOf,
+} from "../src/effects";
 
 // How a device draws effects and motion: plainly on a Shelly wall display,
 // where the system asks for reduced transparency or reduced motion, or as
@@ -137,5 +145,59 @@ describe("what the page says", () => {
     stop();
     setReduced(true);
     expect(document.documentElement.hasAttribute("data-effects")).toBe(false);
+  });
+});
+
+describe("its choices", () => {
+  afterEach(() => {
+    delete document.documentElement.dataset.effects;
+    delete document.documentElement.dataset.motion;
+  });
+
+  it.each([
+    ["On", browser, "on", "reduced"],
+    ["Off", shelly, "off", "regular"],
+    ["Automatic", shelly, "automatic", "reduced"],
+  ] as const)("draws %s as chosen", (_, userAgent, choice, drawn) => {
+    const device = { userAgent, search: "" };
+    expect(effectsOf({ ...device, reducedTransparency: false }, choice)).toBe(
+      drawn,
+    );
+    expect(motionOf({ ...device, reducedMotion: false }, choice)).toBe(drawn);
+  });
+
+  it("leaves the address the last word while developing", () => {
+    const device = { userAgent: browser, search: "?effects=regular" };
+    expect(effectsOf({ ...device, reducedTransparency: true }, "on")).toBe(
+      "regular",
+    );
+  });
+
+  it("follows each new choice on <html> and says what it draws with", () => {
+    const win = {
+      matchMedia: () => Object.assign(new EventTarget(), { matches: false }),
+      navigator: { userAgent: shelly },
+      location: { search: "" },
+      document,
+    } as unknown as Window;
+    const stop = followEffects(win);
+    const said: Drawn[] = [];
+    const stopHearing = followDrawn((drawn) => said.push(drawn));
+    expect(said).toEqual([
+      { effects: "reduced", motion: "reduced", slowDevice: true },
+    ]);
+
+    chooseDrawing({ effects: "automatic", motion: "off" });
+    expect(document.documentElement.dataset.effects).toBe("reduced");
+    expect(document.documentElement.hasAttribute("data-motion")).toBe(false);
+    // The same choices again say nothing new.
+    chooseDrawing({ effects: "automatic", motion: "off" });
+    expect(said).toEqual([
+      { effects: "reduced", motion: "reduced", slowDevice: true },
+      { effects: "reduced", motion: "regular", slowDevice: true },
+    ]);
+
+    stopHearing();
+    stop();
   });
 });

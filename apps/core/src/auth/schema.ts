@@ -1,4 +1,8 @@
-import { platforms } from "@meetsanctum/auth-protocol";
+import {
+  drawingChoices,
+  platforms,
+  type Drawn,
+} from "@meetsanctum/auth-protocol";
 import { sql } from "drizzle-orm";
 import {
   check,
@@ -67,6 +71,16 @@ export const authClients = sqliteTable(
     ),
     lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }),
     revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+    // Reduce effects and Reduce motion as chosen for it, on any client.
+    reduceEffects: text("reduce_effects", { enum: drawingChoices })
+      .notNull()
+      .default("automatic"),
+    reduceMotion: text("reduce_motion", { enum: drawingChoices })
+      .notNull()
+      .default("automatic"),
+    // What the client last said it draws with (ClientInfo's drawn), as JSON;
+    // Automatic is resolved on the device, which alone knows what it is.
+    drawn: text("drawn", { mode: "json" }).$type<Drawn>(),
   },
   (table) => [
     check(

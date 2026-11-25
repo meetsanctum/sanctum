@@ -1,7 +1,10 @@
 import type {
   ClientInfo,
   ClientKind,
+  Drawn,
+  LiveClientChanged,
   Platform,
+  SetClientDrawing,
 } from "@meetsanctum/auth-protocol";
 import {
   and,
@@ -68,14 +71,18 @@ export function clientInfo(
     lastSeenAt: client.lastSeenAt?.toISOString() ?? null,
     connectedSince: connectedSince?.toISOString() ?? null,
     current: client.id === currentId,
+    reduceEffects: client.reduceEffects,
+    reduceMotion: client.reduceMotion,
+    drawn: client.drawn ?? null,
   };
 }
 
 // The live connections each client has open, so revoking it closes them,
-// and since when.
+// and since when, and a change to it reaches it at once.
 export type Connections = {
   closeClient(clientId: string): void;
   connectedSince(clientId: string): Date | null;
+  tell(clientId: string, message: object): void;
 };
 
 export function createClients(
@@ -373,6 +380,50 @@ export function createClients(
         });
         return clientInfo(renamed, principal.client.id);
       });
+    },
+
+    // How a client draws effects and motion, chosen on any client as its
+    // name is, and told to it at once so it draws so without waiting to
+    // read Me again. What it said it draws with is forgotten with a new
+    // choice, until it says again. Not for an agent, which draws nothing.
+    setDrawing(principal: Principal, input: SetClientDrawing) {
+      const changed = db.transaction(() => {
+        const client = manageable(input.id);
+        if (client.kind === "agent") {
+          throw new AuthError("not_found");
+        }
+        const reduceEffects = input.reduceEffects ?? client.reduceEffects;
+        const reduceMotion = input.reduceMotion ?? client.reduceMotion;
+        const isNew =
+          reduceEffects !== client.reduceEffects ||
+          reduceMotion !== client.reduceMotion;
+        return db
+          .update(authClients)
+          .set({
+            reduceEffects,
+            reduceMotion,
+            ...(isNew && { drawn: null }),
+          })
+          .where(eq(authClients.id, input.id))
+          .returning()
+          .get()!;
+      });
+      connections.tell(input.id, {
+        type: "client",
+      } satisfies LiveClientChanged);
+      return clientInfo(
+        changed,
+        principal.client.id,
+        connections.connectedSince(changed.id),
+      );
+    },
+
+    // What the calling client says it draws with now, for its row.
+    setDrawn(principal: Principal, drawn: Drawn) {
+      db.update(authClients)
+        .set({ drawn })
+        .where(eq(authClients.id, principal.client.id))
+        .run();
     },
 
     // The home's agents that have reached it, oldest first: one whose setup

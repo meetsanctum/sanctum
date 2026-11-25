@@ -63,6 +63,18 @@ export function createConnections(options: { now?: () => Date } = {}) {
       close((principal) => principal.client.id === clientId);
     },
 
+    // Sends one client's open connections `message`.
+    tell(clientId: string, message: object) {
+      for (const [socket, { principal }] of open) {
+        if (principal.client.id !== clientId) continue;
+        try {
+          socket.send(JSON.stringify(message));
+        } catch {
+          // A connection on its way out; its close event releases it.
+        }
+      }
+    },
+
     // A removed person's clients are gone with them.
     closePerson(personId: string) {
       close((principal) => principal.person?.id === personId);

@@ -1,6 +1,6 @@
 import type { ClientInfo, PersonInfo } from "@meetsanctum/auth-protocol";
 import { Button, Input } from "@meetsanctum/ui-sdk";
-import { EllipsisVertical, House, Pencil, Trash2 } from "lucide-react";
+import { EllipsisVertical, Gauge, House, Pencil, Trash2 } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -29,6 +29,7 @@ import {
 } from "./components/ui/dropdown-menu";
 import { coreJson } from "./core-fetch";
 import { platformNames } from "./platforms";
+import { ClientDrawing, drawnText } from "./settings-client-drawing";
 import { everyWhileShown } from "./while-shown";
 
 // Settings → Clients: every client with its kind, person, platform and
@@ -75,10 +76,16 @@ export function clientDetail(
       : client.connectedSince
         ? "Connected now"
         : seenText(client.lastSeenAt, now),
-  ].join(" · ");
+    drawnText(client),
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
-type Editing = { action: "rename" | "remove"; client: ClientInfo };
+type Editing = {
+  action: "rename" | "drawing" | "remove";
+  client: ClientInfo;
+};
 
 export function ClientsSection(props: {
   // The way back of Settings' Clients page, which it is the whole of.
@@ -145,8 +152,18 @@ export function ClientsSection(props: {
           })}
         </ul>
       )}
+      <ClientDrawing
+        client={
+          editing?.action === "drawing"
+            ? (clients?.find(({ id }) => id === editing.client.id) ??
+              editing.client)
+            : undefined
+        }
+        onClose={() => setEditing(undefined)}
+        onChanged={() => void refresh().catch(() => undefined)}
+      />
       <EditClient
-        editing={editing}
+        editing={editing?.action === "drawing" ? undefined : editing}
         onClose={() => setEditing(undefined)}
         onDone={() => void refresh().catch(() => undefined)}
       />
@@ -179,6 +196,10 @@ function ClientMenu(props: {
         <DropdownMenuItem onSelect={() => props.onEdit("rename")}>
           <Pencil />
           Rename
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => props.onEdit("drawing")}>
+          <Gauge />
+          Effects and motion
         </DropdownMenuItem>
         {/* Signing out of this device is in the account menu. */}
         {!props.client.current && (

@@ -45,6 +45,9 @@ const client = (changes: Partial<ClientInfo>): ClientInfo => ({
   lastSeenAt: null,
   connectedSince: null,
   current: false,
+  reduceEffects: "automatic",
+  reduceMotion: "automatic",
+  drawn: null,
   ...changes,
 });
 

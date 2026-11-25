@@ -106,6 +106,34 @@ export type ClientInfo = {
   connectedSince: string | null;
   /** The client the request came from. */
   current: boolean;
+  /** How it draws effects: chosen on any client (Settings → Clients). */
+  reduceEffects: DrawingChoice;
+  /** How it draws motion: chosen on any client, as Reduce effects. */
+  reduceMotion: DrawingChoice;
+  /** What it last said it draws with, once it has said. */
+  drawn: Drawn | null;
+};
+
+/**
+ * A client's choice for Reduce effects or Reduce motion: Automatic follows
+ * the device, on for one known to be slow or whose system asks for it.
+ */
+export const drawingChoices = ["automatic", "on", "off"] as const;
+export type DrawingChoice = (typeof drawingChoices)[number];
+
+/** What a client draws with now, from its choices and what it is. */
+export type Drawn = {
+  effects: "regular" | "reduced";
+  motion: "regular" | "reduced";
+  /** Whether it is a device known to be slow, which Automatic reduces. */
+  slowDevice: boolean;
+};
+
+/** Sets a client's choices; one left out stays as it is. */
+export type SetClientDrawing = {
+  id: string;
+  reduceEffects?: DrawingChoice;
+  reduceMotion?: DrawingChoice;
 };
 
 /** The device a claim or sign-in creates a client for. */
@@ -248,3 +276,5 @@ export const liveAuthTimeoutCode = 4408;
 
 export type LiveAuth = { type: "auth"; token: string };
 export type LiveReady = { type: "ready" };
+/** The client's own record changed on another client: it reads Me again. */
+export type LiveClientChanged = { type: "client" };

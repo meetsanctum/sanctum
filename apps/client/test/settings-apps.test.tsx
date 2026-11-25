@@ -35,6 +35,9 @@ const admin: Me = {
     lastSeenAt: null,
     connectedSince: null,
     current: true,
+    reduceEffects: "automatic",
+    reduceMotion: "automatic",
+    drawn: null,
   },
   person: {
     id: "maya",

@@ -33,6 +33,9 @@ const macbook: ClientInfo = {
   lastSeenAt: "2026-10-28T11:59:30Z",
   connectedSince: null,
   current: true,
+  reduceEffects: "automatic",
+  reduceMotion: "automatic",
+  drawn: null,
 };
 const tablet: ClientInfo = {
   id: "tablet",
@@ -44,6 +47,9 @@ const tablet: ClientInfo = {
   lastSeenAt: null,
   connectedSince: null,
   current: false,
+  reduceEffects: "automatic",
+  reduceMotion: "automatic",
+  drawn: null,
 };
 
 describe("a client's detail", () => {
@@ -63,16 +69,33 @@ describe("a client's detail", () => {
     );
     expect(clientDetail(macbook, maya, now)).toBe("Maya · macOS · This device");
   });
+
+  it.each([
+    ["reduced", "reduced", " · Reduced effects and motion"],
+    ["reduced", "regular", " · Reduced effects"],
+    ["regular", "reduced", " · Reduced motion"],
+    ["regular", "regular", ""],
+  ] as const)(
+    "says what it draws with, effects %s and motion %s",
+    (effects, motion, said) => {
+      const drawn = { effects, motion, slowDevice: false };
+      expect(clientDetail({ ...tablet, drawn }, undefined, now)).toBe(
+        `Shared · Web browser · Never seen${said}`,
+      );
+    },
+  );
 });
 
 describe("Settings → Clients", () => {
   let root: Root;
   let container: HTMLDivElement;
   let approved: unknown[];
+  let drawing: unknown[];
 
   beforeEach(async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     approved = [];
+    drawing = [];
     vi.mocked(coreJson).mockReset();
     vi.mocked(coreJson).mockImplementation(async (path, init = {}) => {
       switch (path) {
@@ -95,6 +118,9 @@ describe("Settings → Clients", () => {
         case "/api/auth/pair/approve":
           approved.push(init.json);
           return undefined;
+        case "/api/auth/clients/drawing":
+          drawing.push(init.json);
+          return { ...tablet, ...(init.json as object) };
         default:
           throw new Error(`Unexpected request: ${path}`);
       }
@@ -142,6 +168,60 @@ describe("Settings → Clients", () => {
     ].find((candidate) => candidate.textContent === action)!;
     await act(async () => item.click());
   }
+
+  // A choice in the Effects and motion dialog, by its setting's name.
+  function choice(setting: string, option: string) {
+    const name = [...document.querySelectorAll("[role=dialog] span")].find(
+      (span) => span.textContent === setting,
+    )!;
+    const group = document.querySelector(`[aria-labelledby="${name.id}"]`)!;
+    return [...group.querySelectorAll("button")].find(
+      (each) => each.textContent === option,
+    )!;
+  }
+
+  it("sets a client's effects and motion, Reduce motion turning on with Reduce effects", async () => {
+    await editClient("Kitchen tablet", "Effects and motion");
+    const dialog = document.querySelector<HTMLElement>("[role=dialog]")!;
+    expect(dialog.textContent).toContain("Effects and motion");
+    expect(choice("Reduce effects", "Automatic").dataset.state).toBe("on");
+    expect(dialog.textContent).toContain(
+      "On where Kitchen tablet is known to be slow or asks for reduced transparency.",
+    );
+
+    await act(async () => choice("Reduce effects", "On").click());
+    expect(drawing).toEqual([
+      { id: "tablet", reduceEffects: "on", reduceMotion: "on" },
+    ]);
+    expect(choice("Reduce motion", "On").dataset.state).toBe("on");
+    expect(dialog.textContent).toContain(
+      "On with Reduce effects. You can turn it off on its own.",
+    );
+
+    // Reduce motion keeps its own choice from then on.
+    await act(async () => choice("Reduce motion", "Off").click());
+    expect(drawing.at(-1)).toEqual({ id: "tablet", reduceMotion: "off" });
+    expect(dialog.textContent).toContain(
+      "Every movement, even where Kitchen tablet asks for less.",
+    );
+    await act(async () => choice("Reduce effects", "Off").click());
+    expect(drawing.at(-1)).toEqual({ id: "tablet", reduceEffects: "off" });
+    expect(choice("Reduce motion", "Off").dataset.state).toBe("on");
+
+    await act(async () => button("Done").click());
+    expect(document.querySelector("[role=dialog]")).toBeNull();
+  });
+
+  it("puts a choice back where it couldn't be saved", async () => {
+    await editClient("Kitchen tablet", "Effects and motion");
+    vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(500, "unknown"));
+    await act(async () => choice("Reduce effects", "On").click());
+    expect(choice("Reduce effects", "Automatic").dataset.state).toBe("on");
+    expect(choice("Reduce motion", "Automatic").dataset.state).toBe("on");
+    expect(
+      document.querySelector("[role=dialog] [role=alert]")!.textContent,
+    ).toBe("That did not work. Try again.");
+  });
 
   it("lists every client, marking those never seen", () => {
     expect(container.textContent).toContain("Maya's MacBook");
