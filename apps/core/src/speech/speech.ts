@@ -1,5 +1,3 @@
-import { setTimeout as delay } from "node:timers/promises";
-
 import type { Actor, DeviceInfo } from "@meetsanctum/app-sdk";
 
 import type { DeviceChange } from "../devices/devices.js";
@@ -32,6 +30,20 @@ const startingForMs = 15 * 60_000;
 const addressKeptMs = 5 * 60_000;
 
 export class SpeechUnavailable extends Error {}
+
+// Waits `ms`, or less once `signal` aborts, without holding the process open.
+function pause(ms: number, signal: AbortSignal) {
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    timer.unref?.();
+    signal.addEventListener("abort", done, { once: true });
+  });
+}
 
 type Manager = {
   serviceUrl(service: string): Promise<string | null>;
@@ -109,14 +121,20 @@ export function createSpeech(options: {
   }
 
   // Once the service runs, each voice is spoken once, so its download and
-  // load happen now rather than in someone's first announcement.
+  // load happen now rather than in someone's first announcement. A service
+  // the manager has only just started has an address before it listens,
+  // and fetches its own default voice first, so a voice that fails is tried
+  // again until the service has had its time to start.
   async function warm(signal: AbortSignal) {
     const until = now() + startingForMs;
+    const failed = new Map<SpeechLanguage, unknown>(
+      speechLanguages.map((language) => [language, undefined]),
+    );
     while (!signal.aborted && now() < until) {
       const at = await endpoint();
       if (signal.aborted) return;
       if (at) {
-        for (const language of speechLanguages) {
+        for (const language of failed.keys()) {
           if (signal.aborted) return;
           try {
             const spoken = synthesize({
@@ -128,20 +146,23 @@ export function createSpeech(options: {
             });
             // Only the voice's loading counts, not what it says.
             while (!(await spoken.next()).done);
+            failed.delete(language);
           } catch (error) {
             if (signal.aborted) return;
-            options.log(
-              `Speech couldn't load its ${language} voice: ${error instanceof Error ? error.message : String(error)}`,
-            );
+            failed.set(language, error);
           }
         }
-        return;
+        if (failed.size === 0) return;
       }
-      try {
-        await delay(startingEveryMs, undefined, { signal, ref: false });
-      } catch (error) {
-        if (!signal.aborted) throw error;
-      }
+      await pause(startingEveryMs, signal);
+    }
+    if (signal.aborted) return;
+    for (const [language, error] of failed) {
+      options.log(
+        error === undefined
+          ? `Speech couldn't load its ${language} voice: the service didn't start`
+          : `Speech couldn't load its ${language} voice: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 

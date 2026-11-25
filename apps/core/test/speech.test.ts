@@ -50,6 +50,7 @@ function setup(options: {
   getAddress?: () => string;
   address?: string | null;
   want?: (signal: AbortSignal) => Promise<void>;
+  log?: (message: string) => void;
 }) {
   const calls: string[] = [];
   const told: { device: string; url: string }[] = [];
@@ -87,7 +88,7 @@ function setup(options: {
     },
     areaOn: () => areaOn,
     publishedPort: 4180,
-    log: () => {},
+    log: options.log ?? (() => {}),
   });
   return {
     speech,
@@ -205,6 +206,41 @@ describe("createSpeech", () => {
       expect(synthesize).not.toHaveBeenCalled();
     } finally {
       synthesize.mockRestore();
+    }
+  });
+
+  it("loads each voice once Piper listens, though it refused at first", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    const loaded: string[] = [];
+    let listening = false;
+    const synthesize = vi
+      .spyOn(wyoming, "synthesize")
+      .mockImplementation(async function* ({ voice }) {
+        loaded.push(voice);
+        if (!listening) throw new Error("connect ECONNREFUSED");
+        yield { rate: 22_050, samples: new Int16Array(100) };
+      });
+    const logged: string[] = [];
+    const { speech } = setup({
+      devices: [speaker("a", true)],
+      serviceUrl: "tcp://127.0.0.1:1",
+      log: (message) => logged.push(message),
+    });
+    announcements!.port = () => 4180;
+    try {
+      speech.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(loaded).toEqual([voices.en, voices.de]);
+      listening = true;
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(loaded).toEqual([voices.en, voices.de, voices.en, voices.de]);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(loaded).toHaveLength(4);
+      expect(logged).toEqual([]);
+    } finally {
+      speech.stop();
+      synthesize.mockRestore();
+      vi.useRealTimers();
     }
   });
 
