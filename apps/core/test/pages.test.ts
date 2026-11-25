@@ -5,7 +5,6 @@ import {
   chmod,
   mkdir,
   mkdtemp,
-  readFile,
   rename,
   rm,
   symlink,
@@ -372,49 +371,6 @@ describe("a ticket that opens nothing", () => {
 });
 
 describe("an app's pages", () => {
-  it.each(["0.1.27", "0.1.28"])(
-    "serves existing motion utilities with kit %s",
-    async (version) => {
-      const kitManifest = join(kitDir, "kit.json");
-      const kit = JSON.parse(await readFile(kitManifest, "utf8"));
-      await writeFile(kitManifest, JSON.stringify({ ...kit, version }));
-      const { ticket } = await ticketFor();
-      const css = String.raw`@layer utilities{
-@media(prefers-reduced-motion:no-preference){.motion-safe\:animate-pulse{animation:var(--animate-pulse)}}
-@media (prefers-reduced-motion: reduce){.motion-reduce\:transition-none,.motion-reduce\:animate-none{transition:none}}
-@media(width>500px){.wide{color:blue}}
-}`;
-      const files = { ...pageFiles, "pages.css": css };
-      const listed = Object.fromEntries(
-        Object.entries(files).map(([name, body]) => [
-          name,
-          { size: Buffer.byteLength(body), sha256: sha256(body) },
-        ]),
-      );
-      await stagePages(files, listed, "0.1.27");
-      const response = await get(
-        core,
-        `/pages/${ticket}/apps/sanctum.example/${digestOf(Object.entries(listed))}/pages.css`,
-      );
-      expect(response.statusCode).toBe(200);
-      expect(response.headers["content-type"]).toBe("text/css; charset=utf-8");
-      if (version === "0.1.27") {
-        expect(response.body).toBe(css);
-      } else {
-        expect(response.body).toContain(
-          String.raw`:where(:root:not([data-motion="reduced"])) .motion-safe\:animate-pulse{animation:var(--animate-pulse)}`,
-        );
-        expect(response.body).toContain(
-          String.raw`:where(:root[data-motion="reduced"]) .motion-reduce\:transition-none,:where(:root[data-motion="reduced"]) .motion-reduce\:animate-none{transition:none}`,
-        );
-        expect(response.body).toContain(
-          "@media(width>500px){.wide{color:blue}}",
-        );
-        expect(response.body).not.toContain("prefers-reduced-motion");
-      }
-    },
-  );
-
   it("open at their entry, which the core writes with the kit's import map under the ticket and the kit's start", async () => {
     const { ticket } = await ticketFor();
     await stagePages();

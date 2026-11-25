@@ -9,7 +9,6 @@ import { readFile } from "node:fs/promises";
 
 import { AuthError } from "../auth/errors.js";
 import type { ServedFile } from "./files.js";
-import { hasMotionVariants } from "./motion-css.js";
 import type { Pages } from "./pages.js";
 
 // What a frame loads an app's page from: its entry, its files and the kit,
@@ -191,9 +190,6 @@ export function registerPageRoutes(
       const file = found.files.get(name);
       if (!file) return nothing(reply);
       headers(reply, places);
-      if (file.motionCss !== undefined && hasMotionVariants(kit.version)) {
-        return reply.header("content-type", file.type).send(file.motionCss);
-      }
       return send(reply, file);
     }
 

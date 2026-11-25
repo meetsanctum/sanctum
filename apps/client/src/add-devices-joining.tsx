@@ -1,5 +1,5 @@
 import type { DeviceInfo, JoinedDevice } from "@meetsanctum/app-sdk";
-import { Button, isMotionReduced, useReducedMotion } from "@meetsanctum/ui-sdk";
+import { Button, isMotionReduced } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import {
   useEffect,
@@ -292,7 +292,6 @@ function useMoveUp(isWaiting: boolean, words: string | null) {
   const button = useRef<HTMLSpanElement>(null);
   const line = useRef<HTMLParagraphElement>(null);
   const gone = useRef<HTMLParagraphElement>(null);
-  const reducedMotion = useReducedMotion();
   const previous = useRef<{
     parts: { middle: number; size: number }[];
     line: { words: string | null; top: number; width: number } | null;
@@ -388,15 +387,6 @@ function useMoveUp(isWaiting: boolean, words: string | null) {
     }
     return stopWatching;
   }, [isWaiting, words]);
-
-  useLayoutEffect(() => {
-    if (!reducedMotion) return;
-    for (const ref of [knot, heading, button, line, gone]) {
-      for (const animation of ref.current?.getAnimations?.() ?? []) {
-        animation.cancel();
-      }
-    }
-  }, [reducedMotion]);
 
   return { knot, heading, button, line, gone };
 }

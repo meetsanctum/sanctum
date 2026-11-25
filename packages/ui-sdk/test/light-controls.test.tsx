@@ -144,9 +144,7 @@ describe("a colour light's colour", () => {
         ),
       ).toHaveLength(moving);
     } finally {
-      await act(async () => {
-        delete document.documentElement.dataset.motion;
-      });
+      delete document.documentElement.dataset.motion;
       delete (Element.prototype as Partial<Element>).animate;
     }
   });
@@ -164,30 +162,6 @@ describe("a colour light's colour", () => {
       "Magenta",
     ]);
     expect(pressed()).toEqual(["Orange", "Colour"]);
-  });
-
-  it("cancels the circles' fly-in when Reduce motion turns on", async () => {
-    const cancels: ReturnType<typeof vi.fn>[] = [];
-    Element.prototype.animate = vi.fn(() => {
-      const cancel = vi.fn();
-      cancels.push(cancel);
-      return { cancel } as unknown as Animation;
-    });
-    try {
-      await render(colourLight, orange);
-      expect(cancels).toHaveLength(8);
-      await act(async () => {
-        document.documentElement.dataset.motion = "reduced";
-      });
-      for (const cancel of cancels) expect(cancel).toHaveBeenCalledOnce();
-      await act(async () => {
-        delete document.documentElement.dataset.motion;
-      });
-      expect(cancels).toHaveLength(8);
-    } finally {
-      delete document.documentElement.dataset.motion;
-      delete (Element.prototype as Partial<Element>).animate;
-    }
   });
 
   it("starts an off-center colour's animation at the center of the picker", async () => {

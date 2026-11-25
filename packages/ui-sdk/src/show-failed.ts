@@ -22,19 +22,10 @@ export function showFailed(
     { duration: showFailure, easing: "ease-out" },
   );
   if (isMotionReduced()) return;
-  const shake = button?.animate?.(
+  button?.animate?.(
     [0, -6, 6, -4, 4, -2, 0].map((x) => ({ transform: `translateX(${x}px)` })),
     { duration: showFailure / 2, delay: 60, easing: "ease-in-out" },
   );
-  if (!shake) return;
-  const motion = new MutationObserver(() => {
-    if (isMotionReduced()) shake.cancel();
-  });
-  motion.observe(document.documentElement, {
-    attributeFilter: ["data-motion"],
-  });
-  const stopWatching = () => motion.disconnect();
-  void shake.finished.then(stopWatching, stopWatching);
 }
 
 /**
