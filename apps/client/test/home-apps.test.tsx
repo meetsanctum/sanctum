@@ -3,7 +3,6 @@ import type { AppInfo } from "@meetsanctum/app-sdk";
 import { act } from "react";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import zigbeeManifest from "../../../catalog/apps/zigbee/sanctum-app.json";
 import { moods, weather } from "./home-shell-fixtures";
 import {
   backShown,
@@ -73,8 +72,8 @@ describe("the home's installed apps", () => {
 describe("the default app page", () => {
   const driver: AppInfo = {
     ...zigbee,
-    pages: zigbeeManifest.pages,
-    backdrop: zigbeeManifest.backdrop,
+    pages: [],
+    backdrop: { from: "#0a5c7a", to: "#18bcf2" },
   };
   const summary = "Connects devices to your home.";
   const showDevices = () =>
@@ -82,7 +81,7 @@ describe("the default app page", () => {
       (button) => button.textContent === "Show devices",
     );
 
-  it("paints Zigbee's red backdrop on the shell panel", async () => {
+  it("paints the app's declared colours on the shell panel", async () => {
     homeData.installed = [driver];
     await refresh();
     await openFromOverview("Zigbee");
@@ -91,7 +90,7 @@ describe("the default app page", () => {
     expect(
       container.querySelector<HTMLElement>(".panel")!.style.background,
     ).toContain(
-      "linear-gradient(to top right, rgb(154, 2, 48), rgb(235, 4, 67))",
+      "linear-gradient(to top right, rgb(10, 92, 122), rgb(24, 188, 242))",
     );
   });
 
