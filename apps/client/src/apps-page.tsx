@@ -10,8 +10,7 @@ import { Minus, Pin, Plus, Search } from "lucide-react";
 import { useState } from "react";
 
 import { AppIcon, plainIcon } from "./app-icon";
-import { opens, type HostedApp, type Route } from "./apps";
-import { appSettingsPage, settingsApp } from "./system-apps";
+import type { Route } from "./apps";
 
 /** Where Apps is on show, as a route's app. */
 export const appsPage = "sanctum.apps";
@@ -26,52 +25,30 @@ export type ListedApp = {
 
 /**
  * What Apps lists, and what may be pinned: the shell's own apps and every
- * installed one, by name. An app with a page of its own opens it in Apps'
- * place. One without, such as a driver, opens its settings over Apps, so
- * Done returns there. An app without an icon of its own shows the plain
- * one, as in Settings.
+ * installed one, by name, each opening its main page in Apps' place: its
+ * own, or the shell's default one for an app that brings none, such as a
+ * driver. An app without an icon of its own shows the plain one, as in
+ * Settings.
  */
 export function listedApps(
   shells: ListedApp[],
   installed: readonly AppInfo[],
-  hosted: readonly HostedApp[],
   show: (routes: Route[]) => void,
 ): ListedApp[] {
-  const opened = (info: AppInfo): Route[] => {
-    const app = hosted.find((each) => each.info.id === info.id);
-    return app && opens(app)
-      ? [{ app: info.id, page: mainPage, params: {} }]
-      : [
-          { app: appsPage, page: mainPage, params: {} },
-          {
-            app: settingsApp.id,
-            page: appSettingsPage,
-            params: { id: info.id },
-          },
-        ];
-  };
   return [
     ...shells,
     ...installed.map((info) => ({
       id: info.id,
       name: info.name,
       icon: info.icon ?? plainIcon,
-      onOpen: () => show(opened(info)),
+      onOpen: () => show([{ app: info.id, page: mainPage, params: {} }]),
     })),
   ].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/**
- * The app on show: the one whose page it is, or the one whose settings are
- * over Apps, as Apps opens an app without a page of its own.
- */
+/** The app on show: the one whose page it is. */
 export function appOnShow(routes: readonly Route[]) {
-  const route = routes.at(-1);
-  return route?.app === settingsApp.id &&
-    route.page === appSettingsPage &&
-    routes.at(-2)?.app === appsPage
-    ? route.params.id
-    : route?.app;
+  return routes.at(-1)?.app;
 }
 
 // Apps: the page the sidebar's last tile opens, an app's page like any

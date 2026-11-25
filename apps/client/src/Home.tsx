@@ -3,6 +3,7 @@ import type { Me } from "@meetsanctum/auth-protocol";
 import {
   createLiveFeed,
   HomeTimeZoneProvider,
+  mainPage,
   PageBarSlot,
   TemperatureUnitProvider,
   type CoreBridge,
@@ -18,8 +19,9 @@ import {
 } from "react";
 
 import { usePermissionSheet } from "./permission-sheet";
-import { hasPage, hostedApps, type Route } from "./apps";
+import { hasDefaultPage, hostedApps, showsPage, type Route } from "./apps";
 import { appsPage, listedApps } from "./apps-page";
+import { appBackdrop } from "./default-app-page";
 import { useInstalledApps } from "./installed-apps";
 import { followHost, forgetHost, moveHost } from "./auth/session";
 import { usePrefersDark } from "./color-scheme";
@@ -337,7 +339,7 @@ function HomeScreen(
             route.app === appsPage ||
             route.app === automationsApp.id ||
             apps.some(
-              (app) => app.info.id === route.app && hasPage(app, route.page),
+              (app) => app.info.id === route.app && showsPage(app, route.page),
             ),
       );
       return remaining.length === current.length ? current : remaining;
@@ -368,7 +370,10 @@ function HomeScreen(
 
   const route = routes.at(-1);
   const routeApp = route && apps.find((app) => app.info.id === route.app);
-  const isAppPage = !!route && hasPage(routeApp, route.page);
+  const isAppPage = !!route && showsPage(routeApp, route.page);
+  // The shell's own page for an app that brings none, over its colours.
+  const isDefaultPage =
+    isAppPage && route?.page === mainPage && hasDefaultPage(routeApp);
   // A page another of its app's pages opened, such as an editor, has its
   // own way out, and opening settings over it would lose what it holds.
   const openedByItsApp = routes.length > 1 && routes.at(-2)?.app === route?.app;
@@ -394,7 +399,6 @@ function HomeScreen(
       { ...automationsApp, onOpen: openAutomations },
     ],
     installed,
-    apps,
     setRoutes,
   );
 
@@ -403,7 +407,8 @@ function HomeScreen(
   // app's page, Apps included, fills its panel in the device's mode.
   const appPage = route !== undefined && route.app !== placePages;
   const deviceMode = prefersDark ? "evening" : "day";
-  const mode = appPage ? deviceMode : "evening";
+  // The default page is in Evening too, its white ink over the app's colours.
+  const mode = appPage && !isDefaultPage ? deviceMode : "evening";
   useEffect(() => {
     document.documentElement.dataset.mode = mode;
   }, [mode]);
@@ -454,9 +459,11 @@ function HomeScreen(
           place={dashboard && dashboardFrame[dashboard.background]}
           deviceMode={deviceMode}
           panelBackground={
-            appPage
-              ? "var(--background)"
-              : dashboard && dashboardBackground[dashboard.background]
+            isDefaultPage && routeApp
+              ? appBackdrop(routeApp.info)
+              : appPage
+                ? "var(--background)"
+                : dashboard && dashboardBackground[dashboard.background]
           }
           isVeiled={isVeiled}
           triggerRef={sidebarTrigger}
@@ -524,6 +531,7 @@ function HomeScreen(
                       routeDepth={routes.length}
                       routeApp={routeApp}
                       isAppPage={isAppPage}
+                      isDefaultPage={isDefaultPage}
                       openedByItsApp={openedByItsApp}
                       back={back}
                       opener={opener}
@@ -563,7 +571,9 @@ function HomeScreen(
               </div>
               {/* Over the page, under the top bar; it takes the page's
                   background, so it sits beside the page, not in it. */}
-              <div aria-hidden="true" className="top-fade" />
+              {!isDefaultPage && (
+                <div aria-hidden="true" className="top-fade" />
+              )}
             </>
           }
         >

@@ -137,11 +137,18 @@ What is under which licence, and what neither covers, is in
   (tiles, widgets, the floating sidebar and veils) and for the sheet of the
   screens before it.
 - Carbon and White are the only background colours apart from a dashboard's
-  own, the blurred backdrop of the screens before it, and the green or red
-  of a card that says a device was added or failed to join. A dashboard's
-  background shows only behind dashboards and room and category pages;
-  apps' pages are full bleed Carbon or White by the device's mode, with
-  filled cards.
+  own, the blurred backdrop of the screens before it, the green or red of a
+  card that says a device was added or failed to join, and an app's colours
+  on its default page. A dashboard's background shows only behind
+  dashboards and room and category pages; apps' pages are full bleed Carbon
+  or White by the device's mode, with filled cards.
+- An app without a page of its own, such as a driver, gets the shell's
+  default page (`apps/client/src/default-app-page.tsx`), the same for every
+  such app: full bleed in the app's colours (its manifest's `backdrop`,
+  else its icon's colour), its name with its version and Look for updates
+  at the bottom left, and on the right a card with what it does and Show
+  devices, which opens Settings → Devices. Its devices are listed there,
+  never on this page.
 - The window's frame, which the docked sidebar sits on, is in the page's
   colour, a place's background deepened or the mode's card fill, and on the
   Mac the system's sidebar material through it, not a live blur.
