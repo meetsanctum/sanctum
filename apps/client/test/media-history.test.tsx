@@ -26,7 +26,6 @@ const at = (hours: number, minutes = 0) =>
 let root: Root;
 let container: HTMLDivElement;
 let kept: boolean;
-let rollupStart: string;
 let states: { at: string; availability: string; state: object | null }[];
 
 beforeEach(() => {
@@ -41,7 +40,6 @@ beforeEach(() => {
     },
   );
   kept = true;
-  rollupStart = new Date(2026, 10, 22, 20).toISOString();
   states = [];
   vi.mocked(coreJson).mockReset();
   vi.mocked(coreJson).mockImplementation(async (path) => {
@@ -65,7 +63,7 @@ beforeEach(() => {
         fields: {
           playing: [
             {
-              start: rollupStart,
+              start: new Date(2026, 10, 22, 20).toISOString(),
               mean: 0.5,
               min: 0,
               max: 1,
@@ -304,38 +302,4 @@ it("reloads the week's first hour when the home time zone changes", async () => 
     "2026-11-16T18:00:00.000Z",
     "2026-11-16T17:00:00.000Z",
   ]);
-});
-
-it("reads recorded changes for an older hour that home midnight splits", async () => {
-  vi.setSystemTime(new Date("2026-11-23T15:00:00Z"));
-  rollupStart = "2026-11-20T18:00:00.000Z";
-  states = [
-    { at: rollupStart, availability: "online", state: { activity: "idle" } },
-    {
-      at: "2026-11-20T18:30:00Z",
-      availability: "online",
-      state: { activity: "playing" },
-    },
-    { at: "2026-11-20T19:00:00Z", availability: "offline", state: null },
-  ];
-  await show(
-    mediaPlayer("tv", "TV", "living", { activity: "idle" }),
-    "Asia/Kolkata",
-  );
-
-  const split = vi
-    .mocked(coreJson)
-    .mock.calls.map(([path]) => new URL(path, "http://core"))
-    .find(
-      ({ pathname, searchParams }) =>
-        pathname === "/api/history/states" &&
-        searchParams.get("from") === rollupStart,
-    );
-  expect(split?.searchParams.get("to")).toBe("2026-11-20T19:00:00.000Z");
-  expect(spoken()).toEqual(
-    expect.arrayContaining([
-      "Fri 20 Nov: Nothing played",
-      "Sat 21 Nov: played for 30 min",
-    ]),
-  );
 });

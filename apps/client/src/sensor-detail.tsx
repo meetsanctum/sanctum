@@ -23,9 +23,8 @@ import { useEffect, useId, useState } from "react";
 import { productName } from "./brand";
 import { coreJson } from "./core-fetch";
 import { Notice, Part } from "./device-history";
-import { dayMs, hourMs, type MidnightStates } from "./device-history-data";
+import { dayMs } from "./device-history-data";
 import { measureNames } from "./device-tiles";
-import { loadMidnightStates } from "./history-midnights";
 import { lowBatteryText } from "./maintenance";
 import { dayLine, weekRange, weekRanges } from "./sensor-history-data";
 import { useChartClock } from "./use-chart-clock";
@@ -142,11 +141,7 @@ export function Battery(props: {
   );
 }
 
-type Loaded = {
-  day: DeviceStatistics;
-  week: DeviceStatistics;
-  midnights: MidnightStates;
-};
+type Loaded = { day: DeviceStatistics; week: DeviceStatistics };
 
 function SensorReading(props: {
   device: DeviceInfo;
@@ -189,16 +184,12 @@ function SensorReading(props: {
           coreJson<DeviceStatistics>(
             `/api/history/statistics?${query({
               period: "hour",
-              from: new Date(
-                Math.floor(startOfDay(to, timeZone, 6) / hourMs) * hourMs,
-              ).toISOString(),
+              from: new Date(startOfDay(to, timeZone, 6)).toISOString(),
             })}`,
           ),
         ]);
         if (!current) return;
-        const midnights = await loadMidnightStates(timeZone, week);
-        if (!current) return;
-        setLoaded({ day, week, midnights });
+        setLoaded({ day, week });
         setFailed(false);
         setNow(Date.now());
       } catch {
@@ -216,13 +207,7 @@ function SensorReading(props: {
   const reading =
     device.availability === "offline" ? null : (sensor.state?.value ?? null);
   const line = dayLine(loaded?.day ?? null, now, reading);
-  const days = weekRanges(
-    clock,
-    loaded?.week ?? null,
-    now,
-    reading,
-    loaded?.midnights,
-  );
+  const days = weekRanges(clock, loaded?.week ?? null, now, reading);
   const week = weekRange(days);
   const name = measureNames[sensor.features.measures];
 

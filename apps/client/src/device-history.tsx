@@ -29,9 +29,7 @@ import {
   weekHeadline,
   type Day,
   type Live,
-  type MidnightStates,
 } from "./device-history-data";
-import { loadMidnightStates } from "./history-midnights";
 import { useChartClock } from "./use-chart-clock";
 import { everyWhileShown } from "./while-shown";
 
@@ -74,11 +72,7 @@ export function historyPage(
   };
 }
 
-type Loaded = {
-  states: DeviceHistory;
-  statistics: DeviceStatistics;
-  midnights: MidnightStates;
-};
+type Loaded = { states: DeviceHistory; statistics: DeviceStatistics };
 
 /**
  * A capability's changes over the last 24 hours and its hourly roll-ups
@@ -119,7 +113,7 @@ export function useDayAndWeek(
             `/api/history/states?${query({
               from: new Date(
                 // Keep the preceding state for an opening at midnight.
-                weekOfChanges ? Math.min(weekStart - 1, firstHour) : to - dayMs,
+                weekOfChanges ? weekStart - 1 : to - dayMs,
               ).toISOString(),
             })}`,
           ),
@@ -132,13 +126,7 @@ export function useDayAndWeek(
           ),
         ]);
         if (!current) return;
-        const midnights = await loadMidnightStates(
-          timeZone,
-          statistics,
-          states,
-        );
-        if (!current) return;
-        setLoaded({ states, statistics, midnights });
+        setLoaded({ states, statistics });
         setLive((changes) =>
           changes.filter((change) => change.since >= Date.parse(states.to)),
         );
@@ -207,9 +195,7 @@ function DeviceHistoryPage(props: {
   const spans = loaded ? spansOf(loaded.states, from, now, live) : [];
   const dims =
     capability.kind === "light" && capability.features.brightness === true;
-  const days = loaded
-    ? daysOf(clock, loaded.statistics, spans, now, "on", loaded.midnights)
-    : [];
+  const days = loaded ? daysOf(clock, loaded.statistics, spans, now) : [];
 
   return (
     <div

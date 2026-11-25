@@ -81,7 +81,7 @@ function MediaHistoryPage(props: { device: DeviceInfo; capability: Media }) {
   const from = now - dayMs;
   const spans = loaded ? spansOf(loaded.states, from, now, live) : [];
   const days = loaded
-    ? daysOf(clock, loaded.statistics, spans, now, "playing", loaded.midnights)
+    ? daysOf(clock, loaded.statistics, spans, now, "playing")
     : [];
 
   return (

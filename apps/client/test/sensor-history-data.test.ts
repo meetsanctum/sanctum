@@ -1,5 +1,5 @@
 import { homeClock } from "@meetsanctum/app-sdk/clock";
-import type { DeviceHistory, HistoryStatistic } from "@meetsanctum/app-sdk";
+import type { HistoryStatistic } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
 import { dayMs } from "../src/device-history-data";
@@ -121,46 +121,6 @@ describe("a sensor's day", () => {
 });
 
 describe("a sensor's week", () => {
-  it("keeps a spike after home midnight on its own day, even while offline", () => {
-    const kolkata = homeClock({ timeZone: "Asia/Kolkata" });
-    const today = kolkata.startOfDay(now);
-    const start = today - 30 * minute;
-    const changes: Pick<DeviceHistory, "kind" | "states"> = {
-      kind: "sensor",
-      states: [
-        {
-          at: new Date(start - minute).toISOString(),
-          availability: "online",
-          state: { value: 20 },
-        },
-        {
-          at: new Date(today).toISOString(),
-          availability: "offline",
-          state: { value: 20 },
-        },
-        {
-          at: new Date(today + 15 * minute).toISOString(),
-          availability: "online",
-          state: { value: 30 },
-        },
-        {
-          at: new Date(today + 20 * minute).toISOString(),
-          availability: "offline",
-          state: { value: 30 },
-        },
-      ],
-    };
-    const days = weekRanges(
-      kolkata,
-      fields([period(start, 21, 20, 30)]),
-      now,
-      null,
-      new Map([[start, changes]]),
-    );
-    expect(days.at(-2)).toMatchObject({ min: 20, max: 20 });
-    expect(days.at(-1)).toEqual({ start: today, min: 30, max: 30 });
-  });
-
   it("is each local day's lowest and highest, today with what it reads now", () => {
     const today = clock.startOfDay(now);
     const yesterday = clock.startOfDay(now, 1);
