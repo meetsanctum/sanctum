@@ -18,8 +18,11 @@ const dependenciesAt = "/app/stack-packages";
 const sourcesAt = "/app/stack-sources";
 // Where the worktree keeps an app, by the folder its package is in.
 const appFolders = ["catalog/apps", "deploy/dev/apps"];
-// The app SDK's build and the manifest that resolves its entry points.
-const sdkFiles = ["dist", "package.json"];
+// The app SDK's build, which each package holds a copy of.
+const sdk = {
+  from: "packages/app-sdk/dist",
+  to: "node_modules/@meetsanctum/app-sdk/dist",
+};
 
 async function exists(path: string) {
   return access(path).then(
@@ -77,12 +80,7 @@ export function createStackPackages(
 
   // What says it changed: the app's own files and the SDK's.
   async function fingerprint(source: string) {
-    const lines: string[] = [];
-    for (const file of sdkFiles) {
-      lines.push(
-        ...(await filesUnder(join(sources, "packages/app-sdk", file))),
-      );
-    }
+    const lines = await filesUnder(join(sources, sdk.from));
     for (const file of await filesOf(source)) {
       lines.push(...(await filesUnder(join(source, file))));
     }
@@ -118,13 +116,9 @@ export function createStackPackages(
             });
           }
         }
-        for (const file of sdkFiles) {
-          await cp(
-            join(sources, "packages/app-sdk", file),
-            join(target, "node_modules/@meetsanctum/app-sdk", file),
-            { recursive: true },
-          );
-        }
+        await cp(join(sources, sdk.from), join(target, sdk.to), {
+          recursive: true,
+        });
       }
       return assembled;
     },

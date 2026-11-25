@@ -59,7 +59,6 @@ async function stackOf() {
       );
     }
   };
-  await write(join(sources, "packages/app-sdk/package.json"), "{}");
   await write(join(sources, "packages/app-sdk/dist/runner.js"), "// runner");
   return {
     root,
@@ -180,26 +179,6 @@ describe("a development stack's apps", () => {
     const sdk = await stackPackages.builds();
     expect(sdk.get("weather")).not.toBe(after.get("weather"));
     expect(sdk.get("moods")).not.toBe(after.get("moods"));
-  });
-
-  it("restages apps with the SDK's new export map when only its manifest changes", async () => {
-    const { app, root, sources, stackPackages } = await stackOf();
-    await app("catalog/apps", "weather", "sanctum.weather");
-    const before = await stackPackages.builds();
-    const manifest = JSON.stringify({
-      exports: { "./clock": "./dist/clock.js" },
-    });
-    await write(join(sources, "packages/app-sdk/package.json"), manifest);
-
-    const into = join(root, "staging");
-    const assembled = await stackPackages.assemble(into);
-    expect(assembled.get("weather")).not.toBe(before.get("weather"));
-    expect(
-      await readFile(
-        join(into, "weather/node_modules/@meetsanctum/app-sdk/package.json"),
-        "utf8",
-      ),
-    ).toBe(manifest);
   });
 
   it("isn't changed by the app's source, only its build", async () => {
