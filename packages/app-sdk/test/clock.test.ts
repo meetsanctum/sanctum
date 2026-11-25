@@ -175,7 +175,7 @@ describe("the home's words", () => {
   });
 
   it("write an hour on its own", () => {
-    const four = at("2026-11-24T15:00:00Z");
+    const four = at("2026-11-24T15:48:00Z");
     expect(hourText(four, zurich)).toBe("16:00");
     expect(hourText(four, zurich, "12h")).toBe("4 PM");
   });
@@ -212,6 +212,35 @@ describe("the home clock", () => {
       hostTimeZone(),
     );
     expect(homeClock({ timeZone: zurich }).hourCycle).toBe("24h");
+  });
+
+  it("marks each local hour, using the first occurrence of a repeated hour", () => {
+    const clock = homeClock({ timeZone: zurich });
+    expect(
+      clock.hours(
+        Date.parse("2026-10-24T22:30:00Z"),
+        Date.parse("2026-10-25T04:30:00Z"),
+        1,
+      ),
+    ).toEqual(
+      [
+        "2026-10-24T23:00:00Z",
+        "2026-10-25T00:00:00Z",
+        "2026-10-25T02:00:00Z",
+        "2026-10-25T03:00:00Z",
+        "2026-10-25T04:00:00Z",
+      ].map(Date.parse),
+    );
+  });
+
+  it("rejects impossible dates in words and calendar parts", () => {
+    const clock = homeClock({ timeZone: "UTC" });
+    expect(() => clock.at("2026-02-31", 7, 30)).toThrow(RangeError);
+    expect(() => clock.at({ year: 2026, month: 2, day: 31 }, 7, 30)).toThrow(
+      RangeError,
+    );
+    expect(() => clock.at("2026-02-01-02", 7, 30)).toThrow(RangeError);
+    expect(clock.at("2028-02-29", 7, 30)).toEqual(at("2028-02-29T07:30:00Z"));
   });
 
   it("knows the runtime's time zones", () => {

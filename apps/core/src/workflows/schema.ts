@@ -53,6 +53,9 @@ export const workflowTimers = sqliteTable(
     // For a sun trigger, the home's date of the sunrise or sunset it waits
     // for: the days before it have had their run, however their times move.
     sunDay: text("sun_day"),
+    // Calendar days (UTC midnight of the date), independent of the zone.
+    nextDailyDay: integer("next_daily_day"),
+    lastDailyDay: integer("last_daily_day"),
   },
   (table) => [
     primaryKey({ columns: [table.workflowId, table.node] }),

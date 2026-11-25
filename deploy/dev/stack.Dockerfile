@@ -51,6 +51,9 @@ RUN set -e; for app in catalog/apps/*/ deploy/dev/apps/*/; do \
     done
 
 FROM deps AS core
+# Read the worktree's current export map even when its file is replaced.
+RUN rm packages/app-sdk/package.json \
+    && ln -s /app/stack-sources/packages/app-sdk/package.json packages/app-sdk/package.json
 ARG SANCTUM_VERSION=dev-stack
 ENV NODE_ENV=production \
     SANCTUM_VERSION=$SANCTUM_VERSION \

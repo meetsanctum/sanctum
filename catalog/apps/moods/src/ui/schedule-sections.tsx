@@ -237,7 +237,6 @@ export function TurnOnSection(props: {
     schedule,
     moodNames: new Map(props.moods.map((mood) => [mood.id, mood.name])),
     lightName: props.lightName,
-    minute: minuteIn(now, timeZone),
     now,
     timeZone,
   });

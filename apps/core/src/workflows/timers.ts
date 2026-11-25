@@ -1,4 +1,5 @@
 import type { WorkflowGraph, WorkflowNode } from "@meetsanctum/app-sdk";
+import { localParts } from "@meetsanctum/app-sdk/clock";
 import { and, eq, isNotNull, lte, min } from "drizzle-orm";
 
 import type { CoreDatabase } from "../database.js";
@@ -13,7 +14,7 @@ import { sameValue } from "./graph.js";
 import { nextSun, refreshSunTimer, type SunDays, type Timer } from "./jobs.js";
 import type { Pieces } from "./pieces.js";
 import { workflowClock, workflowTimers, workflows } from "./schema.js";
-import { nextDaily } from "./time.js";
+import { calendarDay, nextDailyOccurrence } from "./time.js";
 
 // Workflows' timers: when each time and sun trigger of a workflow is next
 // due, and when a no-motion trigger's place will have been quiet long
@@ -73,6 +74,17 @@ export function createTimers(
       eq(workflowTimers.node, timer.node),
     );
 
+  function advanceTime(
+    node: WorkflowNode,
+    at: Date,
+    timer: typeof workflowTimers.$inferSelect,
+    dueAt: Date,
+  ) {
+    const lastDailyDay =
+      timer.nextDailyDay ?? calendarDay(localParts(dueAt, clock.timeZone()));
+    return { ...nextFor(node, at, null, lastDailyDay), lastDailyDay };
+  }
+
   // When a time or sun trigger is next due after `after`, null while it
   // waits for sun times; a sun trigger's past `ranFor` once it has run for
   // that day.
@@ -80,8 +92,8 @@ export function createTimers(
     node: WorkflowNode,
     after: Date,
     ranFor: string | null = null,
-    timeZone?: string,
-  ): Timer {
+    lastDailyDay: number | null = null,
+  ): Timer & { nextDailyDay?: number } {
     if (node.piece === "noMotion") {
       const { place, forMinutes } = pieces.coreConfig(
         node,
@@ -94,7 +106,13 @@ export function createTimers(
     if (node.piece === "time") {
       const { time, days } = pieces.coreConfig(node) as TimeTriggerConfig;
       return {
-        nextAt: nextDaily(after, time, timeZone ?? clock.timeZone(), days),
+        ...nextDailyOccurrence(
+          after,
+          time,
+          clock.timeZone(),
+          days,
+          lastDailyDay,
+        ),
         sunDay: null,
       };
     }
@@ -118,9 +136,14 @@ export function createTimers(
     );
   }
 
-  function refresh(piece: "noMotion" | "time", at: Date, timeZone?: string) {
+  function refresh(
+    piece: "noMotion" | "time",
+    at: Date,
+    previousZone?: string,
+  ) {
     for (const timer of db.select().from(workflowTimers).all()) {
-      if (timer.nextAt && timer.nextAt <= at) continue;
+      const due = timer.nextAt && timer.nextAt <= at ? timer.nextAt : null;
+      if (due && (piece !== "time" || timer.nextDailyDay !== null)) continue;
       const node = db
         .select()
         .from(workflows)
@@ -128,9 +151,20 @@ export function createTimers(
         .get()
         ?.graph.nodes.find((each) => each.id === timer.node);
       if (node?.piece !== piece || node.app || !pieces.find(node)) continue;
-      const { nextAt } = nextFor(node, at, null, timeZone);
-      if (nextAt?.getTime() !== timer.nextAt?.getTime()) {
-        db.update(workflowTimers).set({ nextAt }).where(one(timer)).run();
+      if (due) {
+        // A timer saved without its calendar date still belongs to its old zone.
+        const nextDailyDay = calendarDay(
+          localParts(due, previousZone ?? clock.timeZone()),
+        );
+        db.update(workflowTimers).set({ nextDailyDay }).where(one(timer)).run();
+        continue;
+      }
+      const next = nextFor(node, at, null, timer.lastDailyDay);
+      if (
+        next.nextAt?.getTime() !== timer.nextAt?.getTime() ||
+        (piece === "time" && next.nextDailyDay !== timer.nextDailyDay)
+      ) {
+        db.update(workflowTimers).set(next).where(one(timer)).run();
       }
     }
   }
@@ -139,7 +173,8 @@ export function createTimers(
     /**
      * A workflow's timers, set from now: nothing past is caught up. A sun
      * trigger left as it was in the graph `before` keeps its timer, and
-     * with it the day it waits for, so saving never runs one sunset twice.
+     * with it the day it waits for. An unchanged time trigger keeps the last
+     * date it handled.
      */
     set(workflow: WorkflowRow, before?: WorkflowGraph) {
       const kept = new Map(
@@ -156,24 +191,27 @@ export function createTimers(
       for (const node of workflow.graph.nodes.filter(timed)) {
         const timer = kept.get(node.id);
         const previous = before?.nodes.find(
-          (each) => each.id === node.id && timed(each) && each.piece === "sun",
+          (each) =>
+            each.id === node.id && timed(each) && each.piece === node.piece,
         );
         // Compared as parsed, an omitted offset and an explicit zero
         // describe the same timer.
-        const config = pieces.parse<SunTriggerConfig>(node);
-        const hasSameSunTrigger =
-          node.piece === "sun" &&
-          timer !== undefined &&
+        const config = pieces.parse(node);
+        const sameTrigger =
           previous !== undefined &&
           config !== undefined &&
           sameValue(pieces.parse(previous), config);
+        const lastDailyDay = sameTrigger ? (timer?.lastDailyDay ?? null) : null;
+        const next =
+          node.piece === "sun" && sameTrigger && timer
+            ? { nextAt: timer.nextAt, sunDay: timer.sunDay }
+            : nextFor(node, clock.now(), null, lastDailyDay);
         db.insert(workflowTimers)
           .values({
             workflowId: workflow.id,
             node: node.id,
-            ...(hasSameSunTrigger
-              ? { nextAt: timer.nextAt, sunDay: timer.sunDay }
-              : nextFor(node, clock.now())),
+            lastDailyDay,
+            ...next,
           })
           .run();
       }
@@ -225,10 +263,9 @@ export function createTimers(
       const saved = readZone.get()?.timeZone;
       if (saved === zone && previousZone === undefined) return;
       db.transaction(() => {
-        // Timers from before the zone was recorded already use the home's
-        // zone unless Places is changing it in this transaction.
-        if ((previousZone ?? saved ?? zone) !== zone) {
-          refresh("time", at, zone);
+        const scheduledZone = saved ?? previousZone;
+        if (scheduledZone !== zone) {
+          refresh("time", at, scheduledZone);
         }
         db.insert(workflowClock)
           .values({ id: 1, timeZone: zone })
@@ -324,7 +361,10 @@ export function createTimers(
           continue;
         }
         const dueAt = timer.nextAt!;
-        const next = nextFor(node, at, timer.sunDay);
+        const next =
+          node.piece === "time"
+            ? advanceTime(node, at, timer, dueAt)
+            : nextFor(node, at, timer.sunDay);
         db.update(workflowTimers).set(next).where(one(timer)).run();
         // A place that had motion again, or whose sensors stopped
         // answering, is not quiet: its timer waits for the next quiet

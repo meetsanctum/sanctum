@@ -358,21 +358,33 @@ describe("AI models", () => {
     const sources = fakeSources();
     const core = await testCore({
       modelFetchers: sources.fetchers,
-      startsAt: "2026-10-30T22:30:00.000Z",
-      timeZone: "Europe/Zurich",
+      startsAt: "2026-10-30T23:30:00.000Z",
+      timeZone: null,
     });
     const { token } = await claimed(core);
+    const changed = await post(
+      core,
+      "/api/places/home/update",
+      { timeZone: "Europe/Zurich" },
+      { token },
+    );
+    expect(changed.statusCode).toBe(200);
     await addOfficeMac(core, token);
     const [source] = (await checked(core)).sources;
     const sourceId = source!.id;
+    expect(core.db.select().from(modelTokens).all()).toEqual([
+      { day: "2026-10-31", sourceId, usedBy: "check", tokens: 46 },
+    ]);
     core.db
       .insert(modelTokens)
       .values([
-        { day: "2026-09-30", sourceId, usedBy: "check", tokens: 100 },
-        { day: "2026-10-01", sourceId, usedBy: "check", tokens: 20 },
+        { day: "2026-10-01", sourceId, usedBy: "check", tokens: 100 },
+        { day: "2026-10-02", sourceId, usedBy: "check", tokens: 20 },
       ])
       .run();
-    expect(core.models.info().sources[0]?.tokens).toEqual({
+    const info = core.models.info();
+    expect(info.usage.days.at(-1)).toBe("2026-10-31");
+    expect(info.sources[0]?.tokens).toEqual({
       today: 46,
       month: 66,
     });

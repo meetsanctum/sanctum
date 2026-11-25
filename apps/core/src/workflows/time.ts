@@ -25,16 +25,36 @@ export function nextDaily(
   timeZone: string,
   days?: readonly Weekday[],
 ): Date {
+  return nextDailyOccurrence(after, time, timeZone, days).nextAt;
+}
+
+const dayMs = 24 * 60 * 60_000;
+
+export const calendarDay = (date: LocalDate) =>
+  Date.UTC(date.year, date.month - 1, date.day);
+
+/** The next daily occurrence, past any calendar day already handled. */
+export function nextDailyOccurrence(
+  after: Date,
+  time: string,
+  timeZone: string,
+  days?: readonly Weekday[],
+  lastDailyDay: number | null = null,
+) {
   const { hour, minute } = hourMinute(time);
   const today = localParts(after, timeZone);
-  for (let ahead = 0; ahead <= 8; ahead++) {
+  const first =
+    lastDailyDay === null
+      ? 0
+      : Math.max(0, (lastDailyDay - calendarDay(today)) / dayMs + 1);
+  for (let ahead = first; ahead <= first + 8; ahead++) {
     const date = addDays(today, ahead);
     if (days && !days.includes(weekdayOf(date))) {
       continue;
     }
     const at = zonedTime(date, hour, minute, timeZone);
     if (at.getTime() > after.getTime()) {
-      return at;
+      return { nextAt: at, nextDailyDay: calendarDay(date) };
     }
   }
   // Only reached with no days at all, which their schema refuses.

@@ -107,6 +107,10 @@ export function zonedTime(
   minute: number,
   timeZone: string,
 ): Date {
+  const { year, month, day } = addDays(date, 0);
+  if (year !== date.year || month !== date.month || day !== date.day) {
+    throw new RangeError(`Invalid local date: ${dateKey(date)}`);
+  }
   return new Date(resolveTime(date, hour, minute, timeZone));
 }
 
@@ -164,15 +168,15 @@ const dateKey = (date: LocalDate) =>
   `${pad(date.year, 4)}-${pad(date.month)}-${pad(date.day)}`;
 
 function parseLocalDate(date: string): LocalDate {
-  const [year, month, day] = date.split("-").map(Number);
-  if (
-    !Number.isInteger(year) ||
-    !Number.isInteger(month) ||
-    !Number.isInteger(day)
-  ) {
-    throw new Error(`Invalid local date: ${date}`);
+  const parts = /^(\d+)-(\d{1,2})-(\d{1,2})$/.exec(date);
+  if (!parts) {
+    throw new RangeError(`Invalid local date: ${date}`);
   }
-  return { year: year!, month: month!, day: day! };
+  return {
+    year: Number(parts[1]),
+    month: Number(parts[2]),
+    day: Number(parts[3]),
+  };
 }
 
 /** The date in a time zone at an instant, such as 2026-10-29. */
@@ -273,7 +277,11 @@ export function hourText(
         hour: "numeric",
         hourCycle: "h12",
       }).format(at)
-    : timeText(at, timeZone, hourCycle);
+    : `${formatter(`hour24|${timeZone}`, "en-GB", {
+        timeZone,
+        hour: "2-digit",
+        hourCycle: "h23",
+      }).format(at)}:00`;
 }
 
 /** A day's name, such as Mon. */

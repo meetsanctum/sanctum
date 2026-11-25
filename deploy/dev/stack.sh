@@ -114,6 +114,8 @@ core_binds() {
     packages/app-sdk/dist packages/auth-protocol/dist packages/ui-sdk/dist; do
     [[ -e "$path" ]] && binds+="${root}/${path}:/app/${path}:ro;"
   done
+  # The package manifest can be replaced by an editor or a checkout.
+  binds+="${root}/packages/app-sdk:/app/stack-sources/packages/app-sdk:ro;"
   echo "$binds"
 }
 

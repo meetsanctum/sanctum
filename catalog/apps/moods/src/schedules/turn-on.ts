@@ -4,7 +4,6 @@ import {
   type DeviceInfo,
   type TurnOn,
 } from "@meetsanctum/app-sdk";
-import { addDays, homeClock } from "@meetsanctum/app-sdk/clock";
 import { eq } from "drizzle-orm";
 import { isDeepStrictEqual } from "node:util";
 
@@ -13,6 +12,7 @@ import { turnOnEntities } from "../moods/schema.js";
 import { lightsOf } from "../moods/smart.js";
 import { readMood, type Mood } from "../moods/store.js";
 import { allLightsInRoom, type Light } from "../targets.js";
+import { activeSpan } from "./active-span.js";
 import {
   readSchedule,
   readSnapshot,
@@ -20,7 +20,6 @@ import {
   type Snapshot,
   type TurnOnBehaviour,
 } from "./store.js";
-import { day, isOvernight } from "./times.js";
 
 // What turning a room's lights on brings. The core turns a room, a zone or
 // the home on, so Moods publishes each room's rule as a standard
@@ -102,28 +101,8 @@ async function ruleOf(
 ) {
   const { db } = ctx.storage;
   const target = { kind: "room", id: roomId } as const;
-  const clock = homeClock({ timeZone });
-  const today = clock.parts(now);
-  const yesterday = addDays(today, -1);
-  let active: { moodId: string; start: Date; until: Date } | undefined;
-  for (const entry of await readSchedule(db, roomId)) {
-    const endsNextDay = isOvernight(entry) || entry.end === day;
-    for (const date of endsNextDay ? [today, yesterday] : [today]) {
-      const start = clock.at(
-        date,
-        Math.floor(entry.start / 60),
-        entry.start % 60,
-      );
-      if (start > now || (active && start <= active.start)) continue;
-      const until = clock.at(
-        endsNextDay ? addDays(date, 1) : date,
-        Math.floor((entry.end % day) / 60),
-        entry.end % 60,
-      );
-      if (now < until) active = { moodId: entry.moodId, start, until };
-    }
-  }
-  const mood = active ? await readMood(db, active.moodId) : null;
+  const active = activeSpan(await readSchedule(db, roomId), now, timeZone);
+  const mood = active ? await readMood(db, active.span.moodId) : null;
   return turnOnRule({
     roomId,
     behaviour: await readTurnOn(db, target),

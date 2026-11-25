@@ -32,7 +32,7 @@ services:
       # the dependencies its image holds, again whenever their build changes.
       - ../../catalog/apps:/app/stack-sources/catalog/apps:ro
       - ../../deploy/dev/apps:/app/stack-sources/deploy/dev/apps:ro
-      - ../../packages/app-sdk/dist:/app/stack-sources/packages/app-sdk/dist:ro
+      - ../../packages/app-sdk:/app/stack-sources/packages/app-sdk:ro
     logging:
       driver: json-file
       options:

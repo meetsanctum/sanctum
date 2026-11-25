@@ -117,13 +117,17 @@ function answer(action: string, input: Record<string, unknown>) {
 async function show(
   Page: ComponentType<PageProps>,
   params: PageProps["params"],
+  timeZone = places.home.timeZone,
 ) {
   client = fakeClient();
   client.devices.mockResolvedValue([
     lightDevice("lamp", "Lamp", { on: true, brightness: 40 }),
     lightDevice("desk", "Desk", { on: false, brightness: 70 }),
   ]);
-  client.places.mockResolvedValue(places);
+  client.places.mockResolvedValue({
+    ...places,
+    home: { ...places.home, timeZone },
+  });
   client.call.mockImplementation(answer);
   await act(async () => {
     root.render(
@@ -250,6 +254,22 @@ describe("turning a room's lights on", () => {
     );
     expect(chosen?.textContent).toContain("Follow the schedule");
     expect(said()).toBe("Turning the lights on now brings Focus, until 17:00.");
+  });
+
+  it("shows that a mood already ended during the first occurrence of a repeated hour", async () => {
+    vi.setSystemTime(new Date("2026-10-25T01:10:00Z"));
+    schedule = {
+      ...schedule,
+      scheduled: [
+        { id: "s1", roomId: "office", moodId: "focus", start: 60, end: 150 },
+      ],
+      snapshot: null,
+    };
+    await show(RoomMoodsPage, { placeId: "office" }, "Europe/Zurich");
+
+    expect(said()).toBe(
+      "Turning the lights on now brings each light on as it remembers itself.",
+    );
   });
 
   it("says which lights come back as they were, and since when", async () => {

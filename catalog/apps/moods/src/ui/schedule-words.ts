@@ -1,8 +1,10 @@
+import { activeSpan } from "../schedules/active-span.js";
 import {
+  day,
   formatMinute,
   isOvernight,
   lengthOf,
-  spanAt,
+  minuteIn,
   type Span,
 } from "../schedules/times.js";
 import type { RoomSchedule } from "./schedules";
@@ -77,15 +79,20 @@ export function turnOnWords(options: {
   moodNames: ReadonlyMap<string, string>;
   /** The names of the lights, by device and capability. */
   lightName: (light: { device: string; capability: string }) => string;
-  minute: number;
   now: Date;
   timeZone: string;
 }) {
-  const { schedule, moodNames, minute, now, timeZone } = options;
-  const holding = spanAt(schedule.scheduled, minute);
-  const mood = holding && moodNames.get(holding.moodId);
-  if (schedule.turnOn === "followSchedule" && holding && mood) {
-    return `Turning the lights on now brings ${mood}, until ${formatMinute(holding.end)}.`;
+  const { schedule, moodNames, now, timeZone } = options;
+  if (schedule.turnOn === "followSchedule") {
+    const holding = activeSpan(schedule.scheduled, now, timeZone);
+    const mood = holding && moodNames.get(holding.span.moodId);
+    if (holding && mood) {
+      const end = minuteIn(holding.until, timeZone);
+      const label = formatMinute(
+        end === 0 && holding.span.end === day ? day : end,
+      );
+      return `Turning the lights on now brings ${mood}, until ${label}.`;
+    }
   }
   const snapshot = schedule.snapshot;
   if (!snapshot || snapshot.lights.length === 0) {
