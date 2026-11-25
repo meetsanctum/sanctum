@@ -21,7 +21,7 @@ import {
   type RevokeClient,
   type SetClientDrawing,
   drawingChoices,
-  type Drawn,
+  type ReportClientDrawing,
   type SetLoginFinish,
   type SetLoginStart,
   type SignInFinish,
@@ -100,7 +100,8 @@ const schemas = {
     effects: z.enum(["regular", "reduced"]),
     motion: z.enum(["regular", "reduced"]),
     slowDevice: z.boolean(),
-  }) satisfies z.ZodType<Drawn>,
+    drawingRevision: z.number().int().nonnegative(),
+  }) satisfies z.ZodType<ReportClientDrawing>,
   setLoginStart: z.object({
     personId: id,
     username,

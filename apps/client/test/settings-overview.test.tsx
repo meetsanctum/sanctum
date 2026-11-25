@@ -32,6 +32,7 @@ const maya: Me = {
     current: true,
     reduceEffects: "automatic",
     reduceMotion: "automatic",
+    drawingRevision: 0,
     drawn: null,
   },
   person: { id: "maya", name: "Maya", avatar: null, colour: "#c5cdac" },
@@ -45,6 +46,7 @@ const tablet: ClientInfo = {
   current: false,
   reduceEffects: "automatic",
   reduceMotion: "automatic",
+  drawingRevision: 0,
   drawn: null,
 };
 

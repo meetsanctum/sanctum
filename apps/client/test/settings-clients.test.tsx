@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { ClientInfo } from "@meetsanctum/auth-protocol";
+import type { ClientInfo, SetClientDrawing } from "@meetsanctum/auth-protocol";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -35,6 +35,7 @@ const macbook: ClientInfo = {
   current: true,
   reduceEffects: "automatic",
   reduceMotion: "automatic",
+  drawingRevision: 0,
   drawn: null,
 };
 const tablet: ClientInfo = {
@@ -49,6 +50,7 @@ const tablet: ClientInfo = {
   current: false,
   reduceEffects: "automatic",
   reduceMotion: "automatic",
+  drawingRevision: 0,
   drawn: null,
 };
 
@@ -91,16 +93,18 @@ describe("Settings → Clients", () => {
   let container: HTMLDivElement;
   let approved: unknown[];
   let drawing: unknown[];
+  let shownTablet: ClientInfo;
 
   beforeEach(async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     approved = [];
     drawing = [];
+    shownTablet = tablet;
     vi.mocked(coreJson).mockReset();
     vi.mocked(coreJson).mockImplementation(async (path, init = {}) => {
       switch (path) {
         case "/api/auth/clients":
-          return [macbook, tablet];
+          return [macbook, shownTablet];
         case "/api/people":
           return [maya];
         case "/api/auth/pair/lookup":
@@ -120,7 +124,13 @@ describe("Settings → Clients", () => {
           return undefined;
         case "/api/auth/clients/drawing":
           drawing.push(init.json);
-          return { ...tablet, ...(init.json as object) };
+          shownTablet = {
+            ...shownTablet,
+            ...(init.json as SetClientDrawing),
+            drawingRevision: shownTablet.drawingRevision + 1,
+            drawn: null,
+          };
+          return shownTablet;
         default:
           throw new Error(`Unexpected request: ${path}`);
       }
@@ -135,6 +145,7 @@ describe("Settings → Clients", () => {
     await act(async () => root.unmount());
     container.remove();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   // Sets an input's value the way typing does, so React sees it.
@@ -221,6 +232,64 @@ describe("Settings → Clients", () => {
     expect(
       document.querySelector("[role=dialog] [role=alert]")!.textContent,
     ).toBe("That did not work. Try again.");
+  });
+
+  it("waits for the current save and keeps its failure out of a reopened dialog", async () => {
+    await editClient("Kitchen tablet", "Effects and motion");
+    let refuseSave!: (error: Error) => void;
+    const save = new Promise<ClientInfo>((_, reject) => {
+      refuseSave = reject;
+    });
+    vi.mocked(coreJson).mockReturnValueOnce(save);
+    await act(async () => choice("Reduce effects", "On").click());
+    expect(choice("Reduce motion", "Off").disabled).toBe(true);
+    await act(async () => choice("Reduce motion", "Off").click());
+    expect(drawing).toEqual([]);
+
+    await act(async () => button("Done").click());
+    await editClient("Kitchen tablet", "Effects and motion");
+    expect(choice("Reduce effects", "On").disabled).toBe(true);
+    await act(async () => refuseSave(new CoreError(500, "unknown")));
+    expect(document.querySelector("[role=dialog] [role=alert]")).toBeNull();
+    expect(choice("Reduce effects", "On").disabled).toBe(false);
+    expect(choice("Reduce effects", "Automatic").dataset.state).toBe("on");
+  });
+
+  it("updates the open dialog when choices are changed elsewhere", async () => {
+    await editClient("Kitchen tablet", "Effects and motion");
+    const visibility = vi.spyOn(document, "visibilityState", "get");
+    const refresh = async () => {
+      visibility.mockReturnValue("hidden");
+      document.dispatchEvent(new Event("visibilitychange"));
+      visibility.mockReturnValue("visible");
+      await act(async () =>
+        document.dispatchEvent(new Event("visibilitychange")),
+      );
+    };
+    shownTablet = {
+      ...shownTablet,
+      reduceMotion: "on",
+      drawingRevision: 1,
+      drawn: { effects: "reduced", motion: "reduced", slowDevice: false },
+    };
+    await refresh();
+    expect(choice("Reduce motion", "On").dataset.state).toBe("on");
+    expect(document.querySelector("[role=dialog]")?.textContent).toContain(
+      "On now. Automatic turns on when Kitchen tablet is known to be slow or asks for reduced transparency.",
+    );
+    shownTablet = {
+      ...shownTablet,
+      reduceMotion: "off",
+      drawingRevision: 2,
+      drawn: null,
+    };
+    await refresh();
+    expect(choice("Reduce motion", "Off").dataset.state).toBe("on");
+
+    await act(async () => choice("Reduce effects", "On").click());
+    expect(drawing).toEqual([
+      { id: "tablet", reduceEffects: "on", reduceMotion: "on" },
+    ]);
   });
 
   it("lists every client, marking those never seen", () => {

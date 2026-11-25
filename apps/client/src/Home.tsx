@@ -130,7 +130,7 @@ function HomeScreen(
   const { host, onHostMoved, onCertificateChanged, live } = props;
   const { status: core, checkNow } = useCoreStatus();
   const [updateRunning, setUpdateRunning] = useState(false);
-  const liveConnection = useRef<ReturnType<typeof connectLive>>(undefined);
+  const reconnect = useRef<() => void>(undefined);
   const [found, setFound] = useState(false);
   const [certificateNotValid, setCertificateNotValid] = useState(false);
   const [reachedCore, setReachedCore] = useState(false);
@@ -149,7 +149,6 @@ function HomeScreen(
     appChanged,
     appAdded,
   } = useInstalledApps(live);
-  const refreshId = useRef(0);
   const { dashboards, rename, home } = useDashboards(live);
   const { pins, change: changePins } = usePins(live);
   const { current: dashboard, show: showDashboard } =
@@ -224,22 +223,37 @@ function HomeScreen(
     [host, onHostMoved, onCertificateChanged],
   );
 
-  const refresh = useCallback(async () => {
-    const requestId = ++refreshId.current;
-    const [nextMe] = await Promise.allSettled([
-      coreJson<Me>("/api/auth/me"),
-      readApps(),
-    ]);
-    if (requestId !== refreshId.current) return;
-    if (nextMe.status === "fulfilled") setMe(nextMe.value);
-  }, [readApps]);
-
   useEffect(() => {
     if (!found) {
       return;
     }
+    let stopped = false;
+    let readingMe = false;
+    let meQueued = false;
+    function refreshMe(readChoices = true) {
+      if (stopped) return;
+      if (readingMe) {
+        meQueued ||= readChoices;
+        return;
+      }
+      readingMe = true;
+      void coreJson<Me>("/api/auth/me")
+        .then((next) => {
+          if (!stopped && readChoices) setMe(next);
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          readingMe = false;
+          if (meQueued) {
+            meQueued = false;
+            refreshMe();
+          }
+        });
+    }
     const update = () => {
-      void refresh().catch(() => undefined);
+      if (stopped) return;
+      refreshMe();
+      void readApps().catch(() => undefined);
       live.refresh();
     };
     update();
@@ -248,7 +262,7 @@ function HomeScreen(
     // token if the live connection cannot tell it it was revoked.
     const timer = setInterval(() => {
       if (isShown()) update();
-      else if (!isLive) void coreJson("/api/auth/me").catch(() => undefined);
+      else if (!isLive) refreshMe(false);
     }, 30_000);
     let lastReturn: { event: "focus" | "visibility"; time: number } | undefined;
     const resume = (event: NonNullable<typeof lastReturn>["event"]) => {
@@ -284,19 +298,22 @@ function HomeScreen(
         if (state === "offline") checkNow();
       },
       live.publish,
-      () => void refresh().catch(() => undefined),
+      refreshMe,
     );
-    liveConnection.current = connection;
+    reconnect.current = () => {
+      connection.retryNow();
+      update();
+    };
     return () => {
-      refreshId.current += 1;
+      stopped = true;
       stopApps();
       clearInterval(timer);
       stopShown();
       window.removeEventListener("focus", focus);
       connection.stop();
-      liveConnection.current = undefined;
+      reconnect.current = undefined;
     };
-  }, [found, refresh, stopApps, live, host.url, host.token, checkNow]);
+  }, [found, readApps, stopApps, live, host.url, host.token, checkNow]);
 
   // Back after a restart or an outage: reconnect at once and read
   // everything again, rather than wait for the next try.
@@ -307,11 +324,9 @@ function HomeScreen(
       wasAway.current = true;
     } else if (core.state === "online" && wasAway.current && found) {
       wasAway.current = false;
-      liveConnection.current?.retryNow();
-      void refresh().catch(() => undefined);
-      live.refresh();
+      reconnect.current?.();
     }
-  }, [isAway, core.state, found, refresh, live]);
+  }, [isAway, core.state, found]);
 
   // The core is reached once the host answered as itself and its core is up,
   // or as soon as it reports an update: until that commits it answers only

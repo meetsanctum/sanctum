@@ -4,7 +4,7 @@ import type {
   SetClientDrawing,
 } from "@meetsanctum/auth-protocol";
 import { Button, SegmentedControl } from "@meetsanctum/ui-sdk";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 
 import { productName } from "./brand";
 import {
@@ -42,21 +42,14 @@ export function drawnText(client: ClientInfo) {
   return null;
 }
 
-// What a choice means on this client, Automatic by what it said it draws
-// with: why it is on now, or where it would turn on.
+// What a choice means on this client, and what it currently draws with.
 function effectsHint(client: ClientInfo, choice: DrawingChoice) {
   const { name, drawn } = client;
   if (choice === "on") return `Always drawn plainly on ${name}.`;
   if (choice === "off") return `Every effect, even where ${name} feels slow.`;
-  if (!drawn) {
-    return `On where ${name} is known to be slow or asks for reduced transparency.`;
-  }
-  if (drawn.effects === "regular") {
-    return `Off now. It turns on where ${name} asks for reduced transparency.`;
-  }
-  return drawn.slowDevice
-    ? `On now, since ${name} is known to be slow.`
-    : `On now, since ${name} asks for reduced transparency.`;
+  const when = `${name} is known to be slow or asks for reduced transparency.`;
+  if (!drawn) return `On where ${when}`;
+  return `${drawn.effects === "reduced" ? "On" : "Off"} now. Automatic turns on when ${when}`;
 }
 
 function motionHint(client: ClientInfo, choice: DrawingChoice) {
@@ -64,86 +57,91 @@ function motionHint(client: ClientInfo, choice: DrawingChoice) {
   if (choice === "on") return `Nothing moves on ${name}.`;
   if (choice === "off")
     return `Every movement, even where ${name} asks for less.`;
-  if (!drawn) {
-    return `On where ${name} is known to be slow or asks for reduced motion.`;
-  }
-  if (drawn.motion === "regular") {
-    return `Off now. It turns on where ${name} asks for reduced motion.`;
-  }
-  return drawn.slowDevice
-    ? `On now, since ${name} is known to be slow.`
-    : `On now, since ${name} asks for reduced motion.`;
+  const when = `${name} is known to be slow or asks for reduced motion.`;
+  if (!drawn) return `On where ${when}`;
+  return `${drawn.motion === "reduced" ? "On" : "Off"} now. Automatic turns on when ${when}`;
 }
+
+type DrawingChange = Omit<SetClientDrawing, "id">;
 
 export function ClientDrawing(props: {
   /** The client whose drawing is open, as Clients last read it. */
   client?: ClientInfo;
   onClose: () => void;
-  onChanged: () => void;
+  onChanged: (saved: ClientInfo) => void;
 }) {
   // What the dialog showed stays while it closes.
   const last = useRef<ClientInfo>(undefined);
   if (props.client) last.current = props.client;
   const client = last.current;
   const openId = props.client?.id;
-  const [effects, setEffects] = useState<DrawingChoice>("automatic");
-  const [motion, setMotion] = useState<DrawingChoice>("automatic");
-  // Reduce motion turned on with Reduce effects, until it is chosen itself.
-  const [isLinked, setLinked] = useState(false);
+  const opening = useRef<object>(undefined);
+  const saving = useRef(false);
+  const [pending, setPending] = useState<{
+    opening: object;
+    change: DrawingChange;
+    linked: boolean;
+  }>();
+  const [linkedRevision, setLinkedRevision] = useState<number>();
   const [problem, setProblem] = useState<string>();
   const id = useId();
 
-  // Each opening starts from the client's choices, read as it opens: a
-  // later read of Clients changes only what Automatic says now.
-  const opening = useRef(props.client);
-  opening.current = props.client;
-  useEffect(() => {
-    const opened = opening.current;
-    if (!openId || !opened) return;
-    setEffects(opened.reduceEffects);
-    setMotion(opened.reduceMotion);
-    setLinked(false);
+  useLayoutEffect(() => {
+    if (!openId) return;
+    opening.current = {};
+    setLinkedRevision(undefined);
     setProblem(undefined);
+    return () => {
+      opening.current = undefined;
+    };
   }, [openId]);
 
-  const save = (change: Omit<SetClientDrawing, "id">, undo: () => void) => {
-    if (!client) return;
+  const draft = pending?.opening === opening.current ? pending : undefined;
+  const effects =
+    draft?.change.reduceEffects ?? client?.reduceEffects ?? "automatic";
+  const motion =
+    draft?.change.reduceMotion ?? client?.reduceMotion ?? "automatic";
+  // The note belongs to the choices that turned motion on together with effects.
+  const isLinked =
+    draft?.linked ??
+    (linkedRevision !== undefined &&
+      linkedRevision === client?.drawingRevision);
+
+  const save = async (change: DrawingChange, linked: boolean) => {
+    const opened = opening.current;
+    if (!openId || !opened || saving.current) return;
+    saving.current = true;
+    setPending({ opening: opened, change, linked });
     setProblem(undefined);
-    coreJson<ClientInfo>("/api/auth/clients/drawing", {
-      method: "POST",
-      json: { id: client.id, ...change } satisfies SetClientDrawing,
-    })
-      .then(props.onChanged)
-      .catch(() => {
-        undo();
-        setProblem("That did not work. Try again.");
+    try {
+      const saved = await coreJson<ClientInfo>("/api/auth/clients/drawing", {
+        method: "POST",
+        json: { id: openId, ...change } satisfies SetClientDrawing,
       });
+      props.onChanged(saved);
+      if (opening.current === opened) {
+        setLinkedRevision(linked ? saved.drawingRevision : undefined);
+      }
+    } catch {
+      if (opening.current === opened) {
+        setProblem("That did not work. Try again.");
+      }
+    } finally {
+      saving.current = false;
+      setPending(undefined);
+    }
   };
 
   const chooseEffects = (next: DrawingChoice) => {
-    const before = { effects, motion, isLinked };
     const turnsMotionOn = next === "on" && motion !== "on";
-    setEffects(next);
-    if (turnsMotionOn) setMotion("on");
-    setLinked(next === "on" && (turnsMotionOn || isLinked));
-    save(
+    void save(
       { reduceEffects: next, ...(turnsMotionOn && { reduceMotion: "on" }) },
-      () => {
-        setEffects(before.effects);
-        setMotion(before.motion);
-        setLinked(before.isLinked);
-      },
+      next === "on" && (turnsMotionOn || isLinked),
     );
   };
 
   const chooseMotion = (next: DrawingChoice) => {
-    const before = { motion, isLinked };
-    setMotion(next);
-    setLinked(false);
-    save({ reduceMotion: next }, () => {
-      setMotion(before.motion);
-      setLinked(before.isLinked);
-    });
+    void save({ reduceMotion: next }, false);
   };
 
   return (
@@ -168,6 +166,7 @@ export function ClientDrawing(props: {
               title="Reduce effects"
               about="Without blur, fades or shadows, for a device that feels slow."
               value={effects}
+              disabled={!!pending}
               onChange={chooseEffects}
               hint={effectsHint(client, effects)}
             />
@@ -176,6 +175,7 @@ export function ClientDrawing(props: {
               title="Reduce motion"
               about="Things appear and change in place, without sliding, zooming or flying in."
               value={motion}
+              disabled={!!pending}
               onChange={chooseMotion}
               hint={
                 isLinked
@@ -207,6 +207,7 @@ function Group(props: {
   title: string;
   about: string;
   value: DrawingChoice;
+  disabled: boolean;
   onChange: (value: DrawingChoice) => void;
   hint: string;
 }) {
@@ -225,6 +226,7 @@ function Group(props: {
         describedBy={`${props.id}-about ${props.id}-hint`}
         options={options}
         value={props.value}
+        disabled={props.disabled}
         onValueChange={props.onChange}
         className="self-start"
       />

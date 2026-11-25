@@ -108,5 +108,6 @@ export const macbook = {
   current: true,
   reduceEffects: "automatic",
   reduceMotion: "automatic",
+  drawingRevision: 0,
   drawn: null,
 } as const;

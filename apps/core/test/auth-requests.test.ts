@@ -152,11 +152,18 @@ describe("clients", () => {
       close() {},
       send: (message) => heard.push(JSON.parse(String(message))),
     });
+    const heardByEditor: unknown[] = [];
+    core.auth.connections.add(core.auth.clients.authenticate(claim.token)!, {
+      close() {},
+      send: (message) => heardByEditor.push(JSON.parse(String(message))),
+    });
     const me = async () =>
       (await get(core, "/api/auth/me", { token: display.token })).json().client;
-    expect(await me()).toMatchObject({
+    const automatic = await me();
+    expect(automatic).toMatchObject({
       reduceEffects: "automatic",
       reduceMotion: "automatic",
+      drawingRevision: 0,
       drawn: null,
     });
 
@@ -173,6 +180,7 @@ describe("clients", () => {
       current: false,
     });
     expect(heard).toEqual([{ type: "client" }]);
+    expect(heardByEditor).toEqual([]);
     // A choice left out stays as it is.
     await post(
       core,
@@ -180,16 +188,24 @@ describe("clients", () => {
       { id: display.id, reduceMotion: "off" },
       { token: claim.token },
     );
-    expect(await me()).toMatchObject({
+    const saved = await me();
+    expect(saved).toMatchObject({
       reduceEffects: "on",
       reduceMotion: "off",
+      drawingRevision: 2,
     });
 
     const drawn = { effects: "reduced", motion: "regular", slowDevice: true };
-    const said = await post(core, "/api/auth/me/drawn", drawn, {
-      token: display.token,
-    });
+    const say = (report: typeof drawn, drawingRevision: number) =>
+      post(
+        core,
+        "/api/auth/me/drawn",
+        { ...report, drawingRevision },
+        { token: display.token },
+      );
+    const said = await say(drawn, saved.drawingRevision);
     expect(said.statusCode).toBe(204);
+    await say({ ...drawn, motion: "reduced" }, set.json().drawingRevision);
     const listed = (
       await get(core, "/api/auth/clients", { token: claim.token })
     ).json();
@@ -206,6 +222,7 @@ describe("clients", () => {
       { token: claim.token },
     );
     expect(await me()).toMatchObject({ drawn });
+    expect(heard).toEqual([{ type: "client" }, { type: "client" }]);
     await post(
       core,
       "/api/auth/clients/drawing",
@@ -213,6 +230,30 @@ describe("clients", () => {
       { token: claim.token },
     );
     expect(await me()).toMatchObject({ drawn: null });
+  });
+
+  it("refuses drawing changes from a caller revoked after its token check", async () => {
+    const core = await testCore();
+    const claim = await claimed(core);
+    const editor = sharedClient(core);
+    const caller = core.auth.clients.authenticate(editor.token)!;
+    const removed = await post(
+      core,
+      "/api/auth/clients/revoke",
+      { id: editor.id },
+      { token: claim.token },
+    );
+    expect(removed.statusCode).toBe(204);
+    expect(() =>
+      core.auth.clients.setDrawing(caller, {
+        id: claim.client.id,
+        reduceEffects: "on",
+      }),
+    ).toThrow(
+      expect.objectContaining({ code: "invalid_client_token", status: 401 }),
+    );
+    const me = await get(core, "/api/auth/me", { token: claim.token });
+    expect(me.json().client.reduceEffects).toBe("automatic");
   });
 
   it("refuse a choice they don't know, and an agent's drawing", async () => {
@@ -231,7 +272,12 @@ describe("clients", () => {
     const said = await post(
       core,
       "/api/auth/me/drawn",
-      { effects: "plain", motion: "regular", slowDevice: false },
+      {
+        effects: "plain",
+        motion: "regular",
+        slowDevice: false,
+        drawingRevision: 0,
+      },
       { token: display.token },
     );
     expect(said.statusCode).toBe(400);

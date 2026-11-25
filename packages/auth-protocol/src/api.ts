@@ -110,6 +110,8 @@ export type ClientInfo = {
   reduceEffects: DrawingChoice;
   /** How it draws motion: chosen on any client, as Reduce effects. */
   reduceMotion: DrawingChoice;
+  /** Changes whenever either drawing choice changes. */
+  drawingRevision: number;
   /** What it last said it draws with, once it has said. */
   drawn: Drawn | null;
 };
@@ -128,6 +130,9 @@ export type Drawn = {
   /** Whether it is a device known to be slow, which Automatic reduces. */
   slowDevice: boolean;
 };
+
+/** Reports how the device draws with a specific set of saved choices. */
+export type ReportClientDrawing = Drawn & { drawingRevision: number };
 
 /** Sets a client's choices; one left out stays as it is. */
 export type SetClientDrawing = {

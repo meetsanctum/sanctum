@@ -78,6 +78,7 @@ export const authClients = sqliteTable(
     reduceMotion: text("reduce_motion", { enum: drawingChoices })
       .notNull()
       .default("automatic"),
+    drawingRevision: integer("drawing_revision").notNull().default(0),
     // What the client last said it draws with (ClientInfo's drawn), as JSON;
     // Automatic is resolved on the device, which alone knows what it is.
     drawn: text("drawn", { mode: "json" }).$type<Drawn>(),

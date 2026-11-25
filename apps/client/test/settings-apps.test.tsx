@@ -37,6 +37,7 @@ const admin: Me = {
     current: true,
     reduceEffects: "automatic",
     reduceMotion: "automatic",
+    drawingRevision: 0,
     drawn: null,
   },
   person: {

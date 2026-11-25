@@ -82,10 +82,11 @@ export function clientDetail(
     .join(" · ");
 }
 
-type Editing = {
-  action: "rename" | "drawing" | "remove";
+type EditNameOrRemove = {
+  action: "rename" | "remove";
   client: ClientInfo;
 };
+type Editing = EditNameOrRemove | { action: "drawing"; client: ClientInfo };
 
 export function ClientsSection(props: {
   // The way back of Settings' Clients page, which it is the whole of.
@@ -95,15 +96,38 @@ export function ClientsSection(props: {
   const [people, setPeople] = useState<PersonInfo[]>([]);
   const [editing, setEditing] = useState<Editing>();
   const [adding, setAdding] = useState(false);
+  const refreshId = useRef(0);
+  const lastAppliedRefresh = useRef(0);
 
   const refresh = useCallback(async () => {
+    const id = ++refreshId.current;
     const [nextClients, nextPeople] = await Promise.all([
       coreJson<ClientInfo[]>("/api/auth/clients"),
       coreJson<PersonInfo[]>("/api/people"),
     ]);
+    if (id < lastAppliedRefresh.current) return;
+    lastAppliedRefresh.current = id;
     setClients(nextClients);
     setPeople(nextPeople);
   }, []);
+
+  const drawingChanged = (saved: ClientInfo) => {
+    // A read already under way can still contain the old choices.
+    lastAppliedRefresh.current = ++refreshId.current;
+    setClients((current) =>
+      current?.map((client) =>
+        client.id === saved.id && client.drawingRevision < saved.drawingRevision
+          ? {
+              ...client,
+              reduceEffects: saved.reduceEffects,
+              reduceMotion: saved.reduceMotion,
+              drawingRevision: saved.drawingRevision,
+              drawn: saved.drawn,
+            }
+          : client,
+      ),
+    );
+  };
 
   // A device approved here shows up once it collects its token, and
   // last-seen times move on.
@@ -160,7 +184,7 @@ export function ClientsSection(props: {
             : undefined
         }
         onClose={() => setEditing(undefined)}
-        onChanged={() => void refresh().catch(() => undefined)}
+        onChanged={drawingChanged}
       />
       <EditClient
         editing={editing?.action === "drawing" ? undefined : editing}
@@ -218,12 +242,12 @@ function ClientMenu(props: {
 
 // Renaming a client, or removing it after saying what that does.
 function EditClient(props: {
-  editing?: Editing;
+  editing?: EditNameOrRemove;
   onClose: () => void;
   onDone: () => void;
 }) {
   // What the dialog showed stays while it closes.
-  const last = useRef<Editing>(undefined);
+  const last = useRef<EditNameOrRemove>(undefined);
   if (props.editing) last.current = props.editing;
   const editing = last.current;
   const [name, setName] = useState("");

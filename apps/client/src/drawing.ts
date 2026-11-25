@@ -1,9 +1,12 @@
 import {
   drawingChoices,
+  type ClientInfo,
   type DrawingChoice,
+  type Drawn,
   type Me,
+  type ReportClientDrawing,
 } from "@meetsanctum/auth-protocol";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { coreJson } from "./core-fetch";
 import {
@@ -27,10 +30,8 @@ const isChoice = (value: unknown): value is DrawingChoice =>
 
 /** The copy this device keeps, applied as soon as it is read. */
 export async function followStoredDrawing() {
-  const stored = await getShell()
-    .preferences.get(preferenceKey)
-    .catch(() => null);
   try {
+    const stored = await getShell().preferences.get(preferenceKey);
     const choices: unknown = stored && JSON.parse(stored);
     if (
       typeof choices === "object" &&
@@ -51,31 +52,73 @@ export async function followStoredDrawing() {
 export function useDrawing(me: Me | undefined) {
   const effects = me?.client.reduceEffects;
   const motion = me?.client.reduceMotion;
+  const clientId = me?.client.id;
+  const apply = useRef<(client: ClientInfo) => void>(undefined);
+
   useEffect(() => {
     if (!effects || !motion) return;
     const choices: DrawingChoices = { effects, motion };
-    chooseDrawing(choices);
     void getShell()
       .preferences.set(preferenceKey, JSON.stringify(choices))
       .catch(() => undefined);
   }, [effects, motion]);
 
-  const signedIn = me !== undefined;
-  const said = me?.client.drawn ?? null;
-  const saidKey = said && `${said.effects} ${said.motion} ${said.slowDevice}`;
   useEffect(() => {
-    if (!signedIn) return;
-    let told = said;
-    return followDrawn((drawn) => {
-      if (told && sameDrawn(told, drawn)) return;
-      told = drawn;
-      coreJson("/api/auth/me/drawn", { method: "POST", json: drawn }).catch(
-        () => {
-          // Said again with the next change, or the next Me.
-          told = null;
-        },
-      );
+    if (!clientId) return;
+    let drawn: Drawn | undefined;
+    let reported: Drawn | null;
+    let revision: number | undefined;
+    let sending = false;
+    let queued = false;
+    let stopped = false;
+
+    async function report() {
+      if (stopped || !drawn || revision === undefined) return;
+      if (sending) {
+        queued = true;
+        return;
+      }
+      if (reported && sameDrawn(reported, drawn)) return;
+      const sent: ReportClientDrawing = { ...drawn, drawingRevision: revision };
+      sending = true;
+      try {
+        await coreJson("/api/auth/me/drawn", { method: "POST", json: sent });
+        if (revision === sent.drawingRevision) reported = sent;
+      } catch {
+        // The next refresh or appearance change gives it another try.
+      }
+      sending = false;
+      if (queued) {
+        queued = false;
+        void report();
+      }
+    }
+
+    const stop = followDrawn((next) => {
+      drawn = next;
+      void report();
     });
-    // `said` through its key: a new Me that says the same starts nothing.
-  }, [signedIn, saidKey]);
+    apply.current = (client) => {
+      // Applying the choices can call the listener synchronously.
+      revision = undefined;
+      if (client.reduceEffects && client.reduceMotion) {
+        chooseDrawing({
+          effects: client.reduceEffects,
+          motion: client.reduceMotion,
+        });
+      }
+      reported = client.drawn;
+      revision = client.drawingRevision;
+      void report();
+    };
+    return () => {
+      stopped = true;
+      stop();
+      apply.current = undefined;
+    };
+  }, [clientId]);
+
+  useEffect(() => {
+    if (me) apply.current?.(me.client);
+  }, [me]);
 }

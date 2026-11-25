@@ -1,9 +1,9 @@
 import type {
   ClientInfo,
   ClientKind,
-  Drawn,
   LiveClientChanged,
   Platform,
+  ReportClientDrawing,
   SetClientDrawing,
 } from "@meetsanctum/auth-protocol";
 import {
@@ -73,6 +73,7 @@ export function clientInfo(
     current: client.id === currentId,
     reduceEffects: client.reduceEffects,
     reduceMotion: client.reduceMotion,
+    drawingRevision: client.drawingRevision,
     drawn: client.drawn ?? null,
   };
 }
@@ -387,42 +388,61 @@ export function createClients(
     // read Me again. What it said it draws with is forgotten with a new
     // choice, until it says again. Not for an agent, which draws nothing.
     setDrawing(principal: Principal, input: SetClientDrawing) {
-      const changed = db.transaction(() => {
+      const { saved, changed } = db.transaction(() => {
+        if (!active(principal.client.id)) {
+          throw new AuthError("invalid_client_token");
+        }
         const client = manageable(input.id);
         if (client.kind === "agent") {
           throw new AuthError("not_found");
         }
         const reduceEffects = input.reduceEffects ?? client.reduceEffects;
         const reduceMotion = input.reduceMotion ?? client.reduceMotion;
-        const isNew =
-          reduceEffects !== client.reduceEffects ||
-          reduceMotion !== client.reduceMotion;
-        return db
+        if (
+          reduceEffects === client.reduceEffects &&
+          reduceMotion === client.reduceMotion
+        ) {
+          return { saved: client, changed: false };
+        }
+        const saved = db
           .update(authClients)
           .set({
             reduceEffects,
             reduceMotion,
-            ...(isNew && { drawn: null }),
+            drawingRevision: client.drawingRevision + 1,
+            drawn: null,
           })
           .where(eq(authClients.id, input.id))
           .returning()
           .get()!;
+        return { saved, changed: true };
       });
-      connections.tell(input.id, {
-        type: "client",
-      } satisfies LiveClientChanged);
+      if (changed) {
+        connections.tell(input.id, {
+          type: "client",
+        } satisfies LiveClientChanged);
+      }
       return clientInfo(
-        changed,
+        saved,
         principal.client.id,
-        connections.connectedSince(changed.id),
+        connections.connectedSince(saved.id),
       );
     },
 
     // What the calling client says it draws with now, for its row.
-    setDrawn(principal: Principal, drawn: Drawn) {
+    setDrawn(
+      principal: Principal,
+      { drawingRevision, ...drawn }: ReportClientDrawing,
+    ) {
       db.update(authClients)
         .set({ drawn })
-        .where(eq(authClients.id, principal.client.id))
+        .where(
+          and(
+            eq(authClients.id, principal.client.id),
+            eq(authClients.drawingRevision, drawingRevision),
+            isNull(authClients.revokedAt),
+          ),
+        )
         .run();
     },
 
