@@ -455,6 +455,29 @@ describe("a tile a command failed for", () => {
     await render({ ...lamp, failures: 3 });
     expect(animate).not.toHaveBeenCalled();
   });
+
+  it("cancels a scheduled shake and keeps the red fade when Reduce motion turns on", async () => {
+    const fade = { cancel: vi.fn() };
+    let end = () => {};
+    const finished = new Promise<void>((resolve) => {
+      end = resolve;
+    });
+    const shake = { cancel: vi.fn(end), finished };
+    animate.mockReturnValueOnce(fade).mockReturnValueOnce(shake);
+    try {
+      await render(lamp);
+      await render({ ...lamp, failures: 1 });
+      expect(animate).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        document.documentElement.dataset.motion = "reduced";
+      });
+      expect(shake.cancel).toHaveBeenCalledOnce();
+      expect(fade.cancel).not.toHaveBeenCalled();
+    } finally {
+      end();
+      delete document.documentElement.dataset.motion;
+    }
+  });
 });
 
 describe("a tile that opens its device's detail", () => {

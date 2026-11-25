@@ -87,6 +87,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   document.body.innerHTML = "";
   delete document.documentElement.dataset.effects;
+  delete document.documentElement.dataset.motion;
 });
 
 export const client = (app = info) =>

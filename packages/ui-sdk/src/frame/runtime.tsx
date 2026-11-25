@@ -194,7 +194,21 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
   // A shell from before Reduce motion reached pages doesn't say it, and the
   // page follows the system's reduced motion itself.
   const systemMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
-  systemMotion?.addEventListener("change", () => draw());
+  const setMotion = (motion: FrameContext["motion"]) => {
+    const { dataset } = document.documentElement;
+    const reduced =
+      motion === undefined ? systemMotion?.matches : motion === "reduced";
+    if (reduced) {
+      dataset.motion = "reduced";
+    } else {
+      delete dataset.motion;
+    }
+  };
+  systemMotion?.addEventListener("change", () => {
+    if (root && !hasFailed && shown?.context.motion === undefined) {
+      setMotion(undefined);
+    }
+  });
 
   const draw = () => {
     if (!ui || !shown || hasFailed) return;
@@ -205,10 +219,7 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
     dataset.mode = shown.context.mode;
     if (shown.context.effects === "reduced") dataset.effects = "reduced";
     else delete dataset.effects;
-    const motion =
-      shown.context.motion ?? (systemMotion?.matches ? "reduced" : "regular");
-    if (motion === "reduced") dataset.motion = "reduced";
-    else delete dataset.motion;
+    setMotion(shown.context.motion);
     // A device page lies over the device's detail, which shows through.
     if (shown.device) dataset.surface = "detail";
     if (!root) {

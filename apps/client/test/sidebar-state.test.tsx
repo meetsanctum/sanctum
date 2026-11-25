@@ -258,13 +258,15 @@ describe("sidebar transitions", () => {
     await act(async () => vi.advanceTimersByTime(80));
     expect(layout.isSliding).toBe(true);
 
-    document.documentElement.dataset.motion = "reduced";
-    await act(async () => root.render(<Sidebar />));
+    await act(async () => {
+      document.documentElement.dataset.motion = "reduced";
+    });
 
     expect(layout.isSliding).toBe(false);
 
-    delete document.documentElement.dataset.motion;
-    await act(async () => root.render(<Sidebar />));
+    await act(async () => {
+      delete document.documentElement.dataset.motion;
+    });
     expect(layout.docked).toBe(false);
     expect(layout.isSliding).toBe(false);
   });

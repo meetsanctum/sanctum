@@ -143,13 +143,17 @@ describe("a page in its frame", () => {
       expect(shown()?.getAttribute("data-reduced")).toBe("false"),
     );
     // A shell that doesn't say leaves it to the system's setting.
-    bridge.send({ type: "context", context });
     systemMotion.matches = true;
     systemMotion.dispatchEvent(new Event("change"));
+    bridge.send({ type: "context", context });
     await vi.waitFor(() =>
       expect(shown()?.getAttribute("data-reduced")).toBe("true"),
     );
-    vi.unstubAllGlobals();
+    systemMotion.matches = false;
+    systemMotion.dispatchEvent(new Event("change"));
+    await vi.waitFor(() =>
+      expect(shown()?.getAttribute("data-reduced")).toBe("false"),
+    );
   });
 
   it("hears the shell's live updates while it listens, and none once closed", async () => {

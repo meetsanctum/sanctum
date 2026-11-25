@@ -24,7 +24,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { isMotionReduced } from "./reduce-motion";
+import { isMotionReduced, useReducedMotion } from "./reduce-motion";
 import { whiteOf } from "./tiles";
 import { usePreview } from "./use-preview";
 import { useThrottledSend } from "./use-throttled-send";
@@ -136,6 +136,8 @@ export function LightPicker(props: {
   const [layer, setLayer] = useState<Layer>("ring");
   const picker = useRef<HTMLDivElement>(null);
   const refocus = useRef(false);
+  const flyIn = useRef<Animation[]>([]);
+  const reducedMotion = useReducedMotion();
 
   // Shades must use the colour just chosen, even before the device answers.
   const preview = usePreview<Colour>(
@@ -174,7 +176,7 @@ export function LightPicker(props: {
     circles.forEach((circle, index) => {
       const dx = (50 - Number(circle.dataset.x)) * pickerPerCircle;
       const dy = (50 - Number(circle.dataset.y)) * pickerPerCircle;
-      circle.animate?.(
+      const animation = circle.animate?.(
         [
           { opacity: 0, transform: `translate(${dx}%, ${dy}%) scale(0.4)` },
           { opacity: 1, transform: "none" },
@@ -186,12 +188,23 @@ export function LightPicker(props: {
           fill: "backwards",
         },
       );
+      if (animation) flyIn.current.push(animation);
     });
     if (refocus.current) {
       refocus.current = false;
       box.querySelector<HTMLElement>("[data-first]")?.focus();
     }
+    return () => stopFlyIn();
   }, [layer, appearance]);
+
+  function stopFlyIn() {
+    for (const animation of flyIn.current) animation.cancel();
+    flyIn.current = [];
+  }
+
+  useLayoutEffect(() => {
+    if (reducedMotion) stopFlyIn();
+  }, [reducedMotion]);
 
   const open = (next: Layer) => {
     refocus.current = true;

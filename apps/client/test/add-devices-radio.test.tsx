@@ -102,4 +102,45 @@ describe("Add devices, letting a radio's devices join", () => {
       ).toHaveLength(2);
     },
   );
+
+  it.each(["regular", "reduced"])(
+    "follows %s motion when the joining screen times out",
+    async (motion) => {
+      const animate = vi.fn();
+      const cancel = vi.fn();
+      vi.spyOn(HTMLElement.prototype, "offsetTop", "get").mockImplementation(
+        function (this: HTMLElement) {
+          // jsdom has no layout. Give the heading a position before the move.
+          return this.tagName === "H3" && this.classList.contains("mt-7")
+            ? 120
+            : 0;
+        },
+      );
+      if (motion === "reduced")
+        document.documentElement.dataset.motion = "reduced";
+      try {
+        await show();
+        await way("Zigbee");
+        const heading = page().querySelector("h3")!;
+        Object.assign(heading, {
+          animate,
+          getAnimations: () => (animate.mock.calls.length ? [{ cancel }] : []),
+        });
+
+        await act(async () => vi.advanceTimersByTime(240_000));
+        expect(heading.textContent).toBe("Time's up");
+        expect(animate).toHaveBeenCalledTimes(motion === "regular" ? 1 : 0);
+        if (motion === "regular") {
+          await act(async () => {
+            document.documentElement.dataset.motion = "reduced";
+          });
+          expect(cancel).toHaveBeenCalledOnce();
+        }
+      } finally {
+        await act(async () => {
+          delete document.documentElement.dataset.motion;
+        });
+      }
+    },
+  );
 });

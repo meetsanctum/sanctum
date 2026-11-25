@@ -93,6 +93,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   delete document.documentElement.dataset.effects;
+  delete document.documentElement.dataset.motion;
 });
 
 async function show(
@@ -146,8 +147,9 @@ function hello() {
 }
 
 describe("an app's page in its frame", () => {
-  it("sends the shell's effects setting when the page opens and when it changes", async () => {
+  it("sends the shell's effects and motion settings on setup and on separate changes", async () => {
     document.documentElement.dataset.effects = "reduced";
+    document.documentElement.dataset.motion = "reduced";
     await show();
     const port = hello();
     const said: ToFrame[] = [];
@@ -156,7 +158,7 @@ describe("an app's page in its frame", () => {
       await vi.waitFor(() =>
         expect(said[0]).toMatchObject({
           type: "setup",
-          context: { effects: "reduced" },
+          context: { effects: "reduced", motion: "reduced" },
         }),
       );
       await act(async () => {
@@ -168,6 +170,22 @@ describe("an app's page in its frame", () => {
           context: {
             mode: "day",
             effects: "regular",
+            motion: "reduced",
+            temperatureUnit: null,
+            timeZone: null,
+          },
+        }),
+      );
+      await act(async () => {
+        delete document.documentElement.dataset.motion;
+      });
+      await vi.waitFor(() =>
+        expect(said).toContainEqual({
+          type: "context",
+          context: {
+            mode: "day",
+            effects: "regular",
+            motion: "regular",
             temperatureUnit: null,
             timeZone: null,
           },

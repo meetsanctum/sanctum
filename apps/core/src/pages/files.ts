@@ -3,6 +3,8 @@ import { lstat, readdir, readFile, realpath } from "node:fs/promises";
 import { extname, join, sep } from "node:path";
 import { z } from "zod";
 
+import { hasMotionVariants, pageMotionCss } from "./motion-css.js";
+
 // What the core serves app pages from: the kit in its own image, and each
 // running app's pages/ in its staged package, as indexes it builds itself. A
 // request is answered only by an entry of an index, so no part of an
@@ -26,6 +28,7 @@ export type ServedFile = {
   type: string;
   size: number;
   sha256: string;
+  motionCss?: string;
 };
 
 export type FileIndex = {
@@ -176,6 +179,7 @@ export async function indexPages(
   const parsed = pagesManifest.safeParse(source);
   if (!parsed.success) return refuse("its pages.json is invalid");
   const manifest = parsed.data;
+  const usesSystemMotion = !hasMotionVariants(manifest.kit);
   const files = new Map<string, ServedFile>();
   for (const [name, said] of Object.entries(manifest.files)) {
     const found = await plainFileIn(pagesDir, name);
@@ -184,7 +188,16 @@ export async function indexPages(
     if (body.length !== said.size || sha256(body) !== said.sha256) {
       return refuse(`${name} isn't what its pages.json says`);
     }
-    files.set(name, { ...found, size: body.length, sha256: said.sha256 });
+    const motionCss =
+      usesSystemMotion && found.type === servedTypes[".css"]
+        ? pageMotionCss(body.toString("utf8"))
+        : undefined;
+    files.set(name, {
+      ...found,
+      size: body.length,
+      sha256: said.sha256,
+      ...(motionCss === undefined ? {} : { motionCss }),
+    });
   }
   const stylesheet =
     typeof manifest.stylesheet === "string" ? manifest.stylesheet : null;

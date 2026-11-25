@@ -110,8 +110,34 @@ describe("the knot loader's built CSS", () => {
       timingFunction: "ease-in-out",
       iterationCount: "infinite",
     });
+    expect(animationOf(still, [".knot-loader g"]).name).toBe("none");
+    for (const loop of ["upright", "lying"]) {
+      expect(
+        animationOf(still, [".knot-loader path", `.knot-loader .knot-${loop}`])
+          .name,
+      ).toBe("none");
+    }
     expect(css).toContain("@keyframes knot-breathe{");
   });
+});
+
+it("builds both motion variants against data-motion", () => {
+  const reduced = ":where([data-motion=reduced],[data-motion=reduced] *)";
+  const regular =
+    ":where(:root:not([data-motion=reduced]),:root:not([data-motion=reduced]) *)";
+  const transition = ".motion-reduce\\:transition-none";
+  const entrance = ".motion-safe\\:animate-in";
+  expect(css).toContain(`${transition}${reduced}`);
+  expect(css).toContain(`${entrance}${regular}`);
+  const systemMotionSelectors = rules
+    .filter(({ media }) => media.includes("prefers-reduced-motion"))
+    .flatMap(({ selectors }) => selectors);
+  expect(
+    systemMotionSelectors.some(
+      (selector) =>
+        selector.startsWith(transition) || selector.startsWith(entrance),
+    ),
+  ).toBe(false);
 });
 
 describe("the top bar's fade in the built CSS", () => {
@@ -423,8 +449,6 @@ function declarationsOf(
     );
 }
 
-// The animation an element gets where `media` applies, from the rules for
-// `selectors`, least specific first, each overriding the ones before.
 // What draws where motion is reduced, by the system or by Reduce motion
 // (data-motion on <html>), and what draws elsewhere.
 const still = ":where([data-motion=reduced])";
