@@ -5,6 +5,7 @@ import {
   PageBar,
   PageBarButton,
   PageSection,
+  useHomeClock,
 } from "@meetsanctum/ui-sdk";
 import { ChevronRight, CircleAlert, Play, Plus } from "lucide-react";
 import { useState } from "react";
@@ -102,6 +103,7 @@ export function AutomationsList(props: {
   open(page: string, params?: Record<string, string>): void;
   now?: Date;
 }) {
+  const clock = useHomeClock();
   const { workflows, pieces, problem, load } = props.automations;
   const [running, setRunning] = useState<string>();
   const [runProblem, setRunProblem] = useState<string>();
@@ -228,7 +230,7 @@ export function AutomationsList(props: {
       </div>
       {next?.nextRun && (
         <p className="sr-only">
-          Next: {next.name} at {timeWords(new Date(next.nextRun))}
+          Next: {next.name} at {timeWords(clock, new Date(next.nextRun))}
         </p>
       )}
     </>
@@ -246,6 +248,7 @@ function AutomationRow(props: {
   onOpen(): void;
   onRun(): void;
 }) {
+  const clock = useHomeClock();
   const { workflow, pieces, names } = props;
   const triggers = triggersOf(workflow);
   const first = triggers[0];
@@ -256,7 +259,7 @@ function AutomationRow(props: {
   const blocked = problem ? null : blockedBy(workflow, props.apps, pieces);
   const status = blocked
     ? null
-    : listStatus(workflow, { now: props.now, nextId: props.nextId });
+    : listStatus(clock, workflow, { now: props.now, nextId: props.nextId });
   const runs = byHand(workflow, pieces);
   const stepIcons = workflow.graph.nodes
     .filter((node) => node.kind === "step")

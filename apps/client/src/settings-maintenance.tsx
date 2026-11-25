@@ -5,7 +5,8 @@ import {
   type DeviceInfo,
   type Room,
 } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
+import { Button, useHomeClock } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import {
   Battery,
@@ -126,6 +127,7 @@ function useKept(
 
 /** What leads a battery's line: why it is to replace, how it was put right, or that its charge isn't known yet. */
 function batteryStatus(
+  clock: HomeClock,
   device: DeviceInfo,
   first: First,
   now: number,
@@ -134,7 +136,7 @@ function batteryStatus(
 ): Status | null {
   const need = maintenanceOf(device, now);
   if (need === "quiet")
-    return { text: quietText(device, now), tone: "problem" };
+    return { text: quietText(clock, device, now), tone: "problem" };
   if (need === "battery") {
     return {
       text: lowBatteryText(isBeside ? undefined : lowCharge(device)),
@@ -321,6 +323,7 @@ export function MaintenancePage(props: {
   // was opened from elsewhere, and Done closes it.
   backTo?: string;
 }) {
+  const clock = useHomeClock();
   const { devices, rooms } = props;
   const now = useMinuteClock();
   const batteries = useKept(batteryOrder(devices, now), devices, now);
@@ -442,7 +445,7 @@ export function MaintenancePage(props: {
               <DeviceIcon device={device} />
               <DeviceLine
                 device={device}
-                status={batteryStatus(device, first, now, true)}
+                status={batteryStatus(clock, device, first, now, true)}
                 detail={whereLine(device, rooms)}
               />
               <Charge device={device} now={now} />

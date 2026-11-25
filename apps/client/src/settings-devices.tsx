@@ -13,7 +13,13 @@ import {
   type Places,
   type ProbeResult,
 } from "@meetsanctum/app-sdk";
-import { Button, pressLabel, type LiveFeed } from "@meetsanctum/ui-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
+import {
+  Button,
+  pressLabel,
+  type LiveFeed,
+  useHomeClock,
+} from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { Check, CircleAlert, LoaderCircle } from "lucide-react";
 import {
@@ -100,6 +106,7 @@ export function deviceDetail(
  * that it went quiet or its battery is low.
  */
 export function deviceStatus(
+  clock: HomeClock,
   device: DeviceInfo,
   firmware: Status | null,
   now: number,
@@ -113,7 +120,7 @@ export function deviceStatus(
   if (firmware) return firmware;
   const need = maintenanceOf(device, now);
   if (need === "quiet")
-    return { text: quietText(device, now), tone: "problem" };
+    return { text: quietText(clock, device, now), tone: "problem" };
   if (need === "battery") {
     return { text: lowBatteryText(lowCharge(device)), tone: "problem" };
   }
@@ -134,6 +141,7 @@ export function DevicesSection(props: {
   // The way back of Settings' Devices page, which it is the whole of.
   page?: ReactNode;
 }) {
+  const clock = useHomeClock();
   const [devices, setDevices] = useState<DeviceInfo[]>();
   const [rooms, setRooms] = useState<Places["rooms"]>([]);
   // Whether each device with a history keeps it.
@@ -541,6 +549,7 @@ export function DevicesSection(props: {
                   <DeviceLine
                     device={device}
                     status={deviceStatus(
+                      clock,
                       device,
                       firmwareStatus(device, devices, results[device.id], now),
                       now,

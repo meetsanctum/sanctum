@@ -1,5 +1,5 @@
 import type { AppInfo, AvailableApp } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, useHomeClock } from "@meetsanctum/ui-sdk";
 import { ChevronRight } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
@@ -58,6 +58,7 @@ export function AddAppsSection(props: {
   /** One was added, as the core lists it now. */
   onAdded: (app: AppInfo) => void;
 }) {
+  const clock = useHomeClock();
   const { available, refresh } = useAvailableApps(props.apps);
   const [adding, setAdding] = useState<AvailableApp>();
   // The sheet shows the app as last read, and closes if it's gone, as when
@@ -83,7 +84,7 @@ export function AddAppsSection(props: {
                     title={app.name}
                     detail={
                       app.removed
-                        ? `Removed on ${dayWords(app.removed.at)}. Its data is kept until ${dayWords(app.removed.keptUntil)}.`
+                        ? `Removed on ${dayWords(clock, app.removed.at)}. Its data is kept until ${dayWords(clock, app.removed.keptUntil)}.`
                         : (app.summary ?? "")
                     }
                   />

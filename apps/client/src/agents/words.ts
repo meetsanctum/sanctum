@@ -13,6 +13,7 @@ import {
   type AiOfferInfo,
   type AppInfo,
 } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import type { AgentInfo } from "@meetsanctum/auth-protocol";
 
 import { isGivenUp } from "../app-state";
@@ -150,21 +151,13 @@ export function offersByGroup(offers: readonly AiOfferInfo[]) {
 export const onCount = (items: readonly { on: boolean }[]) =>
   `${items.filter((item) => item.on).length} of ${items.length} on`;
 
-const dateWords = (at: Date) =>
-  at.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-const timeWords = (at: Date, withSeconds = false) =>
-  at.toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: withSeconds ? "2-digit" : undefined,
-  });
-
 /**
  * Who added an agent and when, then when it was last seen. Where two
  * agents share a name the time they were added tells them apart, since
  * adding one again can leave the earlier one working.
  */
 export function agentDetail(
+  clock: HomeClock,
   agent: AgentInfo,
   agents: readonly AgentInfo[],
   now?: Date,
@@ -173,19 +166,21 @@ export function agentDetail(
   const twins = agents.filter(
     (other) => other.id !== agent.id && other.name === agent.name,
   );
-  const date = dateWords(added);
-  const time = timeWords(added);
+  const date = clock.dayText(added);
+  const time = clock.timeText(added);
   const sharesMinute = twins.some((other) => {
     const otherAdded = new Date(other.createdAt);
-    return dateWords(otherAdded) === date && timeWords(otherAdded) === time;
+    return (
+      clock.dayText(otherAdded) === date && clock.timeText(otherAdded) === time
+    );
   });
   const when = twins.length
-    ? `${date} at ${sharesMinute ? timeWords(added, true) : time}`
+    ? `${date} at ${sharesMinute ? clock.secondsText(added) : time}`
     : date;
   const by = agent.addedBy.name
     ? agent.addedBy.kind === "person"
       ? ` by ${agent.addedBy.name}`
       : ` from ${agent.addedBy.name}`
     : "";
-  return `Added${by} on ${when} · ${seenText(agent.lastSeenAt, now)}`;
+  return `Added${by} on ${when} · ${seenText(clock, agent.lastSeenAt, now)}`;
 }

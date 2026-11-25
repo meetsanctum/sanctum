@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { ClientInfo, SetClientDrawing } from "@meetsanctum/auth-protocol";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -10,6 +11,9 @@ import {
   clientDetail,
   seenText,
 } from "../src/settings-clients";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 vi.mock("../src/core-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/core-fetch")>()),
@@ -62,14 +66,16 @@ describe("a client's detail", () => {
     ["2026-10-28T10:30:00Z", "Seen an hour ago"],
     ["2026-10-28T03:00:00Z", "Seen 9 hours ago"],
   ])("says when it was last seen (%s)", (lastSeenAt, text) => {
-    expect(seenText(lastSeenAt, now)).toBe(text);
+    expect(seenText(clock, lastSeenAt, now)).toBe(text);
   });
 
   it("names its person, or the household, its platform and when it was seen", () => {
-    expect(clientDetail(tablet, undefined, now)).toBe(
+    expect(clientDetail(clock, tablet, undefined, now)).toBe(
       "Shared · Web browser · Never seen",
     );
-    expect(clientDetail(macbook, maya, now)).toBe("Maya · macOS · This device");
+    expect(clientDetail(clock, macbook, maya, now)).toBe(
+      "Maya · macOS · This device",
+    );
   });
 
   it.each([
@@ -81,7 +87,7 @@ describe("a client's detail", () => {
     "says what it draws with, effects %s and motion %s",
     (effects, motion, said) => {
       const drawn = { effects, motion, slowDevice: false };
-      expect(clientDetail({ ...tablet, drawn }, undefined, now)).toBe(
+      expect(clientDetail(clock, { ...tablet, drawn }, undefined, now)).toBe(
         `Shared · Web browser · Never seen${said}`,
       );
     },

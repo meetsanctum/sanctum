@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { AiCanUse, AppInfo } from "@meetsanctum/app-sdk";
 import type {
   AgentInfo,
@@ -18,23 +19,18 @@ import { agentDetail, missingWords, turnOnWords } from "../src/agents/words";
 import { CoreError, coreJson } from "../src/core-fetch";
 import { assistant, canUseWith, example } from "./settings-agents-fixtures";
 
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
+
 vi.mock("../src/core-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/core-fetch")>()),
   coreJson: vi.fn(),
 }));
 
 const now = new Date("2026-11-22T12:00:00Z");
-// Dates and times in this machine's own words, as the page has them.
-const day = (at: string) =>
-  new Date(at).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-  });
-const time = (at: string) =>
-  new Date(at).toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+// Dates and times as the home clock writes them, as the page has them.
+const day = (at: string) => clock.dayText(new Date(at));
+const time = (at: string) => clock.timeText(new Date(at));
 const codex: AgentInfo = {
   id: "codex",
   name: "Codex on the office Mac",
@@ -160,14 +156,15 @@ async function wait(ms: number) {
 describe("the words for AI agents", () => {
   it("says who added an agent, when, and when it was last seen", () => {
     const added = day(codex.createdAt);
-    expect(agentDetail(codex, [codex], now)).toBe(
+    expect(agentDetail(clock, codex, [codex], now)).toBe(
       `Added by Maya on ${added} · Seen just now`,
     );
-    expect(agentDetail(kitchen, [kitchen], now)).toBe(
+    expect(agentDetail(clock, kitchen, [kitchen], now)).toBe(
       `Added from Kitchen tablet on ${added} · Seen 25 minutes ago`,
     );
     expect(
       agentDetail(
+        clock,
         { ...codex, addedBy: { ...codex.addedBy, name: null } },
         [],
         now,
@@ -177,15 +174,15 @@ describe("the words for AI agents", () => {
 
   it("tells two agents of the same name apart by when each was added", () => {
     const again = { ...codex, id: "again", createdAt: "2026-11-22T11:40:00Z" };
-    expect(agentDetail(codex, [codex, again], now)).toBe(
+    expect(agentDetail(clock, codex, [codex, again], now)).toBe(
       `Added by Maya on ${day(codex.createdAt)} at ${time(codex.createdAt)} · Seen just now`,
     );
   });
 
   it("shows the seconds for agents added with the same name in the same minute", () => {
     const again = { ...codex, id: "again", createdAt: "2026-11-20T09:15:20Z" };
-    expect(agentDetail(codex, [codex, again], now)).not.toEqual(
-      agentDetail(again, [codex, again], now),
+    expect(agentDetail(clock, codex, [codex, again], now)).not.toEqual(
+      agentDetail(clock, again, [codex, again], now),
     );
   });
 

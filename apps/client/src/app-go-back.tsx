@@ -1,5 +1,6 @@
 import type { AppGoBack, AppInfo } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
+import { Button, useHomeClock } from "@meetsanctum/ui-sdk";
 import { useEffect, useState } from "react";
 
 import {
@@ -17,17 +18,13 @@ import { coreJson } from "./core-fetch";
 // focused. It's offered while the old copy and package are there, which only
 // the home knows, and not while the app is off, paused or between versions.
 
-const day = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "long",
-});
-
 /** "2 November" */
-export const dayWords = (at: string) => day.format(new Date(at));
+export const dayWords = (clock: HomeClock, at: string) =>
+  clock.longDayText(new Date(at));
 
 /** What going back asks about: what's lost, what stays and how long it lasts. */
-export function goingBackWords(app: AppInfo, to: AppGoBack) {
-  return `Its data returns to how it was before the update on ${dayWords(to.since)}, so anything it has saved since is lost, and automations that use it may need changing. Settings you've chosen stay where ${to.version} can use them. It stays on ${to.version} until a version newer than ${app.version} arrives.`;
+export function goingBackWords(clock: HomeClock, app: AppInfo, to: AppGoBack) {
+  return `Its data returns to how it was before the update on ${dayWords(clock, to.since)}, so anything it has saved since is lost, and automations that use it may need changing. Settings you've chosen stay where ${to.version} can use them. It stays on ${to.version} until a version newer than ${app.version} arrives.`;
 }
 
 export const canGoBack = (app: AppInfo) => {
@@ -68,6 +65,7 @@ export function useGoBackTo(app: AppInfo) {
 }
 
 export function GoBack(props: { app: AppInfo; to: AppGoBack | null }) {
+  const clock = useHomeClock();
   const { app, to } = props;
   const [isAsking, setIsAsking] = useState(false);
   const [problem, setProblem] = useState<string>();
@@ -97,7 +95,9 @@ export function GoBack(props: { app: AppInfo; to: AppGoBack | null }) {
             <DialogTitle>
               Go back to {app.name} {to.version}?
             </DialogTitle>
-            <DialogDescription>{goingBackWords(app, to)}</DialogDescription>
+            <DialogDescription>
+              {goingBackWords(clock, app, to)}
+            </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type {
   AppGoBack,
   AppInfo,
@@ -17,6 +18,9 @@ import {
 } from "../src/app-running";
 import { clockTime } from "../src/attention";
 import { coreJson } from "../src/core-fetch";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 // How it's running, near the end of an app's settings: its figures, always
 // with their words, and what stopped it last.
@@ -262,7 +266,7 @@ describe("the words for its figures", () => {
   });
 
   it("says what a restart touches until there's been one", () => {
-    expect(restartsWords("Weather", { recent: 0 })).toEqual({
+    expect(restartsWords(clock, "Weather", { recent: 0 })).toEqual({
       figure: "None lately",
       line: "Only Weather restarts, never the rest of your home",
     });
@@ -272,13 +276,13 @@ describe("the words for its figures", () => {
     const at = new Date().toISOString();
 
     expect(
-      restartsWords("Weather", {
+      restartsWords(clock, "Weather", {
         recent: 3,
         last: { at, failure: "out_of_memory" },
       }),
     ).toEqual({
       figure: "3 in 10 minutes",
-      line: `Last at ${clockTime(at)}: it ran out of memory`,
+      line: `Last at ${clockTime(clock, at)}: it ran out of memory`,
     });
   });
 
@@ -287,10 +291,13 @@ describe("the words for its figures", () => {
     const at = "2026-11-02T12:00:00.000Z";
 
     expect(
-      restartsWords("Weather", { recent: 0, last: { at, failure: "crashed" } }),
+      restartsWords(clock, "Weather", {
+        recent: 0,
+        last: { at, failure: "crashed" },
+      }),
     ).toEqual({
       figure: "None lately",
-      line: `Last on 2 November at ${clockTime(at)}: it stopped after an error in its code`,
+      line: `Last on 2 November at ${clockTime(clock, at)}: it stopped after an error in its code`,
     });
   });
 });

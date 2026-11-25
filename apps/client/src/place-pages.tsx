@@ -302,6 +302,7 @@ export function HomeStatus(props: {
   openStatus?: () => void;
   openMaintenance: () => void;
 }) {
+  const clock = useHomeClock();
   const { devices } = props;
   const row = useRef<HTMLElement>(null);
   useEdgeFade(row);
@@ -348,7 +349,7 @@ export function HomeStatus(props: {
           : props.openAttention,
     });
   }
-  const batteries = batteriesTile(devices.devices, Date.now());
+  const batteries = batteriesTile(clock, devices.devices, Date.now());
   if (batteries) {
     shown.push({
       key: "batteries",

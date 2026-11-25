@@ -1,3 +1,4 @@
+import { useHomeClock } from "@meetsanctum/ui-sdk";
 import type {
   AppFailure,
   AppGoBack,
@@ -5,6 +6,7 @@ import type {
   AppRunning,
   StaticManifest,
 } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import { cn } from "cn";
 import {
   Cpu,
@@ -73,17 +75,20 @@ export function processorWords(share: number | null) {
   return share < 1 ? "Under 1%" : `${Math.round(share)}%`;
 }
 
-function lastRestartWords(last: { at: string; failure: AppFailure }) {
-  const isToday =
-    new Date(last.at).toDateString() === new Date().toDateString();
+function lastRestartWords(
+  clock: HomeClock,
+  last: { at: string; failure: AppFailure },
+) {
+  const isToday = clock.date(new Date(last.at)) === clock.date();
   const when = isToday
-    ? `at ${clockTime(last.at)}`
-    : `on ${dayWords(last.at)} at ${clockTime(last.at)}`;
+    ? `at ${clockTime(clock, last.at)}`
+    : `on ${dayWords(clock, last.at)} at ${clockTime(clock, last.at)}`;
   return `Last ${when}: ${lowerFirst(failureWords[last.failure])}`;
 }
 
 /** What the home remembers: failures don't outlive Sanctum's own restart. */
 export function restartsWords(
+  clock: HomeClock,
   name: string,
   restarts: AppRunning["restarts"] | undefined,
 ) {
@@ -92,7 +97,7 @@ export function restartsWords(
       ? `${restarts.recent} in 10 minutes`
       : "None lately",
     line: restarts?.last
-      ? lastRestartWords(restarts.last)
+      ? lastRestartWords(clock, restarts.last)
       : `Only ${name} restarts, never the rest of your home`,
   };
 }
@@ -140,12 +145,13 @@ export function AppRunningSection(props: {
   manifest: StaticManifest;
   lastUpdate: AppGoBack | null;
 }) {
+  const clock = useHomeClock();
   const { app, manifest, lastUpdate } = props;
   const running = useRunning(app);
   const limitMb = manifest.runtime.memory;
   const memory = running?.memoryBytes ?? null;
   const share = memory === null ? 0 : memory / (limitMb * mebibyte);
-  const restarts = restartsWords(app.name, running?.restarts);
+  const restarts = restartsWords(clock, app.name, running?.restarts);
   return (
     <Section id="app-running" title="How It's Running">
       <ul className="m-0 flex list-none flex-col gap-3 p-0">
@@ -195,7 +201,7 @@ export function AppRunningSection(props: {
           <RunningRow
             icon={Undo2}
             title="Its last update"
-            line={`From ${lastUpdate.version} on ${dayWords(lastUpdate.since)}. Its data from before then is kept until its next update.`}
+            line={`From ${lastUpdate.version} on ${dayWords(clock, lastUpdate.since)}. Its data from before then is kept until its next update.`}
           />
         )}
       </ul>

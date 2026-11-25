@@ -28,6 +28,7 @@ const zurichHome = {
   timeZone: "Europe/Zurich",
   coordinates: { latitude: 47.3769, longitude: 8.5417, elevation: 408 },
   temperatureUnit: "celsius",
+  hourCycle: "24h",
 };
 
 let root: Root;
@@ -36,6 +37,15 @@ let saved: unknown[];
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  // The switch measures itself.
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
   saved = [];
   vi.mocked(coreJson).mockReset();
   vi.mocked(coreJson).mockImplementation(async (path, init = {}) => {
@@ -46,6 +56,7 @@ beforeEach(() => {
             name: "Lake house",
             timeZone: "UTC",
             temperatureUnit: "celsius",
+            hourCycle: "24h",
           },
           floors: [],
           rooms: [],
@@ -57,6 +68,7 @@ beforeEach(() => {
           timeZone: null,
           coordinates: null,
           temperatureUnit: "celsius",
+          hourCycle: "24h",
         };
       case "/api/places/home/suggest-location":
         return { ...zurich, place: "Zurich, Switzerland" };
@@ -129,6 +141,7 @@ describe("Settings → Household", () => {
         timeZone: "Europe/Zurich",
         coordinates: { latitude: 47.3769, longitude: 8.5417, elevation: 408 },
         temperatureUnit: "celsius",
+        hourCycle: "24h",
       },
     ]);
     expect(container.textContent).toContain("Saved.");
@@ -171,7 +184,31 @@ describe("Settings → Household", () => {
         timeZone: null,
         coordinates: null,
         temperatureUnit: "fahrenheit",
+        hourCycle: "24h",
       },
+    ]);
+  });
+
+  it("saves 12-hour time for the whole home, with the rest", async () => {
+    await act(async () => root.render(<HouseholdSection />));
+    const hours =
+      container.querySelector<HTMLButtonElement>('[role="switch"]')!;
+    expect(hours.getAttribute("aria-checked")).toBe("true");
+    expect(
+      document.getElementById(hours.getAttribute("aria-describedby")!)
+        ?.textContent,
+    ).toBe(
+      "How the home writes times, as 14:30 or 2:30 PM: on every screen and device.",
+    );
+    expect(button("Save").disabled).toBe(true);
+
+    await act(async () => hours.click());
+    expect(hours.getAttribute("aria-checked")).toBe("false");
+    expect(button("Save").disabled).toBe(false);
+    await act(async () => button("Save").click());
+
+    expect(saved).toEqual([
+      expect.objectContaining({ temperatureUnit: "celsius", hourCycle: "12h" }),
     ]);
   });
 
@@ -219,6 +256,7 @@ describe("Settings → Household", () => {
         timeZone: "Europe/Zurich",
         coordinates: null,
         temperatureUnit: "celsius",
+        hourCycle: "24h",
       },
     ]);
     expect(input("Elevation").value).toBe("");
@@ -251,6 +289,7 @@ describe("Settings → Household", () => {
         timeZone: null,
         coordinates: null,
         temperatureUnit: "celsius",
+        hourCycle: "24h",
       },
     ]);
 

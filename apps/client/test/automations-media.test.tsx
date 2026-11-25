@@ -163,6 +163,7 @@ const names: Names = {
   },
   entity: () => undefined,
   app: () => undefined,
+  time: (wall) => wall,
 };
 
 // Whether a step's preset is offered for a part.

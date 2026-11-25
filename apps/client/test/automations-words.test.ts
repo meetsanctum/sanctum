@@ -1,3 +1,4 @@
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import { mediaFeatures, type CapabilityInfo } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
@@ -44,6 +45,9 @@ import {
   time,
   workflow,
 } from "./automations-fixtures";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 describe("Automations' words", () => {
   it("say days as a sentence and as a card do", () => {
@@ -466,11 +470,17 @@ describe("Automations' statuses", () => {
   });
 
   it("say when a day is, as people do", () => {
-    expect(dayWords(new Date("2026-10-30T07:30:00"), now)).toBe("today");
-    expect(dayWords(new Date("2026-10-31T07:30:00"), now)).toBe("tomorrow");
-    expect(dayWords(new Date("2026-11-02T07:30:00"), now)).toBe("Monday");
-    expect(dayWords(new Date("2026-11-06T07:30:00"), now)).toBe("next Friday");
-    expect(dayWords(new Date("2026-10-28T07:30:00"), now)).toBe(
+    expect(dayWords(clock, new Date("2026-10-30T07:30:00"), now)).toBe("today");
+    expect(dayWords(clock, new Date("2026-10-31T07:30:00"), now)).toBe(
+      "tomorrow",
+    );
+    expect(dayWords(clock, new Date("2026-11-02T07:30:00"), now)).toBe(
+      "Monday",
+    );
+    expect(dayWords(clock, new Date("2026-11-06T07:30:00"), now)).toBe(
+      "next Friday",
+    );
+    expect(dayWords(clock, new Date("2026-10-28T07:30:00"), now)).toBe(
       "last Wednesday",
     );
   });
@@ -480,16 +490,18 @@ describe("Automations' statuses", () => {
       ...base,
       nextRun: new Date("2026-10-30T16:51:00").toISOString(),
     };
-    expect(listStatus(next, { now, nextId: "w" })).toEqual({
+    expect(listStatus(clock, next, { now, nextId: "w" })).toEqual({
       kind: "next",
       text: "Next at 16:51",
       ink: true,
     });
     expect(
-      listStatus({ ...next, enabled: false }, { now, nextId: "w" })?.text,
+      listStatus(clock, { ...next, enabled: false }, { now, nextId: "w" })
+        ?.text,
     ).toBe("Off");
     expect(
       listStatus(
+        clock,
         {
           ...base,
           lastRun: {
@@ -503,6 +515,7 @@ describe("Automations' statuses", () => {
     ).toBe("Skipped today");
     expect(
       listStatus(
+        clock,
         { ...base, problems: [{ node: "n", field: null, message: "Gone" }] },
         { now },
       ),
@@ -546,6 +559,7 @@ describe("Automations' statuses", () => {
   ] as const)("does not call a %s run successful", (status, text) => {
     expect(
       listStatus(
+        clock,
         {
           ...base,
           lastRun: {

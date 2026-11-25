@@ -8,6 +8,7 @@ import type {
   WorkflowInfo,
   WorkflowRunInfo,
 } from "@meetsanctum/app-sdk";
+import { wallTimeText } from "@meetsanctum/app-sdk/clock";
 import type { PersonInfo } from "@meetsanctum/auth-protocol";
 import type { LiveFeed } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -153,6 +154,7 @@ export function namesOf(
     entity: (type, key) =>
       entities.find((each) => each.type === type && each.key === key)?.name,
     app: (id) => apps.find((app) => app.id === id)?.name,
+    time: (wall) => wallTimeText(wall, places?.home.hourCycle),
   };
 }
 
