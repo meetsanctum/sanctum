@@ -1,7 +1,11 @@
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import { describe, expect, it } from "vitest";
 
 import { activityWords } from "../src/activity/words";
 import { entry } from "./activity-fixtures";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 describe("Activity for AI agents and models", () => {
   it("names an AI agent and who added it", () => {
@@ -13,6 +17,7 @@ describe("Activity for AI agents and models", () => {
       } | null,
     ) =>
       activityWords(
+        clock,
         entry({
           who: {
             kind: "agent",
@@ -46,6 +51,7 @@ describe("Activity for AI agents and models", () => {
     "names who asked the assistant ($expected)",
     ({ kind, name, expected }) => {
       const words = activityWords(
+        clock,
         entry({
           who: {
             kind: "agent",
@@ -63,6 +69,7 @@ describe("Activity for AI agents and models", () => {
 
   it("describes an agent being removed", () => {
     const words = activityWords(
+      clock,
       entry({
         action: "client.revoke",
         detail: { kind: "agent", name: "Office agent" },
@@ -80,6 +87,7 @@ describe("Activity for AI agents and models", () => {
 
   it("keeps the name given to an agent in the rename entry", () => {
     const words = activityWords(
+      clock,
       entry({
         action: "client.rename",
         detail: { kind: "agent", name: "Office agent" },
@@ -97,12 +105,14 @@ describe("Activity for AI agents and models", () => {
 
   it("names what the household let AI agents use, or stopped", () => {
     const area = activityWords(
+      clock,
       entry({
         action: "agents.can-use",
         detail: { item: "people.read", on: true },
       }),
     );
     const offer = activityWords(
+      clock,
       entry({
         action: "agents.can-use",
         detail: {
@@ -121,6 +131,7 @@ describe("Activity for AI agents and models", () => {
   it("says when an AI agent was held back for asking too much", () => {
     const words = (reason: string) =>
       activityWords(
+        clock,
         entry({
           action: "agents.limited",
           outcome: "refused",
@@ -145,7 +156,8 @@ describe("Activity for AI agents and models", () => {
 
   it("says how an app's turn with the AI model went, never what was said", () => {
     const turn = (outcome: "ok" | "failed", detail: Record<string, unknown>) =>
-      activityWords(entry({ action: "models.turn", outcome, detail })).title;
+      activityWords(clock, entry({ action: "models.turn", outcome, detail }))
+        .title;
     const asked = {
       app: "sanctum.example",
       appName: "Example",
@@ -174,6 +186,7 @@ describe("Activity for AI agents and models", () => {
   it("names what an AI agent wasn't allowed, by its switch's words", () => {
     const words = (items: string[]) =>
       activityWords(
+        clock,
         entry({
           action: "agents.refused",
           outcome: "refused",
@@ -196,7 +209,7 @@ describe("Activity for AI agents and models", () => {
 
   it("says how an AI agent was added", () => {
     const words = (fields: Partial<Parameters<typeof entry>[0]>) =>
-      activityWords(entry({ outcome: "ok", ...fields }));
+      activityWords(clock, entry({ outcome: "ok", ...fields }));
 
     expect(
       words({

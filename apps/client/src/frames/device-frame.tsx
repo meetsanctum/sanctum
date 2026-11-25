@@ -1,4 +1,4 @@
-import type { DeviceInfo, TemperatureUnit } from "@meetsanctum/app-sdk";
+import type { DeviceInfo, Places } from "@meetsanctum/app-sdk";
 import { Button, type FrameContext } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { CircleAlert } from "lucide-react";
@@ -22,8 +22,10 @@ export function DeviceFrame(props: {
   page: string;
   title: string;
   device: DeviceInfo;
+  /** How the household reads things: its unit, its zone and its hours. */
   household:
-    { temperatureUnit: TemperatureUnit; timeZone: string | null } | undefined;
+    | Pick<Places["home"], "temperatureUnit" | "timeZone" | "hourCycle">
+    | undefined;
   isAway: boolean;
   onEscape: () => void;
 }) {
@@ -35,8 +37,9 @@ export function DeviceFrame(props: {
       mode: "evening",
       temperatureUnit: household?.temperatureUnit ?? null,
       timeZone: household?.timeZone ?? null,
+      hourCycle: household?.hourCycle ?? null,
     }),
-    [household?.temperatureUnit, household?.timeZone],
+    [household?.temperatureUnit, household?.timeZone, household?.hourCycle],
   );
   const latest = useRef(props);
   useEffect(() => {

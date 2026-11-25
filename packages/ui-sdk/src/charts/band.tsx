@@ -3,7 +3,7 @@ import { memo } from "react";
 import { TimeTicks } from "./axis";
 import { SpokenPin, useCursor } from "./cursor";
 import { plotClass, Readout, useWidth } from "./frame";
-import { timeText } from "./time";
+import { useHomeClock } from "../home-clock";
 
 // A day as a band 40 px tall: what is on as solid spans, what is faint as a
 // faint fill across the band, the rest as a hairline along its foot, and
@@ -144,7 +144,7 @@ export type DayBandChartProps<Span extends BandSpan> = {
   text: (span: Span) => string;
   /** When a span was, under its readout: 09:05–10:40, or to now. */
   about?: (span: Span) => string;
-  /** A time of day as the chart says it: 07:30 unless said. */
+  /** A time of day as the chart says it: as the home writes it, 07:30 or 7:30 AM, unless said. */
   time?: (at: number) => string;
   /** Its width in px; without one it measures its box. */
   width?: number;
@@ -164,7 +164,8 @@ type BandKey = { at: number; snaps: boolean };
 export function DayBandChart<Span extends BandSpan>(
   props: DayBandChartProps<Span>,
 ) {
-  const { spans, from, to, text, time = timeText } = props;
+  const clock = useHomeClock();
+  const { spans, from, to, text, time = clock.timeText } = props;
   const page = props.tone === "page";
   const about =
     props.about ??
@@ -272,7 +273,7 @@ export function DayBandChart<Span extends BandSpan>(
         from={from}
         to={to}
         plot={plot}
-        time={time}
+        time={props.time}
         className={page ? "mt-2 text-muted-foreground" : "mt-2 text-(--pewter)"}
       />
       <SpokenPin

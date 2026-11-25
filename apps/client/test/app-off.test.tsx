@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { AppInfo, AppRun, WorkflowInfo } from "@meetsanctum/app-sdk";
 import {
   createLiveFeed,
@@ -27,6 +28,9 @@ import {
 import { CoreError, coreJson } from "../src/core-fetch";
 import { entry } from "./activity-fixtures";
 import { remote } from "./settings-devices-fixtures";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 // An app someone turned off: what its settings ask first, what it says while
 // it's off, and that it leaves what the home shows.
@@ -164,7 +168,7 @@ describe("an app that's off", () => {
     ["turn-on", "ok", "Turned the app on"],
     ["turn-on", "failed", "Couldn't turn the app on"],
   ] as const)("goes in the activity log (%s, %s)", (action, outcome, title) => {
-    const words = activityWords(entry({ action, outcome }), "home");
+    const words = activityWords(clock, entry({ action, outcome }), "home");
     expect(words.title).toBe(title);
   });
 });

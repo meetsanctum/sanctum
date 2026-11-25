@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { AppInfo, AppRun, AppState } from "@meetsanctum/app-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -10,6 +11,9 @@ import { AppNotice, wentBackWords } from "../src/app-state";
 import { appsNotRunning } from "../src/attention";
 import { CoreError, coreJson } from "../src/core-fetch";
 import { entry } from "./activity-fixtures";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 // Going back from an app's last update: when its settings offer it, what
 // they ask first, and what it says afterwards.
@@ -262,7 +266,11 @@ describe("afterwards", () => {
     ["ok", "Went back to the app's version before"],
     ["refused", "Couldn't go back to the app's version before"],
   ] as const)("goes in the activity log (%s)", (outcome, title) => {
-    const words = activityWords(entry({ action: "go-back", outcome }), "home");
+    const words = activityWords(
+      clock,
+      entry({ action: "go-back", outcome }),
+      "home",
+    );
     expect(words.title).toBe(title);
   });
 });

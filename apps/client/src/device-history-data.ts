@@ -5,6 +5,7 @@ import type {
   DeviceStatistics,
   LightState,
 } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import { lightColour } from "@meetsanctum/ui-sdk";
 import type { BandSpan, StripSpan } from "@meetsanctum/ui-sdk/charts";
 
@@ -13,7 +14,7 @@ import type { BandSpan, StripSpan } from "@meetsanctum/ui-sdk/charts";
 // by day, from the hourly roll-ups and the spans for the hour not yet rolled
 // up. A motion sensor's and a contact sensor's pages read them as well,
 // motion and being open counting as on, and a media player's, playing
-// counting as on.
+// counting as on. Its days and times are the home clock's.
 
 export const hourMs = 60 * 60_000;
 export const dayMs = 24 * hourMs;
@@ -186,8 +187,8 @@ export const stripSpan = (span: Span): Span & StripSpan => ({
 });
 
 /** When a span was, such as "09:05–10:40", or to now. */
-export function spanTimes(span: Span, now: number) {
-  return `${timeText(span.from)}–${span.to >= now ? "now" : timeText(span.to)}`;
+export function spanTimes(clock: HomeClock, span: Span, now: number) {
+  return `${clock.timeText(span.from)}–${span.to >= now ? "now" : clock.timeText(span.to)}`;
 }
 
 /** How long the spans were on and known from `from` until `to`, in seconds. */
@@ -226,10 +227,14 @@ export function comingsOn(joined: readonly Span[]) {
  * The week's days with how often it came on in each, counted by the day it
  * came on in, from spans including the state before the week's start.
  */
-export function countedDays(days: readonly Day[], spans: readonly Span[]) {
+export function countedDays(
+  clock: HomeClock,
+  days: readonly Day[],
+  spans: readonly Span[],
+) {
   const starts = comingsOn(joinedSpans(spans)).map((span) => span.from);
   return days.map((day) => {
-    const end = midnight(day.start, -1);
+    const end = clock.startOfDay(day.start, -1);
     return {
       ...day,
       count: starts.filter((at) => at >= day.start && at < end).length,
@@ -237,20 +242,13 @@ export function countedDays(days: readonly Day[], spans: readonly Span[]) {
   });
 }
 
-/** Local midnight of the day `at` is in, `daysBack` days before. */
-export function midnight(at: number, daysBack = 0) {
-  const date = new Date(at);
-  date.setHours(0, 0, 0, 0);
-  date.setDate(date.getDate() - daysBack);
-  return date.getTime();
-}
-
 /**
- * The last 7 local days, today last: the hourly roll-ups of whether it was
+ * The home's last 7 days, today last: the hourly roll-ups of whether it was
  * on, saw motion, was open or played, by `field`, and the spans for the
  * time since the last of them.
  */
 export function daysOf(
+  clock: HomeClock,
   statistics: Pick<DeviceStatistics, "fields"> | null,
   spans: readonly Span[],
   now: number,
@@ -263,12 +261,12 @@ export function daysOf(
   );
   const days: Day[] = [];
   for (let back = 6; back >= 0; back--) {
-    const start = midnight(now, back);
-    const end = midnight(now, back - 1);
+    const start = clock.startOfDay(now, back);
+    const end = clock.startOfDay(now, back - 1);
     let on = 0;
     let known = 0;
     for (const hour of hours) {
-      // An hour that local midnight splits, as in a zone half an hour off
+      // An hour that the home's midnight splits, as in a zone half an hour off
       // the hour, counts on either side for its share of the hour.
       const at = Date.parse(hour.start);
       const share =
@@ -308,17 +306,19 @@ export function spanText(span: Span | undefined) {
 export const sentence = (text: string) =>
   text.charAt(0).toUpperCase() + text.slice(1);
 
-/** A day's name in a column's label, such as Mon. */
-export const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "short" });
-
 /** What the last 24 hours come to: how long it was on, or since when it has been off. */
-export function dayHeadline(spans: readonly Span[], from: number, to: number) {
+export function dayHeadline(
+  clock: HomeClock,
+  spans: readonly Span[],
+  from: number,
+  to: number,
+) {
   const { on, known } = onWithin(spans, from, to);
   if (on > 0) return `On for ${durationText(on)}`;
   const first = spans.find((span) => span.known);
   if (known === 0 || !first) return "Not known yet";
   return first.from > from + 60_000
-    ? `Off since ${timeText(first.from)}`
+    ? `Off since ${clock.timeText(first.from)}`
     : "Off the whole time";
 }
 
@@ -327,8 +327,12 @@ export function dayHeadline(spans: readonly Span[], from: number, to: number) {
  * that have ended; until one has, how long it has been on today; or since
  * when it has been off.
  */
-export function weekHeadline(days: readonly Day[], now: number) {
-  const today = midnight(now);
+export function weekHeadline(
+  clock: HomeClock,
+  days: readonly Day[],
+  now: number,
+) {
+  const today = clock.startOfDay(now);
   const known = days.filter((day) => day.known > 0);
   if (known.length === 0) return "Not known yet";
   const ended = known.filter((day) => day.start !== today);
@@ -340,7 +344,7 @@ export function weekHeadline(days: readonly Day[], now: number) {
   if (known.length === days.length) return "Off all week";
   return known[0]!.start === today
     ? "Off today"
-    : `Off since ${weekday.format(known[0]!.start)}`;
+    : `Off since ${clock.weekdayText(known[0]!.start)}`;
 }
 
 /** The words a sensor's week comes to, for what counts as on. */
@@ -359,11 +363,12 @@ export type WeekWords = {
  * today; or since when not at all.
  */
 export function sensedWeekHeadline(
+  clock: HomeClock,
   days: readonly Day[],
   now: number,
   words: WeekWords,
 ) {
-  return durationWeekHeadline(days, now, {
+  return durationWeekHeadline(clock, days, now, {
     average: (seconds) => {
       const minutes = Math.round(seconds / 60);
       return words.aDay(
@@ -379,13 +384,14 @@ export function sensedWeekHeadline(
       if (known.length === days.length) return `${words.none} all week`;
       return known[0]!.start === today
         ? `${words.none} today`
-        : `${words.none} since ${weekday.format(known[0]!.start)}`;
+        : `${words.none} since ${clock.weekdayText(known[0]!.start)}`;
     },
   });
 }
 
 /** Summarise a week's recorded durations using the capability's wording. */
 export function durationWeekHeadline(
+  clock: HomeClock,
   days: readonly Day[],
   now: number,
   words: {
@@ -394,7 +400,7 @@ export function durationWeekHeadline(
     none: (known: readonly Day[], today: number) => string;
   },
 ) {
-  const today = midnight(now);
+  const today = clock.startOfDay(now);
   const known = days.filter((day) => day.known > 0);
   if (known.length === 0) return "Not known yet";
   const ended = known.filter((day) => day.start !== today);
@@ -423,11 +429,12 @@ export type CountWords = {
  * at all.
  */
 export function countedWeekHeadline(
+  clock: HomeClock,
   days: readonly Day[],
   now: number,
   words: CountWords,
 ) {
-  const today = midnight(now);
+  const today = clock.startOfDay(now);
   const known = days.filter((day) => day.known > 0 || (day.count ?? 0) > 0);
   if (known.length === 0) return "Not known yet";
   const count = (some: readonly Day[]) =>
@@ -437,7 +444,7 @@ export function countedWeekHeadline(
   const since =
     known[0]!.start === today
       ? "today"
-      : `since ${weekday.format(known[0]!.start)}`;
+      : `since ${clock.weekdayText(known[0]!.start)}`;
   if (total === 0) {
     return `${words.none} ${isWholeWeek ? "all week" : since}`;
   }
@@ -448,13 +455,4 @@ export function countedWeekHeadline(
     return words.aDay(rounded === 1 ? "about once" : `about ${rounded} times`);
   }
   return `${words.times(total)} ${isWholeWeek ? "this week" : since}`;
-}
-
-/** A time of day as Automations writes it, such as 07:30. */
-export function timeText(at: number) {
-  const date = new Date(at);
-  if (Number.isNaN(date.getTime())) return "Invalid Date";
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  return `${hours}:${minutes}`;
 }

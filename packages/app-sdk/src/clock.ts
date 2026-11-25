@@ -199,11 +199,51 @@ export function zonedDateToUtc(
   return zonedTime(parseLocalDate(date), hour, minute, timeZone);
 }
 
+// What a day's start and its marked hours came to, by zone and date, kept a
+// while: a screen asks for today's and the week's again each minute.
+const days = new Map<string, number | number[]>();
+const maxDays = 256;
+
+function kept<T extends number | number[]>(key: string, work: () => T): T {
+  const known = days.get(key);
+  if (known !== undefined) return known as T;
+  const value = work();
+  if (days.size === maxDays) days.delete(days.keys().next().value!);
+  days.set(key, value);
+  return value;
+}
+
+const dayStart = (date: LocalDate, timeZone: string) =>
+  kept(`start|${timeZone}|${dateKey(date)}`, () =>
+    resolveTime(date, 0, 0, timeZone, true),
+  );
+
 /** When the day an instant falls on starts in a time zone, `daysBack` days before. */
 export function startOfDay(at: number, timeZone: string, daysBack = 0) {
-  const date = addDays(localParts(at, timeZone), -daysBack);
-  return resolveTime(date, 0, 0, timeZone, true);
+  return dayStart(addDays(localParts(at, timeZone), -daysBack), timeZone);
 }
+
+// A date's whole hours every `every` hours from midnight, leaving out those
+// the clocks skip.
+const markedHours = (date: LocalDate, timeZone: string, every: number) =>
+  kept(`hours|${every}|${timeZone}|${dateKey(date)}`, () => {
+    const hours: number[] = [];
+    for (let hour = 0; hour < 24; hour += every) {
+      const at = resolveTime(date, hour, 0, timeZone);
+      const local = localParts(at, timeZone);
+      if (
+        local.year === date.year &&
+        local.month === date.month &&
+        local.day === date.day &&
+        local.hour === hour &&
+        local.minute === 0 &&
+        local.second === 0
+      ) {
+        hours.push(at);
+      }
+    }
+    return hours;
+  });
 
 /**
  * The whole local hours every `every` hours from midnight, strictly
@@ -222,26 +262,29 @@ export function hoursBetween(
   const hours: number[] = [];
   for (
     let date: LocalDate = localParts(from, timeZone);
-    resolveTime(date, 0, 0, timeZone, true) < to;
+    dayStart(date, timeZone) < to;
     date = addDays(date, 1)
   ) {
-    for (let hour = 0; hour < 24; hour += every) {
-      const at = resolveTime(date, hour, 0, timeZone);
-      if (at <= from || at >= to) continue;
-      const local = localParts(at, timeZone);
-      if (
-        local.year === date.year &&
-        local.month === date.month &&
-        local.day === date.day &&
-        local.hour === hour &&
-        local.minute === 0 &&
-        local.second === 0
-      ) {
-        hours.push(at);
-      }
+    for (const at of markedHours(date, timeZone, every)) {
+      if (at > from && at < to) hours.push(at);
     }
   }
   return hours;
+}
+
+const invalid = "Invalid Date";
+
+// What a formatter writes for an instant, or Invalid Date, as a Date says
+// itself, for one that isn't an instant, rather than failing to draw.
+function written(
+  key: string,
+  locale: string,
+  options: Intl.DateTimeFormatOptions,
+  at: Date | number,
+) {
+  const time = typeof at === "number" ? at : at.getTime();
+  if (!Number.isFinite(time)) return invalid;
+  return formatter(key, locale, options).format(time);
 }
 
 /** A time of day as the home writes it: 07:30, or 7:30 AM with 12 hours. */
@@ -251,18 +294,28 @@ export function timeText(
   hourCycle: HourCycle = "24h",
 ) {
   return hourCycle === "12h"
-    ? formatter(`time12|${timeZone}`, "en-US", {
-        timeZone,
-        hour: "numeric",
-        minute: "2-digit",
-        hourCycle: "h12",
-      }).format(at)
-    : formatter(`time24|${timeZone}`, "en-GB", {
-        timeZone,
-        hour: "2-digit",
-        minute: "2-digit",
-        hourCycle: "h23",
-      }).format(at);
+    ? written(
+        `time12|${timeZone}`,
+        "en-US",
+        {
+          timeZone,
+          hour: "numeric",
+          minute: "2-digit",
+          hourCycle: "h12",
+        },
+        at,
+      )
+    : written(
+        `time24|${timeZone}`,
+        "en-GB",
+        {
+          timeZone,
+          hour: "2-digit",
+          minute: "2-digit",
+          hourCycle: "h23",
+        },
+        at,
+      );
 }
 
 /** An hour on its own, as an axis or a column of hours writes it: 16:00, or 4 PM with 12 hours. */
@@ -271,34 +324,61 @@ export function hourText(
   timeZone: string,
   hourCycle: HourCycle = "24h",
 ) {
-  return hourCycle === "12h"
-    ? formatter(`hour12|${timeZone}`, "en-US", {
-        timeZone,
-        hour: "numeric",
-        hourCycle: "h12",
-      }).format(at)
-    : `${formatter(`hour24|${timeZone}`, "en-GB", {
-        timeZone,
-        hour: "2-digit",
-        hourCycle: "h23",
-      }).format(at)}:00`;
+  if (hourCycle === "12h") {
+    return written(
+      `hour12|${timeZone}`,
+      "en-US",
+      { timeZone, hour: "numeric", hourCycle: "h12" },
+      at,
+    );
+  }
+  const hour = written(
+    `hour24|${timeZone}`,
+    "en-GB",
+    { timeZone, hour: "2-digit", hourCycle: "h23" },
+    at,
+  );
+  return hour === invalid ? hour : `${hour}:00`;
 }
 
 /** A day's name, such as Mon. */
 export const weekdayText = (at: Date | number, timeZone: string) =>
-  formatter(`weekday|${timeZone}`, "en-GB", {
-    timeZone,
-    weekday: "short",
-  }).format(at);
+  written(
+    `weekday|${timeZone}`,
+    "en-GB",
+    {
+      timeZone,
+      weekday: "short",
+    },
+    at,
+  );
+
+/** A date without its day, such as 3 Nov. */
+export const dayText = (at: Date | number, timeZone: string) =>
+  written(
+    `day|${timeZone}`,
+    "en-GB",
+    {
+      timeZone,
+      day: "numeric",
+      month: "short",
+    },
+    at,
+  );
 
 /** A day and its date, such as Mon 3 Nov. */
 export const dateText = (at: Date | number, timeZone: string) =>
-  formatter(`date|${timeZone}`, "en-GB", {
-    timeZone,
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  }).format(at);
+  written(
+    `date|${timeZone}`,
+    "en-GB",
+    {
+      timeZone,
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    },
+    at,
+  );
 
 /** The home clock: every way of working out days and times above, bound to the home's zone and its hours. */
 export type HomeClock = {
@@ -322,6 +402,8 @@ export type HomeClock = {
   hourText(at: Date | number): string;
   /** A day's name, such as Mon. */
   weekdayText(at: Date | number): string;
+  /** A date without its day, such as 3 Nov. */
+  dayText(at: Date | number): string;
   /** A day and its date, such as Mon 3 Nov. */
   dateText(at: Date | number): string;
 };
@@ -363,6 +445,7 @@ export function homeClock(
     timeText: (at) => timeText(at, timeZone, hourCycle),
     hourText: (at) => hourText(at, timeZone, hourCycle),
     weekdayText: (at) => weekdayText(at, timeZone),
+    dayText: (at) => dayText(at, timeZone),
     dateText: (at) => dateText(at, timeZone),
   };
 }

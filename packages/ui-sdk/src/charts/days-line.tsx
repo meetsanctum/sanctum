@@ -5,7 +5,7 @@ import { plotClass, Readout, RowsReadout, useWidth } from "./frame";
 import type { ChartFormat } from "./line";
 import { LineGridLabels, LineGridMarks } from "./line-grid";
 import { scaleOf, yOn, type ChartScale } from "./scale";
-import { dateText } from "./time";
+import { useHomeClock } from "../home-clock";
 
 // Days as lines, a point a day, such as each model's tokens over the last
 // 30: up to three, in the theme's series colours in their order, broken
@@ -120,12 +120,13 @@ const DaysMarks = memo(function DaysMarks(props: {
 
 /** Days as lines, a point a day, with their gridlines, three days named under them and a cursor. */
 export function DaysLineChart(props: DaysLineChartProps) {
+  const clock = useHomeClock();
   const {
     days,
     series: supplied,
     format,
     height,
-    date = dateText,
+    date = clock.dateText,
     today = "Today",
     unknown = "Not known",
   } = props;

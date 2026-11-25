@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { DeviceInfo } from "@meetsanctum/app-sdk";
 import { createLiveFeed, DeviceSections, type Tile } from "@meetsanctum/ui-sdk";
 import { act, useState } from "react";
@@ -11,7 +12,6 @@ import { devicePageAnswer, pressesApp } from "./device-detail-app-fixtures";
 import { coreJson } from "../src/core-fetch";
 import { useDashboards } from "../src/dashboards";
 import { DeviceDetail } from "../src/device-detail";
-import { timeText } from "../src/device-history-data";
 import { sectionsByRoom } from "../src/device-tiles";
 import { forgetPageTicket } from "../src/frames/page-ticket";
 import { useDevices } from "../src/use-devices";
@@ -23,6 +23,9 @@ import {
   remote,
   climateSensor,
 } from "./device-detail-fixtures";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 vi.mock("../src/core-fetch", () => ({
   coreJson: vi.fn(),
@@ -380,7 +383,7 @@ describe("a device's detail", () => {
       });
       expect(dialog()?.textContent).toContain("On for 3 h 1 min");
       expect(dialog()?.textContent).toContain(
-        `${timeText(Date.parse("2026-10-30T12:00:00Z"))} to ${timeText(Date.parse("2026-10-30T12:02:00Z"))}: Off`,
+        `${clock.timeText(Date.parse("2026-10-30T12:00:00Z"))} to ${clock.timeText(Date.parse("2026-10-30T12:02:00Z"))}: Off`,
       );
     } finally {
       vi.useRealTimers();

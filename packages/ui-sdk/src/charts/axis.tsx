@@ -1,5 +1,5 @@
 import { useWidth } from "./frame";
-import { sixHours, timeText } from "./time";
+import { useHomeClock } from "../home-clock";
 
 /**
  * The time every 6 hours of the day, on the clock's own hours whatever the
@@ -16,7 +16,8 @@ export function TimeTicks(props: {
   time?: (at: number) => string;
   nowText?: string;
 }) {
-  const { from, to, plot, time = timeText } = props;
+  const clock = useHomeClock();
+  const { from, to, plot, time = clock.hourText } = props;
   // On whole pixels by default, so the labels are sharp at 1×.
   const x = (at: number) => {
     const left = ((at - from) / (to - from)) * plot;
@@ -24,9 +25,9 @@ export function TimeTicks(props: {
   };
   // Clear of Now, where it shows.
   const end = props.withNow ? 48 : 20;
-  const ticks = sixHours(from, to).filter(
-    (at) => x(at) > 20 && x(at) < plot - end,
-  );
+  const ticks = clock
+    .hours(from, to)
+    .filter((at) => x(at) > 20 && x(at) < plot - end);
   return (
     <div
       aria-hidden="true"
@@ -60,7 +61,7 @@ export type DayTimeAxisProps = {
   width?: number;
   /** Its labels' colour, as classes. */
   className?: string;
-  /** A time of day as a label says it: 07:30 unless said. */
+  /** An hour as a label says it: as the home writes it, 06:00 or 6 AM, unless said. */
   time?: (at: number) => string;
   /** What its right end says with `withNow`: Now unless said. */
   nowText?: string;

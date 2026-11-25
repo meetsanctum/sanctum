@@ -4,7 +4,7 @@ import { SpokenPin } from "./cursor";
 import { plotClass, Readout, useWidth } from "./frame";
 import type { ChartFormat } from "./line";
 import { scaleFraction, scaleOf, type ChartScale } from "./scale";
-import { dateText } from "./time";
+import { useHomeClock } from "../home-clock";
 import { useWeekCursor, WeekNames, weekSlots } from "./week";
 
 // A week as a bar a day from its lowest to its highest, such as a sensor's
@@ -12,7 +12,7 @@ import { useWeekCursor, WeekNames, weekSlots } from "./week";
 // day's range under a mouse or where a tap or the arrow keys pin it,
 // and lists the days for screen readers.
 
-/** A day of a week's ranges, from its local midnight: its lowest and highest, or none when nothing was known. */
+/** A day of a week's ranges, from the start of its day on the home clock: its lowest and highest, or none when nothing was known. */
 export type WeekRange =
   | { start: number; min: number; max: number }
   | { start: number; min: null; max: null };
@@ -104,7 +104,8 @@ export type WeekRangeChartProps = {
 
 /** Each day of the week as a bar from its lowest to its highest. */
 export function WeekRangeChart(props: WeekRangeChartProps) {
-  const { days, now, format, date = dateText } = props;
+  const clock = useHomeClock();
+  const { days, now, format, date = clock.dateText } = props;
   const page = props.tone === "page";
   const labelClass = page ? "text-muted-foreground" : "text-(--pewter)";
   const { box, width } = useWidth(props.width);

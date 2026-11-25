@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import { Sun } from "lucide-react";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -13,7 +14,7 @@ import {
   type LinePoint,
   type WeekColumn,
 } from "../src/charts";
-import { midnight } from "../src/charts/time";
+import { HomeTimeZoneProvider } from "../src/home-clock";
 import { SwipePages } from "../src/swipe-pages";
 
 // Every chart's cursor (charts/cursor.tsx): a mouse's hover shows the
@@ -21,9 +22,12 @@ import { SwipePages } from "../src/swipe-pages";
 // the minute and a reload, until Escape, a tap on it again, or its point
 // leaving the chart.
 
+// The home is in Zurich and the device in Los Angeles, so a day or a time
+// worked out in the device's zone shows.
 vi.hoisted(() => {
-  process.env.TZ = "Europe/Zurich";
+  process.env.TZ = "America/Los_Angeles";
 });
+const zurich = homeClock({ timeZone: "Europe/Zurich" });
 
 const minute = 60_000;
 const hour = 60 * minute;
@@ -53,7 +57,14 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-const render = (element: ReactElement) => act(async () => root.render(element));
+const render = (element: ReactElement) =>
+  act(async () =>
+    root.render(
+      <HomeTimeZoneProvider timeZone="Europe/Zurich">
+        {element}
+      </HomeTimeZoneProvider>,
+    ),
+  );
 const group = () => container.querySelector<HTMLElement>('[role="group"]')!;
 const readout = () =>
   container.querySelector(".pointer-events-none")?.textContent ?? null;
@@ -116,7 +127,7 @@ async function press(key: string, shiftKey = false) {
 // A week of counts, 1 on the first day to 7 today.
 const week = (days = 7, upTo = now): WeekColumn[] =>
   Array.from({ length: days }, (_, index) => ({
-    start: midnight(upTo, days - 1 - index),
+    start: zurich.startOfDay(upTo, days - 1 - index),
     value: index + 1,
   }));
 // 520 px, less the 40 px gutter: a day is 480 / 7 px wide.

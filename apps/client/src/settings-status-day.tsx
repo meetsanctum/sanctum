@@ -1,4 +1,5 @@
 import type { TemperatureUnit } from "@meetsanctum/app-sdk";
+import { useHomeClock } from "@meetsanctum/ui-sdk";
 import { LineChart } from "@meetsanctum/ui-sdk/charts";
 import { cn } from "cn";
 import { CircleAlert } from "lucide-react";
@@ -92,6 +93,7 @@ export function LastDaySection(props: {
   checkedAt: string;
 }) {
   const { host, unit } = props;
+  const clock = useHomeClock();
   const now = Date.parse(props.checkedAt);
   const { day, failed } = useHostDay(now);
   const heading = {
@@ -168,7 +170,10 @@ export function LastDaySection(props: {
   return (
     <Section id="status-day" title={lastDayTitle}>
       <div className="flex flex-col gap-6">
-        <Reading {...heading.processor} summary={processorSummary(usage)}>
+        <Reading
+          {...heading.processor}
+          summary={processorSummary(clock, usage)}
+        >
           <LineChart
             runs={usage.line.runs}
             now={now}
@@ -182,7 +187,7 @@ export function LastDaySection(props: {
         {showsTemperature && (
           <Reading
             {...heading.temperature}
-            summary={temperatureSummary(celsius, unit)}
+            summary={temperatureSummary(clock, celsius, unit)}
             problem={celsius.over !== null}
           >
             <LineChart
@@ -197,7 +202,7 @@ export function LastDaySection(props: {
           </Reading>
         )}
         {memoryScale && (
-          <Reading {...heading.memory} summary={memorySummary(memory)}>
+          <Reading {...heading.memory} summary={memorySummary(clock, memory)}>
             <LineChart
               runs={memory.line.runs}
               now={now}

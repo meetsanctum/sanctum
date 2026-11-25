@@ -1,15 +1,8 @@
 // @vitest-environment jsdom
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import {
-  afterAll,
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   DayBandChart,
@@ -23,13 +16,14 @@ import {
   type StripSpan,
   type WeekRange,
 } from "../src/charts";
-import { midnight } from "../src/charts/time";
+import { HomeTimeZoneProvider } from "../src/home-clock";
 
-// The charts' date formatters take the zone the page starts in, as a page's
-// do, so the zone is set before they load, whatever the machine's own.
+// The home is in Zurich and the device in Los Angeles, so a day or a time
+// worked out in the device's zone shows.
 vi.hoisted(() => {
-  process.env.TZ = "Europe/Zurich";
+  process.env.TZ = "America/Los_Angeles";
 });
+const zurich = homeClock({ timeZone: "Europe/Zurich" });
 
 // @meetsanctum/ui-sdk/charts: whole charts from plain times and values, each
 // with its readout, keyboard cursor and list for screen readers, the words
@@ -40,10 +34,6 @@ const now = Date.parse("2026-11-18T15:30:00+01:00");
 const from = now - 24 * hour;
 let container: HTMLDivElement;
 let root: Root;
-
-// The chart modules create their date formatters when imported.
-vi.hoisted(() => vi.stubEnv("TZ", "Europe/Zurich"));
-afterAll(() => vi.unstubAllEnvs());
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -67,7 +57,14 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-const render = (element: ReactElement) => act(async () => root.render(element));
+const render = (element: ReactElement) =>
+  act(async () =>
+    root.render(
+      <HomeTimeZoneProvider timeZone="Europe/Zurich">
+        {element}
+      </HomeTimeZoneProvider>,
+    ),
+  );
 const group = () => container.querySelector<HTMLElement>('[role="group"]')!;
 const readout = () =>
   container.querySelector(".pointer-events-none")?.textContent ?? null;
@@ -132,8 +129,8 @@ describe("a day's band", () => {
         to={now}
         label="Motion"
         text={(span) => span.said}
-        time={(at) => `${new Date(at).getHours()}h`}
-        about={(span) => `from ${new Date(span.from).getHours()}h`}
+        time={(at) => `${zurich.parts(at).hour}h`}
+        about={(span) => `from ${zurich.parts(span.from).hour}h`}
       />,
     );
     expect(listed()[0]).toBe("15h to 21h: Not known");
@@ -357,7 +354,8 @@ describe("a day's line", () => {
 });
 
 // Built in the same time zone as the charts' date formatters.
-const week = () => [6, 5, 4, 3, 2, 1, 0].map((back) => midnight(now, back));
+const week = () =>
+  [6, 5, 4, 3, 2, 1, 0].map((back) => zurich.startOfDay(now, back));
 
 describe("a week's columns", () => {
   const days = () =>

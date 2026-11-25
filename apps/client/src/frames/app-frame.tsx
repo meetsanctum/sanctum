@@ -1,4 +1,4 @@
-import type { TemperatureUnit } from "@meetsanctum/app-sdk";
+import type { Places } from "@meetsanctum/app-sdk";
 import {
   Button,
   PageBar,
@@ -32,8 +32,10 @@ export function AppFrame(props: {
   back: () => void;
   openSettings: () => void;
   mode: FrameContext["mode"];
+  /** How the household reads things: its unit, its zone and its hours. */
   household:
-    { temperatureUnit: TemperatureUnit; timeZone: string | null } | undefined;
+    | Pick<Places["home"], "temperatureUnit" | "timeZone" | "hourCycle">
+    | undefined;
   /** Whether the home is away, as while it updates. */
   isAway: boolean;
 }) {
@@ -47,8 +49,14 @@ export function AppFrame(props: {
       mode,
       temperatureUnit: household?.temperatureUnit ?? null,
       timeZone: household?.timeZone ?? null,
+      hourCycle: household?.hourCycle ?? null,
     }),
-    [mode, household?.temperatureUnit, household?.timeZone],
+    [
+      mode,
+      household?.temperatureUnit,
+      household?.timeZone,
+      household?.hourCycle,
+    ],
   );
   const latest = useRef(props);
   useEffect(() => {

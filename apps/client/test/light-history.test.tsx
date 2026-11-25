@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { LightState } from "@meetsanctum/app-sdk";
 import { lightColour } from "@meetsanctum/ui-sdk";
 import { act } from "react";
@@ -7,8 +8,10 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { coreJson } from "../src/core-fetch";
 import { historyPage } from "../src/device-history";
-import { timeText } from "../src/device-history-data";
 import { lamp, lampState } from "./device-detail-fixtures";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
@@ -100,7 +103,7 @@ it("draws many brightness changes in a few paths and lists each in one text", as
   expect(items).toHaveLength(24);
   expect(items.every((item) => item.childNodes.length === 1)).toBe(true);
   expect(items[1]!.textContent).toBe(
-    `${timeText(Date.parse(changes[1]!.at))} to ${timeText(Date.parse(changes[2]!.at))}: 22%`,
+    `${clock.timeText(Date.parse(changes[1]!.at))} to ${clock.timeText(Date.parse(changes[2]!.at))}: 22%`,
   );
 });
 

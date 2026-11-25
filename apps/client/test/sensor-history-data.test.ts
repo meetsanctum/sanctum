@@ -1,8 +1,12 @@
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { HistoryStatistic } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
-import { dayMs, midnight } from "../src/device-history-data";
+import { dayMs } from "../src/device-history-data";
 import { dayLine, weekRange, weekRanges } from "../src/sensor-history-data";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 // What a sensor's detail charts (sensor-history-data.ts): its day as a line
 // through each 5 minutes, broken where nothing was known, and its week as
@@ -118,9 +122,10 @@ describe("a sensor's day", () => {
 
 describe("a sensor's week", () => {
   it("is each local day's lowest and highest, today with what it reads now", () => {
-    const today = midnight(now);
-    const yesterday = midnight(now, 1);
+    const today = clock.startOfDay(now);
+    const yesterday = clock.startOfDay(now, 1);
     const days = weekRanges(
+      clock,
       fields([
         period(yesterday + 60 * minute, 20, 18.9, 21),
         period(yesterday + 120 * minute, 22, 21, 23.1),
@@ -133,8 +138,12 @@ describe("a sensor's week", () => {
     expect(days).toHaveLength(7);
     expect(days.at(-1)).toEqual({ start: today, min: 20.5, max: 22 });
     expect(days.at(-2)).toEqual({ start: yesterday, min: 18.9, max: 23.1 });
-    expect(days[0]).toEqual({ start: midnight(now, 6), min: null, max: null });
+    expect(days[0]).toEqual({
+      start: clock.startOfDay(now, 6),
+      min: null,
+      max: null,
+    });
     expect(weekRange(days)).toEqual({ min: 18.9, max: 23.1 });
-    expect(weekRange(weekRanges(null, now, null))).toBeNull();
+    expect(weekRange(weekRanges(clock, null, now, null))).toBeNull();
   });
 });

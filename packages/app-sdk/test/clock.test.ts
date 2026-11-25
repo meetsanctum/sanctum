@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   addLocalDays,
   dateText,
+  dayText,
   homeClock,
   hostTimeZone,
   hourText,
@@ -185,6 +186,37 @@ describe("the home's words", () => {
     expect(weekdayText(late, zurich)).toBe("Wed");
     expect(weekdayText(late, newYork)).toBe("Tue");
     expect(dateText(late, zurich)).toBe("Wed 25 Nov");
+    expect(dayText(late, zurich)).toBe("25 Nov");
+    expect(dayText(late, newYork)).toBe("24 Nov");
+  });
+
+  it("write Invalid Date for a time that isn't one, rather than fail", () => {
+    const twelve = homeClock({ timeZone: zurich, hourCycle: "12h" });
+    const clock = homeClock({ timeZone: zurich });
+    for (const word of [
+      twelve.timeText,
+      twelve.hourText,
+      clock.timeText,
+      clock.hourText,
+      clock.weekdayText,
+      clock.dayText,
+      clock.dateText,
+    ]) {
+      expect(word(Number.NaN)).toBe("Invalid Date");
+      expect(word(new Date("not a time"))).toBe("Invalid Date");
+    }
+  });
+
+  it("start the same day the same way each time it's asked", () => {
+    // Santiago's 6 September 2026 starts at 01:00, when the clocks skip
+    // midnight.
+    const day = at("2026-09-06T12:00:00Z");
+    const start = startOfDay(day.getTime(), "America/Santiago");
+    expect(start).toBe(at("2026-09-06T04:00:00Z").getTime());
+    expect(startOfDay(day.getTime(), "America/Santiago")).toBe(start);
+    expect(startOfDay(day.getTime(), zurich)).toBe(
+      at("2026-09-05T22:00:00Z").getTime(),
+    );
   });
 });
 

@@ -14,6 +14,7 @@ import {
   type PageParams,
   type Tile,
   type TileSection,
+  useHomeClock,
 } from "@meetsanctum/ui-sdk";
 import { useEffect, useRef, type ReactNode } from "react";
 
@@ -453,6 +454,7 @@ export function RoomPage(props: {
   back: () => void;
 }) {
   const { roomId, devices, entities, back } = props;
+  const clock = useHomeClock();
   const room = devices.places?.rooms.find((each) => each.id === roomId);
   // A room removed meanwhile leaves its page.
   const gone = devices.places !== undefined && !room;
@@ -475,7 +477,7 @@ export function RoomPage(props: {
     <>
       <PlaceHeader
         title={room.name}
-        motion={placeMotionText(own, Date.now())}
+        motion={placeMotionText(clock, own, Date.now())}
         contact={placeContacts(own)}
         readings={readingsOf(sensorReadings(own), unitOf(devices))}
       />

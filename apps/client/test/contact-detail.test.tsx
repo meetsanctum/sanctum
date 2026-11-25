@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import { quietAfterMs, type DeviceInfo } from "@meetsanctum/app-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -8,6 +9,9 @@ import { contactNow, ContactPage } from "../src/contact-detail";
 import { coreJson } from "../src/core-fetch";
 import { tilesOf } from "../src/device-tiles";
 import { contactSensor, places } from "./place-pages-fixtures";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
@@ -23,7 +27,7 @@ const at = (hours: number, minutes = 0) =>
 const contactOf = (device: DeviceInfo) =>
   device.capabilities.find((each) => each.kind === "contact")!;
 const says = (device: DeviceInfo, when = now) =>
-  contactNow(device, contactOf(device), when);
+  contactNow(clock, device, contactOf(device), when);
 
 describe("what a contact sensor's detail says now", () => {
   it("is whether it is open, with since when it has been closed", () => {

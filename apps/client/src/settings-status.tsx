@@ -1,5 +1,5 @@
 import type { AppInfo, TemperatureUnit } from "@meetsanctum/app-sdk";
-import { Button, useTemperatureUnit } from "@meetsanctum/ui-sdk";
+import { Button, useHomeClock, useTemperatureUnit } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import {
   Check,
@@ -273,6 +273,7 @@ function Verdict(props: {
   // Storage almost full carries Free up space as its fix.
   space?: Space;
 }) {
+  const clock = useHomeClock();
   const { host, problems = [], notSetUp = [] } = props.status ?? {};
   // A service the home never set up is no problem: it is said plainly,
   // under whatever the verdict is.
@@ -328,7 +329,7 @@ function Verdict(props: {
           <CircleAlert aria-hidden="true" className="size-5 text-destructive" />
         }
         title={problemTitle(problem, props.unit)}
-        detail={problemFix(problem, appName)}
+        detail={problemFix(clock, problem, appName)}
         tone="problem"
         action={
           problem.kind === "storage" &&
@@ -354,13 +355,14 @@ function PowerFact(props: {
   problems: HostProblem[];
 }) {
   const { power } = props;
+  const clock = useHomeClock();
   const problem = props.problems.find((each) => each.kind === "power");
   return (
     <Fact label="Power supply" problem={power.low || !!problem}>
       {power.low
         ? "Too weak right now"
         : problem?.kind === "power"
-          ? `Too weak · last at ${lastAtText(problem.lastLowAt)}`
+          ? `Too weak · last at ${lastAtText(clock, problem.lastLowAt)}`
           : "Enough power"}
     </Fact>
   );

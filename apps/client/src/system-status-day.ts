@@ -1,10 +1,11 @@
 import type { TemperatureUnit } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import { convertTemperature, formatTemperature } from "@meetsanctum/ui-sdk";
 import type { ChartFormat } from "@meetsanctum/ui-sdk/charts";
 import { useEffect, useRef, useState } from "react";
 
 import { coreJson } from "./core-fetch";
-import { dayMs, timeText } from "./device-history-data";
+import { dayMs } from "./device-history-data";
 import type { DayLine, Point } from "./sensor-history-data";
 import {
   formatMemory,
@@ -188,43 +189,49 @@ const percent = (usage: number) => `${Math.round(usage * 100)}%`;
 // What each reading came to, in a line: "4% on average · busiest at 18:10,
 // 62%", with where nothing was read after it.
 function summary(
+  clock: HomeClock,
   day: ReadingDay,
   text: (value: number) => string,
   most: string,
   lead?: string,
 ) {
   if (day.mean === null || !day.highest) return "Nothing read yet";
-  const since = day.since === null ? "" : ` since ${timeText(day.since)}`;
+  const since = day.since === null ? "" : ` since ${clock.timeText(day.since)}`;
   const parts = [
     lead ?? `${text(day.mean)} on average${since}`,
-    `${most} at ${timeText(day.highest.at)}, ${text(day.highest.value)}`,
+    `${most} at ${clock.timeText(day.highest.at)}, ${text(day.highest.value)}`,
   ];
   if (day.gap) {
     parts.push(
-      `no readings from ${timeText(day.gap.from)} to ${timeText(day.gap.to)}`,
+      `no readings from ${clock.timeText(day.gap.from)} to ${clock.timeText(day.gap.to)}`,
     );
   }
   return parts.join(" · ");
 }
 
-export const processorSummary = (day: ReadingDay) =>
-  summary(day, percent, "busiest");
+export const processorSummary = (clock: HomeClock, day: ReadingDay) =>
+  summary(clock, day, percent, "busiest");
 
-export function temperatureSummary(day: ReadingDay, unit: TemperatureUnit) {
+export function temperatureSummary(
+  clock: HomeClock,
+  day: ReadingDay,
+  unit: TemperatureUnit,
+) {
   const text = (celsius: number) =>
     formatTemperature(celsius, unit, { whole: true });
   return summary(
+    clock,
     day,
     text,
     "warmest",
     day.over
-      ? `Too hot from ${timeText(day.over.from)} to ${timeText(day.over.to)}`
+      ? `Too hot from ${clock.timeText(day.over.from)} to ${clock.timeText(day.over.to)}`
       : undefined,
   );
 }
 
-export const memorySummary = (day: ReadingDay) =>
-  summary(day, formatMemory, "most");
+export const memorySummary = (clock: HomeClock, day: ReadingDay) =>
+  summary(clock, day, formatMemory, "most");
 
 // What each reads now, heading its chart: "3% now", "57°C now · normal",
 // "627 MB now".

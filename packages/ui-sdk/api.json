@@ -1,5 +1,5 @@
 {
-  "version": "0.1.28",
+  "version": "0.1.29",
   "react": "19.3.1",
   "exports": {
     "@meetsanctum/ui-sdk": [
@@ -94,6 +94,7 @@
       "tileIconOf",
       "useAppClient",
       "useAppSettings",
+      "useHomeClock",
       "usePhone",
       "useReducedEffects",
       "useReducedMotion",
@@ -2689,6 +2690,7 @@
     ],
     "frame/protocol.d.ts": [
       "import type { AppInfo, DeviceInfo, LiveMessage, LivePress, TemperatureUnit } from \"@meetsanctum/app-sdk\";",
+      "import type { HourCycle } from \"@meetsanctum/app-sdk/clock\";",
       "import type { PageParams } from \"../app-ui\";",
       "export declare const frameBridge = 4;",
       "export type FrameHello = {",
@@ -2706,6 +2708,7 @@
       "    motion?: \"regular\" | \"reduced\";",
       "    temperatureUnit: TemperatureUnit | null;",
       "    timeZone: string | null;",
+      "    hourCycle?: HourCycle | null;",
       "};",
       "export type FrameOperation = {",
       "    op: \"call\";",
@@ -2830,20 +2833,22 @@
       "    default: AppUi;",
       "}>): void;"
     ],
-    "home-time-zone.d.ts": [
+    "home-clock.d.ts": [
+      "import { type HomeClock, type HourCycle } from \"@meetsanctum/app-sdk/clock\";",
       "import { type ReactNode } from \"react\";",
       "export declare function HomeTimeZoneProvider(props: {",
       "    timeZone: string | null | undefined;",
+      "    hourCycle?: HourCycle | null;",
       "    children: ReactNode;",
       "}): import(\"react\").JSX.Element;",
-      "export declare function useHomeTimeZone(): string | undefined;"
+      "export declare function useHomeClock(): HomeClock;"
     ],
     "kit.d.ts": [
       "export * from \"./app-ui\";",
       "export * from \"./client\";",
       "export * from \"./contact-icons\";",
       "export * from \"./device-tile\";",
-      "export { HomeTimeZoneProvider } from \"./home-time-zone\";",
+      "export * from \"./home-clock\";",
       "export * from \"./level-slider\";",
       "export * from \"./light-controls\";",
       "export * from \"./light-picker\";",
@@ -3197,9 +3202,10 @@
     ],
     "widget-card.d.ts": [
       "import type { AppColor, TemperatureUnit, WidgetContent, WidgetSize, WidgetValue } from \"@meetsanctum/app-sdk\";",
+      "import type { HomeClock } from \"@meetsanctum/app-sdk/clock\";",
       "type Shown = {",
       "    unit: TemperatureUnit;",
-      "    timeZone: string | undefined;",
+      "    clock: HomeClock;",
       "};",
       "export declare function formatWidgetValue(value: WidgetValue, shown: Shown): string;",
       "export type RunWidgetAction = (action: string, input: Record<string, unknown>) => Promise<unknown>;",

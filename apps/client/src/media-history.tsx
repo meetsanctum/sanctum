@@ -1,5 +1,5 @@
 import type { CapabilityInfo, DeviceInfo } from "@meetsanctum/app-sdk";
-import type { SwipePage } from "@meetsanctum/ui-sdk";
+import { useHomeClock, type SwipePage } from "@meetsanctum/ui-sdk";
 import { DayBandChart, WeekColumnsChart } from "@meetsanctum/ui-sdk/charts";
 import { History } from "lucide-react";
 
@@ -64,6 +64,7 @@ export function mediaHistoryPage(
 function MediaHistoryPage(props: { device: DeviceInfo; capability: Media }) {
   const { device, capability } = props;
   const { loaded, failed, now, live } = useDayAndWeek(device, capability);
+  const clock = useHomeClock();
 
   if (loaded && !loaded.states.kept) {
     return (
@@ -79,7 +80,9 @@ function MediaHistoryPage(props: { device: DeviceInfo; capability: Media }) {
 
   const from = now - dayMs;
   const spans = loaded ? spansOf(loaded.states, from, now, live) : [];
-  const days = loaded ? daysOf(loaded.statistics, spans, now, "playing") : [];
+  const days = loaded
+    ? daysOf(clock, loaded.statistics, spans, now, "playing")
+    : [];
 
   return (
     <div
@@ -88,8 +91,9 @@ function MediaHistoryPage(props: { device: DeviceInfo; capability: Media }) {
     >
       <Part
         title="Last 24 hours"
-        headline={playedHeadline(spans, from, now)}
+        headline={playedHeadline(clock, spans, from, now)}
         sentence={mediaSentence(
+          clock,
           spans,
           days,
           from,
@@ -107,7 +111,7 @@ function MediaHistoryPage(props: { device: DeviceInfo; capability: Media }) {
           text={mediaSpanText}
         />
       </Part>
-      <Part title="Last 7 days" headline={playedWeekHeadline(days, now)}>
+      <Part title="Last 7 days" headline={playedWeekHeadline(clock, days, now)}>
         <WeekColumnsChart now={now} {...columnsOf(days, playedWords)} />
       </Part>
     </div>

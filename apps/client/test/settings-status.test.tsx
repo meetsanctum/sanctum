@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { AppInfo } from "@meetsanctum/app-sdk";
 import { TemperatureUnitProvider } from "@meetsanctum/ui-sdk";
 import { act } from "react";
@@ -22,6 +23,9 @@ import {
   type MemoryPart,
 } from "../src/system-status";
 import { piStatus, statusApps } from "./system-status-fixtures";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 // Settings → Status: the verdict first, then Sanctum with its processor and
 // power supply, its storage and memory with what fills them, what each reading
@@ -519,7 +523,7 @@ describe("the words", () => {
     };
 
     expect(problemTitle(missing, "celsius")).toBe("An app's data is missing");
-    expect(problemFix(missing, appName)).toBe(
+    expect(problemFix(clock, missing, appName)).toBe(
       "Moods can't start until its data is back",
     );
     expect(problemTitle({ ...missing, state: "damaged" }, "celsius")).toBe(
@@ -531,7 +535,7 @@ describe("the words", () => {
     const problem: HostProblem = { kind: "memoryLimits" };
 
     expect(problemTitle(problem, "celsius")).toBe("Memory limits are off");
-    expect(problemFix(problem, (id) => id)).toBe(
+    expect(problemFix(clock, problem, (id) => id)).toBe(
       "An app can use more memory than it should until they're on in Sanctum's boot settings",
     );
   });
@@ -566,7 +570,7 @@ describe("the words", () => {
     const now = new Date("2026-11-02T19:41:00Z");
     const words = (problem: HostProblem) => [
       problemTitle(problem, "celsius"),
-      problemFix(problem, appName, now),
+      problemFix(clock, problem, appName, now),
     ];
     const zigbee = (problem: string, state: "failed" | "waiting" = "waiting") =>
       words({

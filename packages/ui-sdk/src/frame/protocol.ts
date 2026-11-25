@@ -5,6 +5,7 @@ import type {
   LivePress,
   TemperatureUnit,
 } from "@meetsanctum/app-sdk";
+import type { HourCycle } from "@meetsanctum/app-sdk/clock";
 
 import type { PageParams } from "../app-ui";
 
@@ -30,6 +31,8 @@ export type FrameContext = {
   motion?: "regular" | "reduced";
   temperatureUnit: TemperatureUnit | null;
   timeZone: string | null;
+  /** How the home writes a time of day; a shell that doesn't say counts 24 hours. */
+  hourCycle?: HourCycle | null;
 };
 
 /** The operations a page may ask for: each of AppClient's, by name. */

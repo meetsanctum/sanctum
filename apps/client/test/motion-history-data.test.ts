@@ -1,10 +1,10 @@
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { DeviceHistory } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
 import {
   daysOf,
   joinedSpans,
-  midnight,
   spansOf,
   spanTimes,
   type Day,
@@ -15,6 +15,9 @@ import {
   motionWeekHeadline,
   roomSpans,
 } from "../src/motion-history-data";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 // A motion sensor's Motion page: its day as spans of motion, quiet and
 // nothing known, and its week as motion time a day, from core History.
@@ -72,12 +75,12 @@ describe("a motion sensor's day", () => {
       [1316, "Motion"],
       [1350, "Quiet"],
     ]);
-    expect(spanTimes(spans[1]!, now)).toBe("16:00–17:00");
-    expect(spanTimes(spans.at(-1)!, now)).toBe("13:30–now");
+    expect(spanTimes(clock, spans[1]!, now)).toBe("16:00–17:00");
+    expect(spanTimes(clock, spans.at(-1)!, now)).toBe("13:30–now");
   });
 
   it("says how long there was motion, and when the last ended", () => {
-    expect(motionSentence(day, from, now)).toBe(
+    expect(motionSentence(clock, day, from, now)).toBe(
       "1 h 34 min of motion, the last at 13:30",
     );
   });
@@ -93,7 +96,7 @@ describe("a motion sensor's day", () => {
       from,
       now,
     );
-    expect(motionSentence(moving, from, now)).toBe(
+    expect(motionSentence(clock, moving, from, now)).toBe(
       "25 min of motion, this time since 14:35",
     );
   });
@@ -108,7 +111,7 @@ describe("a motion sensor's day", () => {
       from,
       now,
     );
-    expect(motionSentence(spans, from, now)).toBe(
+    expect(motionSentence(clock, spans, from, now)).toBe(
       "25 min of motion, the last at 15:00",
     );
   });
@@ -119,10 +122,10 @@ describe("a motion sensor's day", () => {
       from,
       now,
     );
-    expect(motionSentence(quiet, from, now)).toBe(
+    expect(motionSentence(clock, quiet, from, now)).toBe(
       "No motion in the last 24 hours",
     );
-    expect(motionSentence([], from, now)).toBe(
+    expect(motionSentence(clock, [], from, now)).toBe(
       "Nothing read in the last 24 hours",
     );
   });
@@ -195,8 +198,9 @@ describe("a room's day", () => {
 
 describe("a motion sensor's week", () => {
   it("counts motion from the hourly roll-ups of motion", () => {
-    const start = new Date(midnight(now, 1) + 9 * hour).toISOString();
+    const start = new Date(clock.startOfDay(now, 1) + 9 * hour).toISOString();
     const days = daysOf(
+      clock,
       {
         fields: {
           motion: [{ start, mean: 0.5, min: 0, max: 1, seconds: 3600 }],
@@ -207,7 +211,7 @@ describe("a motion sensor's week", () => {
       "motion",
     );
     expect(days.at(-2)).toEqual({
-      start: midnight(now, 1),
+      start: clock.startOfDay(now, 1),
       on: 1800,
       known: 3600,
     });
@@ -215,7 +219,7 @@ describe("a motion sensor's week", () => {
 
   const week = (on: (number | null)[]): Day[] =>
     on.map((seconds, index) => ({
-      start: midnight(now, 6 - index),
+      start: clock.startOfDay(now, 6 - index),
       on: seconds ?? 0,
       known: seconds === null ? 0 : 86_400,
     }));
@@ -223,32 +227,46 @@ describe("a motion sensor's week", () => {
   it("says about how long a day, over the days that have ended", () => {
     expect(
       motionWeekHeadline(
+        clock,
         week([2, 5.8, 6.4, 5.9, 6.6, 4.2, 1].map((h) => h * 3600)),
         now,
       ),
     ).toBe("About 5 h a day");
     expect(
-      motionWeekHeadline(week([null, null, null, null, null, 2400, 0]), now),
+      motionWeekHeadline(
+        clock,
+        week([null, null, null, null, null, 2400, 0]),
+        now,
+      ),
     ).toBe("About 40 min a day");
     expect(
-      motionWeekHeadline(week([null, null, null, null, null, 20, 0]), now),
+      motionWeekHeadline(
+        clock,
+        week([null, null, null, null, null, 20, 0]),
+        now,
+      ),
     ).toBe("Under a minute a day");
   });
 
   it("says today's until a day has ended, or since when there has been none", () => {
     expect(
       motionWeekHeadline(
+        clock,
         week([null, null, null, null, null, null, 45 * 60]),
         now,
       ),
     ).toBe("45 min today");
-    expect(motionWeekHeadline(week([0, 0, 0, 0, 0, 0, 0]), now)).toBe(
+    expect(motionWeekHeadline(clock, week([0, 0, 0, 0, 0, 0, 0]), now)).toBe(
       "No motion all week",
     );
     expect(
-      motionWeekHeadline(week([null, null, null, null, null, null, 0]), now),
+      motionWeekHeadline(
+        clock,
+        week([null, null, null, null, null, null, 0]),
+        now,
+      ),
     ).toBe("No motion today");
-    expect(motionWeekHeadline(week(Array(7).fill(null)), now)).toBe(
+    expect(motionWeekHeadline(clock, week(Array(7).fill(null)), now)).toBe(
       "Not known yet",
     );
   });

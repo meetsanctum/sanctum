@@ -14,6 +14,7 @@ import {
   formatTemperature,
   formatTemperatureRange,
   icons,
+  useHomeClock,
 } from "@meetsanctum/ui-sdk";
 import { LineChart, WeekRangeChart } from "@meetsanctum/ui-sdk/charts";
 import { useEffect, useId, useState } from "react";
@@ -21,7 +22,7 @@ import { useEffect, useId, useState } from "react";
 import { productName } from "./brand";
 import { coreJson } from "./core-fetch";
 import { Notice, Part } from "./device-history";
-import { dayMs, midnight } from "./device-history-data";
+import { dayMs } from "./device-history-data";
 import { measureNames } from "./device-tiles";
 import { lowBatteryText } from "./maintenance";
 import { dayLine, weekRange, weekRanges } from "./sensor-history-data";
@@ -151,6 +152,7 @@ function SensorReading(props: {
   const [failed, setFailed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   useChartClock(setNow);
+  const clock = useHomeClock();
   const titleId = useId();
 
   useEffect(() => {
@@ -180,7 +182,7 @@ function SensorReading(props: {
           coreJson<DeviceStatistics>(
             `/api/history/statistics?${query({
               period: "hour",
-              from: new Date(midnight(to, 6)).toISOString(),
+              from: new Date(clock.startOfDay(to, 6)).toISOString(),
             })}`,
           ),
         ]);
@@ -198,12 +200,12 @@ function SensorReading(props: {
       current = false;
       stopReloads();
     };
-  }, [device.id, sensor.id]);
+  }, [device.id, sensor.id, clock]);
 
   const reading =
     device.availability === "offline" ? null : (sensor.state?.value ?? null);
   const line = dayLine(loaded?.day ?? null, now, reading);
-  const days = weekRanges(loaded?.week ?? null, now, reading);
+  const days = weekRanges(clock, loaded?.week ?? null, now, reading);
   const week = weekRange(days);
   const name = measureNames[sensor.features.measures];
 

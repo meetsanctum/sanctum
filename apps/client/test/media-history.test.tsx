@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { DeviceInfo, MediaState } from "@meetsanctum/app-sdk";
+import { HomeTimeZoneProvider } from "@meetsanctum/ui-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -87,11 +88,15 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function show(device: DeviceInfo) {
+async function show(device: DeviceInfo, timeZone?: string) {
   const player = device.capabilities[0]!;
   if (player.kind !== "media") throw new Error("not a media player");
   await act(async () => {
-    root.render(mediaHistoryPage(device, player).content);
+    root.render(
+      <HomeTimeZoneProvider timeZone={timeZone}>
+        {mediaHistoryPage(device, player).content}
+      </HomeTimeZoneProvider>,
+    );
   });
   // The history arrives.
   await act(async () => {});
@@ -268,16 +273,20 @@ it("reads its history as the player's, from the day before", async () => {
   expect(query.get("from")).toBe(new Date(now - 24 * hour).toISOString());
 });
 
-it("requests the hour that overlaps the start of the first local day", async () => {
-  vi.stubEnv("TZ", "Asia/Kolkata");
+it("requests the hour that overlaps the start of the home's first day", async () => {
+  // A home in Kolkata, seen from a device in Los Angeles.
+  vi.stubEnv("TZ", "America/Los_Angeles");
   vi.setSystemTime(new Date("2026-11-23T15:00:00Z"));
-  await show(mediaPlayer("tv", "TV", "living", { activity: "idle" }));
+  await show(
+    mediaPlayer("tv", "TV", "living", { activity: "idle" }),
+    "Asia/Kolkata",
+  );
 
   const asked = vi
     .mocked(coreJson)
     .mock.calls.map(([path]) => path)
     .find((path) => path.startsWith("/api/history/statistics"))!;
   const query = new URL(asked, "http://core").searchParams;
-  // The first local day starts at 18:30 UTC.
+  // The home's first day starts at 18:30 UTC.
   expect(query.get("from")).toBe("2026-11-16T18:00:00.000Z");
 });

@@ -1,3 +1,4 @@
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import { deviceCategories, type DeviceInfo } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
@@ -13,6 +14,9 @@ import {
 import { sectionsOfRoom, tilesIn, tilesOf } from "../src/device-tiles";
 import { contactSensor, places, sensor } from "./place-pages-fixtures";
 
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
+
 // What contact sensors say: words on a tile, in a room's line and in the
 // home's status, by one rule for open, closed and not known.
 
@@ -26,46 +30,70 @@ const tiles = (devices: DeviceInfo[]) =>
 
 describe("a contact sensor's words", () => {
   it("say Closed, or for how long it has been open", () => {
-    expect(contactText(false, ago(5 * minute), now)).toBe("Closed");
-    expect(contactText(true, ago(30_000), now)).toBe("Open");
-    expect(contactText(true, ago(12 * minute + 30_000), now)).toBe(
+    expect(contactText(clock, false, ago(5 * minute), now)).toBe("Closed");
+    expect(contactText(clock, true, ago(30_000), now)).toBe("Open");
+    expect(contactText(clock, true, ago(12 * minute + 30_000), now)).toBe(
       "Open for 12 min",
     );
-    expect(contactText(true, ago(59 * minute), now)).toBe("Open for 59 min");
+    expect(contactText(clock, true, ago(59 * minute), now)).toBe(
+      "Open for 59 min",
+    );
   });
 
   it("say since when from an hour, then yesterday, then the date", () => {
     expect(
-      contactText(true, new Date(2026, 9, 31, 13, 5).toISOString(), now),
+      contactText(clock, true, new Date(2026, 9, 31, 13, 5).toISOString(), now),
     ).toBe("Open since 13:05");
     expect(
-      contactText(true, new Date(2026, 9, 30, 23, 50).toISOString(), now),
+      contactText(
+        clock,
+        true,
+        new Date(2026, 9, 30, 23, 50).toISOString(),
+        now,
+      ),
     ).toBe("Open since yesterday");
     expect(
-      contactText(true, new Date(2026, 9, 28, 9, 0).toISOString(), now),
+      contactText(clock, true, new Date(2026, 9, 28, 9, 0).toISOString(), now),
     ).toBe("Open since 28 Oct");
   });
 
   it("say only Open when it is not known since when", () => {
-    expect(contactText(true, null, now)).toBe("Open");
+    expect(contactText(clock, true, null, now)).toBe("Open");
   });
 
   it("say on its detail since when it has been closed, which a tile leaves out", () => {
-    expect(contactNowText(true, ago(12 * minute), now)).toBe("Open for 12 min");
-    expect(contactNowText(false, ago(30_000), now)).toBe("Closed");
-    expect(contactNowText(false, ago(12 * minute), now)).toBe(
+    expect(contactNowText(clock, true, ago(12 * minute), now)).toBe(
+      "Open for 12 min",
+    );
+    expect(contactNowText(clock, false, ago(30_000), now)).toBe("Closed");
+    expect(contactNowText(clock, false, ago(12 * minute), now)).toBe(
       "Closed for 12 min",
     );
     expect(
-      contactNowText(false, new Date(2026, 9, 31, 13, 56).toISOString(), now),
+      contactNowText(
+        clock,
+        false,
+        new Date(2026, 9, 31, 13, 56).toISOString(),
+        now,
+      ),
     ).toBe("Closed since 13:56");
     expect(
-      contactNowText(false, new Date(2026, 9, 30, 23, 50).toISOString(), now),
+      contactNowText(
+        clock,
+        false,
+        new Date(2026, 9, 30, 23, 50).toISOString(),
+        now,
+      ),
     ).toBe("Closed since yesterday");
     expect(
-      contactNowText(false, new Date(2026, 9, 28, 9, 0).toISOString(), now),
+      contactNowText(
+        clock,
+        false,
+        new Date(2026, 9, 28, 9, 0).toISOString(),
+        now,
+      ),
     ).toBe("Closed since 28 Oct");
-    expect(contactNowText(false, null, now)).toBe("Closed");
+    expect(contactNowText(clock, false, null, now)).toBe("Closed");
   });
 });
 

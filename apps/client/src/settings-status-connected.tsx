@@ -1,4 +1,6 @@
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import type { ClientInfo, PersonInfo } from "@meetsanctum/auth-protocol";
+import { useHomeClock } from "@meetsanctum/ui-sdk";
 import { House } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -13,6 +15,7 @@ import { everyWhileShown } from "./while-shown";
 // longest connected. Renaming and removing stay in Clients.
 
 export function connectedDetail(
+  clock: HomeClock,
   client: ClientInfo,
   person: PersonInfo | undefined,
   now = new Date(),
@@ -22,11 +25,12 @@ export function connectedDetail(
     platformNames[client.platform],
     client.current
       ? "this device"
-      : `since ${lastAtText(client.connectedSince!, now)}`,
+      : `since ${lastAtText(clock, client.connectedSince!, now)}`,
   ].join(" · ");
 }
 
 export function ConnectedSection() {
+  const clock = useHomeClock();
   const [clients, setClients] = useState<ClientInfo[]>();
   const [people, setPeople] = useState<PersonInfo[]>([]);
 
@@ -84,7 +88,7 @@ export function ConnectedSection() {
               )}
               <Row
                 title={client.name}
-                detail={connectedDetail(client, person)}
+                detail={connectedDetail(clock, client, person)}
               />
             </li>
           );

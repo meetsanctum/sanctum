@@ -3,17 +3,22 @@ import type {
   ActivityTrigger,
   ActivityWho,
 } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import { pressLabel } from "@meetsanctum/ui-sdk";
 
 import { productName } from "../brand";
-import { durationText, timeText } from "../device-history-data";
+import { durationText } from "../device-history-data";
 
 // A motion trigger's place, by its name, and how long it waited, where the
 // run's trigger says them.
-export function triggerWords(trigger: ActivityTrigger, at: string) {
+export function triggerWords(
+  clock: HomeClock,
+  trigger: ActivityTrigger,
+  at: string,
+) {
   switch (trigger.piece) {
     case "time":
-      return `at ${trigger.time ?? timeText(Date.parse(at))}`;
+      return `at ${trigger.time ?? clock.timeText(Date.parse(at))}`;
     case "sun": {
       const event = trigger.event ?? "sunset";
       const offset = trigger.offsetMinutes ?? 0;
@@ -68,12 +73,12 @@ export function whoWords(who: ActivityWho): string {
 }
 
 /** Who did it, with the automation behind it and the app whose code it was. */
-export function byWords(entry: ActivityInfo) {
+export function byWords(clock: HomeClock, entry: ActivityInfo) {
   const { who, run, app } = entry;
   const parts: string[] = [];
   if (who.kind === "workflow" && run) {
     parts.push(
-      `${run.name ?? whoWords(who)}, ${triggerWords(run.trigger, entry.at)}`,
+      `${run.name ?? whoWords(who)}, ${triggerWords(clock, run.trigger, entry.at)}`,
     );
   } else {
     parts.push(whoWords(who));

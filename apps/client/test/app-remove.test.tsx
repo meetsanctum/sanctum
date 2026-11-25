@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { AppInfo, AppRemoval } from "@meetsanctum/app-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -8,6 +9,9 @@ import { activityWords } from "../src/activity/words";
 import { RemoveApp, removalWords } from "../src/app-remove";
 import { CoreError, coreJson } from "../src/core-fetch";
 import { entry } from "./activity-fixtures";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 // Removing an app from its settings: what its dialog names, what Remove
 // sends, and what the activity log says.
@@ -130,6 +134,7 @@ describe("removing an app", () => {
   it("is in the activity log, by the name kept once it's gone", () => {
     expect(
       activityWords(
+        clock,
         entry({
           kind: "setup",
           source: "sanctum.example",

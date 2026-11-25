@@ -7,7 +7,8 @@ import { DaysLineChart, type DaysLineChartProps } from "./days-line";
 import { plotClass, Readout, useWidth } from "./frame";
 import { LineGridLabels, LineGridMarks } from "./line-grid";
 import { scaleOf, yOn, type ChartScale } from "./scale";
-import { dayMs, hourMs, timeText } from "./time";
+import { useHomeClock } from "../home-clock";
+import { dayMs, hourMs } from "./time";
 
 // A day as a line through each 5 minutes' mean, such as a sensor's reading.
 // It is broken where nothing was known, has two or three faint gridlines with
@@ -160,7 +161,7 @@ export type LineChartProps = {
   unknown?: string;
   /** The readout's time for what it reads now: Now unless said. */
   nowText?: string;
-  /** A time of day as the chart says it: 07:30 unless said. */
+  /** A time of day as the chart says it: as the home writes it, 07:30 or 7:30 AM, unless said. */
   time?: (at: number) => string;
   /** Its width in px; without one it measures its box. */
   width?: number;
@@ -181,7 +182,8 @@ export function LineChart(props: LineChartInput) {
 
 // A day as a line, with its gridlines, hours and a cursor.
 function DayLineChart(props: LineChartProps) {
-  const { runs, now, format, height, time = timeText } = props;
+  const clock = useHomeClock();
+  const { runs, now, format, height, time = clock.timeText } = props;
   const page = props.tone === "page";
   const { box, width } = useWidth(props.width);
   const points = useMemo(() => runs.flat(), [runs]);
@@ -322,7 +324,7 @@ function DayLineChart(props: LineChartProps) {
           from={from}
           to={now}
           plot={plot}
-          time={time}
+          time={props.time}
           fractional
           className={`mt-2 ${label}`}
         />

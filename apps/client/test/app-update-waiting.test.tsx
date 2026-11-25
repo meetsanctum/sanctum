@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { AppInfo, AppWaitingUpdate } from "@meetsanctum/app-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -20,6 +21,9 @@ import { productName } from "../src/brand";
 import { CoreError, coreJson } from "../src/core-fetch";
 import { NeedsAttentionSection } from "../src/settings-attention";
 import { entry } from "./activity-fixtures";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 // A newer version that waits for someone to allow what it newly needs: what
 // its settings and Needs attention say, what Review asks, and what allowing
@@ -272,6 +276,7 @@ describe("in Needs attention", () => {
     ["refused", "Couldn't allow the app's new version"],
   ] as const)("goes in the activity log (%s)", (outcome, title) => {
     const words = activityWords(
+      clock,
       entry({ action: "allow-update", outcome }),
       "home",
     );

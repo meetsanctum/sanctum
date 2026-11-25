@@ -1,8 +1,12 @@
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { ActivityInfo } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
 import { activityWords } from "../src/activity/words";
 import { entry } from "./activity-fixtures";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 // How the activity log reads a motion sensor's settings and the runs its
 // motion starts.
@@ -56,17 +60,18 @@ describe("a motion sensor's settings in the activity log", () => {
       "No longer blinks on motion",
     ],
   ])("says what changed (%j)", (asked, home, device) => {
-    expect(activityWords(setting(asked), "home")).toEqual({
+    expect(activityWords(clock, setting(asked), "home")).toEqual({
       title: home,
       detail: "Alex",
       problem: false,
     });
-    expect(activityWords(setting(asked), "device").title).toBe(device);
+    expect(activityWords(clock, setting(asked), "device").title).toBe(device);
   });
 
   it("says a change it didn't take as other commands do", () => {
     expect(
       activityWords(
+        clock,
         setting(
           { sensitivity: "high" },
           { outcome: "failed", reason: "no_answer" },
@@ -81,6 +86,7 @@ describe("a motion sensor's settings in the activity log", () => {
     });
     expect(
       activityWords(
+        clock,
         setting(
           { indicator: true },
           { outcome: "refused", reason: "invalid_request" },
@@ -90,6 +96,7 @@ describe("a motion sensor's settings in the activity log", () => {
     ).toBe("Couldn't start blinking on motion");
     expect(
       activityWords(
+        clock,
         setting(
           { clearAfter: 60 },
           { outcome: "failed", reason: "app_failed" },
@@ -117,12 +124,14 @@ describe("a run that motion starts, in the activity log", () => {
   it("names the motion that started it, in the place it was", () => {
     expect(
       activityWords(
+        clock,
         by({ place: "Office" }, "Office lights on with motion"),
         "home",
       ).detail,
     ).toBe("Office lights on with motion, motion in Office");
     expect(
       activityWords(
+        clock,
         by(
           { piece: "noMotion", place: "Office", forMinutes: 10 },
           "Office lights off with no motion",
@@ -132,6 +141,7 @@ describe("a run that motion starts, in the activity log", () => {
     ).toBe("Office lights off with no motion, no motion in Office for 10 min");
     expect(
       activityWords(
+        clock,
         entry({
           action: "workflow.run",
           who: { kind: "workflow", id: "w", name: "Office lights on" },
@@ -149,8 +159,11 @@ describe("a run that motion starts, in the activity log", () => {
 
   it("names the contact sensor that started a run, and which way it went", () => {
     const opened = (trigger: Record<string, unknown>) =>
-      activityWords(by({ piece: "device", ...trigger }, "Hall light"), "home")
-        .detail;
+      activityWords(
+        clock,
+        by({ piece: "device", ...trigger }, "Hall light"),
+        "home",
+      ).detail;
     expect(opened({ device: "Front door", opened: true })).toBe(
       "Hall light, after Front door opened",
     );
@@ -166,11 +179,11 @@ describe("a run that motion starts, in the activity log", () => {
   });
 
   it("still reads when the run doesn't say where", () => {
-    expect(activityWords(by({}, "Hall lights"), "home").detail).toBe(
+    expect(activityWords(clock, by({}, "Hall lights"), "home").detail).toBe(
       "Hall lights, after motion",
     );
     expect(
-      activityWords(by({ piece: "noMotion" }, "Hall lights off"), "home")
+      activityWords(clock, by({ piece: "noMotion" }, "Hall lights off"), "home")
         .detail,
     ).toBe("Hall lights off, after no motion");
   });

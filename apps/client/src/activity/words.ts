@@ -3,10 +3,10 @@ import {
   type ActivityInfo,
   type MotionCommand,
 } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import { pressLabel } from "@meetsanctum/ui-sdk";
 
 import { productName } from "../brand";
-import { timeText } from "../device-history-data";
 import { clearAfterWords, sensitivityLabel } from "../motion-settings";
 import { byWords, triggerWords, whoWords } from "./actor-words";
 import { aiEntry } from "./ai-words";
@@ -179,10 +179,10 @@ function about(entry: ActivityInfo, where: Where, words: string) {
   return `${name} ${words.charAt(0).toLowerCase()}${words.slice(1)}`;
 }
 
-function spanWords(entry: ActivityInfo) {
+function spanWords(clock: HomeClock, entry: ActivityInfo) {
   if (!entry.firstAt) return "";
-  const from = timeText(Date.parse(entry.firstAt));
-  const to = timeText(Date.parse(entry.at));
+  const from = clock.timeText(Date.parse(entry.firstAt));
+  const to = clock.timeText(Date.parse(entry.at));
   return from === to ? "" : `${from}–${to}`;
 }
 
@@ -200,7 +200,11 @@ function microphoneWords(muted: boolean) {
     : { done: "Turned on its microphones", verb: "turn on its microphones" };
 }
 
-function commandEntry(entry: ActivityInfo, where: Where): Words {
+function commandEntry(
+  clock: HomeClock,
+  entry: ActivityInfo,
+  where: Where,
+): Words {
   const asked = (entry.detail?.asked ?? {}) as Asked;
   const muted = (asked as { muted?: unknown }).muted;
   const move =
@@ -211,7 +215,10 @@ function commandEntry(entry: ActivityInfo, where: Where): Words {
         : undefined;
   // One its device did not confirm in time went again: it says so, however
   // it ended.
-  const by = [byWords(entry), entry.detail?.resent === true ? "Sent again" : ""]
+  const by = [
+    byWords(clock, entry),
+    entry.detail?.resent === true ? "Sent again" : "",
+  ]
     .filter(Boolean)
     .join(" · ");
   const settings = motionSettings(asked);
@@ -241,7 +248,7 @@ function commandEntry(entry: ActivityInfo, where: Where): Words {
         : "";
     return {
       title: about(entry, where, `Adjusted ${entry.count} times${range}`),
-      detail: [by, spanWords(entry)].filter(Boolean).join(" · "),
+      detail: [by, spanWords(clock, entry)].filter(Boolean).join(" · "),
       problem: false,
     };
   }
@@ -262,11 +269,12 @@ function failedWords(entry: ActivityInfo, verb: string) {
 }
 
 function deviceEntry(
+  clock: HomeClock,
   entry: ActivityInfo,
   where: Where,
   rooms: RoomNames,
 ): Words | null {
-  const by = byWords(entry);
+  const by = byWords(clock, entry);
   const said = (title: string, detail = by) => ({
     title: about(entry, where, title),
     detail,
@@ -274,7 +282,7 @@ function deviceEntry(
   });
   switch (entry.action) {
     case "device.command":
-      return commandEntry(entry, where);
+      return commandEntry(clock, entry, where);
     case "device.changed":
       return said(entry.detail?.on ? "Turned on" : "Turned off");
     case "device.press": {
@@ -398,12 +406,12 @@ function deviceEntry(
   return null;
 }
 
-function runEntry(entry: ActivityInfo): Words {
+function runEntry(clock: HomeClock, entry: ActivityInfo): Words {
   const name = entry.run?.name ?? entry.subject?.name ?? "an automation";
   const status = String(entry.detail?.status ?? "");
   const started =
     entry.who.kind === "workflow" && entry.run
-      ? triggerWords(entry.run.trigger, entry.at)
+      ? triggerWords(clock, entry.run.trigger, entry.at)
       : whoWords(entry.who);
   const detail = `${started.charAt(0).toUpperCase()}${started.slice(1)}`;
   if (entry.reason === "interrupted") {
@@ -437,8 +445,8 @@ const doneWords: Record<string, string> = {
   remove: "Removed",
 };
 
-function setupEntry(entry: ActivityInfo): Words | null {
-  const by = byWords(entry);
+function setupEntry(clock: HomeClock, entry: ActivityInfo): Words | null {
+  const by = byWords(clock, entry);
   const name = entry.subject?.name;
   const [noun, verb] = entry.action.split(".");
   const said = (title: string) => ({
@@ -565,6 +573,7 @@ export type RoomNames = (id: string) => string | null;
 
 /** How an entry reads, in a device's list or the home's. */
 export function activityWords(
+  clock: HomeClock,
   entry: ActivityInfo,
   where: Where = "home",
   rooms: RoomNames = () => null,
@@ -579,38 +588,41 @@ export function activityWords(
           where === "device"
             ? title
             : `${subjectName(entry, "A device")}: ${title}`,
-        detail: byWords(entry),
+        detail: byWords(clock, entry),
         problem: true,
       };
     }
     const times = entry.count > 1 ? `, ${entry.count} times` : "";
     return {
       title: about(entry, where, `${entry.done}${times}`),
-      detail: [byWords(entry), entry.count > 1 ? spanWords(entry) : ""]
+      detail: [
+        byWords(clock, entry),
+        entry.count > 1 ? spanWords(clock, entry) : "",
+      ]
         .filter(Boolean)
         .join(" · "),
       problem: false,
     };
   }
-  if (entry.action === "workflow.run") return runEntry(entry);
+  if (entry.action === "workflow.run") return runEntry(clock, entry);
   const words =
-    systemEntry(entry) ??
-    deviceEntry(entry, where, rooms) ??
-    aiEntry(entry) ??
-    setupEntry(entry);
+    systemEntry(clock, entry) ??
+    deviceEntry(clock, entry, where, rooms) ??
+    aiEntry(clock, entry) ??
+    setupEntry(clock, entry);
   if (words) return words;
   // An app's action, by its title.
   const title = entry.title ?? entry.action;
   return {
     title: entry.outcome === "ok" ? title : `${title} didn't work`,
-    detail: byWords(entry),
+    detail: byWords(clock, entry),
     problem: entry.outcome !== "ok",
   };
 }
 
 /** The last change a device's list starts with, as "Alex turned it on at 21:52". */
-export function lastChangeWords(entry: ActivityInfo) {
-  const at = timeText(Date.parse(entry.at));
+export function lastChangeWords(clock: HomeClock, entry: ActivityInfo) {
+  const at = clock.timeText(Date.parse(entry.at));
   if (entry.source === "devices" && entry.action === "device.press") {
     return `${pressLabel(String(entry.detail?.action ?? ""))} at ${at}`;
   }

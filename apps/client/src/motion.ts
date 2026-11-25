@@ -1,7 +1,6 @@
 import type { Places } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import type { Tile } from "@meetsanctum/ui-sdk";
-
-import { midnight, timeText } from "./device-history-data";
 
 // What motion sensors say, in words rather than a value: on a sensor's tile,
 // in a room's line under its name and Presence's overview, and where in the
@@ -14,18 +13,14 @@ import { midnight, timeText } from "./device-history-data";
 const minute = 60_000;
 const hour = 60 * minute;
 
-const date = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-});
-
 /**
  * What a motion sensor, or a place, says while it answers: "Motion now",
  * or how long it has been quiet, short enough for a tile ("Quiet since
- * yesterday"). A sensor that has not said when it went quiet, as before
- * the core kept the time, says only "Quiet".
+ * yesterday"), by the home clock. A sensor that has not said when it went
+ * quiet, as before the core kept the time, says only "Quiet".
  */
 export function motionText(
+  clock: HomeClock,
   motion: boolean,
   changedAt: string | null,
   now: number,
@@ -36,9 +31,11 @@ export function motionText(
   if (now - since < hour) {
     return `Quiet for ${Math.floor((now - since) / minute)} min`;
   }
-  if (since >= midnight(now)) return `Quiet since ${timeText(since)}`;
-  if (since >= midnight(now, 1)) return "Quiet since yesterday";
-  return `Quiet since ${date.format(since)}`;
+  if (since >= clock.startOfDay(now)) {
+    return `Quiet since ${clock.timeText(since)}`;
+  }
+  if (since >= clock.startOfDay(now, 1)) return "Quiet since yesterday";
+  return `Quiet since ${clock.dayText(since)}`;
 }
 
 /** The motion of the motion sensors among some tiles that answer and have said something. */
@@ -54,7 +51,11 @@ const answering = (tiles: readonly Tile[]) =>
  * "Motion now" while any sees it, otherwise quiet since the last of them
  * went quiet; null while none of them answers.
  */
-export function placeMotionText(tiles: readonly Tile[], now: number) {
+export function placeMotionText(
+  clock: HomeClock,
+  tiles: readonly Tile[],
+  now: number,
+) {
   const sensors = answering(tiles);
   if (sensors.length === 0) return null;
   if (sensors.some((sensor) => sensor.motion)) return "Motion now";
@@ -64,7 +65,7 @@ export function placeMotionText(tiles: readonly Tile[], now: number) {
   const last = times.some(Number.isNaN)
     ? null
     : new Date(Math.max(...times)).toISOString();
-  return motionText(false, last, now);
+  return motionText(clock, false, last, now);
 }
 
 /** Where in the home there is motion now. */

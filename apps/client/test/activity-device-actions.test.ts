@@ -1,7 +1,11 @@
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import { describe, expect, it } from "vitest";
 
 import { activityWords, lastChangeWords } from "../src/activity/words";
 import { entry } from "./activity-fixtures";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 // An app's action about one of its devices, as a smart speaker's page
 // changes its microphones or ring: said of the device in the home's list,
@@ -30,18 +34,19 @@ const ringChange = (fields: Parameters<typeof entry>[0] = {}) =>
 
 describe("an app's action about a device", () => {
   it("says what it did to the device", () => {
-    expect(activityWords(ringChange())).toEqual({
+    expect(activityWords(clock, ringChange())).toEqual({
       title: "Office Speaker changed its ring",
       detail: "Alex, with ESPHome",
       problem: false,
     });
-    expect(activityWords(ringChange(), "device").title).toBe(
+    expect(activityWords(clock, ringChange(), "device").title).toBe(
       "Changed its ring",
     );
   });
 
   it("says how many times, and over when, where changes joined", () => {
     const words = activityWords(
+      clock,
       ringChange({
         count: 4,
         firstAt: "2026-10-31T21:50:00",
@@ -53,7 +58,7 @@ describe("an app's action about a device", () => {
   });
 
   it("says when it didn't work, by the action's title", () => {
-    expect(activityWords(ringChange({ outcome: "failed" }))).toEqual({
+    expect(activityWords(clock, ringChange({ outcome: "failed" }))).toEqual({
       title: "Office Speaker: Change its ring didn't work",
       detail: "Alex, with ESPHome",
       problem: true,
@@ -61,15 +66,15 @@ describe("an app's action about a device", () => {
   });
 
   it("reads by its title when it isn't about a device", () => {
-    expect(activityWords(ringChange({ subject: null })).title).toBe(
+    expect(activityWords(clock, ringChange({ subject: null })).title).toBe(
       "Change its ring",
     );
   });
 
   it("uses the app's words for the device's last change", () => {
-    expect(lastChangeWords(ringChange({ at: "2026-10-31T21:52:00" }))).toBe(
-      "Alex changed its ring at 21:52",
-    );
+    expect(
+      lastChangeWords(clock, ringChange({ at: "2026-10-31T21:52:00" })),
+    ).toBe("Alex changed its ring at 21:52");
   });
 
   it("uses the app's words when its action id matches a press", () => {
@@ -77,7 +82,7 @@ describe("an app's action about a device", () => {
       action: "device.press",
       at: "2026-10-31T21:52:00",
     });
-    expect(lastChangeWords(log)).toBe("Alex changed its ring at 21:52");
+    expect(lastChangeWords(clock, log)).toBe("Alex changed its ring at 21:52");
   });
 });
 
@@ -97,10 +102,10 @@ describe("a smart speaker's microphones", () => {
     });
 
   it("say they were muted or turned on", () => {
-    expect(activityWords(microphones(true)).title).toBe(
+    expect(activityWords(clock, microphones(true)).title).toBe(
       "Office Speaker muted its microphones",
     );
-    expect(activityWords(microphones(false), "device").title).toBe(
+    expect(activityWords(clock, microphones(false), "device").title).toBe(
       "Turned on its microphones",
     );
   });
@@ -108,6 +113,7 @@ describe("a smart speaker's microphones", () => {
   it("say what didn't happen when its own switch held them", () => {
     expect(
       activityWords(
+        clock,
         microphones(false, { outcome: "failed", reason: "no_answer" }),
         "device",
       ).title,

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { ActivityInfo, ActivityPage as Page } from "@meetsanctum/app-sdk";
 import { createLiveFeed } from "@meetsanctum/ui-sdk";
 import { act } from "react";
@@ -14,6 +15,9 @@ import {
 import { ActivityPage } from "../src/activity/page";
 import { coreJson } from "../src/core-fetch";
 import { entry } from "./activity-fixtures";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
@@ -111,13 +115,27 @@ describe("a live list", () => {
     ]);
   });
 
+  it("heads each day by the home's days, wherever the device is", () => {
+    const now = Date.parse("2026-10-31T12:00:00Z");
+    // 00:30 on 31 October in Zurich, 20:30 on the 30th in New York.
+    const at = Date.parse("2026-10-30T23:30:00Z");
+    expect(dayHeading(homeClock({ timeZone: "Europe/Zurich" }), at, now)).toBe(
+      "Today",
+    );
+    expect(
+      dayHeading(homeClock({ timeZone: "America/New_York" }), at, now),
+    ).toBe("Yesterday");
+  });
+
   it("heads each day as people say it", () => {
     const now = Date.parse("2026-10-31T12:00:00");
-    expect(dayHeading(Date.parse("2026-10-31T08:00:00"), now)).toBe("Today");
-    expect(dayHeading(Date.parse("2026-10-30T23:00:00"), now)).toBe(
+    expect(dayHeading(clock, Date.parse("2026-10-31T08:00:00"), now)).toBe(
+      "Today",
+    );
+    expect(dayHeading(clock, Date.parse("2026-10-30T23:00:00"), now)).toBe(
       "Yesterday",
     );
-    expect(dayHeading(Date.parse("2026-10-29T10:00:00"), now)).toBe(
+    expect(dayHeading(clock, Date.parse("2026-10-29T10:00:00"), now)).toBe(
       "Thursday 29 October",
     );
   });
