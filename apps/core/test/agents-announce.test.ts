@@ -8,8 +8,8 @@ import { AnnouncementRefused } from "../src/speech/announcements.js";
 import { SpeechUnavailable } from "../src/speech/speech.js";
 
 // The announce tool: an AI agent has Sanctum say something on a smart
-// speaker while "Speak on your smart speakers" is on, never on a muted or
-// offline one, a few a minute, and Activity keeps what was said.
+// speaker while "Speak on your smart speakers" is on, a few a minute, and
+// Activity keeps what was sent.
 
 const agent: AgentCaller = {
   id: "agent-1",
@@ -26,6 +26,7 @@ function speakerDevice(
   overrides: {
     availability?: string;
     muted?: boolean;
+    volume?: number;
     announces?: boolean;
   } = {},
 ) {
@@ -40,7 +41,7 @@ function speakerDevice(
         features: {},
         observed: {
           activity: "idle",
-          volume: 40,
+          volume: overrides.volume ?? 40,
           muted: overrides.muted ?? false,
         },
       },
@@ -64,6 +65,7 @@ function setup(
       Parameters<typeof createAnnounceTool>[0]["speech"]["speak"]
     >[0],
   ) => Promise<boolean | void>,
+  fetched = false,
 ) {
   const devices = [device, { ...device, id: "other" }];
   const said: unknown[] = [];
@@ -78,7 +80,7 @@ function setup(
       speak: async (input) => {
         said.push(input);
         const encoded = (await speak?.(input)) ?? true;
-        return { encoded: Promise.resolve(encoded), fetched: () => true };
+        return { encoded: Promise.resolve(encoded), fetched: () => fetched };
       },
     },
     record: (entry) => {
@@ -183,6 +185,18 @@ describe("the announce tool", () => {
     ).rejects.toMatchObject({ items: ["devices.announce"] });
   });
 
+  it("refuses a speaker turned all the way down", async () => {
+    const { run, said, recorded } = setup(speakerDevice({ volume: 0 }));
+    const result = await run({ speaker: "speaker", text: "Hi" });
+    expect(result.structuredContent).toEqual({
+      error: "muted",
+      message:
+        "“Office Speaker” is turned all the way down, so nobody would hear it.",
+    });
+    expect(said).toEqual([]);
+    expect(recorded).toEqual([]);
+  });
+
   it("lets a speaker say four things a minute", async () => {
     const { run, tick } = setup();
     for (let i = 0; i < 4; i++) {
@@ -199,12 +213,30 @@ describe("the announce tool", () => {
     ).toBeUndefined();
   });
 
-  it("does not log a successful announcement when encoding fails", async () => {
+  it("reports failed speech when encoding fails before the speaker fetches it", async () => {
     const { run, recorded } = setup(speakerDevice(), async () => false);
     expect(errorOf(await run({ speaker: "speaker", text: "Hi" }))).toBe(
       "unavailable",
     );
     expect(recorded).toEqual([]);
+  });
+
+  it("reports and logs an announcement fetched before its stream was cut short", async () => {
+    const { run, recorded } = setup(speakerDevice(), async () => false, true);
+    const result = await run({ speaker: "speaker", text: "Hi" });
+    expect(result.structuredContent).toEqual({
+      sentTo: "Office Speaker",
+      speaker: "speaker",
+    });
+    expect(recorded).toEqual([
+      {
+        action: "device.announce",
+        outcome: "ok",
+        actor: "assistant-run:agent-1",
+        subjectId: "speaker",
+        detail: { text: "Hi", language: "en" },
+      },
+    ]);
   });
 
   it("reserves agent quota across speakers and returns it if dispatch fails", async () => {

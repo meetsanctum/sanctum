@@ -198,12 +198,14 @@ export function createAnnouncements(options: {
      * Makes an announcement for a device from speech as it comes: its
      * address straight away, the sound as `speech` yields it. Refused while
      * the device has one that hasn't played yet, or the home has too many.
+     * Calls `onUnfetched` if the address expires without a fetch.
      */
     create(
       device: string,
       network: NonNullable<ReturnType<typeof speakerNetwork>>,
       publishedPort: number,
       speech: (signal: AbortSignal) => AsyncIterable<SpeechAudio>,
+      onUnfetched?: () => void,
     ) {
       if (byDevice.has(device)) throw new AnnouncementRefused("busy");
       if (byDevice.size >= maxAnnouncements)
@@ -221,7 +223,10 @@ export function createAnnouncements(options: {
         sources: network.sources,
         listeners: new Set(),
         stop: new AbortController(),
-        expiry: setTimeout(() => end(announcement), announcementKeptMs),
+        expiry: setTimeout(() => {
+          end(announcement);
+          onUnfetched?.();
+        }, announcementKeptMs),
         release: null,
       };
       byPath.set(path, announcement);

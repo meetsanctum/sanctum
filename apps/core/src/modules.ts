@@ -71,11 +71,7 @@ import { createPages } from "./pages/pages.js";
 import { createPeople } from "./people/people.js";
 import { createPins } from "./pins/pins.js";
 import { createPlaces } from "./places/places.js";
-import { createPower, type PowerManager } from "./system/power.js";
-import { createRestores } from "./system/restore.js";
-import { createSpace, type SpaceManager } from "./system/space.js";
-import { createStatus, type StatusManager } from "./system/status.js";
-import { createUpdates, type UpdateManager } from "./system/updates.js";
+import { assembleSystem, type SystemManager } from "./system/assembly.js";
 import type { SunDays } from "./workflows/jobs.js";
 import { createWorkflows } from "./workflows/workflows.js";
 
@@ -101,11 +97,8 @@ export async function createModules(
     manager: ServiceManager &
       AppContainerManager &
       AppUpdateManager &
-      UpdateManager &
-      StatusManager &
-      Pick<ManagerClient, "hostResources" | "serviceUrl"> &
-      PowerManager &
-      SpaceManager & {
+      SystemManager &
+      Pick<ManagerClient, "hostResources" | "serviceUrl"> & {
         // The manager's audit after an entry (activity/manager-audit.ts);
         // tests may leave it out.
         audit?: (after: number) => Promise<ManagerAudit>;
@@ -212,41 +205,17 @@ export async function createModules(
     limits: options.limits,
     now,
   });
-  // A restore from a backup signs every device out before the core serves
-  // anyone.
-  const record = activity.for("system");
-  const restores = createRestores(db, {
+  const system = assembleSystem(db, {
+    manager: options.manager,
     dataDir: options.dataDir,
+    version: options.version,
+    record: activity.for("system"),
     signOutEveryone: auth.signOutEveryone,
-    record,
+    appIds: () => apps.list().map((app) => app.id),
+    announce: (going) => live.system(going),
     log,
-    now: now ?? (() => new Date()),
+    now,
   });
-  restores.applyMarker();
-  const system = {
-    restores,
-    updates: createUpdates({
-      manager: options.manager,
-      version: options.version,
-      record,
-    }),
-    // The host's status, and the space each installed app's data takes.
-    status: createStatus({
-      manager: options.manager,
-      dataDir: options.dataDir,
-      version: options.version,
-      appIds: () => apps.list().map((app) => app.id),
-      now,
-    }),
-    // Restart and Shut down, which every client hears of first.
-    power: createPower({
-      manager: options.manager,
-      record,
-      announce: (going) => live.system(going),
-    }),
-    space: createSpace({ manager: options.manager, record }),
-    record,
-  };
   const agentAccess = createAgentAccess(db, {
     activity,
     auth,

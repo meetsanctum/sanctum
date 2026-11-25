@@ -26,8 +26,8 @@ import { minuteWindows } from "./limits.js";
 // speaker, in the home's voice, while "Speak on your smart speakers" is on.
 // The words are the agent's; the voice is always Sanctum's own, so an agent
 // can say "Dinner's ready", never play a recording. A speaker says one thing
-// at a time, a muted or offline one says nothing, and a few a minute is all
-// an agent or a speaker gets, so an agent can't talk over the household.
+// at a time, and a few a minute is all an agent or a speaker gets, so an
+// agent can't talk over the household.
 
 /** The most an announcement says, in characters. */
 export const maxAnnouncementText = 300;
@@ -64,15 +64,6 @@ export function createAnnounceTool(options: {
     language: z.enum(speechLanguages).default("en"),
   });
 
-  // A speaker's mute silences an announcement while it still reports
-  // playing it, so a muted one is refused rather than unmuted.
-  const isMuted = (device: DeviceInfo) =>
-    device.capabilities.some(
-      (capability) =>
-        capability.kind === "media" &&
-        (capability.observed as { muted?: boolean } | null)?.muted === true,
-    );
-
   return {
     tool: () => ({
       name: "announce",
@@ -83,7 +74,7 @@ export function createAnnounceTool(options: {
           .map((device) => `${device.id} (${JSON.stringify(device.name)})`)
           .join(", ")}.`,
         `\`text\` is up to ${maxAnnouncementText} characters, said as written in \`language\`, English unless the person speaks German.`,
-        "Each speaker says one thing at a time, and a few a minute; a muted or offline speaker says nothing.",
+        "Each speaker says one thing at a time, and a few a minute. A speaker says nothing while offline, muted or turned all the way down.",
         "Announce only what the person asked to have said, and say where it went.",
         notInstructions,
       ].join(" "),
@@ -110,10 +101,23 @@ export function createAnnounceTool(options: {
       if (device.availability !== "online") {
         return toolError("unavailable", `“${device.name}” is offline.`);
       }
-      if (isMuted(device)) {
+      const players = device.capabilities.filter(
+        (capability) => capability.kind === "media",
+      );
+      if (players.some(({ observed }) => observed?.muted === true)) {
         return toolError(
           "muted",
           `“${device.name}” is muted, so nobody would hear it. Someone at home unmutes it.`,
+        );
+      }
+      // A driver can pick any of the device's players for announcements.
+      if (
+        players.length &&
+        players.every(({ observed }) => observed?.volume === 0)
+      ) {
+        return toolError(
+          "muted",
+          `“${device.name}” is turned all the way down, so nobody would hear it.`,
         );
       }
       // Hold both quotas before any dispatch can yield to another call.
@@ -133,14 +137,14 @@ export function createAnnounceTool(options: {
           `That's enough announcements for now. Try again in ${wait} seconds.`,
         );
       }
-      let encoded: Promise<boolean>;
+      let announcement: Awaited<ReturnType<Speech["speak"]>>;
       try {
-        ({ encoded } = await options.speech.speak({
+        announcement = await options.speech.speak({
           device: device.id,
           text,
           language,
           actor: agent.actor,
-        }));
+        });
       } catch (error) {
         releaseQuota();
         if (error instanceof AnnouncementRefused) {
@@ -156,7 +160,7 @@ export function createAnnounceTool(options: {
         }
         return errorAnswer(error);
       }
-      if (!(await encoded)) {
+      if (!(await announcement.encoded) && !announcement.fetched()) {
         return toolError(
           "unavailable",
           "The announcement audio couldn't be generated.",

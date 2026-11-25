@@ -53,8 +53,12 @@ doesn't build leaves the last good pages, and a rebuilt kit is read again.
 core serves its client API over HTTPS, with a certificate the manager signs as
 the host's certificate authority, and the desktop app pins that authority.
 Smart speakers fetch one-time announcement audio over a separate plain HTTP
-listener on port 4180, restricted to the home's network. The desktop
-app finds hosts on the network and talks to them cross-origin; see
+listener on port 4180, restricted to the home's network. To test announcements
+on a real speaker, use a Linux host such as a dev host. Docker Desktop forwards
+requests through its virtual machine, so the core cannot verify the speaker's
+network address. See [Docker Desktop networking](https://docs.docker.com/desktop/features/networking/#how-exposed-ports-work).
+
+The desktop app finds hosts on the network and talks to them cross-origin; see
 [apps/desktop](apps/desktop/README.md).
 
 ### A wall display

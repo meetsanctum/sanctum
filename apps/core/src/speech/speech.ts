@@ -256,6 +256,10 @@ export function createSpeech(options: {
             idleMs: speechIdleMs,
             signal,
           }),
+        () => {
+          // An unfetched URL can mean the host has moved to another address.
+          if (address?.value === network) address = null;
+        },
       );
       try {
         await options.devices.announce(

@@ -3,6 +3,7 @@ import type { Server } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  announcementKeptMs,
   createAnnouncements,
   type Announcements,
 } from "../src/speech/announcements.js";
@@ -46,6 +47,7 @@ function setup(options: {
   areaOn?: boolean;
   serviceUrl?: string | null;
   getServiceUrl?: () => Promise<string | null>;
+  getAddress?: () => string;
   address?: string | null;
   want?: (signal: AbortSignal) => Promise<void>;
 }) {
@@ -67,7 +69,8 @@ function setup(options: {
           options.address === null
             ? null
             : {
-                address: options.address ?? "192.168.1.20",
+                address:
+                  options.getAddress?.() ?? options.address ?? "192.168.1.20",
                 cidr: "192.168.1.20/24",
               },
       }),
@@ -254,6 +257,51 @@ describe("createSpeech", () => {
       nowhere.speech.speak({ device: "a", text: "Hi", language: "en", actor }),
     ).rejects.toThrow(SpeechUnavailable);
     nowhere.speech.stop();
+  });
+
+  it("looks up the host's new address after an announcement expires unfetched", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    const synthesize = vi
+      .spyOn(wyoming, "synthesize")
+      .mockImplementation(async function* () {
+        yield { rate: 22_050, samples: new Int16Array(100) };
+      });
+    let address = "192.168.1.20";
+    const getAddress = vi.fn(() => address);
+    const { speech, told } = setup({
+      devices: [],
+      serviceUrl: "tcp://127.0.0.1:1",
+      getAddress,
+    });
+    announcements!.port = () => 4180;
+    speech.start();
+    const speak = (device: string) =>
+      speech.speak({
+        device,
+        text: "Hi",
+        language: "en",
+        actor: { kind: "app", id: "sanctum.example" },
+      });
+    try {
+      expect(await (await speak("a")).encoded).toBe(true);
+      address = "192.168.1.21";
+      vi.advanceTimersByTime(announcementKeptMs - 1);
+      expect(await (await speak("b")).encoded).toBe(true);
+      expect(getAddress).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(1);
+      expect(await (await speak("a")).encoded).toBe(true);
+      expect(getAddress).toHaveBeenCalledTimes(2);
+      expect(told.map(({ url }) => new URL(url).hostname)).toEqual([
+        "192.168.1.20",
+        "192.168.1.20",
+        "192.168.1.21",
+      ]);
+    } finally {
+      speech.stop();
+      await announcements!.stop();
+      synthesize.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it("withdraws the announcement when the speaker can't be told", async () => {
