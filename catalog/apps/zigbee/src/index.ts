@@ -55,13 +55,14 @@ export function createZigbeeApp(options: BridgeOptions = {}) {
     // 0.5.0: motion sensors, their light level and their settings.
     // 0.6.0: contact sensors.
     // 0.7.0: a battery its device says is low.
-    version: "0.9.0",
+    // 0.10.0: no page of its own; the shell draws its default page.
+    version: "0.10.0",
     core: "^2.0.0",
     summary:
       "Brings your Zigbee lights, plugs, remotes and sensors into your home.",
     icon: { glyph: "radio-tower", color: "graphite" },
-    // The app overview opens main.
-    pages: ["main"],
+    // Zigbee's red.
+    backdrop: { from: "#9A0230", to: "#EB0443" },
     permissions: [
       {
         id: "services:zigbee2mqtt",

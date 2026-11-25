@@ -1,7 +1,7 @@
 {
   "id": "sanctum.zigbee",
   "name": "Zigbee",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "core": "^2.0.0",
   "protocol": 22,
   "summary": "Brings your Zigbee lights, plugs, remotes and sensors into your home.",
@@ -41,9 +41,11 @@
     "glyph": "radio-tower",
     "color": "graphite"
   },
-  "pages": [
-    "main"
-  ],
+  "backdrop": {
+    "from": "#9A0230",
+    "to": "#EB0443"
+  },
+  "pages": [],
   "settings": null,
   "actions": [
     {
