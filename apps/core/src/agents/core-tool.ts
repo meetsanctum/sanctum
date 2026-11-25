@@ -18,6 +18,8 @@ export type CoreTool = {
   tool: (canUse: AiCanUse, listing: Listing) => Tool;
   /** Whether it's listed: what it needs is on. */
   usable: (canUse: AiCanUse) => boolean;
+  /** Whether a call may run when listing also requires a device. */
+  callable?: (canUse: AiCanUse) => boolean;
   /** Why it can't be used, when it's called anyway. */
   refusal: (canUse: AiCanUse) => Refused;
   run: (

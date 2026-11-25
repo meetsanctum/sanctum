@@ -92,6 +92,7 @@ export function createAnnounceTool(options: {
     }),
     usable: (canUse: AiCanUse) =>
       isOn(canUse, announcePermission) && speakers().length > 0,
+    callable: (canUse) => isOn(canUse, announcePermission),
     refusal: () => areasOff([announcePermission]),
     async run(agent, raw, canUse) {
       if (!isOn(canUse, announcePermission))
@@ -115,24 +116,33 @@ export function createAnnounceTool(options: {
           `“${device.name}” is muted, so nobody would hear it. Someone at home unmutes it.`,
         );
       }
+      // Hold both quotas before any dispatch can yield to another call.
+      const reservations: (() => void)[] = [];
+      const hold = (release: () => void) => reservations.push(release);
+      const releaseQuota = () => {
+        for (const release of reservations) release();
+      };
       const wait = Math.max(
-        byAgent(agent.id, false) ?? 0,
-        bySpeaker(device.id, false) ?? 0,
+        byAgent(agent.id, true, hold) ?? 0,
+        bySpeaker(device.id, true, hold) ?? 0,
       );
       if (wait > 0) {
+        releaseQuota();
         return toolError(
           "limited",
           `That's enough announcements for now. Try again in ${wait} seconds.`,
         );
       }
+      let encoded: Promise<boolean>;
       try {
-        await options.speech.speak({
+        ({ encoded } = await options.speech.speak({
           device: device.id,
           text,
           language,
           actor: agent.actor,
-        });
+        }));
       } catch (error) {
+        releaseQuota();
         if (error instanceof AnnouncementRefused) {
           return error.reason === "busy"
             ? toolError("busy", `“${device.name}” is still saying something.`)
@@ -146,8 +156,12 @@ export function createAnnounceTool(options: {
         }
         return errorAnswer(error);
       }
-      byAgent(agent.id);
-      bySpeaker(device.id);
+      if (!(await encoded)) {
+        return toolError(
+          "unavailable",
+          "The announcement audio couldn't be generated.",
+        );
+      }
       options.record({
         action: "device.announce",
         outcome: "ok",

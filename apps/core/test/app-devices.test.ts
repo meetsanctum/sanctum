@@ -322,10 +322,10 @@ describe("a smart speaker's announcements", () => {
     expect(sent.statusCode).toBe(400);
     await expect(
       core.devices.command(
-        { kind: "app", id: "test.panel" },
+        { kind: "app", id: "sanctum.example" },
         { device: speaker.id, capability: "audio", command: asked },
         {},
-        "test.panel",
+        "sanctum.example",
       ),
     ).rejects.toMatchObject({ code: "invalid_request" });
     expect(radio.received).toEqual([]);

@@ -13,7 +13,7 @@ import { SpeechUnavailable } from "../src/speech/speech.js";
 
 const agent: AgentCaller = {
   id: "agent-1",
-  name: "Codex",
+  name: "Kitchen agent",
   actor: { kind: "assistant-run", id: "agent-1", onBehalfOf: "person-1" },
 };
 
@@ -57,20 +57,28 @@ function speakerDevice(
   } as unknown as DeviceInfo;
 }
 
-function setup(device = speakerDevice(), speak?: () => Promise<unknown>) {
+function setup(
+  device = speakerDevice(),
+  speak?: (
+    input: Parameters<
+      Parameters<typeof createAnnounceTool>[0]["speech"]["speak"]
+    >[0],
+  ) => Promise<boolean | void>,
+) {
+  const devices = [device, { ...device, id: "other" }];
   const said: unknown[] = [];
   const recorded: NewActivityEntry[] = [];
   let clock = 0;
   const tool = createAnnounceTool({
     devices: {
-      list: () => [device],
-      get: (id) => (id === device.id ? device : null),
+      list: () => devices,
+      get: (id) => devices.find((device) => device.id === id) ?? null,
     },
     speech: {
       speak: async (input) => {
         said.push(input);
-        await speak?.();
-        return { spoken: Promise.resolve(true), fetched: () => true };
+        const encoded = (await speak?.(input)) ?? true;
+        return { encoded: Promise.resolve(encoded), fetched: () => true };
       },
     },
     record: (entry) => {
@@ -188,6 +196,35 @@ describe("the announce tool", () => {
     tick(60_001);
     expect(
       (await run({ speaker: "speaker", text: "6" })).isError,
+    ).toBeUndefined();
+  });
+
+  it("does not log a successful announcement when encoding fails", async () => {
+    const { run, recorded } = setup(speakerDevice(), async () => false);
+    expect(errorOf(await run({ speaker: "speaker", text: "Hi" }))).toBe(
+      "unavailable",
+    );
+    expect(recorded).toEqual([]);
+  });
+
+  it("reserves agent quota across speakers and returns it if dispatch fails", async () => {
+    let fail!: (reason: Error) => void;
+    const pending = new Promise<never>((_resolve, reject) => (fail = reject));
+    const { run, said } = setup(speakerDevice(), async ({ text }) => {
+      if (text === "pending") await pending;
+    });
+    for (const id of ["speaker", "speaker", "speaker", "other", "other"]) {
+      expect((await run({ speaker: id, text: "Hi" })).isError).toBeUndefined();
+    }
+    const first = run({ speaker: "speaker", text: "pending" });
+    expect(errorOf(await run({ speaker: "other", text: "Hi" }))).toBe(
+      "limited",
+    );
+    expect(said).toHaveLength(6);
+    fail(new SpeechUnavailable("offline"));
+    expect(errorOf(await first)).toBe("unavailable");
+    expect(
+      (await run({ speaker: "other", text: "Hi" })).isError,
     ).toBeUndefined();
   });
 

@@ -53,39 +53,48 @@ export function minuteWindows(
   now: () => number,
 ) {
   // Each agent's in the last minute, oldest first, and the home's.
-  const recent = new Map<string, number[]>();
-  const home: number[] = [];
+  const recent = new Map<string, { at: number }[]>();
+  const home: { at: number }[] = [];
 
-  const prune = (times: number[], at: number) => {
-    while (times.length && times[0]! <= at - minuteMs) times.shift();
+  const prune = (times: { at: number }[], at: number) => {
+    while (times.length && times[0]!.at <= at - minuteMs) times.shift();
   };
 
   /** Counts one, or answers how many seconds until there's room. */
-  return function take(
+  function take(
     agentId: string,
     shouldCount = true,
+    reserved?: (release: () => void) => void,
   ): number | undefined {
     const at = now();
     for (const [id, times] of recent) {
-      if (times.at(-1)! > at - minuteMs) break;
-      recent.delete(id);
+      if (times.at(-1)!.at <= at - minuteMs) recent.delete(id);
     }
     const times = recent.get(agentId) ?? [];
     prune(times, at);
     prune(home, at);
     const agentWait =
-      times.length >= limits.agentPerMinute ? times[0]! + minuteMs - at : 0;
+      times.length >= limits.agentPerMinute ? times[0]!.at + minuteMs - at : 0;
     const homeWait =
-      home.length >= limits.homePerMinute ? home[0]! + minuteMs - at : 0;
+      home.length >= limits.homePerMinute ? home[0]!.at + minuteMs - at : 0;
     const wait = Math.max(agentWait, homeWait);
     if (wait > 0) return Math.ceil(wait / 1_000);
     if (!shouldCount) return;
-    times.push(at);
-    // Keep agents in order of their latest, so idle ones expire.
-    recent.delete(agentId);
+    const entry = { at };
+    times.push(entry);
     recent.set(agentId, times);
-    home.push(at);
-  };
+    home.push(entry);
+    reserved?.(() => {
+      for (const window of [times, home]) {
+        const index = window.indexOf(entry);
+        if (index !== -1) window.splice(index, 1);
+      }
+      if (times.length === 0 && recent.get(agentId) === times) {
+        recent.delete(agentId);
+      }
+    });
+  }
+  return take;
 }
 
 export function createAgentLimiter(

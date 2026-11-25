@@ -631,7 +631,7 @@ export function createCoreTools(options: CoreToolsOptions) {
     ): Promise<CallToolResult | undefined> {
       if (!Object.hasOwn(tools, name)) return undefined;
       const tool = tools[name]!;
-      if (!tool.usable(canUse)) {
+      if (!(tool.callable ?? tool.usable)(canUse)) {
         return refused(agent, name, tool.refusal(canUse));
       }
       try {

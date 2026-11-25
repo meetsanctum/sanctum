@@ -39,8 +39,7 @@ import { createAppVersions } from "./app-host/versions.js";
 import { createAppSecrets, createSealer } from "./app-host/secrets.js";
 import { createAppSettings } from "./app-host/settings.js";
 import { createAuth, loginRule } from "./auth/auth.js";
-import { createAnnouncements } from "./speech/announcements.js";
-import { createSpeech } from "./speech/speech.js";
+import { assembleSpeech } from "./speech/assembly.js";
 import type { Limits } from "./auth/limits.js";
 import { setCoreFollowers } from "./core-followers.js";
 import { createDashboards } from "./dashboards/dashboards.js";
@@ -665,30 +664,13 @@ export async function createModules(
     dashboard: (id) =>
       dashboards.list().find((dashboard) => dashboard.id === id)?.name ?? null,
   });
-  const { wantServiceForCore, releaseServiceForCore } = options.manager;
-  const announcements =
-    options.speaker &&
-    createAnnouncements({
-      host: options.speaker.host,
-      port: options.speaker.port,
-      log,
-    });
-  const speech =
-    announcements && wantServiceForCore && releaseServiceForCore
-      ? createSpeech({
-          announcements,
-          manager: {
-            serviceUrl: options.manager.serviceUrl,
-            hostStatus: options.manager.hostStatus,
-            wantServiceForCore,
-            releaseServiceForCore,
-          },
-          devices,
-          areaOn: () => agentsCanUse.areaOn(announcePermission),
-          publishedPort: options.speaker!.publishedPort,
-          log,
-        })
-      : undefined;
+  const { speech, startSpeech, stopSpeech } = assembleSpeech({
+    speaker: options.speaker,
+    manager: options.manager,
+    devices,
+    areaOn: () => agentsCanUse.areaOn(announcePermission),
+    log,
+  });
   const agentTools: AgentTools = assembleAgentTools(agentAccess, {
     apps,
     places,
@@ -742,13 +724,7 @@ export async function createModules(
   // firmware's deadlines are the last that change a device, so the bus closes
   // after them, and history then records that nothing is known from then on.
   const stoppingSteps = [
-    [
-      "stop announcements",
-      async () => {
-        speech?.stop();
-        await announcements?.stop();
-      },
-    ],
+    ["stop announcements", stopSpeech],
     ["stop discovery", () => sightings?.close()],
     ["stop the manager's audit", () => managerAudit?.close()],
     ["stop removed apps' deadlines", () => appDeleting.close()],
@@ -817,21 +793,7 @@ export async function createModules(
     // What the manager finds on the home's network, which starts with the
     // core (core.ts); none under a manager that can't look.
     discovery: sightings,
-    // Serves smart speakers their announcements, and wants the speech
-    // service while one can announce; a port that's taken leaves the home
-    // without announcements, not without its core.
-    async startSpeech() {
-      if (!announcements || !speech) return;
-      try {
-        await announcements.start();
-      } catch (error) {
-        log(
-          `speech: smart speakers can't fetch announcements on port ${options.speaker!.port} (${error instanceof Error ? error.message : String(error)})`,
-        );
-        return;
-      }
-      speech.start();
-    },
+    startSpeech,
     // At stopping's first moment, before anything is awaited (lifecycle.ts).
     stopNewWork,
     // The modules' steps of stopping, in order (lifecycle.ts).

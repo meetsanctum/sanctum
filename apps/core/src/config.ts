@@ -11,7 +11,8 @@ const envSchema = z.object({
   // Where smart speakers fetch announcements: plain HTTP, on the home's
   // network, at one-off addresses (speech/announcements.ts). The published
   // port is the one the host maps to it, which goes in the addresses.
-  CORE_SPEAKER_PORT: z.coerce.number().int().min(1).max(65535).default(4180),
+  // A listener port of 0 disables announcements.
+  CORE_SPEAKER_PORT: z.coerce.number().int().min(0).max(65535).default(4180),
   CORE_SPEAKER_PUBLISHED_PORT: z.coerce
     .number()
     .int()
@@ -74,9 +75,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CoreConfig {
   return {
     host: parsed.CORE_HOST,
     port: parsed.CORE_PORT,
-    speakerPort: parsed.CORE_SPEAKER_PORT,
+    speakerPort: parsed.CORE_SPEAKER_PORT || undefined,
     speakerPublishedPort:
-      parsed.CORE_SPEAKER_PUBLISHED_PORT ?? parsed.CORE_SPEAKER_PORT,
+      parsed.CORE_SPEAKER_PUBLISHED_PORT ??
+      (parsed.CORE_SPEAKER_PORT || undefined),
     allowedOrigins: parsed.CORE_ALLOWED_ORIGINS.split(",")
       .map((origin) => origin.trim())
       .filter((origin) => origin.length > 0),

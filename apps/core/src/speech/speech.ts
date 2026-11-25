@@ -1,7 +1,9 @@
+import { setTimeout as delay } from "node:timers/promises";
+
 import type { Actor, DeviceInfo } from "@meetsanctum/app-sdk";
 
 import type { DeviceChange } from "../devices/devices.js";
-import type { Announcements } from "./announcements.js";
+import { speakerNetwork, type Announcements } from "./announcements.js";
 import { synthesize } from "./wyoming.js";
 
 // What Sanctum says out loud, in the home's one voice per language. Piper,
@@ -33,9 +35,17 @@ export class SpeechUnavailable extends Error {}
 
 type Manager = {
   serviceUrl(service: string): Promise<string | null>;
-  wantServiceForCore(service: string): Promise<void>;
-  releaseServiceForCore(service: string): Promise<void>;
-  hostStatus(): Promise<{ network: { address: string | null } | null }>;
+  wantServiceForCore(
+    service: string,
+    options: { signal: AbortSignal },
+  ): Promise<void>;
+  releaseServiceForCore(
+    service: string,
+    options: { signal: AbortSignal },
+  ): Promise<void>;
+  hostStatus(): Promise<{
+    network: { address: string | null; cidr?: string } | null;
+  }>;
 };
 
 const announces = (device: DeviceInfo | null) =>
@@ -47,7 +57,8 @@ const announces = (device: DeviceInfo | null) =>
 
 /** Where a Wyoming service listens, from its `tcp://host:port`. */
 function endpointOf(url: string) {
-  const parsed = new URL(url);
+  const parsed = URL.parse(url);
+  if (!parsed) return null;
   const port = Number(parsed.port);
   if (parsed.protocol !== "tcp:" || !parsed.hostname || !port) return null;
   return { host: parsed.hostname, port };
@@ -69,15 +80,23 @@ export function createSpeech(options: {
 }) {
   const now = options.now ?? Date.now;
   const announcers = new Set<string>();
-  let wanted: boolean | null = null;
+  let desired: boolean | null = null;
+  let changing: AbortController | null = null;
   let warming: AbortController | null = null;
-  let address: { value: string; at: number } | null = null;
-  let stopped = false;
+  let address: {
+    value: NonNullable<ReturnType<typeof speakerNetwork>>;
+    at: number;
+  } | null = null;
+  let running = false;
 
-  async function hostAddress() {
+  async function hostNetwork() {
     if (address && now() - address.at < addressKeptMs) return address.value;
     const status = await options.manager.hostStatus().catch(() => null);
-    const value = status?.network?.address ?? null;
+    const network = status?.network;
+    const value =
+      network?.address && network.cidr
+        ? speakerNetwork(network.address, network.cidr)
+        : null;
     address = value ? { value, at: now() } : null;
     return value;
   }
@@ -95,8 +114,10 @@ export function createSpeech(options: {
     const until = now() + startingForMs;
     while (!signal.aborted && now() < until) {
       const at = await endpoint();
+      if (signal.aborted) return;
       if (at) {
         for (const language of speechLanguages) {
+          if (signal.aborted) return;
           try {
             const spoken = synthesize({
               ...at,
@@ -116,45 +137,69 @@ export function createSpeech(options: {
         }
         return;
       }
-      await new Promise((resolve) => setTimeout(resolve, startingEveryMs));
+      try {
+        await delay(startingEveryMs, undefined, { signal, ref: false });
+      } catch (error) {
+        if (!signal.aborted) throw error;
+      }
     }
   }
 
-  // Wants the service while there is something to say things on, and lets
-  // it go otherwise; asks the manager only when that changes.
+  // Only one manager write at a time. A setting change cancels retries
+  // and applies the newest state after the previous attempt settles.
+  async function applyServiceState() {
+    while (running && desired !== null) {
+      const want: boolean = desired;
+      const change = new AbortController();
+      changing = change;
+      try {
+        if (want) {
+          await options.manager.wantServiceForCore(speechService, {
+            signal: change.signal,
+          });
+        } else {
+          await options.manager.releaseServiceForCore(speechService, {
+            signal: change.signal,
+          });
+        }
+        if (running && !change.signal.aborted && want) {
+          warming = new AbortController();
+          const signal = warming.signal;
+          void warm(signal).catch((error: unknown) => {
+            if (!signal.aborted)
+              options.log(`Speech warmup failed: ${String(error)}`);
+          });
+        }
+      } catch (error) {
+        if (!change.signal.aborted) {
+          desired = null;
+          options.log(
+            `Speech couldn't ${want ? "start" : "stop"}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      } finally {
+        changing = null;
+      }
+      if (!change.signal.aborted) return;
+    }
+  }
+
   function reconcile() {
-    if (stopped) return;
-    const should = options.areaOn() && announcers.size > 0;
-    if (should === wanted) return;
-    wanted = should;
+    if (!running) return;
+    const want = options.areaOn() && announcers.size > 0;
+    if (want === desired) return;
+    desired = want;
     warming?.abort();
     warming = null;
-    if (should) {
-      const controller = new AbortController();
-      warming = controller;
-      void options.manager
-        .wantServiceForCore(speechService)
-        .then(() => warm(controller.signal))
-        .catch((error: unknown) => {
-          wanted = null;
-          options.log(
-            `Speech couldn't start: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        });
-    } else {
-      void options.manager
-        .releaseServiceForCore(speechService)
-        .catch((error: unknown) => {
-          wanted = null;
-          options.log(
-            `Speech couldn't stop: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        });
-    }
+    if (changing) changing.abort();
+    else void applyServiceState();
   }
 
   return {
     start() {
+      if (running || options.announcements.port() === null) return;
+      running = true;
+      announcers.clear();
       for (const device of options.devices.list()) {
         if (announces(device)) announcers.add(device.id);
       }
@@ -177,7 +222,7 @@ export function createSpeech(options: {
     /**
      * Says `text` on a smart speaker in the language's voice, as `actor`:
      * resolves once the speaker has been told to play it, with whether all
-     * of it was then spoken still to come. Throws SpeechUnavailable while
+     * of it was then encoded still to come. Throws SpeechUnavailable while
      * the speech service or the host's address isn't there, and the
      * announcement's own refusal while the speaker is still speaking.
      */
@@ -187,16 +232,22 @@ export function createSpeech(options: {
       language: SpeechLanguage;
       actor: Actor;
     }) {
-      const [at, host] = await Promise.all([endpoint(), hostAddress()]);
-      if (!at || !host) {
+      if (!running || options.announcements.port() === null) {
+        throw new SpeechUnavailable(
+          "Speech isn't running on Sanctum right now",
+        );
+      }
+      const [at, network] = await Promise.all([endpoint(), hostNetwork()]);
+      const listenerPort = options.announcements.port();
+      if (!running || listenerPort === null || !at || !network) {
         throw new SpeechUnavailable(
           "Speech isn't running on Sanctum right now",
         );
       }
       const announcement = options.announcements.create(
         input.device,
-        host,
-        options.publishedPort,
+        network,
+        options.publishedPort || listenerPort,
         (signal) =>
           synthesize({
             ...at,
@@ -216,11 +267,13 @@ export function createSpeech(options: {
         announcement.withdraw();
         throw error;
       }
-      return { spoken: announcement.spoken, fetched: announcement.fetched };
+      return { encoded: announcement.encoded, fetched: announcement.fetched };
     },
 
     stop() {
-      stopped = true;
+      running = false;
+      desired = null;
+      changing?.abort();
       warming?.abort();
       warming = null;
     },

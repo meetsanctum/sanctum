@@ -1,3 +1,5 @@
+import { createServer } from "node:net";
+
 import {
   assertManaged,
   ensureNetwork,
@@ -8,6 +10,7 @@ import {
 } from "./docker-resources.js";
 import {
   ensureImage,
+  errorMessage,
   inspectContainer,
   type ContainerCreateOptions,
   type ContainerInfo,
@@ -54,13 +57,19 @@ function publishedSpeakerPort() {
   return stackCore ? (stackCore.speakerPort ?? null) : speakerPort;
 }
 
-export function coreContainerOptions(image: string): ContainerCreateOptions {
-  const published = publishedSpeakerPort();
+const speakerPortFallback = "sanctum.core.speaker-port-unavailable";
+
+export function coreContainerOptions(
+  image: string,
+  withoutSpeakers = false,
+): ContainerCreateOptions {
+  const published = withoutSpeakers ? null : publishedSpeakerPort();
   return {
     name: coreContainerName,
     Image: image,
     Labels: {
       ...managedLabels(coreRole),
+      ...(withoutSpeakers && { [speakerPortFallback]: "true" }),
       // Keep the requested mounts: Docker Desktop rewrites their source
       // paths inside its VM, so its inspected Binds cannot be compared to
       // paths on the Mac when the stack starts again.
@@ -78,6 +87,7 @@ export function coreContainerOptions(image: string): ContainerCreateOptions {
             `CORE_SPEAKER_PUBLISHED_PORT=${published}`,
           ]),
       ...(stackCore?.env ?? []),
+      ...(withoutSpeakers ? ["CORE_SPEAKER_PORT=0"] : []),
     ],
     ExposedPorts: {
       [`${corePort}/tcp`]: {},
@@ -150,12 +160,57 @@ export function coreContainerOptions(image: string): ContainerCreateOptions {
   };
 }
 
-export async function createCoreContainer(
-  docker: DockerClientLike,
-  image: string,
-) {
-  const created = await docker.createContainer(coreContainerOptions(image));
-  return created.id;
+function speakerPortConflict(error: unknown) {
+  const port = publishedSpeakerPort();
+  if (port === null) return false;
+  const message = errorMessage(error);
+  return (
+    new RegExp(`:${port}(?!\\d)`).test(message) &&
+    /port is already allocated|address already in use/i.test(message)
+  );
+}
+
+async function speakerPortAvailable(docker: DockerClientLike, port: number) {
+  // Docker can reserve a published port without a userspace listener.
+  const containers = await docker.listContainers();
+  if (
+    containers.some(({ Ports }) =>
+      Ports?.some(
+        (binding) => binding.Type === "tcp" && binding.PublicPort === port,
+      ),
+    )
+  )
+    return false;
+  return new Promise<boolean>((resolve, reject) => {
+    const probe = createServer();
+    probe.once("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "EADDRINUSE") resolve(false);
+      else reject(error);
+    });
+    probe.listen(port, "0.0.0.0", () => probe.close(() => resolve(true)));
+  });
+}
+
+export async function startCoreContainer(options: {
+  docker: DockerClientLike;
+  image: string;
+  log: Log;
+  withoutSpeakers?: boolean;
+}) {
+  const { docker, image, log, withoutSpeakers = false } = options;
+  const container = docker.getContainer(coreContainerName);
+  await docker.createContainer(coreContainerOptions(image, withoutSpeakers));
+  try {
+    await container.start();
+  } catch (error) {
+    if (withoutSpeakers || !speakerPortConflict(error)) throw error;
+    log(
+      `The speaker port is in use. Starting ${coreContainerName} without announcements.`,
+    );
+    await container.remove({ force: true });
+    await docker.createContainer(coreContainerOptions(image, true));
+    await docker.getContainer(coreContainerName).start();
+  }
 }
 
 // Whether a core's container can reach apps' sockets and packages. An older
@@ -210,6 +265,7 @@ export async function reconcileCore(options: {
   docker: DockerClientLike;
   image: string;
   log: Log;
+  portAvailable?: (port: number) => Promise<boolean>;
 }) {
   const { docker, image, log } = options;
   await ensureNetwork(docker, sanctumNetworkName);
@@ -217,27 +273,49 @@ export async function reconcileCore(options: {
   await ensureVolume(docker, socketVolumeName);
 
   const existing = await inspectContainer(docker, coreContainerName);
+  let withoutSpeakers = false;
   if (existing) {
     assertManaged(
       { labels: existing.Config.Labels, name: coreContainerName },
       coreRole,
     );
+    const published = publishedSpeakerPort();
+    if (
+      published !== null &&
+      existing.Config.Labels?.[speakerPortFallback] === "true"
+    ) {
+      const available =
+        options.portAvailable ?? ((port) => speakerPortAvailable(docker, port));
+      try {
+        withoutSpeakers = !(await available(published));
+      } catch (error) {
+        log(`Could not check the speaker port: ${errorMessage(error)}`);
+        withoutSpeakers = true;
+      }
+    }
     const lacks = !hasAppFolders(existing)
       ? "the folders apps need"
       : !hasInit(existing)
         ? "an init process"
-        : !hasSpeakerPort(existing)
+        : !withoutSpeakers && !hasSpeakerPort(existing)
           ? "the port speakers fetch sound from"
           : null;
     if (!lacks) {
-      const started = await startExistingContainer({
-        container: existing,
-        docker,
-        log,
-        networkName: sanctumNetworkName,
-      });
-      if (started) {
-        return existing.Image;
+      try {
+        const started = await startExistingContainer({
+          container: existing,
+          docker,
+          log,
+          networkName: sanctumNetworkName,
+        });
+        if (started) return existing.Image;
+      } catch (error) {
+        if (withoutSpeakers || !speakerPortConflict(error)) throw error;
+        log(
+          `The speaker port is in use. Starting ${coreContainerName} without announcements.`,
+        );
+        await docker.getContainer(existing.Id).remove({ force: true });
+        withoutSpeakers = true;
       }
     } else {
       // Once, and with the image it has. Its data is in its volume.
@@ -251,7 +329,11 @@ export async function reconcileCore(options: {
   const desiredImage = existing?.Image ?? image;
   log(`Creating ${coreContainerName} from ${desiredImage}`);
   await ensureImage(docker, desiredImage);
-  await createCoreContainer(docker, desiredImage);
-  await docker.getContainer(coreContainerName).start();
+  await startCoreContainer({
+    docker,
+    image: desiredImage,
+    log,
+    withoutSpeakers,
+  });
   return (await inspectContainer(docker, coreContainerName))!.Image;
 }

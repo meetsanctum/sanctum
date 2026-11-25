@@ -155,6 +155,39 @@ describe("reconcileCore and the port speakers fetch sound from", () => {
     return id;
   }
 
+  it("keeps the core running without announcements while the port is occupied", async () => {
+    const { docker, log } = setup();
+    await olderCore(docker);
+    const portAvailable = vi.fn(async () => false);
+    const reconcile = () =>
+      reconcileCore({ docker, image: coreImage, log, portAvailable });
+    docker.startError = new Error(
+      "Bind for 0.0.0.0:4180 failed: port is already allocated",
+    );
+
+    await reconcile();
+    const fallback = docker.container(coreContainerName)!;
+    expect(fallback.running).toBe(true);
+    expect(fallback.options.Env).toContain("CORE_SPEAKER_PORT=0");
+    expect(
+      hasSpeakerPort(await docker.getContainer(fallback.id).inspect()),
+    ).toBe(false);
+
+    docker.events = [];
+    await reconcile();
+    expect(docker.container(coreContainerName)?.id).toBe(fallback.id);
+    expect(docker.events).toEqual([]);
+
+    portAvailable.mockResolvedValue(true);
+    await reconcile();
+    const restored = docker.container(coreContainerName)!;
+    expect(restored.id).not.toBe(fallback.id);
+    expect(restored.running).toBe(true);
+    expect(
+      hasSpeakerPort(await docker.getContainer(restored.id).inspect()),
+    ).toBe(true);
+  });
+
   it("recreates once a core without it, on the image it has", async () => {
     const { docker, log, reconcile } = setup();
     const older = await olderCore(docker);

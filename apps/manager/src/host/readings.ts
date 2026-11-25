@@ -19,6 +19,7 @@ export type NetworkReading = {
   interface: string;
   kind: "wifi" | "ethernet" | "other";
   address: string | null;
+  cidr?: string;
   // Wi-Fi's signal, in dBm, and Ethernet's link speed, in Mb/s.
   signalDbm: number | null;
   speedMbps: number | null;
@@ -218,10 +219,9 @@ export function createHostReadings(
       const name = route ? defaultInterfaceOf(route) : null;
       if (!name) return null;
       const kind = kindOf(name);
-      const address =
-        interfaces()[name]?.find(
-          (each) => each.family === "IPv4" && !each.internal,
-        )?.address ?? null;
+      const ipv4 = interfaces()[name]?.find(
+        (each) => each.family === "IPv4" && !each.internal,
+      );
       const wireless = kind === "wifi" ? await text("proc/net/wireless") : null;
       const speed =
         kind === "ethernet"
@@ -230,7 +230,8 @@ export function createHostReadings(
       return {
         interface: name,
         kind,
-        address,
+        address: ipv4?.address ?? null,
+        ...(ipv4?.cidr && { cidr: ipv4.cidr }),
         signalDbm: wireless ? signalOf(wireless, name) : null,
         // An interface without a link says -1.
         speedMbps: speed !== null && speed > 0 ? speed : null,

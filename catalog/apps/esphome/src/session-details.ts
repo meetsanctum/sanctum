@@ -1,5 +1,5 @@
 import { maxDeviceCapabilities } from "@meetsanctum/app-sdk";
-import { MediaPlayerFormatPurpose } from "esphome-client";
+import { MediaPlayerFormatPurpose, type Entity } from "esphome-client";
 
 import type { Session } from "./connection.js";
 import { mapEntities } from "./entities.js";
@@ -17,6 +17,7 @@ const sessions = new WeakMap<
   {
     parts: ReturnType<typeof speakerPartsOf>;
     mapping: ReturnType<typeof mapEntities>;
+    announcementPlayer: Extract<Entity, { type: "media_player" }> | undefined;
   }
 >();
 
@@ -24,9 +25,18 @@ export function describeSession(session: SessionDescription) {
   const cached = sessions.get(session);
   if (cached) return cached;
   const mapping = mapEntities(session.entities);
-  const player = mapping.mapped.find(
-    ({ capability }) => capability.kind === "media",
+  const announcement = mapping.mapped.find(
+    ({ entity }) =>
+      entity.type === "media_player" &&
+      (entity.supportedFormats ?? []).some(
+        (format) =>
+          format.purpose === MediaPlayerFormatPurpose.ANNOUNCEMENT &&
+          String(format.format).toLowerCase() === "flac",
+      ),
   );
+  const player =
+    announcement ??
+    mapping.mapped.find(({ capability }) => capability.kind === "media");
   const parts = player ? speakerPartsOf(session) : null;
   if (parts && player) {
     if (mapping.mapped.length === maxDeviceCapabilities) {
@@ -41,27 +51,29 @@ export function describeSession(session: SessionDescription) {
       }
     }
     const mutes = parts.mute !== null;
-    const announces =
-      player.entity.type === "media_player" &&
-      (player.entity.supportedFormats ?? []).some(
-        (format) =>
-          format.purpose === MediaPlayerFormatPurpose.ANNOUNCEMENT &&
-          // The library types the format's name loosely; the wire carries
-          // it as text, such as "flac".
-          String(format.format).toLowerCase() === "flac",
-      );
     mapping.mapped.push({
       capability: {
         id: "audio",
         kind: "audio",
-        features: { mutes, muteSwitch: mutes, announces },
+        features: {
+          mutes,
+          muteSwitch: mutes,
+          announces: announcement !== undefined,
+        },
       },
       // Its media player's stands in where it has no Mute switch, whose
       // reports are the media part's.
       entity: parts.mute ?? player.entity,
     });
   }
-  const details = { parts, mapping };
+  const details = {
+    parts,
+    mapping,
+    announcementPlayer:
+      parts && announcement?.entity.type === "media_player"
+        ? announcement.entity
+        : undefined,
+  };
   sessions.set(session, details);
   return details;
 }
