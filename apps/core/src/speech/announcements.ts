@@ -196,7 +196,8 @@ export function createAnnouncements(options: {
   return {
     /**
      * Makes an announcement for a device from speech as it comes: its
-     * address straight away, the sound as `speech` yields it. Refused while
+     * address straight away, the sound as `speech` yields it, and `ready`
+     * once there is sound to play. Refused while
      * the device has one that hasn't played yet, or the home has too many.
      * Calls `onUnfetched` if the address expires without a fetch.
      */
@@ -240,6 +241,8 @@ export function createAnnouncements(options: {
         announcement.chunks.push(bytes);
         for (const listener of [...announcement.listeners]) listener();
       };
+      let sounded: (ready: boolean) => void = () => {};
+      const ready = new Promise<boolean>((resolve) => (sounded = resolve));
       const encoded = (async () => {
         let encoder: ReturnType<typeof createFlacEncoder> | null = null;
         try {
@@ -249,6 +252,7 @@ export function createAnnouncements(options: {
             announcement.rate = audio.rate;
             announcement.samples += audio.samples.length;
             append(encoder.push(audio.samples));
+            if (announcement.samples > 0) sounded(true);
           }
           if (announcement.stop.signal.aborted) return false;
           if (!encoder || announcement.samples === 0) {
@@ -268,10 +272,16 @@ export function createAnnouncements(options: {
           return false;
         }
       })();
+      void encoded.then((done) => sounded(done));
       return {
         url: `http://${network.host}:${publishedPort}${path}`,
         /** Whether FLAC encoding finished successfully. */
         encoded,
+        /**
+         * Whether there is sound to play: true once the first of it is
+         * encoded, false if the speech failed before any.
+         */
+        ready,
         /** Withdraws it, as when its speaker couldn't be told. */
         withdraw: () => end(announcement),
         /** Whether its speaker has fetched it. */

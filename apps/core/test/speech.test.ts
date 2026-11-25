@@ -272,6 +272,70 @@ describe("createSpeech", () => {
     speech.stop();
   });
 
+  it("tells the speaker only once there is sound to play", async () => {
+    const loading = deferredDelivery();
+    const synthesize = vi
+      .spyOn(wyoming, "synthesize")
+      .mockImplementation(async function* () {
+        await loading.promise;
+        yield { rate: 22_050, samples: new Int16Array(100) };
+      });
+    const { speech, told } = setup({
+      devices: [],
+      serviceUrl: "tcp://127.0.0.1:1",
+    });
+    announcements!.port = () => 4180;
+    speech.start();
+    try {
+      const said = speech.speak({
+        device: "a",
+        text: "Hi",
+        language: "en",
+        actor: { kind: "app", id: "sanctum.example" },
+      });
+      await settle();
+      // The voice is still loading: nothing for the speaker to fetch yet.
+      expect(told).toEqual([]);
+      expect(announcements!.busy("a")).toBe(true);
+      loading.resolve();
+      expect(await (await said).encoded).toBe(true);
+      expect(told).toHaveLength(1);
+    } finally {
+      speech.stop();
+      synthesize.mockRestore();
+    }
+  });
+
+  it("tells no speaker about speech that fails before any sound", async () => {
+    const synthesize = vi
+      .spyOn(wyoming, "synthesize")
+      .mockImplementation(async function* () {
+        yield* [];
+        throw new Error("connect ECONNREFUSED");
+      });
+    const { speech, told } = setup({
+      devices: [],
+      serviceUrl: "tcp://127.0.0.1:1",
+    });
+    announcements!.port = () => 4180;
+    speech.start();
+    try {
+      await expect(
+        speech.speak({
+          device: "a",
+          text: "Hi",
+          language: "en",
+          actor: { kind: "app", id: "sanctum.example" },
+        }),
+      ).rejects.toThrow(SpeechUnavailable);
+      expect(told).toEqual([]);
+      expect(announcements!.busy("a")).toBe(false);
+    } finally {
+      speech.stop();
+      synthesize.mockRestore();
+    }
+  });
+
   it("is unavailable while Piper isn't running or the host's address is unknown", async () => {
     const actor = { kind: "app", id: "sanctum.example" } as const;
     const stopped = setup({ devices: [speaker("a", true)], serviceUrl: null });

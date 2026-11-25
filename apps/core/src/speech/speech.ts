@@ -244,7 +244,8 @@ export function createSpeech(options: {
      * Says `text` on a smart speaker in the language's voice, as `actor`:
      * resolves once the speaker has been told to play it, with whether all
      * of it was then encoded still to come. Throws SpeechUnavailable while
-     * the speech service or the host's address isn't there, and the
+     * the speech service or the host's address isn't there or the speech
+     * fails before any sound, and the
      * announcement's own refusal while the speaker is still speaking.
      */
     async speak(input: {
@@ -282,6 +283,14 @@ export function createSpeech(options: {
           if (address?.value === network) address = null;
         },
       );
+      // The speaker hears of it only once there is sound to play: one that
+      // waits on an empty stream, while a voice loads, can give up silently.
+      if (!(await announcement.ready)) {
+        announcement.withdraw();
+        throw new SpeechUnavailable(
+          "The announcement audio couldn't be generated.",
+        );
+      }
       try {
         await options.devices.announce(
           input.device,
