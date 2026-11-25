@@ -75,15 +75,9 @@ export function createAnnounceTool(options: {
     const players = device.capabilities.filter(
       (capability) => capability.kind === "media",
     );
-    if (players.some(({ observed }) => observed?.muted === true)) {
-      throw new NotHeard(
-        toolError(
-          "muted",
-          `“${device.name}” is muted, so nobody would hear it. Someone at home unmutes it.`,
-        ),
-      );
-    }
-    // A driver can pick any of the device's players for announcements.
+    // A driver can pick any of the device's players for announcements. A
+    // speaker turned all the way down may report itself muted as well, and
+    // turning it up is what helps.
     if (
       players.length &&
       players.every(({ observed }) => observed?.volume === 0)
@@ -92,6 +86,14 @@ export function createAnnounceTool(options: {
         toolError(
           "muted",
           `“${device.name}” is turned all the way down, so nobody would hear it.`,
+        ),
+      );
+    }
+    if (players.some(({ observed }) => observed?.muted === true)) {
+      throw new NotHeard(
+        toolError(
+          "muted",
+          `“${device.name}” is muted, so nobody would hear it. Someone at home unmutes it.`,
         ),
       );
     }

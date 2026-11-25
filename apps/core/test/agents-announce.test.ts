@@ -187,7 +187,10 @@ describe("the announce tool", () => {
   });
 
   it("refuses a speaker turned all the way down", async () => {
-    const { run, said, recorded } = setup(speakerDevice({ volume: 0 }));
+    // A Voice PE turned all the way down reports itself muted too.
+    const { run, said, recorded } = setup(
+      speakerDevice({ volume: 0, muted: true }),
+    );
     const result = await run({ speaker: "speaker", text: "Hi" });
     expect(result.structuredContent).toEqual({
       error: "muted",
