@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 
+import { isMotionReduced } from "./reduce-motion";
+
 // How long a tile shows that a command to it failed, in ms.
 const showFailure = 900;
 
@@ -19,7 +21,7 @@ export function showFailed(
     ],
     { duration: showFailure, easing: "ease-out" },
   );
-  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+  if (isMotionReduced()) return;
   button?.animate?.(
     [0, -6, 6, -4, 4, -2, 0].map((x) => ({ transform: `translateX(${x}px)` })),
     { duration: showFailure / 2, delay: 60, easing: "ease-in-out" },

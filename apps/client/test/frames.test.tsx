@@ -7,6 +7,7 @@ import {
   startFrame,
   useAppClient,
   useReducedEffects,
+  useReducedMotion,
   type AppUi,
   type DevicePageProps,
   type PageProps,
@@ -113,6 +114,46 @@ describe("a page in its frame", () => {
     await vi.waitFor(() => expect(input()?.matches(reducedShadow)).toBe(true));
     bridge.send({ type: "context", context });
     await vi.waitFor(() => expect(input()?.matches(reducedShadow)).toBe(false));
+  });
+
+  it("applies Reduce motion from the shell, or the system's where the shell doesn't say", async () => {
+    const systemMotion = Object.assign(new EventTarget(), { matches: false });
+    vi.stubGlobal("matchMedia", (media: string) => {
+      expect(media).toBe("(prefers-reduced-motion: reduce)");
+      return systemMotion;
+    });
+    function Moving() {
+      const reduced = useReducedMotion();
+      return <p data-reduced={reduced}>moving</p>;
+    }
+    const { bridge } = framed(
+      async () => ({ default: { ...ui, pages: { main: Moving } } }),
+      info,
+      { ...context, motion: "reduced" },
+    );
+    const shown = () => document.querySelector("p[data-reduced]");
+    await vi.waitFor(() =>
+      expect(shown()?.getAttribute("data-reduced")).toBe("true"),
+    );
+    bridge.send({
+      type: "context",
+      context: { ...context, motion: "regular" },
+    });
+    await vi.waitFor(() =>
+      expect(shown()?.getAttribute("data-reduced")).toBe("false"),
+    );
+    // A shell that doesn't say leaves it to the system's setting.
+    systemMotion.matches = true;
+    systemMotion.dispatchEvent(new Event("change"));
+    bridge.send({ type: "context", context });
+    await vi.waitFor(() =>
+      expect(shown()?.getAttribute("data-reduced")).toBe("true"),
+    );
+    systemMotion.matches = false;
+    systemMotion.dispatchEvent(new Event("change"));
+    await vi.waitFor(() =>
+      expect(shown()?.getAttribute("data-reduced")).toBe("false"),
+    );
   });
 
   it("hears the shell's live updates while it listens, and none once closed", async () => {

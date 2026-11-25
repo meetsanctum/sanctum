@@ -24,6 +24,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { isMotionReduced } from "./reduce-motion";
 import { whiteOf } from "./tiles";
 import { usePreview } from "./use-preview";
 import { useThrottledSend } from "./use-throttled-send";
@@ -162,28 +163,24 @@ export function LightPicker(props: {
   const on = state.on && !disabled;
 
   // A new layer's circles fly out from the middle, and focus moves to it
-  // when a press inside the picker opened it.
+  // when a press inside the picker opened it. Under Reduce motion they are
+  // there at once, still.
   useLayoutEffect(() => {
     const box = picker.current;
     if (!box) return;
-    const reduced = window.matchMedia?.(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-    box.querySelectorAll<HTMLElement>("[data-fly]").forEach((circle, index) => {
+    const circles = isMotionReduced()
+      ? []
+      : box.querySelectorAll<HTMLElement>("[data-fly]");
+    circles.forEach((circle, index) => {
       const dx = (50 - Number(circle.dataset.x)) * pickerPerCircle;
       const dy = (50 - Number(circle.dataset.y)) * pickerPerCircle;
       circle.animate?.(
-        reduced
-          ? [{ opacity: 0 }, { opacity: 1 }]
-          : [
-              {
-                opacity: 0,
-                transform: `translate(${dx}%, ${dy}%) scale(0.4)`,
-              },
-              { opacity: 1, transform: "none" },
-            ],
+        [
+          { opacity: 0, transform: `translate(${dx}%, ${dy}%) scale(0.4)` },
+          { opacity: 1, transform: "none" },
+        ],
         {
-          duration: reduced ? 150 : 360,
+          duration: 360,
           delay: index * 15,
           easing: "cubic-bezier(0.22, 1, 0.36, 1)",
           fill: "backwards",

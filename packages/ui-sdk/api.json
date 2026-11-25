@@ -1,5 +1,5 @@
 {
-  "version": "0.1.27",
+  "version": "0.1.28",
   "react": "19.3.1",
   "exports": {
     "@meetsanctum/ui-sdk": [
@@ -82,6 +82,7 @@
       "formatWidgetValue",
       "frameBridge",
       "isFrameHello",
+      "isMotionReduced",
       "lightColour",
       "mainPage",
       "pressGroups",
@@ -95,6 +96,7 @@
       "useAppSettings",
       "usePhone",
       "useReducedEffects",
+      "useReducedMotion",
       "useShowFailed",
       "useTemperatureUnit",
       "whiteOf",
@@ -2701,6 +2703,7 @@
       "export type FrameContext = {",
       "    mode: \"day\" | \"evening\";",
       "    effects?: \"regular\" | \"reduced\";",
+      "    motion?: \"regular\" | \"reduced\";",
       "    temperatureUnit: TemperatureUnit | null;",
       "    timeZone: string | null;",
       "};",
@@ -2848,6 +2851,7 @@
       "export * from \"./page-section\";",
       "export * from \"./presses\";",
       "export * from \"./reduce-effects\";",
+      "export * from \"./reduce-motion\";",
       "export * from \"./section-button\";",
       "export * from \"./section-tile\";",
       "export * from \"./segmented-control\";",
@@ -2988,6 +2992,10 @@
     ],
     "reduce-effects.d.ts": [
       "export declare function useReducedEffects(): boolean;"
+    ],
+    "reduce-motion.d.ts": [
+      "export declare const isMotionReduced: () => boolean;",
+      "export declare function useReducedMotion(): boolean;"
     ],
     "section-button.d.ts": [
       "import type { LucideIcon } from \"lucide-react\";",

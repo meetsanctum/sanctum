@@ -1,5 +1,5 @@
 import type { DeviceInfo, JoinedDevice } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, isMotionReduced } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import {
   useEffect,
@@ -335,11 +335,7 @@ function useMoveUp(isWaiting: boolean, words: string | null) {
     window.addEventListener("resize", rememberLayout);
     const stopWatching = () =>
       window.removeEventListener("resize", rememberLayout);
-    if (
-      !before ||
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-    )
-      return stopWatching;
+    if (!before || isMotionReduced()) return stopWatching;
 
     for (const [index, element] of elements.entries()) {
       const old = before.parts[index]!;

@@ -65,7 +65,7 @@ describe("the knot loader's built CSS", () => {
     "draws and pulls out the %s path every 4.8 s, over and over",
     (loop) => {
       expect(
-        animationOf("prefers-reduced-motion:no-preference", [
+        animationOf(moving, [
           ".knot-loader path",
           `.knot-loader .knot-${loop}`,
         ]),
@@ -92,9 +92,7 @@ describe("the knot loader's built CSS", () => {
   });
 
   it("turns the drawing a quarter with each turn of the line", () => {
-    expect(
-      animationOf("prefers-reduced-motion:no-preference", [".knot-loader g"]),
-    ).toEqual({
+    expect(animationOf(moving, [".knot-loader g"])).toEqual({
       name: "knot-turns",
       duration: "19.2s",
       timingFunction: "step-end",
@@ -106,16 +104,40 @@ describe("the knot loader's built CSS", () => {
   });
 
   it("breathes where motion is reduced", () => {
-    expect(
-      animationOf("prefers-reduced-motion:reduce", [".knot-loader"]),
-    ).toEqual({
+    expect(animationOf(still, [".knot-loader"])).toEqual({
       name: "knot-breathe",
       duration: "2.4s",
       timingFunction: "ease-in-out",
       iterationCount: "infinite",
     });
+    expect(animationOf(still, [".knot-loader g"]).name).toBe("none");
+    for (const loop of ["upright", "lying"]) {
+      expect(
+        animationOf(still, [".knot-loader path", `.knot-loader .knot-${loop}`])
+          .name,
+      ).toBe("none");
+    }
     expect(css).toContain("@keyframes knot-breathe{");
   });
+});
+
+it("builds both motion variants against data-motion", () => {
+  const reduced = ":where([data-motion=reduced],[data-motion=reduced] *)";
+  const regular =
+    ":where(:root:not([data-motion=reduced]),:root:not([data-motion=reduced]) *)";
+  const transition = ".motion-reduce\\:transition-none";
+  const entrance = ".motion-safe\\:animate-in";
+  expect(css).toContain(`${transition}${reduced}`);
+  expect(css).toContain(`${entrance}${regular}`);
+  const systemMotionSelectors = rules
+    .filter(({ media }) => media.includes("prefers-reduced-motion"))
+    .flatMap(({ selectors }) => selectors);
+  expect(
+    systemMotionSelectors.some(
+      (selector) =>
+        selector.startsWith(transition) || selector.startsWith(entrance),
+    ),
+  ).toBe(false);
 });
 
 describe("the top bar's fade in the built CSS", () => {
@@ -234,13 +256,12 @@ describe("the frame's backing under the glass in the built CSS", () => {
   });
 
   it("keeps following the glass's fade where motion is reduced", () => {
-    const reduced = rules.filter((rule) =>
-      rule.media.includes("prefers-reduced-motion:reduce"),
+    const backingSelectors = [".frame", ".frame-under-glass"].map(
+      (selector) => `${still} ${selector}`,
     );
-    const backingSelectors = [".frame", ".frame-under-glass"];
 
     expect(
-      reduced
+      rules
         .filter((rule) =>
           rule.selectors.some((selector) =>
             backingSelectors.includes(selector),
@@ -428,15 +449,22 @@ function declarationsOf(
     );
 }
 
-// The animation an element gets where `media` applies, from the rules for
-// `selectors`, least specific first, each overriding the ones before.
-function animationOf(media: string, selectors: string[]): Animation {
+// What draws where motion is reduced, by the system or by Reduce motion
+// (data-motion on <html>), and what draws elsewhere.
+const still = ":where([data-motion=reduced])";
+const moving = ":where(:root:not([data-motion=reduced]))";
+
+// The animation an element gets from its rules, those under `scope` too.
+function animationOf(scope: string, selectors: string[]): Animation {
   const animation = { ...initial };
   for (const selector of selectors) {
     for (const rule of rules) {
       if (
-        !rule.selectors.includes(selector) ||
-        (rule.media !== "" && !rule.media.includes(media))
+        rule.media !== "" ||
+        !(
+          rule.selectors.includes(selector) ||
+          rule.selectors.includes(`${scope} ${selector}`)
+        )
       ) {
         continue;
       }

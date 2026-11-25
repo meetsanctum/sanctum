@@ -50,6 +50,7 @@ afterEach(async () => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  delete document.documentElement.dataset.motion;
 });
 
 const restOnEdge = async () => {
@@ -241,6 +242,7 @@ describe("sidebar transitions", () => {
       addEventListener() {},
       removeEventListener() {},
     }));
+    document.documentElement.dataset.motion = "reduced";
     await act(async () => root.render(<Sidebar />));
 
     await act(async () => layout.toggle());
@@ -256,21 +258,15 @@ describe("sidebar transitions", () => {
     await act(async () => vi.advanceTimersByTime(80));
     expect(layout.isSliding).toBe(true);
 
-    vi.stubGlobal("matchMedia", () => ({
-      matches: true,
-      addEventListener() {},
-      removeEventListener() {},
-    }));
-    await act(async () => root.render(<Sidebar />));
+    await act(async () => {
+      document.documentElement.dataset.motion = "reduced";
+    });
 
     expect(layout.isSliding).toBe(false);
 
-    vi.stubGlobal("matchMedia", (query: string) => ({
-      matches: !query.includes("prefers-reduced-motion"),
-      addEventListener() {},
-      removeEventListener() {},
-    }));
-    await act(async () => root.render(<Sidebar />));
+    await act(async () => {
+      delete document.documentElement.dataset.motion;
+    });
     expect(layout.docked).toBe(false);
     expect(layout.isSliding).toBe(false);
   });
