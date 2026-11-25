@@ -275,7 +275,7 @@ describe("Settings → Clients", () => {
     await refresh();
     expect(choice("Reduce motion", "On").dataset.state).toBe("on");
     expect(document.querySelector("[role=dialog]")?.textContent).toContain(
-      "On now. Automatic turns on when Kitchen tablet is known to be slow or asks for reduced transparency.",
+      "On now, since Kitchen tablet asks for reduced transparency.",
     );
     shownTablet = {
       ...shownTablet,

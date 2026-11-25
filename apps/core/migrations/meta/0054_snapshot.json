@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8f9aee49-b0c1-4610-9d9f-623dcd853a0b",
+  "id": "c5f98133-7aed-43cd-b443-aaa8f132f759",
   "prevId": "58206239-a3c7-45cd-a372-9c69e8bdaad6",
   "tables": {
     "activity": {
@@ -1002,6 +1002,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'automatic'"
+        },
+        "drawing_revision": {
+          "name": "drawing_revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         },
         "drawn": {
           "name": "drawn",

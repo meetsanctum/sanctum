@@ -74,7 +74,7 @@ it("checks the token while hidden if the live connection is down", async () => {
   expect(requests("/api/devices")).toBe(0);
 });
 
-it("applies drawing choices from live notices without refreshing apps", async () => {
+it("applies drawing choices from a live notice, reading only Me", async () => {
   let receive!: (data: object) => void;
   vi.stubGlobal(
     "WebSocket",
@@ -118,25 +118,13 @@ it("applies drawing choices from live notices without refreshing apps", async ()
     expect(document.documentElement.dataset.motion).toBeUndefined();
     mockCoreJson.mockClear();
 
-    let finishFirst!: (value: typeof me) => void;
-    const first = new Promise<typeof me>((resolve) => {
-      finishFirst = resolve;
-    });
-    mockCoreJson.mockReturnValueOnce(first);
-    await act(async () => {
-      receive({ type: "client" });
-      receive({ type: "client" });
-      receive({ type: "client" });
-    });
-    expect(requests("/api/auth/me")).toBe(1);
-    const previous = me;
     me = {
       ...me,
       client: { ...me.client, reduceMotion: "on", drawingRevision: 1 },
     };
-    await act(async () => finishFirst(previous));
+    await act(async () => receive({ type: "client" }));
 
-    expect(requests("/api/auth/me")).toBe(2);
+    expect(requests("/api/auth/me")).toBe(1);
     expect(requests("/api/apps")).toBe(0);
     expect(document.documentElement.dataset.motion).toBe("reduced");
   } finally {

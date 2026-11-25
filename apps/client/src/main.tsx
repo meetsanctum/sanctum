@@ -13,16 +13,15 @@ import "./styles.css";
 
 reloadOnFailedImports();
 followEffects();
+void followStoredDrawing();
 
 const root = document.getElementById("root");
 if (!root) {
   throw new Error("Missing #root element");
 }
 
-void followStoredDrawing().then(() => {
-  createRoot(root).render(
-    <StrictMode>
-      <App />
-    </StrictMode>,
-  );
-});
+createRoot(root).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+);

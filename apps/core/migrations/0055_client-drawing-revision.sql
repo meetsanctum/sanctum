@@ -1,1 +1,0 @@
-ALTER TABLE `auth_clients` ADD `drawing_revision` integer DEFAULT 0 NOT NULL;

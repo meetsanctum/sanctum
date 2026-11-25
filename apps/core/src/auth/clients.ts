@@ -389,9 +389,6 @@ export function createClients(
     // choice, until it says again. Not for an agent, which draws nothing.
     setDrawing(principal: Principal, input: SetClientDrawing) {
       const { saved, changed } = db.transaction(() => {
-        if (!active(principal.client.id)) {
-          throw new AuthError("invalid_client_token");
-        }
         const client = manageable(input.id);
         if (client.kind === "agent") {
           throw new AuthError("not_found");

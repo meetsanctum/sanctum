@@ -42,14 +42,22 @@ export function drawnText(client: ClientInfo) {
   return null;
 }
 
-// What a choice means on this client, and what it currently draws with.
+// What a choice means on this client, Automatic by what it said it draws
+// with under its current choices: why it is on now, or where it would turn
+// on.
 function effectsHint(client: ClientInfo, choice: DrawingChoice) {
   const { name, drawn } = client;
   if (choice === "on") return `Always drawn plainly on ${name}.`;
   if (choice === "off") return `Every effect, even where ${name} feels slow.`;
-  const when = `${name} is known to be slow or asks for reduced transparency.`;
-  if (!drawn) return `On where ${when}`;
-  return `${drawn.effects === "reduced" ? "On" : "Off"} now. Automatic turns on when ${when}`;
+  if (!drawn) {
+    return `On where ${name} is known to be slow or asks for reduced transparency.`;
+  }
+  if (drawn.effects === "regular") {
+    return `Off now. It turns on where ${name} asks for reduced transparency.`;
+  }
+  return drawn.slowDevice
+    ? `On now, since ${name} is known to be slow.`
+    : `On now, since ${name} asks for reduced transparency.`;
 }
 
 function motionHint(client: ClientInfo, choice: DrawingChoice) {
@@ -57,9 +65,15 @@ function motionHint(client: ClientInfo, choice: DrawingChoice) {
   if (choice === "on") return `Nothing moves on ${name}.`;
   if (choice === "off")
     return `Every movement, even where ${name} asks for less.`;
-  const when = `${name} is known to be slow or asks for reduced motion.`;
-  if (!drawn) return `On where ${when}`;
-  return `${drawn.motion === "reduced" ? "On" : "Off"} now. Automatic turns on when ${when}`;
+  if (!drawn) {
+    return `On where ${name} is known to be slow or asks for reduced motion.`;
+  }
+  if (drawn.motion === "regular") {
+    return `Off now. It turns on where ${name} asks for reduced motion.`;
+  }
+  return drawn.slowDevice
+    ? `On now, since ${name} is known to be slow.`
+    : `On now, since ${name} asks for reduced motion.`;
 }
 
 type DrawingChange = Omit<SetClientDrawing, "id">;

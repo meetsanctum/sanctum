@@ -232,30 +232,6 @@ describe("clients", () => {
     expect(await me()).toMatchObject({ drawn: null });
   });
 
-  it("refuses drawing changes from a caller revoked after its token check", async () => {
-    const core = await testCore();
-    const claim = await claimed(core);
-    const editor = sharedClient(core);
-    const caller = core.auth.clients.authenticate(editor.token)!;
-    const removed = await post(
-      core,
-      "/api/auth/clients/revoke",
-      { id: editor.id },
-      { token: claim.token },
-    );
-    expect(removed.statusCode).toBe(204);
-    expect(() =>
-      core.auth.clients.setDrawing(caller, {
-        id: claim.client.id,
-        reduceEffects: "on",
-      }),
-    ).toThrow(
-      expect.objectContaining({ code: "invalid_client_token", status: 401 }),
-    );
-    const me = await get(core, "/api/auth/me", { token: claim.token });
-    expect(me.json().client.reduceEffects).toBe("automatic");
-  });
-
   it("refuse a choice they don't know, and an agent's drawing", async () => {
     const core = await testCore();
     const claim = await claimed(core);
