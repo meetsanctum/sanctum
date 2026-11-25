@@ -714,7 +714,11 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
         session.client.command(entityId("switch", entity.objectId), {
           state: command.command.on,
         });
-      } else if (!(await sendSpeakerCommand(session, entity, command))) {
+      } else if (
+        !(await sendSpeakerCommand(session, entity, command, (playerKey) =>
+          owned.telemetry.announced(playerKey),
+        ))
+      ) {
         // A motion sensor's settings are its configuration's, not Sanctum's.
         throw new ActionError(
           "not_found",

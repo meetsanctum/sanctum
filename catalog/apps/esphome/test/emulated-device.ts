@@ -610,9 +610,10 @@ export class EmulatedDevice {
       ...this.states[key],
     };
     if (typeof said.volume === "number") now.volume = said.volume;
-    // The test decides when the announced audio ends.
+    // An announcement it was asked to play shows as playing, as the Voice
+    // PE's firmware of 2026.6 shows it; the test says when it ends.
     if (said.announcement === true && typeof said.mediaUrl === "string") {
-      now.state = MediaPlayerState.ANNOUNCING;
+      now.state = MediaPlayerState.PLAYING;
     }
     switch (said.command) {
       case MediaPlayerCommand.PLAY:

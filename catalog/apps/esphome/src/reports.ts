@@ -4,7 +4,7 @@ import type {
   DeviceRegistration,
   MediaActivity,
 } from "@meetsanctum/app-sdk";
-import type { TelemetryEvent } from "esphome-client";
+import { MediaPlayerState, type TelemetryEvent } from "esphome-client";
 
 import type { Session, Timings } from "./connection.js";
 import { signalOf, type Mapping } from "./entities.js";
@@ -13,6 +13,17 @@ import { connectionFactsOf, describeSession } from "./session-details.js";
 import { audioStateOf, mutedOf } from "./speaker.js";
 import { stateOf } from "./states.js";
 import { declineRequests } from "./voice.js";
+
+// An announcement Sanctum sent, on the player that got it. The Voice PE's
+// firmware reports an announcement it was asked for as playing, not
+// announcing, so that player's playing reads as an announcement: from its
+// first report of playing, which comes within a second of the command, until
+// it reports anything else. One that never starts playing, as when its
+// address fails, is dropped, so it can't hide music started after it.
+/** How soon the player says it's playing an announcement, or it didn't. */
+const announcementStartsMs = 5_000;
+/** The longest an announcement holds the player's own activity. */
+const announcementHeldMs = 5 * 60_000;
 
 // What a device says, told to the core: each part's state, each press once,
 // and its Wi-Fi signal kept for its page.
@@ -94,8 +105,31 @@ export function createReports(
         : [],
     ),
   );
+  let announcing: { key: number; sentAt: number; started: boolean } | null =
+    null;
+  // An event from the player announcing, read as an announcement while it is
+  // one, and the end of it otherwise.
+  function readAnnouncement(event: TelemetryEvent): TelemetryEvent {
+    if (!announcing || event.type !== "media_player") return event;
+    if (event.key !== announcing.key) return event;
+    const since = Date.now() - announcing.sentAt;
+    if (
+      event.state === MediaPlayerState.PLAYING &&
+      since < announcementHeldMs &&
+      (announcing.started || since < announcementStartsMs)
+    ) {
+      announcing.started = true;
+      return { ...event, state: MediaPlayerState.ANNOUNCING };
+    }
+    announcing = null;
+    return event;
+  }
   return {
     audio,
+    /** An announcement went to the player with this key. */
+    announced(playerKey: number) {
+      announcing = { key: playerKey, sentAt: Date.now(), started: false };
+    },
     registered(capabilities: DeviceRegistration["capabilities"]) {
       for (const id of activities.keys()) {
         if (
@@ -107,7 +141,16 @@ export function createReports(
     },
     state(event: TelemetryEvent, session: Session) {
       const { mapping } = describeSession(session);
-      report(ctx, facts, key, mapping, event, session, activities, audio.send);
+      report(
+        ctx,
+        facts,
+        key,
+        mapping,
+        readAnnouncement(event),
+        session,
+        activities,
+        audio.send,
+      );
     },
   };
 }

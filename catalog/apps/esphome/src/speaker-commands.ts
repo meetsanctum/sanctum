@@ -10,6 +10,8 @@ export async function sendSpeakerCommand(
   session: Session,
   entity: Entity,
   command: DriverCommand,
+  // Told the player an announcement went to, before it's sent.
+  announced: (playerKey: number) => void,
 ) {
   if (command.kind === "media" && entity.type === "media_player") {
     const sent = mediaCommandOf(command.command);
@@ -25,6 +27,7 @@ export async function sendSpeakerCommand(
     if (!announcementPlayer) {
       throw new ActionError("not_found", `${command.key} doesn't announce`);
     }
+    announced(announcementPlayer.key);
     session.client.command(
       entityId("media_player", announcementPlayer.objectId),
       {

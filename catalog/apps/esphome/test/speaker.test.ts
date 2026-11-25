@@ -1,5 +1,5 @@
 import { MediaPlayerState, VoiceAssistantEvent } from "esphome-client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { add, announce, startHome } from "./support.js";
 import { player, voicePe } from "./voice-pe.js";
@@ -213,8 +213,9 @@ describe("a smart speaker", () => {
 
     const url = "http://192.168.1.20:4180/a/abc.flac";
     await home.core.command(key, "audio", "audio", { announce: { url } });
+    // The Voice PE reports the announcement it was asked for as playing.
     await home.core.until(
-      () => device.states[201]?.state === MediaPlayerState.ANNOUNCING,
+      () => device.states[201]?.state === MediaPlayerState.PLAYING,
       "it plays the announcement",
     );
     expect(device.commands.at(-1)).toMatchObject({
@@ -222,7 +223,7 @@ describe("a smart speaker", () => {
       key: 201,
       fields: { mediaUrl: url, announcement: true },
     });
-    device.setState(201, { state: MediaPlayerState.ANNOUNCING, volume: 0.4 });
+    device.setState(201, { state: MediaPlayerState.PLAYING, volume: 0.4 });
     device.setState(207, { state: MediaPlayerState.PLAYING });
     await home.core.until(
       () =>
@@ -230,14 +231,49 @@ describe("a smart speaker", () => {
         home.core.latest(key, "media-music")?.activity === "playing",
       "the announcement and music are reported separately",
     );
+    // The announcing player is doing what it did before; the other plays.
     expect(home.core.latest(key, capability)?.activity).toBe("idle");
 
-    // If its announcement fails, a regular playback report is still read.
+    // Once it has stopped, playing is its own again.
+    device.setState(201, { state: MediaPlayerState.IDLE, volume: 0.5 });
+    await home.core.until(
+      () => home.core.latest(key, capability)?.volume === 50,
+      "the announcement's end",
+    );
     device.setState(201, { state: MediaPlayerState.PLAYING });
     await home.core.until(
       () => home.core.latest(key, capability)?.activity === "playing",
-      "regular playback after the announcement fails",
+      "playing after the announcement",
     );
+  });
+
+  it("doesn't let an announcement that never played hide music started after it", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      home = await startHome();
+      const device = await speaker();
+      const key = await add(home.core, device);
+      const capability = "media-media_player";
+      await home.core.until(
+        () => home.core.latest(key, capability)?.activity === "idle",
+        "idle",
+      );
+      // Its address fails: the speaker never reports playing it.
+      device.silent.add(201);
+      await home.core.command(key, "audio", "audio", {
+        announce: { url: "http://192.168.1.20:4180/a/gone.flac" },
+      });
+      device.silent.delete(201);
+
+      vi.setSystemTime(Date.now() + 6_000);
+      device.setState(201, { state: MediaPlayerState.PLAYING });
+      await home.core.until(
+        () => home.core.latest(key, capability)?.activity === "playing",
+        "music after an announcement that never played",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps a speaker's activity separate from another speaker with the same capability", async () => {
