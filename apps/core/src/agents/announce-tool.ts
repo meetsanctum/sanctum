@@ -26,11 +26,19 @@ import { minuteWindows } from "./limits.js";
 // speaker, in the home's voice, while "Speak on your smart speakers" is on.
 // The words are the agent's; the voice is always Sanctum's own, so an agent
 // can say "Dinner's ready", never play a recording. A speaker says one thing
-// at a time, and a few a minute is all an agent or a speaker gets, so an
-// agent can't talk over the household.
+// at a time, the next waiting its turn, and a few a minute is all an agent or
+// a speaker gets, so an agent can't talk over the household.
 
 /** The most an announcement says, in characters. */
 export const maxAnnouncementText = 300;
+
+// Why a speaker wouldn't be heard: checked when asked, and again when an
+// announcement that waited its turn is about to play.
+class NotHeard extends Error {
+  constructor(readonly answer: ReturnType<typeof toolError>) {
+    super("The speaker wouldn't be heard");
+  }
+}
 
 const announceLimits = {
   // Each agent's, and the home's, in the last minute.
@@ -58,6 +66,37 @@ export function createAnnounceTool(options: {
     );
   const speakers = () => options.devices.list().filter(announcesOn);
 
+  function heard(device: DeviceInfo) {
+    if (device.availability !== "online") {
+      throw new NotHeard(
+        toolError("unavailable", `“${device.name}” is offline.`),
+      );
+    }
+    const players = device.capabilities.filter(
+      (capability) => capability.kind === "media",
+    );
+    if (players.some(({ observed }) => observed?.muted === true)) {
+      throw new NotHeard(
+        toolError(
+          "muted",
+          `“${device.name}” is muted, so nobody would hear it. Someone at home unmutes it.`,
+        ),
+      );
+    }
+    // A driver can pick any of the device's players for announcements.
+    if (
+      players.length &&
+      players.every(({ observed }) => observed?.volume === 0)
+    ) {
+      throw new NotHeard(
+        toolError(
+          "muted",
+          `“${device.name}” is turned all the way down, so nobody would hear it.`,
+        ),
+      );
+    }
+  }
+
   const input = z.strictObject({
     speaker: z.string().min(1).max(64),
     text: z.string().trim().min(1).max(maxAnnouncementText),
@@ -74,7 +113,7 @@ export function createAnnounceTool(options: {
           .map((device) => `${device.id} (${JSON.stringify(device.name)})`)
           .join(", ")}.`,
         `\`text\` is up to ${maxAnnouncementText} characters, said as written in \`language\`, English unless the person speaks German.`,
-        "Each speaker says one thing at a time, and a few a minute. A speaker says nothing while offline, muted or turned all the way down.",
+        "Each speaker says one thing at a time: what you send while it speaks waits its turn, up to two waiting, and the call answers once it's sent. A few a minute per speaker. A speaker says nothing while offline, muted or turned all the way down.",
         "Announce only what the person asked to have said, and say where it went.",
         notInstructions,
       ].join(" "),
@@ -98,27 +137,11 @@ export function createAnnounceTool(options: {
           "There's no such smart speaker in the home.",
         );
       }
-      if (device.availability !== "online") {
-        return toolError("unavailable", `“${device.name}” is offline.`);
-      }
-      const players = device.capabilities.filter(
-        (capability) => capability.kind === "media",
-      );
-      if (players.some(({ observed }) => observed?.muted === true)) {
-        return toolError(
-          "muted",
-          `“${device.name}” is muted, so nobody would hear it. Someone at home unmutes it.`,
-        );
-      }
-      // A driver can pick any of the device's players for announcements.
-      if (
-        players.length &&
-        players.every(({ observed }) => observed?.volume === 0)
-      ) {
-        return toolError(
-          "muted",
-          `“${device.name}” is turned all the way down, so nobody would hear it.`,
-        );
+      try {
+        heard(device);
+      } catch (error) {
+        if (error instanceof NotHeard) return error.answer;
+        throw error;
       }
       // Hold both quotas before any dispatch can yield to another call.
       const reservations: (() => void)[] = [];
@@ -144,12 +167,17 @@ export function createAnnounceTool(options: {
           text,
           language,
           actor: agent.actor,
+          beforeTelling: () => heard(options.devices.get(device.id) ?? device),
         });
       } catch (error) {
         releaseQuota();
+        if (error instanceof NotHeard) return error.answer;
         if (error instanceof AnnouncementRefused) {
           return error.reason === "busy"
-            ? toolError("busy", `“${device.name}” is still saying something.`)
+            ? toolError(
+                "busy",
+                `“${device.name}” already has two announcements waiting. Try again in a minute.`,
+              )
             : toolError(
                 "limited",
                 "Too many announcements at once. Try again in a minute.",

@@ -3,6 +3,8 @@ import { createServer } from "node:net";
 /** A fake Piper that says one chunk of sound for any words. */
 export async function fakePiper(asked: unknown[]) {
   const server = createServer((socket) => {
+    // The core hangs up mid-answer when it stops or gives up on a voice.
+    socket.on("error", () => {});
     socket.once("data", (bytes) => {
       asked.push(JSON.parse(bytes.toString().split("\n")[0]!));
       const format = { rate: 22_050, width: 2, channels: 1 };

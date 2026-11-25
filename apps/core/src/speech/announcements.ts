@@ -13,7 +13,8 @@ import type { SpeechAudio } from "./wyoming.js";
 // address it's given, and the Voice PE takes plain HTTP only, so the core
 // serves each announcement on a port of its own, on the home's network:
 // a one-off address with 160 random bits in it, fetched once, gone a minute
-// after it's made, from memory only. The address is the gate, as nothing
+// after its turn comes, from memory only. A speaker says one at a time, as a
+// second cuts the first short on it, so the rest wait their turn in order. The address is the gate, as nothing
 // that fetches it can sign in; the port answers only the home's own network
 // and nothing but these addresses. The sound streams as it is spoken, so a
 // speaker starts after the first sentence, not the last.
@@ -45,6 +46,8 @@ function ipv4Of(address: string | undefined) {
 export const announcementKeptMs = 60_000;
 /** At most this many announcements at once in the whole home. */
 export const maxAnnouncements = 8;
+/** At most this many for one speaker: the one it says and those waiting. */
+export const maxPerSpeaker = 3;
 /** The most sound one announcement holds, in bytes (minutes of speech). */
 const maxAnnouncementBytes = 4 * 1024 * 1024;
 const pendingDeadlineMs = 5_000;
@@ -64,15 +67,19 @@ type Announcement = {
   sources: BlockList;
   listeners: Set<() => void>;
   stop: AbortController;
-  expiry: NodeJS.Timeout;
+  // Set once its turn comes: until then it can't be fetched or expire.
+  expiry: NodeJS.Timeout | null;
   release: NodeJS.Timeout | null;
+  ended: boolean;
+  turn: (now: boolean) => void;
+  onUnfetched?: () => void;
 };
 
 export class AnnouncementRefused extends Error {
   constructor(readonly reason: "busy" | "full") {
     super(
       reason === "busy"
-        ? "That speaker is busy"
+        ? "That speaker has too many waiting"
         : "Too many announcements at once",
     );
   }
@@ -84,9 +91,18 @@ export function createAnnouncements(options: {
   log: (message: string) => void;
 }) {
   const byPath = new Map<string, Announcement>();
-  // A device's announcement, from its making until it has played: one at a
-  // time, as a second one cuts the first short on the speaker.
-  const byDevice = new Map<string, Announcement>();
+  // Each device's announcements, from their making until they have played,
+  // in order: the first is the one whose turn it is.
+  const byDevice = new Map<string, Announcement[]>();
+  let count = 0;
+
+  function takeTurn(announcement: Announcement) {
+    announcement.expiry = setTimeout(() => {
+      end(announcement);
+      announcement.onUnfetched?.();
+    }, announcementKeptMs);
+    announcement.turn(true);
+  }
   const server = createServer(
     { headersTimeout: 5_000, requestTimeout: 10_000 },
     serve,
@@ -120,13 +136,19 @@ export function createAnnouncements(options: {
   });
 
   function end(announcement: Announcement) {
-    clearTimeout(announcement.expiry);
+    if (announcement.ended) return;
+    announcement.ended = true;
+    count--;
+    if (announcement.expiry) clearTimeout(announcement.expiry);
     if (announcement.release) clearTimeout(announcement.release);
     announcement.stop.abort();
     byPath.delete(announcement.path);
-    if (byDevice.get(announcement.device) === announcement) {
-      byDevice.delete(announcement.device);
-    }
+    announcement.turn(false);
+    const queue = byDevice.get(announcement.device) ?? [];
+    const at = queue.indexOf(announcement);
+    if (at !== -1) queue.splice(at, 1);
+    if (queue.length === 0) byDevice.delete(announcement.device);
+    else if (at === 0) takeTurn(queue[0]!);
     announcement.chunks = [];
     for (const listener of announcement.listeners) listener();
     announcement.listeners.clear();
@@ -155,7 +177,8 @@ export function createAnnouncements(options: {
     if (
       request.method !== "GET" ||
       !source ||
-      !announcement?.sources.check(source, "ipv4")
+      !announcement?.expiry ||
+      !announcement.sources.check(source, "ipv4")
     ) {
       notFound(response);
       return;
@@ -196,10 +219,11 @@ export function createAnnouncements(options: {
   return {
     /**
      * Makes an announcement for a device from speech as it comes: its
-     * address straight away, the sound as `speech` yields it, and `ready`
-     * once there is sound to play. Refused while
-     * the device has one that hasn't played yet, or the home has too many.
-     * Calls `onUnfetched` if the address expires without a fetch.
+     * address straight away, the sound as `speech` yields it, `ready` once
+     * there is sound to play and `turn` once those before it on the device
+     * have played. Refused while the device has too many waiting, or the
+     * home has too many. Calls `onUnfetched` if the address expires, a
+     * minute into its turn, without a fetch.
      */
     create(
       device: string,
@@ -208,10 +232,12 @@ export function createAnnouncements(options: {
       speech: (signal: AbortSignal) => AsyncIterable<SpeechAudio>,
       onUnfetched?: () => void,
     ) {
-      if (byDevice.has(device)) throw new AnnouncementRefused("busy");
-      if (byDevice.size >= maxAnnouncements)
-        throw new AnnouncementRefused("full");
+      const queue = byDevice.get(device) ?? [];
+      if (queue.length >= maxPerSpeaker) throw new AnnouncementRefused("busy");
+      if (count >= maxAnnouncements) throw new AnnouncementRefused("full");
       const path = `/a/${randomBytes(20).toString("base64url")}.flac`;
+      let turned: (now: boolean) => void = () => {};
+      const turn = new Promise<boolean>((resolve) => (turned = resolve));
       const announcement: Announcement = {
         device,
         path,
@@ -224,14 +250,17 @@ export function createAnnouncements(options: {
         sources: network.sources,
         listeners: new Set(),
         stop: new AbortController(),
-        expiry: setTimeout(() => {
-          end(announcement);
-          onUnfetched?.();
-        }, announcementKeptMs),
+        expiry: null,
         release: null,
+        ended: false,
+        turn: turned,
+        onUnfetched,
       };
       byPath.set(path, announcement);
-      byDevice.set(device, announcement);
+      queue.push(announcement);
+      byDevice.set(device, queue);
+      count++;
+      if (queue.length === 1) takeTurn(announcement);
       const append = (bytes: Uint8Array) => {
         if (bytes.length === 0) return;
         announcement.bytes += bytes.length;
@@ -282,6 +311,11 @@ export function createAnnouncements(options: {
          * encoded, false if the speech failed before any.
          */
         ready,
+        /**
+         * Whether its turn on the device came: true once those before it
+         * have played, false if it ended first.
+         */
+        turn,
         /** Withdraws it, as when its speaker couldn't be told. */
         withdraw: () => end(announcement),
         /** Whether its speaker has fetched it. */
@@ -305,7 +339,10 @@ export function createAnnouncements(options: {
     },
 
     async stop() {
-      for (const announcement of [...byDevice.values()]) end(announcement);
+      for (const queue of [...byDevice.values()]) {
+        // The last first, so none takes its turn on the way out.
+        for (const announcement of [...queue].reverse()) end(announcement);
+      }
       for (const socket of pending.keys()) dropPending(socket);
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));

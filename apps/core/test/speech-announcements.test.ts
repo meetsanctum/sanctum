@@ -11,8 +11,8 @@ import {
 import type { SpeechAudio } from "../src/speech/wyoming.js";
 
 // Announcements as smart speakers fetch them: one-off addresses on a port of
-// their own, each fetched once, gone a minute after it's made, streamed as
-// the speech comes, one at a time for each speaker.
+// their own, each fetched once, gone a minute into its turn, streamed as the
+// speech comes, one at a time for each speaker with the rest waiting.
 
 let announcements: Announcements | undefined;
 const logged: string[] = [];
@@ -155,21 +155,47 @@ describe("createAnnouncements", () => {
     expect(body.length).toBeGreaterThan(42);
   });
 
-  it("is one at a time for each speaker, until what it said has played", async () => {
+  it("has the rest wait their turn on a speaker, in order, until what's before them has played", async () => {
     const served = await started();
     // A tenth of a second of sound.
-    const made = served.create("speaker", network, 4180, speech([2_205]));
+    const first = served.create("speaker", network, 4180, speech([2_205]));
+    const second = served.create("speaker", network, 4180, speech([10]));
+    const third = served.create("speaker", network, 4180, speech([10]));
     expect(() => served.create("speaker", network, 4180, speech([10]))).toThrow(
       new AnnouncementRefused("busy"),
     );
     // Another speaker isn't held.
-    served.create("other", network, 4180, speech([10])).withdraw();
-    await made.encoded;
-    await fetch(local(made.url, served.port()!));
+    const other = served.create("other", network, 4180, speech([10]));
+    expect(await other.turn).toBe(true);
+    other.withdraw();
+    expect(await first.turn).toBe(true);
+    let secondsTurn = false;
+    void second.turn.then(() => (secondsTurn = true));
+    await second.encoded;
+    // Made already, but not to be fetched before its turn.
+    expect((await fetch(local(second.url, served.port()!))).status).toBe(404);
+    await first.encoded;
+    expect((await fetch(local(first.url, served.port()!))).status).toBe(200);
+    expect(secondsTurn).toBe(false);
+    // Once the first has had time to play, and a second more, it's the next's.
+    expect(await second.turn).toBe(true);
+    expect((await fetch(local(second.url, served.port()!))).status).toBe(200);
     expect(served.busy("speaker")).toBe(true);
-    // Once it has had time to play, and a second more, the speaker is free.
-    await new Promise((resolve) => setTimeout(resolve, 1_300));
-    expect(served.busy("speaker")).toBe(false);
+    third.withdraw();
+    expect(await third.turn).toBe(false);
+  });
+
+  it("gives the next its turn when the one before ends unplayed", async () => {
+    const served = await started();
+    const first = served.create("speaker", network, 4180, speech([10]));
+    const second = served.create("speaker", network, 4180, speech([10]));
+    const third = served.create("speaker", network, 4180, speech([10]));
+    // One waiting goes: the order of the rest stays.
+    second.withdraw();
+    expect(await second.turn).toBe(false);
+    first.withdraw();
+    expect(await third.turn).toBe(true);
+    expect((await fetch(local(third.url, served.port()!))).status).toBe(200);
   });
 
   it("keeps the speaker busy for the clip after a delayed response ends", async () => {
@@ -230,7 +256,7 @@ describe("createAnnouncements", () => {
     }
   });
 
-  it("lets an address go a minute after it's made, unfetched", async () => {
+  it("lets an address go a minute into its turn, unfetched", async () => {
     const served = await started();
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const made = served.create("speaker", network, 4180, speech([10]));
@@ -241,6 +267,28 @@ describe("createAnnouncements", () => {
     vi.useRealTimers();
     expect(served.busy("speaker")).toBe(false);
     expect((await fetch(local(made.url, served.port()!))).status).toBe(404);
+  });
+
+  it("starts a waiting address's minute only at its turn", async () => {
+    const served = await started();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const unfetched: string[] = [];
+    const first = served.create("speaker", network, 4180, speech([10]), () =>
+      unfetched.push("first"),
+    );
+    const second = served.create("speaker", network, 4180, speech([10]), () =>
+      unfetched.push("second"),
+    );
+    await Promise.all([first.encoded, second.encoded]);
+    vi.advanceTimersByTime(60_001);
+    expect(unfetched).toEqual(["first"]);
+    expect(await second.turn).toBe(true);
+    vi.advanceTimersByTime(59_000);
+    expect(served.busy("speaker")).toBe(true);
+    vi.advanceTimersByTime(1_001);
+    vi.useRealTimers();
+    expect(unfetched).toEqual(["first", "second"]);
+    expect(served.busy("speaker")).toBe(false);
   });
 
   it("withdraws an announcement whose speech fails, and logs why", async () => {
@@ -256,11 +304,13 @@ describe("createAnnouncements", () => {
     ]);
   });
 
-  it("takes at most eight at once in the home", async () => {
+  it("takes at most eight at once in the home, those waiting too", async () => {
     const served = await started();
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 6; i++) {
       served.create(`speaker-${i}`, network, 4180, speech([10]));
     }
+    served.create("speaker-0", network, 4180, speech([10]));
+    served.create("speaker-0", network, 4180, speech([10]));
     expect(() =>
       served.create("speaker-8", network, 4180, speech([10])),
     ).toThrow(new AnnouncementRefused("full"));

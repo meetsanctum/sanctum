@@ -241,18 +241,21 @@ export function createSpeech(options: {
     },
 
     /**
-     * Says `text` on a smart speaker in the language's voice, as `actor`:
-     * resolves once the speaker has been told to play it, with whether all
-     * of it was then encoded still to come. Throws SpeechUnavailable while
-     * the speech service or the host's address isn't there or the speech
-     * fails before any sound, and the
-     * announcement's own refusal while the speaker is still speaking.
+     * Says `text` on a smart speaker in the language's voice, as `actor`,
+     * after what the speaker has still to say: resolves once the speaker has
+     * been told to play it, with whether all of it was then encoded still to
+     * come. `beforeTelling` runs then, and may throw to keep it from the
+     * speaker, as when the speaker was muted while it waited. Throws
+     * SpeechUnavailable while the speech service or the host's address isn't
+     * there or the speech fails before any sound, and the announcement's own
+     * refusal while too many wait.
      */
     async speak(input: {
       device: string;
       text: string;
       language: SpeechLanguage;
       actor: Actor;
+      beforeTelling?: () => void;
     }) {
       if (!running || options.announcements.port() === null) {
         throw new SpeechUnavailable(
@@ -291,7 +294,15 @@ export function createSpeech(options: {
           "The announcement audio couldn't be generated.",
         );
       }
+      if (!(await announcement.turn)) {
+        throw new SpeechUnavailable(
+          running
+            ? "The announcement audio couldn't be generated."
+            : "Speech isn't running on Sanctum right now",
+        );
+      }
       try {
+        input.beforeTelling?.();
         await options.devices.announce(
           input.device,
           announcement.url,

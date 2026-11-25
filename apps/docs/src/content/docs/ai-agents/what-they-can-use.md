@@ -41,9 +41,11 @@ home in the same words as apps' [permissions](/apps/permissions/).
 - **Speak on your smart speakers** lets an agent have Sanctum say something
   out loud on one smart speaker that can announce, such as "Dinner's ready":
   up to 300 characters, in English or German, always in Sanctum's own voice.
-  A speaker says one thing at a time and at most four a minute, and an agent
-  six a minute. A speaker says nothing while offline, muted or turned all the
-  way down, and the agent is told why. The activity log keeps what was said
+  A speaker says one thing at a time: what's sent while it speaks waits its
+  turn, up to two waiting, and plays as soon as the one before ends. A speaker
+  says at most four a minute, and an agent six a minute. A speaker says
+  nothing while offline, muted or turned all the way down, also when it gets
+  that way while an announcement waits, and the agent is told why. The activity log keeps what was said
   and which agent asked.
 - **What Tells Who's Home:** motion, doors and windows, remotes' presses,
   the activity log, what your devices reported, and the names of the people

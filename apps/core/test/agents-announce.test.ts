@@ -135,6 +135,7 @@ describe("the announce tool", () => {
         text: "Dinner's ready.",
         language: "en",
         actor: agent.actor,
+        beforeTelling: expect.any(Function),
       },
     ]);
     expect(recorded).toEqual([
@@ -258,6 +259,19 @@ describe("the announce tool", () => {
     expect(
       (await run({ speaker: "other", text: "Hi" })).isError,
     ).toBeUndefined();
+  });
+
+  it("keeps one that waited its turn from a speaker muted meanwhile", async () => {
+    const device = speakerDevice();
+    const { run, recorded } = setup(device, async (input) => {
+      // Someone mutes the speaker while what's before it plays.
+      const player = device.capabilities[0] as { observed: { muted: boolean } };
+      player.observed.muted = true;
+      input.beforeTelling?.();
+    });
+    const result = await run({ speaker: "speaker", text: "Hi" });
+    expect(errorOf(result)).toBe("muted");
+    expect(recorded).toEqual([]);
   });
 
   it("answers busy, full and unavailable speech by name", async () => {
