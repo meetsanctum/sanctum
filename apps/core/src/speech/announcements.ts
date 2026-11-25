@@ -176,16 +176,6 @@ export function createAnnouncements(options: {
     announcement.listeners.clear();
   }
 
-  // The driver doesn't confirm playback. Allow a full clip's worth of time
-  // after the response finishes, even if synthesis or the network was slow.
-  function releaseAfterPlaying(announcement: Announcement) {
-    const playedMs = (announcement.samples / announcement.rate) * 1_000;
-    announcement.release = setTimeout(
-      () => end(announcement),
-      playedMs + 1_000,
-    );
-  }
-
   function notFound(response: ServerResponse) {
     response
       .writeHead(404, { "content-length": "0", connection: "close" })
@@ -220,11 +210,6 @@ export function createAnnouncements(options: {
       }
     };
     response.setTimeout(streamIdleMs, () => response.destroy());
-    response.once("finish", () => {
-      if (announcement.done && !announcement.stop.signal.aborted) {
-        releaseAfterPlaying(announcement);
-      }
-    });
     response.once("close", () => {
       announcement.listeners.delete(flush);
       if (!response.writableFinished) end(announcement);
@@ -235,6 +220,18 @@ export function createAnnouncements(options: {
         notFound(response);
         return;
       }
+      const startedAt = performance.now();
+      response.once("finish", () => {
+        if (!announcement.done || announcement.stop.signal.aborted) return;
+        // Playback can run during synthesis. Leave time for the whole clip
+        // and keep the speaker held until the stream has finished.
+        const clipMs = (announcement.samples / announcement.rate) * 1_000;
+        const remainingMs = Math.max(0, startedAt + clipMs - performance.now());
+        announcement.release = setTimeout(
+          () => end(announcement),
+          remainingMs + 1_000,
+        );
+      });
       response.writeHead(200, {
         "content-type": "audio/flac",
         "cache-control": "no-store",

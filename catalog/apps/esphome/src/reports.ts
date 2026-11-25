@@ -112,6 +112,7 @@ export function createReports(
       url: string;
       fetchedAt: number | null;
       started: boolean;
+      held?: { events: TelemetryEvent[]; flush: () => void };
     }
   >();
   // An event from the player announcing, read as an announcement while it is
@@ -136,10 +137,24 @@ export function createReports(
     announcements.delete(session);
     return event;
   }
+  function reportState(event: TelemetryEvent, session: Session) {
+    const { mapping } = describeSession(session);
+    report(
+      ctx,
+      facts,
+      key,
+      mapping,
+      readAnnouncement(event, session),
+      session,
+      activities,
+      audio.send,
+    );
+  }
   return {
     audio,
     /** An announcement went to the player with this key. */
     announced(session: Session, playerKey: number, url: string) {
+      announcements.get(session)?.held?.flush();
       announcements.set(session, {
         key: playerKey,
         url,
@@ -151,6 +166,7 @@ export function createReports(
       const announcing = announcements.get(session);
       if (announcing?.url === url) {
         announcing.fetchedAt ??= Date.now();
+        announcing.held?.flush();
       }
     },
     registered(capabilities: DeviceRegistration["capabilities"]) {
@@ -163,17 +179,33 @@ export function createReports(
       }
     },
     state(event: TelemetryEvent, session: Session) {
-      const { mapping } = describeSession(session);
-      report(
-        ctx,
-        facts,
-        key,
-        mapping,
-        readAnnouncement(event, session),
-        session,
-        activities,
-        audio.send,
-      );
+      const announcing = announcements.get(session);
+      if (
+        event.type === "media_player" &&
+        announcing?.key === event.key &&
+        announcing.fetchedAt === null
+      ) {
+        if (announcing.held) {
+          announcing.held.events.push(event);
+          return;
+        }
+        if (event.state === MediaPlayerState.PLAYING && current() === session) {
+          // The fetch notice can arrive after playback. Keep this player's
+          // reports in order while it has a chance to arrive.
+          const events: TelemetryEvent[] = [event];
+          const flush = () => {
+            clearTimeout(timer);
+            announcing.held = undefined;
+            if (current() !== session) return;
+            for (const held of events) reportState(held, session);
+          };
+          const timer = setTimeout(flush, announcementStartsMs);
+          timer.unref();
+          announcing.held = { events, flush };
+          return;
+        }
+      }
+      reportState(event, session);
     },
   };
 }

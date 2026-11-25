@@ -201,35 +201,46 @@ describe("createAnnouncements", () => {
     expect((await fetch(local(third.url, served.port()!))).status).toBe(200);
   });
 
-  it("keeps the speaker busy for the clip after a delayed response ends", async () => {
-    const served = await started();
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => (release = resolve));
-    const made = served.create(
-      "speaker",
-      network,
-      4180,
-      speech([4_096, 100], gate),
-    );
-    let delayed = false;
-    const body = fetch(local(made.url, served.port()!), "GET", () => {
-      if (delayed) return;
-      delayed = true;
-      vi.advanceTimersByTime(5_000);
-      release();
-    });
-    try {
-      expect((await body).status).toBe(200);
-      vi.advanceTimersByTime(1_100);
-      expect(served.busy("speaker")).toBe(true);
-      vi.advanceTimersByTime(100);
-      expect(served.busy("speaker")).toBe(false);
-    } finally {
-      release();
-      vi.useRealTimers();
-    }
-  });
+  it.each([
+    { synthesisMs: 500, waitAfterStreamMs: 2_500 },
+    { synthesisMs: 5_000, waitAfterStreamMs: 1_000 },
+  ])(
+    "accounts for $synthesisMs ms of synthesis during a two-second clip",
+    async ({ synthesisMs, waitAfterStreamMs }) => {
+      const served = await started();
+      vi.useFakeTimers({
+        toFake: ["setTimeout", "clearTimeout", "performance"],
+      });
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      const first = served.create(
+        "speaker",
+        network,
+        4180,
+        speech([4_096, 40_004], gate),
+      );
+      const second = served.create("speaker", network, 4180, speech([10]));
+      let secondHasTurn = false;
+      void second.turn.then((turn) => (secondHasTurn = turn));
+      let delayed = false;
+      const body = fetch(local(first.url, served.port()!), "GET", (bytes) => {
+        if (delayed || bytes <= 42) return;
+        delayed = true;
+        vi.advanceTimersByTime(synthesisMs);
+        release();
+      });
+      try {
+        expect((await body).status).toBe(200);
+        await vi.advanceTimersByTimeAsync(waitAfterStreamMs - 1);
+        expect(secondHasTurn).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(secondHasTurn).toBe(true);
+      } finally {
+        release();
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it("refuses a valid URL outside the selected interface's prefix", async () => {
     const served = await started();
