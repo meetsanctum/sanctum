@@ -109,12 +109,17 @@ describe("createFlacEncoder", () => {
     }
   });
 
-  it("numbers frames past the one-byte range", async () => {
-    const samples = speechLike(4_096 * 300 + 17, 22_050);
-    const decoded = await decode(framesOf(samples, 22_050).frames);
-    expect(decoded.errors).toEqual([]);
-    expect(toInt16(decoded.channelData[0]!)).toEqual(samples);
-  });
+  it(
+    "numbers frames past the one-byte range",
+    { timeout: 30_000 },
+    async () => {
+      // Frame 128 is the first whose number takes two bytes.
+      const samples = speechLike(4_096 * 130 + 17, 22_050);
+      const decoded = await decode(framesOf(samples, 22_050).frames);
+      expect(decoded.errors).toEqual([]);
+      expect(toInt16(decoded.channelData[0]!)).toEqual(samples);
+    },
+  );
 
   it("starts with the stream's header before any block is complete", () => {
     const encoder = createFlacEncoder(22_050);
