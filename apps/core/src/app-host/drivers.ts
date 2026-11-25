@@ -168,7 +168,9 @@ export function createDriverCalls<Entry extends Driving>(options: {
         if (actor.kind === "assistant-run") {
           options.permit(
             actor,
-            command.kind === "audio" && "announce" in command.command
+            command.kind === "audio" &&
+              ("announce" in command.command ||
+                "announcementFetched" in command.command)
               ? announceRule
               : deviceCommandRule(command.kind),
           );

@@ -64,12 +64,12 @@ function setup(
     input: Parameters<
       Parameters<typeof createAnnounceTool>[0]["speech"]["speak"]
     >[0],
-  ) => Promise<boolean | void>,
-  fetched = false,
+  ) => Promise<void>,
 ) {
   const devices = [device, { ...device, id: "other" }];
   const said: unknown[] = [];
   const recorded: NewActivityEntry[] = [];
+  const deliveries: ((fetched: boolean) => void)[] = [];
   let clock = 0;
   const tool = createAnnounceTool({
     devices: {
@@ -78,9 +78,12 @@ function setup(
     },
     speech: {
       speak: async (input) => {
-        said.push(input);
-        const encoded = (await speak?.(input)) ?? true;
-        return { encoded: Promise.resolve(encoded), fetched: () => fetched };
+        const { onDelivery, onSynthesisStarted, ...request } = input;
+        said.push(request);
+        await speak?.(input);
+        if (onDelivery) deliveries.push(onDelivery);
+        // The tool answers when the command goes out while speech is encoding.
+        return { encoded: new Promise<boolean>(() => {}) };
       },
     },
     record: (entry) => {
@@ -94,6 +97,7 @@ function setup(
     tool,
     said,
     recorded,
+    deliveries,
     tick: (ms: number) => {
       clock += ms;
     },
@@ -119,7 +123,7 @@ describe("the announce tool", () => {
   });
 
   it("says the text on the speaker in English unless asked, and logs what was said", async () => {
-    const { run, said, recorded } = setup();
+    const { run, said, recorded, deliveries } = setup();
     const result = await run({
       speaker: "speaker",
       text: "  Dinner's ready.  ",
@@ -138,6 +142,8 @@ describe("the announce tool", () => {
         beforeTelling: expect.any(Function),
       },
     ]);
+    expect(recorded).toEqual([]);
+    deliveries[0]!(true);
     expect(recorded).toEqual([
       {
         action: "device.announce",
@@ -146,6 +152,18 @@ describe("the announce tool", () => {
         subjectId: "speaker",
         detail: { text: "Dinner's ready.", language: "en" },
       },
+    ]);
+  });
+
+  it("records an expired announcement as failed after replying that it was sent", async () => {
+    const { run, deliveries, recorded } = setup();
+    expect(
+      (await run({ speaker: "speaker", text: "Hi" })).isError,
+    ).toBeUndefined();
+    expect(recorded).toEqual([]);
+    deliveries[0]!(false);
+    expect(recorded).toMatchObject([
+      { action: "device.announce", outcome: "failed" },
     ]);
   });
 
@@ -217,33 +235,19 @@ describe("the announce tool", () => {
     ).toBeUndefined();
   });
 
-  it("reports failed speech when encoding fails before the speaker fetches it", async () => {
-    const { run, recorded } = setup(speakerDevice(), async () => false);
+  it("reports failed speech when encoding fails before dispatch", async () => {
+    const { run, recorded } = setup(speakerDevice(), async () => {
+      throw new SpeechUnavailable(
+        "The announcement audio couldn't be generated.",
+      );
+    });
     expect(errorOf(await run({ speaker: "speaker", text: "Hi" }))).toBe(
       "unavailable",
     );
     expect(recorded).toEqual([]);
   });
 
-  it("reports and logs an announcement fetched before its stream was cut short", async () => {
-    const { run, recorded } = setup(speakerDevice(), async () => false, true);
-    const result = await run({ speaker: "speaker", text: "Hi" });
-    expect(result.structuredContent).toEqual({
-      sentTo: "Office Speaker",
-      speaker: "speaker",
-    });
-    expect(recorded).toEqual([
-      {
-        action: "device.announce",
-        outcome: "ok",
-        actor: "assistant-run:agent-1",
-        subjectId: "speaker",
-        detail: { text: "Hi", language: "en" },
-      },
-    ]);
-  });
-
-  it("reserves agent quota across speakers and returns it if dispatch fails", async () => {
+  it("reserves agent quota across speakers and returns it if synthesis never starts", async () => {
     let fail!: (reason: Error) => void;
     const pending = new Promise<never>((_resolve, reject) => (fail = reject));
     const { run, said } = setup(speakerDevice(), async ({ text }) => {
@@ -262,6 +266,49 @@ describe("the announce tool", () => {
     expect(
       (await run({ speaker: "other", text: "Hi" })).isError,
     ).toBeUndefined();
+  });
+
+  it("counts attempts against the speaker quota once synthesis starts", async () => {
+    const { run } = setup(speakerDevice(), async ({ onSynthesisStarted }) => {
+      onSynthesisStarted?.();
+      throw new SpeechUnavailable("Dispatch failed");
+    });
+    for (let i = 0; i < 4; i++) {
+      expect(errorOf(await run({ speaker: "speaker", text: "Hi" }))).toBe(
+        "unavailable",
+      );
+    }
+    expect(errorOf(await run({ speaker: "speaker", text: "Hi" }))).toBe(
+      "limited",
+    );
+  });
+
+  it("checks the announcement player's volume and mute even when another player differs", async () => {
+    const device = speakerDevice();
+    const player = device.capabilities.find((part) => part.kind === "media")!;
+    const audio = device.capabilities.find((part) => part.kind === "audio")!;
+    audio.features.announcementPlayer = player.id;
+    device.capabilities.unshift({
+      ...player,
+      id: "music",
+      observed: { activity: "playing", volume: 50, muted: true },
+    });
+    const { run } = setup(device);
+    expect(
+      (await run({ speaker: "speaker", text: "Hi" })).isError,
+    ).toBeUndefined();
+    player.observed!.volume = 0;
+    expect(errorOf(await run({ speaker: "speaker", text: "Hi" }))).toBe(
+      "muted",
+    );
+    player.observed!.volume = 40;
+    const waiting = setup(device, async (input) => {
+      player.observed!.muted = true;
+      input.beforeTelling?.();
+    });
+    expect(errorOf(await waiting.run({ speaker: "speaker", text: "Hi" }))).toBe(
+      "muted",
+    );
   });
 
   it("keeps one that waited its turn from a speaker muted meanwhile", async () => {

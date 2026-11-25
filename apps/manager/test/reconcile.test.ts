@@ -213,6 +213,36 @@ describe("reconcileCore and the port speakers fetch sound from", () => {
     expect(docker.container(coreContainerName)!.id).toBe(core.id);
     expect(docker.events).toEqual([]);
   });
+
+  it("restarts a stopped core on its own image if the speaker port is taken", async () => {
+    const { docker, log } = setup();
+    const stopped = await docker.createContainer(
+      coreContainerOptions(coreImage),
+    );
+    const before = await docker.getContainer(stopped.id).inspect();
+    expect(hasSpeakerPort(before)).toBe(true);
+    docker.load("localhost:5000/sanctum-core:dev-2", {
+      title: "sanctum-core",
+      version: "dev-2",
+    });
+    docker.startError = new Error(
+      "Bind for 0.0.0.0:4180 failed: port is already allocated",
+    );
+
+    await expect(
+      reconcileCore({
+        docker,
+        log,
+        image: "localhost:5000/sanctum-core:dev-2",
+      }),
+    ).resolves.toBe(before.Image);
+    const fallback = docker.container(coreContainerName)!;
+    expect(fallback.id).not.toBe(stopped.id);
+    expect(fallback).toMatchObject({ imageId: before.Image, running: true });
+    expect(
+      hasSpeakerPort(await docker.getContainer(fallback.id).inspect()),
+    ).toBe(false);
+  });
 });
 
 describe("reconcileCore and the core's init process", () => {

@@ -290,7 +290,9 @@ function deviceEntry(
       };
     }
     case "device.announce":
-      return said(`Said “${String(entry.detail?.text ?? "")}”`);
+      return said(
+        `${entry.outcome === "ok" ? "Sent" : "Couldn't deliver"} “${String(entry.detail?.text ?? "")}”`,
+      );
     case "device.offline":
       return said("Went offline", "It stopped answering");
     case "device.online":

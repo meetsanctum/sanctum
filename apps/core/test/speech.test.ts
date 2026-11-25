@@ -7,12 +7,14 @@ import {
   createAnnouncements,
   type Announcements,
 } from "../src/speech/announcements.js";
+import { assembleSpeech } from "../src/speech/assembly.js";
 import {
   createSpeech,
   SpeechUnavailable,
   voices,
 } from "../src/speech/speech.js";
 import * as wyoming from "../src/speech/wyoming.js";
+import { fakeManager } from "./manager-support.js";
 import { fakePiper } from "./speech-support.js";
 import { deferredDelivery, deferredResult } from "./support.js";
 
@@ -49,6 +51,7 @@ function setup(options: {
   getServiceUrl?: () => Promise<string | null>;
   getAddress?: () => string;
   address?: string | null;
+  cidr?: string;
   want?: (signal: AbortSignal) => Promise<void>;
   log?: (message: string) => void;
 }) {
@@ -72,7 +75,7 @@ function setup(options: {
             : {
                 address:
                   options.getAddress?.() ?? options.address ?? "192.168.1.20",
-                cidr: "192.168.1.20/24",
+                cidr: options.cidr ?? "192.168.1.20/24",
               },
       }),
       wantServiceForCore: async (service, { signal }) => {
@@ -84,7 +87,9 @@ function setup(options: {
     },
     devices: {
       list: () => options.devices,
-      announce: async (device, url) => void told.push({ device, url }),
+      announce: async (device, url, _actor, fetched) => {
+        if (!fetched) told.push({ device, url });
+      },
     },
     areaOn: () => areaOn,
     publishedPort: 4180,
@@ -102,6 +107,26 @@ function setup(options: {
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+it("releases the core's Piper request when no speaker port is configured", async () => {
+  const releaseServiceForCore = vi.fn(async () => {});
+  const { startSpeech, stopSpeech } = assembleSpeech({
+    manager: {
+      serviceUrl: async () => null,
+      hostStatus: fakeManager().manager.hostStatus,
+      wantServiceForCore: vi.fn(async () => {}),
+      releaseServiceForCore,
+    },
+    devices: { list: () => [], announce: async () => {} },
+    areaOn: () => true,
+    log: () => {},
+  });
+  await startSpeech();
+  expect(releaseServiceForCore).toHaveBeenCalledWith("piper", {
+    signal: expect.any(AbortSignal),
+  });
+  await stopSpeech();
+});
 
 describe("createSpeech", () => {
   it("wants Piper while a speaker announces and the area is on, and lets it go after", async () => {
@@ -144,7 +169,7 @@ describe("createSpeech", () => {
     speech.stop();
   });
 
-  it("does not request Piper or dispatch while the listener is down", async () => {
+  it("releases Piper and cannot dispatch while the listener is down", async () => {
     const { speech, calls, setArea } = setup({
       devices: [speaker("a", true)],
       serviceUrl: "tcp://127.0.0.1:1",
@@ -160,7 +185,7 @@ describe("createSpeech", () => {
         actor: { kind: "app", id: "sanctum.example" },
       }),
     ).rejects.toThrow(SpeechUnavailable);
-    expect(calls).toEqual([]);
+    expect(calls).toEqual(["release piper"]);
   });
 
   it("waits for a superseded manager request before applying the latest setting", async () => {
@@ -274,11 +299,15 @@ describe("createSpeech", () => {
 
   it("tells the speaker only once there is sound to play", async () => {
     const loading = deferredDelivery();
+    const finishing = deferredDelivery();
+    const partial = deferredDelivery();
     const synthesize = vi
       .spyOn(wyoming, "synthesize")
       .mockImplementation(async function* () {
         await loading.promise;
         yield { rate: 22_050, samples: new Int16Array(100) };
+        partial.resolve();
+        await finishing.promise;
       });
     const { speech, told } = setup({
       devices: [],
@@ -298,11 +327,121 @@ describe("createSpeech", () => {
       expect(told).toEqual([]);
       expect(announcements!.busy("a")).toBe(true);
       loading.resolve();
+      await partial.promise;
+      await settle();
+      expect(told).toEqual([]);
+      finishing.resolve();
       expect(await (await said).encoded).toBe(true);
       expect(told).toHaveLength(1);
     } finally {
+      finishing.resolve();
       speech.stop();
       synthesize.mockRestore();
+    }
+  });
+
+  it("does not send a URL withdrawn after the first playable frame", async () => {
+    const synthesize = vi
+      .spyOn(wyoming, "synthesize")
+      .mockImplementation(async function* () {
+        yield { rate: 22_050, samples: new Int16Array(4096) };
+        throw new Error("The service disconnected");
+      });
+    const { speech, told } = setup({
+      devices: [],
+      serviceUrl: "tcp://127.0.0.1:1",
+    });
+    announcements!.port = () => 4180;
+    speech.start();
+    try {
+      await expect(
+        speech.speak({
+          device: "a",
+          text: "Hi",
+          language: "en",
+          actor: { kind: "app", id: "sanctum.example" },
+        }),
+      ).rejects.toThrow(SpeechUnavailable);
+      expect(told).toEqual([]);
+    } finally {
+      speech.stop();
+      synthesize.mockRestore();
+    }
+  });
+
+  it("dispatches a waiting announcement only after the first clip has had time to play", async () => {
+    const { server, url } = await fakePiper([]);
+    piper = server;
+    const { speech, told } = setup({
+      devices: [],
+      serviceUrl: url,
+      address: "127.0.0.1",
+      cidr: "127.0.0.1/32",
+    });
+    await announcements!.start();
+    speech.start();
+    const created = vi.spyOn(announcements!, "create");
+    const speak = (text: string) =>
+      speech.speak({
+        device: "a",
+        text,
+        language: "en",
+        actor: { kind: "app", id: "sanctum.example" },
+      });
+    try {
+      await speak("First");
+      const second = speak("Second");
+      await vi.waitFor(() => expect(created).toHaveBeenCalledTimes(2));
+      expect(await created.mock.results[1]!.value.encoded).toBe(true);
+      expect(told).toHaveLength(1);
+      const firstUrl = new URL(told[0]!.url);
+      firstUrl.port = String(announcements!.port());
+      const response = await fetch(firstUrl);
+      expect(response.status).toBe(200);
+      await response.arrayBuffer();
+      expect(told).toHaveLength(1);
+      await second;
+      expect(told).toHaveLength(2);
+    } finally {
+      speech.stop();
+    }
+  });
+
+  it("withdraws queued speech before the caller times out", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    const synthesize = vi
+      .spyOn(wyoming, "synthesize")
+      .mockImplementation(async function* () {
+        yield { rate: 22_050, samples: new Int16Array(100) };
+      });
+    const { speech, told } = setup({
+      devices: [],
+      serviceUrl: "tcp://127.0.0.1:1",
+    });
+    announcements!.port = () => 4180;
+    speech.start();
+    const speak = () =>
+      speech.speak({
+        device: "a",
+        text: "Hi",
+        language: "en",
+        actor: { kind: "app", id: "sanctum.example" },
+      });
+    try {
+      await speak();
+      const rejected = expect(speak()).rejects.toThrow(
+        "didn't take the announcement in time",
+      );
+      await vi.advanceTimersByTimeAsync(59_000);
+      await rejected;
+      await vi.advanceTimersByTimeAsync(1_001);
+      expect(told).toHaveLength(1);
+      expect(announcements!.busy("a")).toBe(false);
+    } finally {
+      speech.stop();
+      await announcements!.stop();
+      synthesize.mockRestore();
+      vi.useRealTimers();
     }
   });
 

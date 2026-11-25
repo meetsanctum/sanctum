@@ -1,8 +1,15 @@
-import type { Actor, AudioFeatures, DeviceInfo } from "@meetsanctum/app-sdk";
+import type { Actor, CapabilityInfo, DeviceInfo } from "@meetsanctum/app-sdk";
 
 import { ActionCallError } from "../app-host/errors.js";
 import type { Deliver } from "./devices.js";
 import type { DeviceReads } from "./reads.js";
+
+export function announcementCapability(device: DeviceInfo | null) {
+  return device?.capabilities.find(
+    (capability): capability is Extract<CapabilityInfo, { kind: "audio" }> =>
+      capability.kind === "audio" && capability.features.announces,
+  );
+}
 
 // Only the core dispatches an announcement URL to its speaker's driver.
 export function createAnnouncementDelivery(options: {
@@ -11,16 +18,21 @@ export function createAnnouncementDelivery(options: {
   deliver: Deliver;
   stopping: () => boolean;
 }) {
-  return async (deviceId: string, url: string, actor: Actor) => {
+  return async (
+    deviceId: string,
+    url: string,
+    actor: Actor,
+    fetched = false,
+  ) => {
     if (options.stopping()) throw new ActionCallError("unavailable");
     const device = options.load(deviceId);
-    const capability = device?.capabilities.find(
-      (each) =>
-        each.kind === "audio" && (each.features as AudioFeatures).announces,
-    );
+    const capability = announcementCapability(device);
     const address = device && options.reads.address(device.id);
     if (!device || !capability || !address)
       throw new ActionCallError("not_found");
+    // Drivers that identify their announcement player can distinguish its
+    // ordinary playback from an announcement after the speaker fetches it.
+    if (fetched && !capability.features.announcementPlayer) return;
     await options.deliver(
       address.driver,
       {
@@ -28,7 +40,9 @@ export function createAnnouncementDelivery(options: {
         device: device.id,
         capability: capability.id,
         kind: "audio",
-        command: { announce: { url } },
+        command: fetched
+          ? { announcementFetched: { url } }
+          : { announce: { url } },
       },
       actor,
     );

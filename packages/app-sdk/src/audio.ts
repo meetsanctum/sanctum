@@ -17,6 +17,11 @@ export const audioFeatures = z.strictObject({
   // Whether it plays an announcement from an address the core gives it,
   // over whatever it was playing.
   announces: z.boolean().default(false),
+  // The media capability whose volume and mute apply to announcements.
+  announcementPlayer: z
+    .string()
+    .regex(/^[a-z0-9][a-z0-9_-]{0,31}$/)
+    .optional(),
 });
 
 export const audioState = z.strictObject({

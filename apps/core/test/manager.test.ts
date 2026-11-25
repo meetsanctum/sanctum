@@ -17,7 +17,7 @@ type Received = { method?: string; url?: string; body: unknown };
 
 // A manager listening on a Unix socket, answering with `status`, and with
 // the host's id when asked for it.
-function listen(socketPath: string, status = 204) {
+function listen(socketPath: string, status = 204, putAnswer?: object) {
   const received: Received[] = [];
   const server = createServer((request, response) => {
     let body = "";
@@ -31,6 +31,9 @@ function listen(socketPath: string, status = 204) {
       if (request.method === "GET" && status < 300) {
         response.statusCode = 200;
         response.end(JSON.stringify({ id: "host-1" }));
+      } else if (request.method === "PUT" && putAnswer) {
+        response.statusCode = 200;
+        response.end(JSON.stringify(putAnswer));
       } else {
         response.statusCode = status;
         response.end();
@@ -571,6 +574,23 @@ describe("the manager client", () => {
     await vi.waitFor(() => expect(client.hostId()).toBe("host-1"));
     expect(received).toEqual([
       { method: "GET", url: "/api/host", body: undefined },
+    ]);
+  });
+
+  it("asks the manager to keep and release Piper for the core", async () => {
+    const { client, socketPath } = await setUp();
+    const { server, received } = await listen(socketPath, 204, {
+      service: { name: "piper", apps: [], core: true, state: "starting" },
+    });
+    open.push({ server });
+
+    await expect(client.wantServiceForCore("piper")).resolves.toBeUndefined();
+    await expect(
+      client.releaseServiceForCore("piper"),
+    ).resolves.toBeUndefined();
+    expect(received).toEqual([
+      { method: "PUT", url: "/api/services/piper/core", body: undefined },
+      { method: "DELETE", url: "/api/services/piper/core", body: undefined },
     ]);
   });
 

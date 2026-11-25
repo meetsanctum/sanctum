@@ -59,6 +59,7 @@ export function describeSession(session: SessionDescription) {
           mutes,
           muteSwitch: mutes,
           announces: announcement !== undefined,
+          announcementPlayer: announcement?.capability.id,
         },
       },
       // Its media player's stands in where it has no Mute switch, whose

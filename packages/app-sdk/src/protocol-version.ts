@@ -40,8 +40,8 @@
 // 22 lets a newer request from the same device take over: the core ends the
 // older one's call with `end` and refuses its later calls `turn_ended`, and a
 // request carries the device's earlier exchanges.
-// 23 lets a smart speaker announce: the audio kind's `announces` feature and
-// its `announce` command, which plays the core's speech from an address.
+// 23 lets a smart speaker announce from a core URL, identify the player
+// it uses, and distinguish ordinary playback after the core sees a fetch.
 export const protocolVersion = 23;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 11;

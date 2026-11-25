@@ -54,6 +54,9 @@ const pendingDeadlineMs = 5_000;
 const maxPending = 2 * maxAnnouncements;
 const maxPendingPerSource = 2;
 const streamIdleMs = 35_000;
+const fetchNoticeMs = 250;
+
+type Delivery = "fetched" | "failed" | "withdrawn";
 
 type Announcement = {
   device: string;
@@ -71,8 +74,11 @@ type Announcement = {
   expiry: NodeJS.Timeout | null;
   release: NodeJS.Timeout | null;
   ended: boolean;
+  ready: (ready: boolean) => void;
   turn: (now: boolean) => void;
+  delivery: (outcome: Delivery) => void;
   onUnfetched?: () => void;
+  onFetched?: () => Promise<void>;
 };
 
 export class AnnouncementRefused extends Error {
@@ -98,7 +104,7 @@ export function createAnnouncements(options: {
 
   function takeTurn(announcement: Announcement) {
     announcement.expiry = setTimeout(() => {
-      end(announcement);
+      end(announcement, "failed");
       announcement.onUnfetched?.();
     }, announcementKeptMs);
     announcement.turn(true);
@@ -121,6 +127,17 @@ export function createAnnouncements(options: {
     socket.destroy();
   }
   server.on("connection", (socket) => {
+    const source = ipv4Of(socket.remoteAddress);
+    if (
+      !source ||
+      !Array.from(byPath.values()).some(
+        (announcement) =>
+          announcement.expiry && announcement.sources.check(source, "ipv4"),
+      )
+    ) {
+      socket.destroy();
+      return;
+    }
     const sameSource = [...pending.keys()].filter(
       (peer) => peer.remoteAddress === socket.remoteAddress,
     );
@@ -135,7 +152,10 @@ export function createAnnouncements(options: {
     socket.once("close", () => removePending(socket));
   });
 
-  function end(announcement: Announcement) {
+  function end(
+    announcement: Announcement,
+    outcome: "failed" | "withdrawn" = "withdrawn",
+  ) {
     if (announcement.ended) return;
     announcement.ended = true;
     count--;
@@ -143,7 +163,9 @@ export function createAnnouncements(options: {
     if (announcement.release) clearTimeout(announcement.release);
     announcement.stop.abort();
     byPath.delete(announcement.path);
+    announcement.ready(false);
     announcement.turn(false);
+    announcement.delivery(outcome);
     const queue = byDevice.get(announcement.device) ?? [];
     const at = queue.indexOf(announcement);
     if (at !== -1) queue.splice(at, 1);
@@ -184,14 +206,9 @@ export function createAnnouncements(options: {
       return;
     }
     removePending(request.socket);
-    announcement.fetched = true;
     clearTimeout(announcement.expiry);
+    announcement.expiry = null;
     byPath.delete(path);
-    response.writeHead(200, {
-      "content-type": "audio/flac",
-      "cache-control": "no-store",
-      connection: "close",
-    });
     let sent = 0;
     const flush = () => {
       while (sent < announcement.chunks.length) {
@@ -202,7 +219,6 @@ export function createAnnouncements(options: {
         response.end();
       }
     };
-    announcement.listeners.add(flush);
     response.setTimeout(streamIdleMs, () => response.destroy());
     response.once("finish", () => {
       if (announcement.done && !announcement.stop.signal.aborted) {
@@ -213,7 +229,36 @@ export function createAnnouncements(options: {
       announcement.listeners.delete(flush);
       if (!response.writableFinished) end(announcement);
     });
-    flush();
+    const startStream = () => {
+      if (response.destroyed) return;
+      if (announcement.ended) {
+        notFound(response);
+        return;
+      }
+      response.writeHead(200, {
+        "content-type": "audio/flac",
+        "cache-control": "no-store",
+        connection: "close",
+      });
+      announcement.listeners.add(flush);
+      flush();
+      announcement.fetched = true;
+      announcement.delivery("fetched");
+    };
+    if (announcement.onFetched) {
+      // Give the driver a chance to classify playback before audio arrives.
+      // Audio still plays if the driver is slow or cannot take the notice.
+      let timer: NodeJS.Timeout;
+      const deadline = new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, fetchNoticeMs);
+      });
+      void Promise.race([announcement.onFetched(), deadline]).then(() => {
+        clearTimeout(timer);
+        startStream();
+      });
+    } else {
+      startStream();
+    }
   }
 
   return {
@@ -231,13 +276,21 @@ export function createAnnouncements(options: {
       publishedPort: number,
       speech: (signal: AbortSignal) => AsyncIterable<SpeechAudio>,
       onUnfetched?: () => void,
+      onFetched?: (url: string) => Promise<void>,
     ) {
       const queue = byDevice.get(device) ?? [];
       if (queue.length >= maxPerSpeaker) throw new AnnouncementRefused("busy");
       if (count >= maxAnnouncements) throw new AnnouncementRefused("full");
       const path = `/a/${randomBytes(20).toString("base64url")}.flac`;
+      const url = `http://${network.host}:${publishedPort}${path}`;
+      let sounded: (ready: boolean) => void = () => {};
+      const ready = new Promise<boolean>((resolve) => (sounded = resolve));
       let turned: (now: boolean) => void = () => {};
       const turn = new Promise<boolean>((resolve) => (turned = resolve));
+      let delivered: (outcome: Delivery) => void = () => {};
+      const delivery = new Promise<Delivery>(
+        (resolve) => (delivered = resolve),
+      );
       const announcement: Announcement = {
         device,
         path,
@@ -253,8 +306,11 @@ export function createAnnouncements(options: {
         expiry: null,
         release: null,
         ended: false,
+        ready: sounded,
         turn: turned,
+        delivery: delivered,
         onUnfetched,
+        onFetched: onFetched && (() => onFetched(url)),
       };
       byPath.set(path, announcement);
       queue.push(announcement);
@@ -270,8 +326,6 @@ export function createAnnouncements(options: {
         announcement.chunks.push(bytes);
         for (const listener of [...announcement.listeners]) listener();
       };
-      let sounded: (ready: boolean) => void = () => {};
-      const ready = new Promise<boolean>((resolve) => (sounded = resolve));
       const encoded = (async () => {
         let encoder: ReturnType<typeof createFlacEncoder> | null = null;
         try {
@@ -281,13 +335,14 @@ export function createAnnouncements(options: {
             announcement.rate = audio.rate;
             announcement.samples += audio.samples.length;
             append(encoder.push(audio.samples));
-            if (announcement.samples > 0) sounded(true);
+            if (encoder.hasFrames()) sounded(true);
           }
           if (announcement.stop.signal.aborted) return false;
           if (!encoder || announcement.samples === 0) {
             throw new Error("The speech had no sound");
           }
           append(encoder.end());
+          sounded(true);
           announcement.done = true;
           for (const listener of [...announcement.listeners]) listener();
           return true;
@@ -297,13 +352,16 @@ export function createAnnouncements(options: {
               `An announcement's speech failed: ${error instanceof Error ? error.message : String(error)}`,
             );
           }
-          end(announcement);
+          end(announcement, "failed");
           return false;
         }
       })();
-      void encoded.then((done) => sounded(done));
       return {
-        url: `http://${network.host}:${publishedPort}${path}`,
+        url,
+        dispatchUrl: () =>
+          announcement.ended || announcement.fetched || !announcement.expiry
+            ? null
+            : url,
         /** Whether FLAC encoding finished successfully. */
         encoded,
         /**
@@ -316,6 +374,7 @@ export function createAnnouncements(options: {
          * have played, false if it ended first.
          */
         turn,
+        delivery,
         /** Withdraws it, as when its speaker couldn't be told. */
         withdraw: () => end(announcement),
         /** Whether its speaker has fetched it. */

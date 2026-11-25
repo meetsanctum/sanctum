@@ -51,16 +51,20 @@ function pcm(...samples: number[]) {
   return bytes;
 }
 
-async function all(port: number, idleMs = 2_000, signal?: AbortSignal) {
-  const got: { rate: number; samples: number[] }[] = [];
-  for await (const audio of synthesize({
+function spoken(port: number, idleMs = 2_000, signal?: AbortSignal) {
+  return synthesize({
     host: "127.0.0.1",
     port,
     text: "Dinner is ready.",
     voice: "en_US-norman-medium",
     idleMs,
     signal,
-  })) {
+  });
+}
+
+async function all(port: number, idleMs = 2_000, signal?: AbortSignal) {
+  const got: { rate: number; samples: number[] }[] = [];
+  for await (const audio of spoken(port, idleMs, signal)) {
     got.push({ rate: audio.rate, samples: Array.from(audio.samples) });
   }
   return got;
@@ -69,13 +73,17 @@ async function all(port: number, idleMs = 2_000, signal?: AbortSignal) {
 describe("synthesize", () => {
   it("asks for the words in the voice and yields the audio as it comes", async () => {
     let asked: Record<string, unknown> | null = null;
+    let finish!: () => void;
+    const rest = new Promise<void>((resolve) => (finish = resolve));
     const port = await service((socket, request) => {
       asked = request;
       const format = { rate: 22_050, width: 2, channels: 1 };
       // A sample split across two chunks, and a header split across writes.
-      const stream = Buffer.concat([
+      const first = Buffer.concat([
         event("audio-start", format),
         event("audio-chunk", format, pcm(1, -2, 3).subarray(0, 5)),
+      ]);
+      const remaining = Buffer.concat([
         event(
           "audio-chunk",
           format,
@@ -83,13 +91,28 @@ describe("synthesize", () => {
         ),
         event("audio-stop", {}),
       ]);
-      socket.write(stream.subarray(0, 10));
-      setTimeout(() => socket.write(stream.subarray(10)), 20);
+      socket.write(first.subarray(0, 10));
+      setTimeout(() => socket.write(first.subarray(10)), 20);
+      void rest.then(() => {
+        if (!socket.destroyed) socket.end(remaining);
+      });
     });
-    expect(await all(port)).toEqual([
-      { rate: 22_050, samples: [1, -2] },
-      { rate: 22_050, samples: [3, -4] },
-    ]);
+    const audio = spoken(port);
+    try {
+      expect(await audio.next()).toEqual({
+        done: false,
+        value: { rate: 22_050, samples: new Int16Array([1, -2]) },
+      });
+      finish();
+      expect(await audio.next()).toEqual({
+        done: false,
+        value: { rate: 22_050, samples: new Int16Array([3, -4]) },
+      });
+      expect((await audio.next()).done).toBe(true);
+    } finally {
+      finish();
+      await audio.return(undefined);
+    }
     expect(asked).toEqual({
       type: "synthesize",
       data: {

@@ -18,8 +18,8 @@ import { declineRequests } from "./voice.js";
 // firmware reports an announcement it was asked for as playing, not
 // announcing, so that player's playing reads as an announcement: from its
 // first report of playing, which comes within a second of the command, until
-// it reports anything else. One that never starts playing, as when its
-// address fails, is dropped, so it can't hide music started after it.
+// it reports anything else. Only a fetch of the clip lets an ordinary
+// PLAYING report count as an announcement.
 /** How soon the player says it's playing an announcement, or it didn't. */
 const announcementStartsMs = 5_000;
 /** The longest an announcement holds the player's own activity. */
@@ -105,14 +105,26 @@ export function createReports(
         : [],
     ),
   );
-  let announcing: { key: number; sentAt: number; started: boolean } | null =
-    null;
+  const announcements = new WeakMap<
+    Session,
+    {
+      key: number;
+      url: string;
+      fetchedAt: number | null;
+      started: boolean;
+    }
+  >();
   // An event from the player announcing, read as an announcement while it is
   // one, and the end of it otherwise.
-  function readAnnouncement(event: TelemetryEvent): TelemetryEvent {
-    if (!announcing || event.type !== "media_player") return event;
-    if (event.key !== announcing.key) return event;
-    const since = Date.now() - announcing.sentAt;
+  function readAnnouncement(
+    event: TelemetryEvent,
+    session: Session,
+  ): TelemetryEvent {
+    if (event.type !== "media_player") return event;
+    const announcing = announcements.get(session);
+    if (announcing?.key !== event.key || announcing.fetchedAt === null)
+      return event;
+    const since = Date.now() - announcing.fetchedAt;
     if (
       event.state === MediaPlayerState.PLAYING &&
       since < announcementHeldMs &&
@@ -121,14 +133,25 @@ export function createReports(
       announcing.started = true;
       return { ...event, state: MediaPlayerState.ANNOUNCING };
     }
-    announcing = null;
+    announcements.delete(session);
     return event;
   }
   return {
     audio,
     /** An announcement went to the player with this key. */
-    announced(playerKey: number) {
-      announcing = { key: playerKey, sentAt: Date.now(), started: false };
+    announced(session: Session, playerKey: number, url: string) {
+      announcements.set(session, {
+        key: playerKey,
+        url,
+        fetchedAt: null,
+        started: false,
+      });
+    },
+    announcementFetched(session: Session, url: string) {
+      const announcing = announcements.get(session);
+      if (announcing?.url === url) {
+        announcing.fetchedAt ??= Date.now();
+      }
     },
     registered(capabilities: DeviceRegistration["capabilities"]) {
       for (const id of activities.keys()) {
@@ -146,7 +169,7 @@ export function createReports(
         facts,
         key,
         mapping,
-        readAnnouncement(event),
+        readAnnouncement(event, session),
         session,
         activities,
         audio.send,

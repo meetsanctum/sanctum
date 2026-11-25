@@ -715,9 +715,7 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
           state: command.command.on,
         });
       } else if (
-        !(await sendSpeakerCommand(session, entity, command, (playerKey) =>
-          owned.telemetry.announced(playerKey),
-        ))
+        !(await sendSpeakerCommand(session, entity, command, owned.telemetry))
       ) {
         // A motion sensor's settings are its configuration's, not Sanctum's.
         throw new ActionError(

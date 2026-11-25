@@ -312,6 +312,7 @@ export function createFlacEncoder(sampleRate: number) {
   }
 
   return {
+    hasFrames: () => frame > 0,
     push(samples: Int16Array) {
       if (ended) throw new Error("The stream has ended");
       const head = header();

@@ -779,7 +779,12 @@ export type DriverCommand = {
       [K in CapabilityKind]: { kind: K; command: CommandOf<K> };
     }[CapabilityKind]
   // Only the core sends a one-time announcement URL to a driver.
-  | { kind: "audio"; command: { announce: { url: string } } }
+  | {
+      kind: "audio";
+      command:
+        | { announce: { url: string } }
+        | { announcementFetched: { url: string } };
+    }
 );
 
 /** What the core hands a driver app to move one of its lights (driver.move). */

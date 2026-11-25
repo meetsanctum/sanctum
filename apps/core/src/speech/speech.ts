@@ -1,5 +1,7 @@
 import type { Actor, DeviceInfo } from "@meetsanctum/app-sdk";
 
+import { TimedOut, withTimeout } from "../app-host/errors.js";
+import { announcementCapability } from "../devices/announce.js";
 import type { DeviceChange } from "../devices/devices.js";
 import { speakerNetwork, type Announcements } from "./announcements.js";
 import { synthesize } from "./wyoming.js";
@@ -23,6 +25,8 @@ export const speechService = "piper";
 
 /** How long Piper may stay quiet: a voice's first use downloads it. */
 const speechIdleMs = 30_000;
+/** Leave time to answer before the connector's 60-second request timeout. */
+const dispatchWithinMs = 50_000;
 /** How often to look for the service while it starts, and for how long. */
 const startingEveryMs = 10_000;
 const startingForMs = 15 * 60_000;
@@ -60,13 +64,6 @@ type Manager = {
   }>;
 };
 
-const announces = (device: DeviceInfo | null) =>
-  device?.capabilities.some(
-    (capability) =>
-      capability.kind === "audio" &&
-      (capability.features as { announces?: boolean }).announces === true,
-  ) ?? false;
-
 /** Where a Wyoming service listens, from its `tcp://host:port`. */
 function endpointOf(url: string) {
   const parsed = URL.parse(url);
@@ -81,7 +78,12 @@ export function createSpeech(options: {
   manager: Manager;
   devices: {
     list(): DeviceInfo[];
-    announce(device: string, url: string, actor: Actor): Promise<void>;
+    announce(
+      device: string,
+      url: string,
+      actor: Actor,
+      fetched?: true,
+    ): Promise<void>;
   };
   // Whether AI agents may speak on smart speakers.
   areaOn: () => boolean;
@@ -207,7 +209,10 @@ export function createSpeech(options: {
 
   function reconcile() {
     if (!running) return;
-    const want = options.areaOn() && announcers.size > 0;
+    const want =
+      options.announcements.port() !== null &&
+      options.areaOn() &&
+      announcers.size > 0;
     if (want === desired) return;
     desired = want;
     warming?.abort();
@@ -218,18 +223,18 @@ export function createSpeech(options: {
 
   return {
     start() {
-      if (running || options.announcements.port() === null) return;
+      if (running) return;
       running = true;
       announcers.clear();
       for (const device of options.devices.list()) {
-        if (announces(device)) announcers.add(device.id);
+        if (announcementCapability(device)) announcers.add(device.id);
       }
       reconcile();
     },
 
     deviceChanged(change: DeviceChange) {
       const had = announcers.has(change.id);
-      const has = announces(change.after);
+      const has = Boolean(announcementCapability(change.after));
       if (had === has) return;
       if (has) announcers.add(change.id);
       else announcers.delete(change.id);
@@ -256,7 +261,14 @@ export function createSpeech(options: {
       language: SpeechLanguage;
       actor: Actor;
       beforeTelling?: () => void;
+      onSynthesisStarted?: () => void;
+      onDelivery?: (fetched: boolean) => void;
     }) {
+      const dispatchBy = now() + dispatchWithinMs;
+      const waitExpired = () =>
+        new SpeechUnavailable(
+          "The speaker didn't take the announcement in time.",
+        );
       if (!running || options.announcements.port() === null) {
         throw new SpeechUnavailable(
           "Speech isn't running on Sanctum right now",
@@ -269,50 +281,77 @@ export function createSpeech(options: {
           "Speech isn't running on Sanctum right now",
         );
       }
+      if (now() >= dispatchBy) throw waitExpired();
       const announcement = options.announcements.create(
         input.device,
         network,
         options.publishedPort || listenerPort,
-        (signal) =>
-          synthesize({
+        (signal) => {
+          input.onSynthesisStarted?.();
+          return synthesize({
             ...at,
             text: input.text,
             voice: voices[input.language],
             idleMs: speechIdleMs,
             signal,
-          }),
+          });
+        },
         () => {
           // An unfetched URL can mean the host has moved to another address.
           if (address?.value === network) address = null;
         },
+        async (url) => {
+          try {
+            await options.devices.announce(
+              input.device,
+              url,
+              input.actor,
+              true,
+            );
+          } catch (error) {
+            options.log(
+              `Speech couldn't confirm the speaker's fetch: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        },
       );
-      // The speaker hears of it only once there is sound to play: one that
-      // waits on an empty stream, while a voice loads, can give up silently.
-      if (!(await announcement.ready)) {
-        announcement.withdraw();
-        throw new SpeechUnavailable(
-          "The announcement audio couldn't be generated.",
-        );
-      }
-      if (!(await announcement.turn)) {
+      const tell = async () => {
+        // The speaker needs a playable frame, and those ahead of it
+        // must have finished, before the driver gets the address.
+        if ((await announcement.ready) && (await announcement.turn)) {
+          if (now() >= dispatchBy) throw waitExpired();
+          input.beforeTelling?.();
+          const url = announcement.dispatchUrl();
+          if (url) {
+            await options.devices.announce(input.device, url, input.actor);
+            return;
+          }
+        }
         throw new SpeechUnavailable(
           running
             ? "The announcement audio couldn't be generated."
             : "Speech isn't running on Sanctum right now",
         );
-      }
+      };
       try {
-        input.beforeTelling?.();
-        await options.devices.announce(
-          input.device,
-          announcement.url,
-          input.actor,
-        );
+        await withTimeout(tell(), Math.max(0, dispatchBy - now()));
       } catch (error) {
         announcement.withdraw();
-        throw error;
+        throw error instanceof TimedOut ? waitExpired() : error;
       }
-      return { encoded: announcement.encoded, fetched: announcement.fetched };
+      const onDelivery = input.onDelivery;
+      if (onDelivery) {
+        void announcement.delivery
+          .then((outcome) => {
+            if (outcome !== "withdrawn") onDelivery(outcome === "fetched");
+          })
+          .catch((error: unknown) => {
+            options.log(
+              `Speech couldn't record delivery: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          });
+      }
+      return { encoded: announcement.encoded };
     },
 
     stop() {

@@ -6,6 +6,7 @@ import {
 import { z } from "zod";
 
 import type { ActivityAuthor, NewActivityEntry } from "../activity/activity.js";
+import { announcementCapability } from "../devices/announce.js";
 import { AnnouncementRefused } from "../speech/announcements.js";
 import {
   speechLanguages,
@@ -58,15 +59,14 @@ export function createAnnounceTool(options: {
   const byAgent = minuteWindows(announceLimits.agent, now);
   const bySpeaker = minuteWindows(announceLimits.speaker, now);
 
-  const announcesOn = (device: DeviceInfo) =>
-    device.capabilities.some(
-      (capability) =>
-        capability.kind === "audio" &&
-        (capability.features as { announces?: boolean }).announces === true,
-    );
-  const speakers = () => options.devices.list().filter(announcesOn);
+  const speakers = () => options.devices.list().filter(announcementCapability);
 
-  function heard(device: DeviceInfo) {
+  const noSpeaker = () =>
+    toolError("not_found", "There's no such smart speaker in the home.");
+
+  function heard(device: DeviceInfo | null) {
+    const audio = announcementCapability(device);
+    if (!device || !audio) throw new NotHeard(noSpeaker());
     if (device.availability !== "online") {
       throw new NotHeard(
         toolError("unavailable", `“${device.name}” is offline.`),
@@ -75,13 +75,14 @@ export function createAnnounceTool(options: {
     const players = device.capabilities.filter(
       (capability) => capability.kind === "media",
     );
-    // A driver can pick any of the device's players for announcements. A
-    // speaker turned all the way down may report itself muted as well, and
-    // turning it up is what helps.
-    if (
-      players.length &&
-      players.every(({ observed }) => observed?.volume === 0)
-    ) {
+    const playerId = audio.features.announcementPlayer;
+    // Older registrations can still identify a sole media player.
+    const player = playerId
+      ? players.find(({ id }) => id === playerId)
+      : players.length === 1
+        ? players[0]
+        : undefined;
+    if (player?.observed?.volume === 0) {
       throw new NotHeard(
         toolError(
           "muted",
@@ -89,7 +90,7 @@ export function createAnnounceTool(options: {
         ),
       );
     }
-    if (players.some(({ observed }) => observed?.muted === true)) {
+    if (player?.observed?.muted === true) {
       throw new NotHeard(
         toolError(
           "muted",
@@ -133,12 +134,7 @@ export function createAnnounceTool(options: {
       if (!parsed.success) return invalidInput();
       const { speaker: id, text, language } = parsed.data;
       const device = options.devices.get(id);
-      if (!device || !announcesOn(device)) {
-        return toolError(
-          "not_found",
-          "There's no such smart speaker in the home.",
-        );
-      }
+      if (!device) return noSpeaker();
       try {
         heard(device);
       } catch (error) {
@@ -162,17 +158,30 @@ export function createAnnounceTool(options: {
           `That's enough announcements for now. Try again in ${wait} seconds.`,
         );
       }
-      let announcement: Awaited<ReturnType<Speech["speak"]>>;
+      let synthesisStarted = false;
       try {
-        announcement = await options.speech.speak({
+        const author = options.agentWho(agent.id);
+        await options.speech.speak({
           device: device.id,
           text,
           language,
           actor: agent.actor,
-          beforeTelling: () => heard(options.devices.get(device.id) ?? device),
+          beforeTelling: () => heard(options.devices.get(device.id)),
+          onSynthesisStarted: () => {
+            synthesisStarted = true;
+          },
+          onDelivery: (fetched) => {
+            options.record({
+              action: "device.announce",
+              outcome: fetched ? "ok" : "failed",
+              ...author,
+              subjectId: device.id,
+              detail: { text, language },
+            });
+          },
         });
       } catch (error) {
-        releaseQuota();
+        if (!synthesisStarted) releaseQuota();
         if (error instanceof NotHeard) return error.answer;
         if (error instanceof AnnouncementRefused) {
           return error.reason === "busy"
@@ -190,19 +199,6 @@ export function createAnnounceTool(options: {
         }
         return errorAnswer(error);
       }
-      if (!(await announcement.encoded) && !announcement.fetched()) {
-        return toolError(
-          "unavailable",
-          "The announcement audio couldn't be generated.",
-        );
-      }
-      options.record({
-        action: "device.announce",
-        outcome: "ok",
-        ...options.agentWho(agent.id),
-        subjectId: device.id,
-        detail: { text, language },
-      });
       return answer({ sentTo: device.name, speaker: device.id });
     },
   };

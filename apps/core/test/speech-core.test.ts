@@ -6,7 +6,7 @@ import { radio, settled } from "./devices-support.js";
 import { fakeManager } from "./manager-support.js";
 import { loadAppPackage } from "./runner-apps.js";
 import { fakePiper } from "./speech-support.js";
-import { claimed, fixtureApps, testCore } from "./support.js";
+import { claimed, fixtureApps, post, testCore } from "./support.js";
 
 it("serves FLAC from the running core after an agent calls announce over MCP", async () => {
   const { server, url: serviceUrl } = await fakePiper([]);
@@ -26,7 +26,7 @@ it("serves FLAC from the running core after an agent calls announce over MCP", a
       },
     });
     manager.wantServiceForCore = vi.fn(async () => {});
-    manager.releaseServiceForCore = async () => {};
+    manager.releaseServiceForCore = vi.fn(async () => {});
     radio.reset();
     const lamps = await loadAppPackage(join(fixtureApps, "lamps"), "system");
     const core = await testCore({ manager, apps: [lamps], speakerPort: 0 });
@@ -63,6 +63,11 @@ it("serves FLAC from the running core after an agent calls announce over MCP", a
         "piper",
         expect.anything(),
       );
+      const activity = () =>
+        core.activity
+          .recent()
+          .filter((entry) => entry.action === "device.announce");
+      expect(activity()).toEqual([]);
 
       const command = radio.received.at(-1)?.command;
       if (command?.kind !== "audio" || !("announce" in command.command)) {
@@ -74,6 +79,25 @@ it("serves FLAC from the running core after an agent calls announce over MCP", a
       const bytes = Buffer.from(await audio.arrayBuffer());
       expect(bytes.subarray(0, 4).toString()).toBe("fLaC");
       expect(bytes.length).toBeGreaterThan(42);
+      expect(activity()).toMatchObject([
+        { subjectId: speaker.id, outcome: "ok" },
+      ]);
+      vi.mocked(manager.releaseServiceForCore).mockClear();
+      const switched = await post(
+        core,
+        "/api/agents/can-use/area",
+        {
+          id: "devices.announce",
+          on: false,
+        },
+        person,
+      );
+      expect(switched.statusCode).toBe(200);
+      expect(await names(client)).not.toContain("announce");
+      expect(manager.releaseServiceForCore).toHaveBeenCalledWith(
+        "piper",
+        expect.anything(),
+      );
     } finally {
       await client.close();
     }

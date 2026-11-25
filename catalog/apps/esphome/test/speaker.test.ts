@@ -49,7 +49,12 @@ describe("a smart speaker", () => {
       // format for announcements.
       {
         kind: "audio",
-        features: { mutes: true, muteSwitch: true, announces: true },
+        features: {
+          mutes: true,
+          muteSwitch: true,
+          announces: true,
+          announcementPlayer: "media-media_player",
+        },
       },
     ]);
 
@@ -203,7 +208,10 @@ describe("a smart speaker", () => {
     expect(home.core.registered.get(key)?.capabilities).toContainEqual(
       expect.objectContaining({
         kind: "audio",
-        features: expect.objectContaining({ announces: true }),
+        features: expect.objectContaining({
+          announces: true,
+          announcementPlayer: capability,
+        }),
       }),
     );
     await home.core.until(
@@ -212,17 +220,21 @@ describe("a smart speaker", () => {
     );
 
     const url = "http://192.168.1.20:4180/a/abc.flac";
+    device.silent.add(201);
     await home.core.command(key, "audio", "audio", { announce: { url } });
-    // The Voice PE reports the announcement it was asked for as playing.
     await home.core.until(
-      () => device.states[201]?.state === MediaPlayerState.PLAYING,
-      "it plays the announcement",
+      () => device.commands.some((command) => command.fields.mediaUrl === url),
+      "it received the announcement",
     );
     expect(device.commands.at(-1)).toMatchObject({
       type: "media_player",
       key: 201,
       fields: { mediaUrl: url, announcement: true },
     });
+    await home.core.command(key, "audio", "audio", {
+      announcementFetched: { url },
+    });
+    // The Voice PE reports the announcement it was asked for as playing.
     device.setState(201, { state: MediaPlayerState.PLAYING, volume: 0.4 });
     device.setState(207, { state: MediaPlayerState.PLAYING });
     await home.core.until(
@@ -259,13 +271,19 @@ describe("a smart speaker", () => {
         "idle",
       );
       // Its address fails: the speaker never reports playing it.
+      const url = "http://192.168.1.20:4180/a/gone.flac";
       device.silent.add(201);
       await home.core.command(key, "audio", "audio", {
-        announce: { url: "http://192.168.1.20:4180/a/gone.flac" },
+        announce: { url },
       });
+      await home.core.until(
+        () =>
+          device.commands.some((command) => command.fields.mediaUrl === url),
+        "it received the announcement while silent",
+      );
       device.silent.delete(201);
 
-      vi.setSystemTime(Date.now() + 6_000);
+      vi.setSystemTime(Date.now() + 1_000);
       device.setState(201, { state: MediaPlayerState.PLAYING });
       await home.core.until(
         () => home.core.latest(key, capability)?.activity === "playing",
@@ -274,6 +292,39 @@ describe("a smart speaker", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("reports ordinary playback after reconnecting during an announcement", async () => {
+    home = await startHome();
+    const device = await speaker();
+    const key = await add(home.core, device);
+    const capability = "media-media_player";
+    await home.core.until(
+      () => home.core.latest(key, capability)?.activity === "idle",
+      "idle",
+    );
+    const url = "http://192.168.1.20:4180/a/abc.flac";
+    device.silent.add(201);
+    await home.core.command(key, "audio", "audio", { announce: { url } });
+    await home.core.until(
+      () => device.commands.some((command) => command.fields.mediaUrl === url),
+      "it received the announcement",
+    );
+    await home.core.command(key, "audio", "audio", {
+      announcementFetched: { url },
+    });
+    device.setState(201, { state: MediaPlayerState.PLAYING, volume: 0.4 });
+    await home.core.until(
+      () => home.core.latest(key, capability)?.volume === 40,
+      "it reported announcement playback",
+    );
+    expect(home.core.latest(key, capability)?.activity).toBe("idle");
+    device.reboot();
+    await announce(home.core, device);
+    await home.core.until(
+      () => home.core.latest(key, capability)?.activity === "playing",
+      "it reported ordinary playback on the new connection",
+    );
   });
 
   it("keeps a speaker's activity separate from another speaker with the same capability", async () => {

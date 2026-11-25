@@ -103,6 +103,9 @@ describe("createAnnouncements", () => {
       /^http:\/\/127\.0\.0\.1:4180\/a\/[A-Za-z0-9_-]{27}\.flac$/,
     );
     expect(await made.encoded).toBe(true);
+    // Keep the network eligible even after the first URL has been used.
+    const other = served.create("other", network, 4180, speech([100]));
+    await other.encoded;
 
     const first = await fetch(local(made.url, port));
     expect(first.status).toBe(200);
@@ -232,13 +235,15 @@ describe("createAnnouncements", () => {
     const served = await started();
     const elsewhere = speakerNetwork("127.0.0.2", "127.0.0.2/32")!;
     const made = served.create("speaker", elsewhere, 4180, speech([100]));
-    expect((await fetch(local(made.url, served.port()!))).status).toBe(404);
+    await expect(fetch(local(made.url, served.port()!))).rejects.toThrow();
     expect(made.fetched()).toBe(false);
   });
 
   it("accepts a speaker while other connections from its address are idle", async () => {
     const served = await started();
     const port = served.port()!;
+    const made = served.create("speaker", network, 4180, speech([100]));
+    await made.encoded;
     const idle = [];
     try {
       for (let i = 0; i < 20; i++) {
@@ -249,7 +254,6 @@ describe("createAnnouncements", () => {
           socket.once("error", reject);
         });
       }
-      const made = served.create("speaker", network, 4180, speech([100]));
       expect((await fetch(local(made.url, port))).status).toBe(200);
     } finally {
       for (const socket of idle) socket.destroy();
@@ -266,7 +270,7 @@ describe("createAnnouncements", () => {
     vi.advanceTimersByTime(1_001);
     vi.useRealTimers();
     expect(served.busy("speaker")).toBe(false);
-    expect((await fetch(local(made.url, served.port()!))).status).toBe(404);
+    await expect(fetch(local(made.url, served.port()!))).rejects.toThrow();
   });
 
   it("starts a waiting address's minute only at its turn", async () => {
