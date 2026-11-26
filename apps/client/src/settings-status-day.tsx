@@ -5,6 +5,7 @@ import { cn } from "cn";
 import { CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { productName } from "./brand";
 import { Row, Section } from "./components";
 import { hotCelsius, type HostInfo, type HostProblem } from "./system-status";
 import {
@@ -99,7 +100,7 @@ export function LastDaySection(props: {
           {failed && (
             <Row
               title="Not known right now"
-              detail="Shows again once Updates and services answers"
+              detail={`Shows again once ${productName}'s updater answers`}
             />
           )}
         </div>

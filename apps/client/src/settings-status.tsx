@@ -300,7 +300,7 @@ function Verdict(props: {
         title="Can't check right now"
         detail={
           props.status
-            ? "Updates and services isn't answering. It's usually back within a minute, and this fills in by itself"
+            ? `${productName}'s updater isn't answering. It's usually back within a minute, and this fills in by itself`
             : "Couldn't read the status. It checks again by itself"
         }
       />

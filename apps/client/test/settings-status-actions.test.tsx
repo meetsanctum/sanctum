@@ -226,7 +226,7 @@ describe("restart and shut down", () => {
     );
     await press(buttonIn(dialog()!, "Shut down"));
     expect(sanctum.querySelector('[role="alert"]')?.textContent).toBe(
-      "Couldn't shut downUpdates and services isn't answering. Try again in a minute",
+      "Couldn't shut downSanctum's updater isn't answering. Try again in a minute",
     );
     expect(buttonIn(sanctum, "Restart").disabled).toBe(false);
   });
@@ -294,6 +294,21 @@ describe("free up space", () => {
     });
     expect(storage.querySelector('[role="status"]')?.textContent).toBe(
       "Freed 1.29 GBOnly the version running, the one before and the newest are kept",
+    );
+  });
+
+  it("says when the updater doesn't answer after confirming Free up space", async () => {
+    answers["/api/system/space/free"] = async () => {
+      throw new CoreError(503, "manager_unavailable");
+    };
+    await render();
+    const storage = section("status-storage");
+
+    await press(buttonIn(storage, "Free up space"));
+    await press(buttonIn(dialog()!, "Free up space"));
+
+    expect(storage.querySelector('[role="status"]')?.textContent).toContain(
+      "Sanctum's updater isn't answering. Try again in a minute",
     );
   });
 
@@ -489,7 +504,7 @@ describe("the last 24 hours", () => {
     };
     await render();
     expect(section("status-day").textContent).toBe(
-      "Last 24 HoursProcessor3% nowTemperature58°C now · normalMemory in use627 MB nowNot known right nowShows again once Updates and services answers",
+      "Last 24 HoursProcessor3% nowTemperature58°C now · normalMemory in use627 MB nowNot known right nowShows again once Sanctum's updater answers",
     );
   });
 });

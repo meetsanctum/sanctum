@@ -151,6 +151,7 @@ export const serviceNames: Record<string, string> = {
   zigbee2mqtt: "Zigbee",
   mosquitto: "Messaging",
   ollama: "Ollama",
+  piper: "Piper",
 };
 
 export const serviceName = (service: string) =>
@@ -203,10 +204,6 @@ export function osText(host: HostInfo) {
   const name = host.os.replace(" GNU/Linux", "");
   return host.bits ? `${name}, ${host.bits}-bit` : name;
 }
-
-// "Debian", for what the system holds.
-export const systemName = (host: HostInfo) =>
-  host.os?.split(" ")[0] ?? "The system";
 
 /** How long the host has run: "4 days, 21 hours", "2 hours, 12 minutes". */
 export function runningFor(seconds: number) {
