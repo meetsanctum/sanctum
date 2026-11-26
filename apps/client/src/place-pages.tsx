@@ -16,7 +16,7 @@ import {
   type TileSection,
   useHomeClock,
 } from "@meetsanctum/ui-sdk";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 
 import { appsNotRunning, attentionTile, needingAttention } from "./attention";
 import {
@@ -328,6 +328,12 @@ export function HomeStatus(props: {
     unit,
     appsNotRunning(props.apps, props.notSetUp),
   );
+  const hasProblem = attention?.problem ?? false;
+  useLayoutEffect(() => {
+    // Reveal the tile when it moves to the front of a scrolled row.
+    if (hasProblem && row.current) row.current.scrollLeft = 0;
+  }, [hasProblem]);
+
   if (attention) {
     const tile: StatusItem = {
       key: "attention",
