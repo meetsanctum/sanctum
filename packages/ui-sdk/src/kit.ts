@@ -31,6 +31,12 @@ export * from "./widget-icons";
 export { Button, buttonVariants } from "./components/ui/button";
 export { Input } from "./components/ui/input";
 export {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSeparator,
+  InputOTPSlot,
+} from "./components/ui/input-otp";
+export {
   NativeSelect,
   NativeSelectOptGroup,
   NativeSelectOption,

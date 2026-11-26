@@ -122,7 +122,9 @@ describe("a time-of-day trigger running a mood", () => {
     core.advance(minutes(24 * 60));
     await tick(core);
     expect(await runsOf(core, token, id)).toHaveLength(2);
-  });
+    // It loads the Moods app's package and runs it apart, which takes several
+    // seconds on a slow machine.
+  }, 30_000);
 });
 
 describe("time triggers", () => {

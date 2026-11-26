@@ -1,12 +1,21 @@
 import {
   formatPairingCode,
   normalisePairingCode,
+  pairingCodeAlphabet,
+  pairingCodeLength,
   type PairExchangeFailure,
   type PairExchangeStarted,
   type PairingRequestInfo,
   type Platform,
 } from "@meetsanctum/auth-protocol";
-import { Button, Input } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  Input,
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSeparator,
+  InputOTPSlot,
+} from "@meetsanctum/ui-sdk";
 import { Globe, Monitor, Tablet } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
@@ -49,6 +58,17 @@ type Step =
 // gives the device 30 seconds to answer each of its steps.
 const exchangeMs = 1_000;
 const exchangeLimitMs = 75_000;
+
+const codeSlots = Array.from(
+  { length: pairingCodeLength },
+  (_, index) => index,
+);
+const codeMidpoint = pairingCodeLength / 2;
+const lookAlikeCharacter = /[01ILOU]/;
+const lookAlikeNote =
+  "Codes don’t use 0, 1, I, L, O or U. Check the code on the device.";
+const invalidPasteNote =
+  "That isn’t a code. Codes have 8 letters and digits, such as K7QX-M4PD.";
 
 class ExchangeFailed extends Error {
   constructor(readonly reason: PairExchangeFailure | "timeout") {
@@ -114,6 +134,9 @@ export function ApproveDevice(props: {
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [problem, setProblem] = useState<string>();
+  // A character the code never uses was typed, and left out.
+  const [lookAlike, setLookAlike] = useState(false);
+  const [pasteNote, setPasteNote] = useState<string>();
   const [working, setWorking] = useState(false);
   // The core keeps a verified exchange for this approver while the device
   // is waiting, so use its IDs again if the approver goes back or reopens.
@@ -128,6 +151,8 @@ export function ApproveDevice(props: {
       setStep({ name: "code" });
       setCode("");
       setProblem(undefined);
+      setLookAlike(false);
+      setPasteNote(undefined);
       setWorking(false);
     }
   }, [props.open, cancel]);
@@ -148,13 +173,14 @@ export function ApproveDevice(props: {
     }
   };
 
-  const find = (event: FormEvent) => {
-    event.preventDefault();
-    const normalised = normalisePairingCode(code);
-    if (!normalised) {
-      setProblem("A code has 8 letters and digits, such as K7QX-M4PD.");
+  // Looks the code up as soon as its last character is typed, or when the
+  // form is sent again after a problem.
+  const find = (typed: string) => {
+    const normalised = normalisePairingCode(typed);
+    if (!normalised || working) {
       return;
     }
+    setPasteNote(undefined);
     void run(async (signal) => {
       const previous = verified.current;
       const exchange =
@@ -207,8 +233,8 @@ export function ApproveDevice(props: {
 
   const approve = (event: FormEvent) => {
     event.preventDefault();
-    if (step.name !== "details") return;
     const deviceName = name.trim();
+    if (step.name !== "details" || working || !deviceName) return;
     void run(async (signal) => {
       await approvePairing({ ...step.exchange, name: deviceName }, signal);
       signal.throwIfAborted();
@@ -219,6 +245,8 @@ export function ApproveDevice(props: {
   };
 
   const named = step.name === "details" && suggestedName(step.request);
+  const codeNote =
+    pasteNote ?? (lookAlike && !problem ? lookAlikeNote : undefined);
 
   return (
     <Dialog
@@ -230,7 +258,13 @@ export function ApproveDevice(props: {
     >
       <DialogContent>
         {step.name === "code" && (
-          <form onSubmit={find} className="flex flex-col gap-5">
+          <form
+            onSubmit={(event: FormEvent) => {
+              event.preventDefault();
+              find(code);
+            }}
+            className="flex flex-col gap-5"
+          >
             <DialogHeader>
               <DialogTitle>Add a shared device</DialogTitle>
               <DialogDescription>
@@ -238,22 +272,86 @@ export function ApproveDevice(props: {
                 at home”. Enter the code it shows.
               </DialogDescription>
             </DialogHeader>
-            <Input
+            <InputOTP
               aria-label="Code shown on the device"
-              placeholder="K7QX-M4PD"
+              aria-invalid={problem ? true : undefined}
+              maxLength={pairingCodeLength}
               value={code}
-              onChange={(event) => setCode(event.target.value.toUpperCase())}
-              autoCapitalize="characters"
-              autoComplete="off"
-              spellCheck={false}
-              maxLength={12}
-              className="h-12 text-center text-2xl font-light tabular-nums md:text-2xl"
-              required
+              readOnly={working}
+              filter={(typed) => {
+                const upper = typed.toUpperCase();
+                setPasteNote(undefined);
+                setLookAlike(lookAlikeCharacter.test(upper));
+                return [...upper]
+                  .filter((char) => pairingCodeAlphabet.includes(char))
+                  .join("");
+              }}
+              onPaste={(event) => {
+                if (working) return;
+                const text = event.clipboardData.getData("text/plain");
+                const completeCode = normalisePairingCode(text);
+                if (completeCode) {
+                  event.preventDefault();
+                  setCode(completeCode);
+                  setLookAlike(false);
+                  find(completeCode);
+                  return;
+                }
+                const input = event.currentTarget;
+                const pasted = text.toUpperCase().replace(/[\s-]/g, "");
+                const selectionStart = input.selectionStart ?? 0;
+                const selectionEnd = input.selectionEnd ?? input.value.length;
+                const nextLength =
+                  input.value.length -
+                  (selectionEnd - selectionStart) +
+                  pasted.length;
+                const fits = nextLength <= pairingCodeLength;
+                const invalidCharacters = [...pasted].filter(
+                  (char) => !pairingCodeAlphabet.includes(char),
+                );
+                if (!fits || invalidCharacters.length > 0) {
+                  event.preventDefault();
+                  setPasteNote(
+                    fits &&
+                      invalidCharacters.every((char) =>
+                        lookAlikeCharacter.test(char),
+                      )
+                      ? lookAlikeNote
+                      : invalidPasteNote,
+                  );
+                }
+              }}
+              onChange={(next) => {
+                setCode(next);
+                setProblem(undefined);
+              }}
+              onComplete={find}
+              enterKeyHint="go"
               autoFocus
-            />
+            >
+              <InputOTPGroup>
+                {codeSlots.slice(0, codeMidpoint).map((index) => (
+                  <InputOTPSlot key={index} index={index} />
+                ))}
+              </InputOTPGroup>
+              <InputOTPSeparator />
+              <InputOTPGroup>
+                {codeSlots.slice(codeMidpoint).map((index) => (
+                  <InputOTPSlot key={index} index={index} />
+                ))}
+              </InputOTPGroup>
+            </InputOTP>
+            {codeNote && (
+              <p role="status" className="m-0 text-sm text-muted-foreground">
+                {codeNote}
+              </p>
+            )}
             <Problem text={problem} />
             <DialogFooter>
-              <Button type="submit" disabled={working}>
+              <Button
+                type="submit"
+                disabled={working || code.length < pairingCodeLength}
+              >
                 {working ? "Finding the device…" : "Find the device"}
               </Button>
             </DialogFooter>
