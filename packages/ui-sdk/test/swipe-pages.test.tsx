@@ -210,7 +210,20 @@ it("scrolls tabs too many for the width to keep the current one in view", async 
   // Eight 44 px tabs 20 px apart, after 24 px of room, in a 360 px row.
   const at = (index: number) => 24 + index * 64;
   // jsdom lays nothing out; these stand in for the row's layout.
-  const saved = (["offsetLeft", "offsetWidth", "clientWidth"] as const).map(
+  // The row says its size once it is observed, as a browser's does.
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private callback: () => void) {}
+      observe() {
+        this.callback();
+      }
+      disconnect() {}
+    },
+  );
+  const saved = (
+    ["offsetLeft", "offsetWidth", "clientWidth", "scrollWidth"] as const
+  ).map(
     (name) =>
       [
         name,
@@ -227,6 +240,8 @@ it("scrolls tabs too many for the width to keep the current one in view", async 
     ],
     ["offsetWidth", () => 44],
     ["clientWidth", () => 360],
+    // 24 px of room, eight tabs and 24 px more.
+    ["scrollWidth", () => 24 + 7 * 64 + 44 + 24],
   ] as const) {
     Object.defineProperty(HTMLElement.prototype, name, {
       configurable: true,
@@ -342,3 +357,48 @@ it.each(["swipe", "tab"])(
     }
   },
 );
+
+it("measures no tabs while they fit", async () => {
+  const offsetLeft = vi.fn(() => 0);
+  const saved = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "offsetLeft",
+  );
+  Object.defineProperty(HTMLElement.prototype, "offsetLeft", {
+    configurable: true,
+    get: offsetLeft,
+  });
+  try {
+    await renderTwoPages();
+    const tabs = [...container.querySelectorAll<HTMLElement>('[role="tab"]')];
+    await act(async () => tabs[1]!.click());
+    expect(currentPage()).toBe("Second");
+    expect(offsetLeft).not.toHaveBeenCalled();
+  } finally {
+    if (saved)
+      Object.defineProperty(HTMLElement.prototype, "offsetLeft", saved);
+    else Reflect.deleteProperty(HTMLElement.prototype, "offsetLeft");
+  }
+});
+
+it("makes the page it left unreachable once the pages have slid", async () => {
+  vi.useFakeTimers();
+  try {
+    await renderTwoPages();
+    const [first, second] = [
+      ...container.querySelectorAll<HTMLElement>("[role=tabpanel]"),
+    ];
+    const tabs = [...container.querySelectorAll<HTMLElement>('[role="tab"]')];
+    await act(async () => tabs[1]!.click());
+    expect(currentPage()).toBe("Second");
+    // While they slide, the page left stays as it was.
+    expect(first!.hasAttribute("inert")).toBe(false);
+    expect(second!.hasAttribute("inert")).toBe(true);
+
+    await act(async () => vi.advanceTimersByTime(300));
+    expect(first!.hasAttribute("inert")).toBe(true);
+    expect(second!.hasAttribute("inert")).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});

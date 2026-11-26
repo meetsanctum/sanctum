@@ -501,8 +501,6 @@ describe("a light's pages", () => {
 
   it("turns the page on a swipe, which presses nothing", async () => {
     await render(colourLight, orange);
-    const pages =
-      container.querySelector("[role=tabpanel]")!.parentElement!.parentElement!;
     const red = button("Red");
     await act(async () => {
       pointer(red, "pointerdown", 300, 100);
@@ -512,9 +510,11 @@ describe("a light's pages", () => {
       red.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
     });
     expect(onCommand).not.toHaveBeenCalled();
-    expect(pages.querySelector("[role=tabpanel]:not([inert])")?.id).toMatch(
-      /brightness$/,
-    );
+    expect(
+      container
+        .querySelector('[role="tab"][aria-selected="true"]')
+        ?.getAttribute("aria-label"),
+    ).toBe("Brightness");
   });
 
   it("does not pick a colour after a vertical drag", async () => {

@@ -15,6 +15,7 @@ import {
 } from "react";
 
 import { ScrollArea } from "./components/ui/scroll-area";
+import { isMotionReduced } from "./reduce-motion";
 
 // Pages side by side: a finger swipes between them, and so does a mouse;
 // along the bottom a tab for each, an icon with a dot under the current one,
@@ -28,6 +29,8 @@ import { ScrollArea } from "./components/ui/scroll-area";
 // turn the page, in px.
 const swipeAfter = 10;
 const turnAfter = 60;
+// How long the pages slide to their places, in ms, as their duration-300.
+const slide = 300;
 // How far the tabs fade out at the sides, and the room kept for it either
 // side of them, in px.
 const tabsFade = 24;
@@ -98,6 +101,19 @@ export function SwipePages(props: {
     selectedIndex >= 0
       ? selectedIndex
       : Math.min(chosen.index, pages.length - 1);
+  // The page that can be reached follows the one on show once the pages
+  // have slid there: making a page reachable or not has every element on
+  // it looked at again, which on a slow device would hold the slide back.
+  const [settled, setSettled] = useState(page);
+  useEffect(() => {
+    if (settled === page) return;
+    const later = setTimeout(
+      () => setSettled(page),
+      isMotionReduced() ? 0 : slide,
+    );
+    return () => clearTimeout(later);
+  }, [page, settled]);
+  const reachable = settled < pages.length ? settled : page;
   const swipe = useRef<Swipe | null>(null);
   // A swipe moves the pages straight away, by each page's own style, for
   // each move of the finger: drawing them again, or a value or selector
@@ -152,18 +168,40 @@ export function SwipePages(props: {
   }, [pageId]);
 
   // The current tab scrolls into view, clear of the fade, however the page
-  // was chosen: a swipe, a click or a key.
-  useEffect(() => {
+  // was chosen: a swipe, a click or a key. Only tabs too many for the width
+  // are measured for it, as the row's size says when it changes: measuring
+  // as the page changes would have a slow device lay the detail out before
+  // the pages start to slide.
+  const tabsOverflow = useRef(false);
+  const showTab = useEffectEvent(() => {
     const row = tabRow.current;
     const tab = tabs.current[page];
-    if (!row || !tab) return;
+    if (!row || !tab || !tabsOverflow.current) return;
     const start = tab.offsetLeft - tabsFade;
     const end = tab.offsetLeft + tab.offsetWidth + tabsFade;
     if (start < row.scrollLeft) row.scrollLeft = start;
     else if (end > row.scrollLeft + row.clientWidth) {
       row.scrollLeft = end - row.clientWidth;
     }
-  }, [page]);
+  });
+  useEffect(() => showTab(), [page]);
+  const hasTabs = pages.length > 1;
+  useEffect(() => {
+    const row = tabRow.current;
+    if (!hasTabs || !row) return;
+    // Without a way to hear of the row's size, every page change measures.
+    if (typeof ResizeObserver === "undefined") {
+      tabsOverflow.current = true;
+      return;
+    }
+    const resized = new ResizeObserver(() => {
+      tabsOverflow.current = row.scrollWidth > row.clientWidth;
+      showTab();
+    });
+    resized.observe(row);
+    if (row.firstElementChild) resized.observe(row.firstElementChild);
+    return () => resized.disconnect();
+  }, [hasTabs]);
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.isPrimary === false) return;
@@ -314,7 +352,7 @@ export function SwipePages(props: {
                 pages.length > 1 ? `${id}-${each.id}-tab` : undefined
               }
               // Only the page on show can be reached.
-              inert={index !== page}
+              inert={index !== reachable}
               style={{
                 transform: `translateX(${(index - page) * 100}%)`,
               }}
