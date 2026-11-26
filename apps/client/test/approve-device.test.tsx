@@ -105,9 +105,9 @@ async function type(input: HTMLInputElement, value: string) {
   });
 }
 
+// Typing the last character looks the code up.
 async function find(code: string, waitMs = 0) {
   await type(dialog().querySelector("input")!, code);
-  await act(async () => button("Find the device").click());
   await act(async () => {
     await vi.advanceTimersByTimeAsync(waitMs);
   });
@@ -121,7 +121,6 @@ describe("adding a shared device", () => {
       { status: "verified", request: lenovo },
     ];
     await type(dialog().querySelector("input")!, "k7qx-m4pd");
-    await act(async () => button("Find the device").click());
 
     expect(looked).toEqual([{ code: "K7QXM4PD" }]);
     expect(button("Finding the device…")).toBeDefined();
@@ -231,13 +230,44 @@ describe("adding a shared device", () => {
     );
   });
 
-  it("checks a code's form before asking the home", async () => {
-    await find("K7QX-M4P0");
+  it("keeps only the characters a code uses, in capitals, and says which it never uses", async () => {
+    await find("k7qx-m4p0");
 
-    expect(dialog().querySelector("[role=alert]")!.textContent).toContain(
-      "8 letters and digits",
+    const input = dialog().querySelector<HTMLInputElement>("input")!;
+    expect(input.value).toBe("K7QXM4P");
+    const slots = [
+      ...dialog().querySelectorAll("[data-slot=input-otp-slot]"),
+    ].map((slot) => slot.textContent);
+    expect(slots).toEqual(["K", "7", "Q", "X", "M", "4", "P", ""]);
+    expect(dialog().querySelector("[role=status]")!.textContent).toBe(
+      "Codes don’t use 0, 1, I, L, O or U. Check the code on the device.",
     );
+    expect(button("Find the device").disabled).toBe(true);
     expect(looked).toEqual([]);
+
+    await find("K7QXM4PD");
+    expect(dialog().querySelector("[role=status]")).toBeNull();
+    expect(looked).toEqual([{ code: "K7QXM4PD" }]);
+  });
+
+  it("looks a code up again when Find the device is pressed after a problem", async () => {
+    statuses = [{ status: "failed", reason: "no_answer" }];
+    await find("K7QX-M4PD");
+    expect(dialog().querySelector("[role=alert]")).not.toBeNull();
+    expect(
+      dialog()
+        .querySelector("[data-slot=input-otp]")!
+        .getAttribute("aria-invalid"),
+    ).toBe("true");
+
+    statuses = [{ status: "verified", request: lenovo }];
+    await act(async () => button("Find the device").click());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(looked).toHaveLength(2);
+    expect(dialog().textContent).toContain("Approve this device?");
   });
 
   it("ignores a lookup from an approval dialog that was closed", async () => {
@@ -251,7 +281,6 @@ describe("adding a shared device", () => {
         : original(path, init),
     );
     await type(dialog().querySelector("input")!, "K7QX-M4PD");
-    await act(async () => button("Find the device").click());
     await open(false);
     await open(true);
 

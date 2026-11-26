@@ -1,12 +1,21 @@
 import {
   formatPairingCode,
   normalisePairingCode,
+  pairingCodeAlphabet,
+  pairingCodeLength,
   type PairExchangeFailure,
   type PairExchangeStarted,
   type PairingRequestInfo,
   type Platform,
 } from "@meetsanctum/auth-protocol";
-import { Button, Input } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  Input,
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSeparator,
+  InputOTPSlot,
+} from "@meetsanctum/ui-sdk";
 import { Globe, Monitor, Tablet } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
@@ -114,6 +123,8 @@ export function ApproveDevice(props: {
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [problem, setProblem] = useState<string>();
+  // A character the code never uses was typed, and left out.
+  const [lookAlike, setLookAlike] = useState(false);
   const [working, setWorking] = useState(false);
   // The core keeps a verified exchange for this approver while the device
   // is waiting, so use its IDs again if the approver goes back or reopens.
@@ -128,6 +139,7 @@ export function ApproveDevice(props: {
       setStep({ name: "code" });
       setCode("");
       setProblem(undefined);
+      setLookAlike(false);
       setWorking(false);
     }
   }, [props.open, cancel]);
@@ -148,11 +160,11 @@ export function ApproveDevice(props: {
     }
   };
 
-  const find = (event: FormEvent) => {
-    event.preventDefault();
-    const normalised = normalisePairingCode(code);
-    if (!normalised) {
-      setProblem("A code has 8 letters and digits, such as K7QX-M4PD.");
+  // Looks the code up as soon as its last character is typed, or when the
+  // form is sent again after a problem.
+  const find = (typed: string) => {
+    const normalised = normalisePairingCode(typed);
+    if (!normalised || working) {
       return;
     }
     void run(async (signal) => {
@@ -230,7 +242,13 @@ export function ApproveDevice(props: {
     >
       <DialogContent>
         {step.name === "code" && (
-          <form onSubmit={find} className="flex flex-col gap-5">
+          <form
+            onSubmit={(event: FormEvent) => {
+              event.preventDefault();
+              find(code);
+            }}
+            className="flex flex-col gap-5"
+          >
             <DialogHeader>
               <DialogTitle>Add a shared device</DialogTitle>
               <DialogDescription>
@@ -238,22 +256,50 @@ export function ApproveDevice(props: {
                 Then enter the code it shows.
               </DialogDescription>
             </DialogHeader>
-            <Input
+            <InputOTP
               aria-label="Code shown on the device"
-              placeholder="K7QX-M4PD"
+              aria-invalid={problem ? true : undefined}
+              maxLength={pairingCodeLength}
               value={code}
-              onChange={(event) => setCode(event.target.value.toUpperCase())}
-              autoCapitalize="characters"
-              autoComplete="off"
-              spellCheck={false}
-              maxLength={12}
-              className="h-12 text-center text-2xl font-light tabular-nums md:text-2xl"
-              required
+              filter={(typed) => {
+                const upper = typed.toUpperCase();
+                setLookAlike(/[01ILOU]/.test(upper));
+                return [...upper]
+                  .filter((char) => pairingCodeAlphabet.includes(char))
+                  .join("");
+              }}
+              onChange={(next) => {
+                setCode(next);
+                setProblem(undefined);
+              }}
+              onComplete={find}
+              enterKeyHint="go"
               autoFocus
-            />
+            >
+              <InputOTPGroup>
+                {[0, 1, 2, 3].map((index) => (
+                  <InputOTPSlot key={index} index={index} />
+                ))}
+              </InputOTPGroup>
+              <InputOTPSeparator />
+              <InputOTPGroup>
+                {[4, 5, 6, 7].map((index) => (
+                  <InputOTPSlot key={index} index={index} />
+                ))}
+              </InputOTPGroup>
+            </InputOTP>
+            {lookAlike && !problem && (
+              <p role="status" className="m-0 text-sm text-muted-foreground">
+                Codes don’t use 0, 1, I, L, O or U. Check the code on the
+                device.
+              </p>
+            )}
             <Problem text={problem} />
             <DialogFooter>
-              <Button type="submit" disabled={working}>
+              <Button
+                type="submit"
+                disabled={working || code.length < pairingCodeLength}
+              >
                 {working ? "Finding the device…" : "Find the device"}
               </Button>
             </DialogFooter>
