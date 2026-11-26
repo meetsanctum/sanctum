@@ -46,7 +46,7 @@ jobs:
       - name: Test grammar updates and Wyoming events
         run: |
           docker run --rm --entrypoint python3 \
-            -e PYTHONPATH=/usr/src \
+            -e PYTHONPATH=/usr/src/src:/usr/src \
             -v "$PWD/deploy/speech-to-phrase:/checks:ro" \
             sanctum-speech-to-phrase:check -m unittest discover -s /checks
       - name: Read the pinned model cache key
