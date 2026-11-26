@@ -26,6 +26,8 @@ import {
 // read, what each reads now still heads it.
 
 const chartHeight = 72;
+// Half of the 5 minutes each kept reading stands for.
+const halfOfFive = 150_000;
 const lastDayTitle = "Last 24 Hours";
 
 function Reading(props: {
@@ -122,15 +124,14 @@ export function LastDaySection(props: {
   );
   const showsTemperature = celsius.max !== null;
   const temperature = temperatureChart(unit);
-  // The hourly averages a screen reader gets can hide a hot five minutes.
-  const hotReading =
-    celsius.max !== null && celsius.max >= hotCelsius
-      ? celsius.runs
-          .flat()
-          .find((point) => point.at < now && point.value >= hotCelsius)
-      : undefined;
-  const temperatureLabel = hotReading
-    ? `Temperature over the last 24 hours. Too hot at ${clock.timeText(hotReading.at)}.`
+  // The hourly averages a screen reader gets can hide a hot five minutes, so
+  // its label says when it was too hot: from the start of the first hot
+  // 5 minutes kept to the end of the last, each drawn at its middle.
+  const hot = celsius.runs
+    .flat()
+    .filter((point) => point.at < now && point.value >= hotCelsius);
+  const temperatureLabel = hot.length
+    ? `Temperature over the last 24 hours. Too hot from ${clock.timeText(hot[0]!.at - halfOfFive)} to ${clock.timeText(hot.at(-1)!.at + halfOfFive)}.`
     : undefined;
   const total = host.memory?.total;
   const memoryScale = total ? memoryChart(total) : null;

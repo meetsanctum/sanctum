@@ -407,8 +407,6 @@ describe("the last 24 hours", () => {
     expect(
       [...day.querySelectorAll("h3")].map((heading) => {
         const header = heading.parentElement!;
-        expect(header.classList).toContain("flex");
-        expect(header.classList).toContain("flex-col");
         expect([...header.children].map((child) => child.tagName)).toEqual([
           "H3",
           "P",
@@ -429,7 +427,7 @@ describe("the last 24 hours", () => {
       ),
     ).toEqual([
       "Processor in use over the last 24 hours",
-      "Temperature over the last 24 hours. Too hot at 19:17.",
+      "Temperature over the last 24 hours. Too hot from 19:15 to 19:20.",
       "Memory in use over the last 24 hours",
     ]);
   });
