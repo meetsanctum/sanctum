@@ -58,8 +58,9 @@ export function SourceCheck(props: {
   source: ModelSourceInfo | undefined;
   // The source in use, when it's another one.
   inUse: ModelSourceInfo | undefined;
-  // What was done before the check, such as "Added to your sources".
-  done: string;
+  // What was done before the check, such as "Added to your sources";
+  // nothing when the check is all there is.
+  done?: string;
   onClose: () => void;
   onChanged: (info: ModelsResponse) => void;
 }) {
@@ -155,8 +156,8 @@ export function SourceCheck(props: {
           {inHome(source)
             ? "This can take a minute while the model loads."
             : "This takes a few seconds."}{" "}
-          If you close this, the check carries on, and AI Models shows how it
-          went.
+          If you close this, the check carries on. AI Models shows any problems
+          it finds.
         </p>
       </Result>
     );
