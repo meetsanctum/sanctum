@@ -60,6 +60,9 @@ export type ServiceStatus = {
   restarts?: number;
   // Where it answers over HTTP on the `sanctum` network, while it runs.
   url?: string;
+  // The secret it takes from the core, given with its url, for a service
+  // that has one.
+  token?: string;
 };
 
 type Observed = Omit<ServiceStatus, "name" | "apps" | "core">;
@@ -213,12 +216,15 @@ export function createServices(options: {
         ? last
         : { state: "off" };
     const url = findService(name)?.url;
+    const token = state.tokens?.[name];
+    const answers = url !== undefined && current.state === "running";
     return {
       name,
       apps: state.apps[name] ?? [],
       ...((state.core ?? []).includes(name) ? { core: true as const } : {}),
       ...current,
-      ...(url && current.state === "running" ? { url } : {}),
+      ...(answers ? { url } : {}),
+      ...(answers && token ? { token } : {}),
     };
   }
 
@@ -448,9 +454,15 @@ export function createServices(options: {
     // needs. Asking again changes nothing. The core reaches it at its url,
     // which GET /api/services/:service gives once it runs.
     async wantForCore(name: string) {
-      forCore(name);
+      const definition = forCore(name);
       await store.update((draft) => {
         draft.core = [...new Set([...(draft.core ?? []), name])].sort();
+        if (definition.token) {
+          draft.tokens = {
+            ...draft.tokens,
+            [name]: draft.tokens?.[name] ?? randomBytes(32).toString("hex"),
+          };
+        }
       });
       void options.onChange?.();
       return { service: status(name) };
