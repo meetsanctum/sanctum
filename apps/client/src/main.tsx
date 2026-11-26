@@ -12,7 +12,10 @@ import "@fontsource/inter/500.css";
 import "./styles.css";
 
 reloadOnFailedImports();
-followEffects();
+followEffects(
+  window,
+  import.meta.env.DEV || import.meta.env.MODE === "display",
+);
 void followStoredDrawing();
 
 const root = document.getElementById("root");

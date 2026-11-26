@@ -142,7 +142,7 @@ describe("clients", () => {
     ).toBe(401);
   });
 
-  it("draw as any client chooses, and say what they draw with", async () => {
+  it("turn Reduce effects and Reduce motion on and off as any client sets them", async () => {
     const core = await testCore();
     const claim = await claimed(core);
     const display = sharedClient(core);
@@ -159,104 +159,86 @@ describe("clients", () => {
     });
     const me = async () =>
       (await get(core, "/api/auth/me", { token: display.token })).json().client;
-    const automatic = await me();
-    expect(automatic).toMatchObject({
-      reduceEffects: "automatic",
-      reduceMotion: "automatic",
-      drawingRevision: 0,
-      drawn: null,
+    expect(await me()).toMatchObject({
+      reduceEffects: false,
+      reduceMotion: false,
     });
 
     const set = await post(
       core,
       "/api/auth/clients/drawing",
-      { id: display.id, reduceEffects: "on", reduceMotion: "on" },
+      { id: display.id, reduceEffects: true },
       { token: claim.token },
     );
+    // Reduce motion stays off: each is turned on on its own.
     expect(set.json()).toMatchObject({
       id: display.id,
-      reduceEffects: "on",
-      reduceMotion: "on",
+      reduceEffects: true,
+      reduceMotion: false,
       current: false,
     });
     expect(heard).toEqual([{ type: "client" }]);
     expect(heardByEditor).toEqual([]);
-    // A choice left out stays as it is.
     await post(
       core,
       "/api/auth/clients/drawing",
-      { id: display.id, reduceMotion: "off" },
+      { id: display.id, reduceMotion: true },
       { token: claim.token },
     );
-    const saved = await me();
-    expect(saved).toMatchObject({
-      reduceEffects: "on",
-      reduceMotion: "off",
-      drawingRevision: 2,
+    await post(
+      core,
+      "/api/auth/clients/drawing",
+      { id: display.id, reduceEffects: false },
+      { token: claim.token },
+    );
+    expect(await me()).toMatchObject({
+      reduceEffects: false,
+      reduceMotion: true,
     });
-
-    const drawn = { effects: "reduced", motion: "regular", slowDevice: true };
-    const say = (report: typeof drawn, drawingRevision: number) =>
-      post(
-        core,
-        "/api/auth/me/drawn",
-        { ...report, drawingRevision },
-        { token: display.token },
-      );
-    const said = await say(drawn, saved.drawingRevision);
-    expect(said.statusCode).toBe(204);
-    await say({ ...drawn, motion: "reduced" }, set.json().drawingRevision);
     const listed = (
       await get(core, "/api/auth/clients", { token: claim.token })
     ).json();
     expect(
       listed.find((client: { id: string }) => client.id === display.id),
-    ).toMatchObject({ drawn });
+    ).toMatchObject({ reduceEffects: false, reduceMotion: true });
+    expect(heard).toHaveLength(3);
 
-    // A new choice forgets it until the display says again; the same one
-    // keeps it.
+    const motionOff = await post(
+      core,
+      "/api/auth/clients/drawing",
+      { id: display.id, reduceMotion: false },
+      { token: claim.token },
+    );
+    expect(motionOff.statusCode).toBe(200);
+    expect(motionOff.json()).toMatchObject({
+      reduceEffects: false,
+      reduceMotion: false,
+    });
+    expect(heard).toHaveLength(4);
+
+    // The same again tells it nothing.
     await post(
       core,
       "/api/auth/clients/drawing",
-      { id: display.id, reduceEffects: "on" },
+      { id: display.id, reduceMotion: false },
       { token: claim.token },
     );
-    expect(await me()).toMatchObject({ drawn });
-    expect(heard).toEqual([{ type: "client" }, { type: "client" }]);
-    await post(
-      core,
-      "/api/auth/clients/drawing",
-      { id: display.id, reduceEffects: "automatic" },
-      { token: claim.token },
-    );
-    expect(await me()).toMatchObject({ drawn: null });
+    expect(heard).toHaveLength(4);
   });
 
-  it("refuse a choice they don't know, and an agent's drawing", async () => {
+  it("refuse anything but on or off, and an agent's drawing", async () => {
     const core = await testCore();
     const claim = await claimed(core);
     const display = sharedClient(core);
     for (const body of [
-      { id: display.id, reduceEffects: "sometimes" },
-      { id: display.id, reduceMotion: true },
+      { id: display.id, reduceEffects: "on" },
+      { id: display.id, reduceMotion: "automatic" },
     ]) {
       const refused = await post(core, "/api/auth/clients/drawing", body, {
         token: claim.token,
       });
       expect(refused.statusCode).toBe(400);
     }
-    const said = await post(
-      core,
-      "/api/auth/me/drawn",
-      {
-        effects: "plain",
-        motion: "regular",
-        slowDevice: false,
-        drawingRevision: 0,
-      },
-      { token: display.token },
-    );
-    expect(said.statusCode).toBe(400);
 
     const agent = core.auth.clients.createAgent({
       name: "Codex on the office Mac",
@@ -266,7 +248,7 @@ describe("clients", () => {
     const refused = await post(
       core,
       "/api/auth/clients/drawing",
-      { id: agent.client.id, reduceEffects: "on" },
+      { id: agent.client.id, reduceEffects: true },
       { token: claim.token },
     );
     expect(refused.statusCode).toBe(404);

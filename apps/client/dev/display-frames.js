@@ -326,7 +326,7 @@ async function follow() {
   }
 }
 
-// The system's reduced transparency can change between control polls.
+// Reduce effects can be turned on or off between control polls.
 new MutationObserver(() => updateRun(control)).observe(
   document.documentElement,
   {

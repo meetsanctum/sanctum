@@ -1,5 +1,9 @@
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
-import type { ClientInfo, PersonInfo } from "@meetsanctum/auth-protocol";
+import type {
+  ClientInfo,
+  PersonInfo,
+  SetClientDrawing,
+} from "@meetsanctum/auth-protocol";
 import { Button, Input, useHomeClock } from "@meetsanctum/ui-sdk";
 import { EllipsisVertical, Gauge, House, Pencil, Trash2 } from "lucide-react";
 import {
@@ -115,22 +119,24 @@ export function ClientsSection(props: {
     setPeople(nextPeople);
   }, []);
 
-  const drawingChanged = (saved: ClientInfo) => {
-    // A read already under way can still contain the old choices.
+  // A saved switch shows at once, a read already on its way is let go,
+  // since it can hold the old value, and Clients read afresh, in case
+  // another client changed something meanwhile. Only the switch pressed is
+  // taken from the save's answer: the other may have changed since.
+  const drawingChanged = (saved: SetClientDrawing) => {
     lastAppliedRefresh.current = ++refreshId.current;
     setClients((current) =>
       current?.map((client) =>
-        client.id === saved.id && client.drawingRevision < saved.drawingRevision
+        client.id === saved.id
           ? {
               ...client,
-              reduceEffects: saved.reduceEffects,
-              reduceMotion: saved.reduceMotion,
-              drawingRevision: saved.drawingRevision,
-              drawn: saved.drawn,
+              reduceEffects: saved.reduceEffects ?? client.reduceEffects,
+              reduceMotion: saved.reduceMotion ?? client.reduceMotion,
             }
           : client,
       ),
     );
+    void refresh().catch(() => undefined);
   };
 
   // A device approved here shows up once it collects its token, and

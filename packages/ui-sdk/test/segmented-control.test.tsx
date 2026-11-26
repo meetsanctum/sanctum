@@ -26,20 +26,20 @@ afterEach(async () => {
 });
 
 const options = [
-  { value: "automatic", label: "Automatic" },
-  { value: "on", label: "On" },
-  { value: "off", label: "Off" },
+  { value: "all", label: "All" },
+  { value: "devices", label: "Devices" },
+  { value: "automations", label: "Automations" },
 ] as const;
 
 async function render(
-  value: "automatic" | "on" | "off" | undefined,
+  value: (typeof options)[number]["value"] | undefined,
   onValueChange = vi.fn(),
   extra: { fill?: boolean } = {},
 ) {
   await act(async () => {
     root.render(
       <SegmentedControl
-        label="Reduce effects"
+        label="Show"
         options={options}
         value={value}
         onValueChange={onValueChange}
@@ -53,13 +53,13 @@ async function render(
 }
 
 it("is named by its label and says which segment is chosen", async () => {
-  const { group, segments } = await render("on");
+  const { group, segments } = await render("devices");
   expect(group.getAttribute("role")).toBe("radiogroup");
-  expect(group.getAttribute("aria-label")).toBe("Reduce effects");
+  expect(group.getAttribute("aria-label")).toBe("Show");
   expect(segments.map((segment) => segment.textContent)).toEqual([
-    "Automatic",
-    "On",
-    "Off",
+    "All",
+    "Devices",
+    "Automations",
   ]);
   expect(segments.map((segment) => segment.getAttribute("role"))).toEqual([
     "radio",
@@ -72,9 +72,9 @@ it("is named by its label and says which segment is chosen", async () => {
 });
 
 it("chooses another segment, and keeps the chosen one when pressed again", async () => {
-  const { segments, onValueChange } = await render("automatic");
+  const { segments, onValueChange } = await render("all");
   await act(async () => segments[2]!.click());
-  expect(onValueChange).toHaveBeenCalledWith("off");
+  expect(onValueChange).toHaveBeenCalledWith("automations");
   onValueChange.mockClear();
   await act(async () => segments[0]!.click());
   expect(onValueChange).not.toHaveBeenCalled();
@@ -95,7 +95,7 @@ it.each([
   ["ArrowLeft", 0],
   ["ArrowUp", 0],
 ] as const)("selects the segment reached with %s", async (key, index) => {
-  const { segments, onValueChange } = await render("on");
+  const { segments, onValueChange } = await render("devices");
   await act(async () => segments[1]!.focus());
   await act(async () => {
     segments[1]!.dispatchEvent(
@@ -137,12 +137,12 @@ it("can select an empty string as a choice distinct from no selection", async ()
 });
 
 it("gives every segment the same width, and stretches only when asked", async () => {
-  let { group } = await render("on");
+  let { group } = await render("devices");
   expect(group.classList.contains("auto-cols-[minmax(min-content,1fr)]")).toBe(
     true,
   );
   expect(group.classList.contains("w-full")).toBe(false);
-  ({ group } = await render("on", vi.fn(), { fill: true }));
+  ({ group } = await render("devices", vi.fn(), { fill: true }));
   expect(group.classList.contains("auto-cols-[minmax(min-content,1fr)]")).toBe(
     true,
   );
@@ -156,7 +156,7 @@ it("is a menu of the same choices on a phone, with phoneMenu", async () => {
       <SegmentedControl
         label="Show"
         options={options}
-        value="on"
+        value="devices"
         onValueChange={onValueChange}
         phoneMenu
       />,
@@ -168,20 +168,20 @@ it("is a menu of the same choices on a phone, with phoneMenu", async () => {
   expect(menu.parentElement!.classList.contains("sm:hidden")).toBe(true);
   expect(menu.getAttribute("aria-label")).toBe("Show");
   expect([...menu.options].map((option) => option.text)).toEqual([
-    "Automatic",
-    "On",
-    "Off",
+    "All",
+    "Devices",
+    "Automations",
   ]);
-  expect(menu.selectedOptions[0]!.text).toBe("On");
+  expect(menu.selectedOptions[0]!.text).toBe("Devices");
 
   await act(async () => {
     menu.value = menu.options[2]!.value;
     menu.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  expect(onValueChange).toHaveBeenCalledExactlyOnceWith("off");
+  expect(onValueChange).toHaveBeenCalledExactlyOnceWith("automations");
 });
 
 it("has no menu without phoneMenu", async () => {
-  await render("on");
+  await render("devices");
   expect(container.querySelector("select")).toBeNull();
 });

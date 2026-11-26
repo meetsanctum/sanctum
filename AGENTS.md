@@ -189,7 +189,10 @@ What is under which licence, and what neither covers, is in
   same: every screen and widget has one state, gated by nothing, and there is
   no per-person data. A device may draw that one state more plainly: its
   mode, Reduce effects and Reduce motion change how a screen is drawn, never
-  what it shows or does.
+  what it shows or does. Reduce effects and Reduce motion are two switches
+  of each client's, set on any client and independent of each other: off
+  until someone turns one on, and nothing else, such as the device or its
+  system, turns either on.
 - Keep layout stable and lightweight: live `backdrop-filter` only for the
   dashboard's frosted glass, through the `frosted` utility, which draws no
   blur under Reduce effects (`data-effects="reduced"` on `<html>`, set by
@@ -200,7 +203,7 @@ What is under which licence, and what neither covers, is in
   Animate only `transform` and `opacity`. The knot loader drawing its line
   and the page's edge going with the sidebar are the exceptions. What moves
   stays still under Reduce motion (`data-motion="reduced"` on `<html>`, set
-  by the same file from the system's reduced motion): `motion-reduce:` and
+  by the same file): `motion-reduce:` and
   `motion-safe:` follow it, and so do CSS under `[data-motion="reduced"]` and
   scripts through `useReducedMotion` or `isMotionReduced`, never the media
   query (`apps/client/test/reduce-motion-source.test.ts`). What a finger

@@ -449,8 +449,8 @@ function declarationsOf(
     );
 }
 
-// What draws where motion is reduced, by the system or by Reduce motion
-// (data-motion on <html>), and what draws elsewhere.
+// What draws under Reduce motion (data-motion on <html>), and what draws
+// elsewhere.
 const still = ":where([data-motion=reduced])";
 const moving = ":where(:root:not([data-motion=reduced]))";
 

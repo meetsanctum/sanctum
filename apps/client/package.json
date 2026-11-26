@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
-    "build:display": "vite build --base /__display/built/ --outDir dist-display --emptyOutDir",
+    "build:display": "vite build --mode display --base /__display/built/ --outDir dist-display --emptyOutDir",
     "preview": "vite preview",
     "lint": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json",
