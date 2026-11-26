@@ -158,10 +158,11 @@ export function SwipePages(props: {
     return () => clearTimeout(later);
   }, [leaving, page]);
   const setPage = (index: number) => {
-    if (index === page) return;
-    setDrawsAll(true);
-    const slides = !isMotionReduced() || glide.current !== undefined;
-    setLeaving(slides ? pages[page]?.id : undefined);
+    if (index !== page) {
+      setDrawsAll(true);
+      const slides = !isMotionReduced() || glide.current !== undefined;
+      setLeaving(slides ? pages[page]?.id : undefined);
+    }
     setChosen({ id: pages[index]?.id, index });
   };
   const selectTab = (index: number) => {
@@ -378,7 +379,8 @@ export function SwipePages(props: {
               aria-labelledby={
                 pages.length > 1 ? `${id}-${each.id}-tab` : undefined
               }
-              // Only the page on show can be reached.
+              // Only the page on show can be reached, and the one left
+              // until the pages have slid.
               inert={index !== page && each.id !== leaving}
               style={{
                 transform: `translateX(${(index - page) * 100}%)`,
