@@ -235,10 +235,10 @@ function Sections(props: {
   );
 }
 
-// The categories in the shell's order, Home's status row and the sidebar
-// alike: Lights first, the one with something to press, then Environment,
-// Security and Presence, as a room's line of readings has them, and Media
-// before Buttons.
+// The sidebar and Home's status row share this category order. Lights leads
+// the categories, followed by Environment, Security and Presence, as in a
+// room's line of readings. Media comes before Buttons. On Home, the Attention
+// tile comes before the categories while there's a problem.
 const categoryOrder = [
   "lights",
   "environment",
