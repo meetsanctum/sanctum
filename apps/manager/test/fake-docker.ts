@@ -478,6 +478,7 @@ export class FakeDocker implements DockerClientLike {
         const container = get();
         container.running = true;
         container.startedAt = new Date();
+        if (container.options.Healthcheck) container.health = "starting";
         this.events.push(`restart ${container.name}`);
       },
       remove: async (options?: { v?: boolean }) => {

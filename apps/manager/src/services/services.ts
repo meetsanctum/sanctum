@@ -74,6 +74,8 @@ type Download = { image: string; failedAt?: number; problem?: string };
 
 // A large image that failed to download is tried again after this.
 const downloadAgainMs = 5 * 60_000;
+// Reuse a recent endpoint check between requests, including concurrent ones.
+const endpointCheckMs = 2_000;
 
 // Reverse-DNS app ids, as packages/app-sdk requires them.
 const appId = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/;
@@ -96,15 +98,25 @@ function syncAccounts(draft: ServicesState) {
   }
 }
 
+function isRunning(container: ContainerInfo) {
+  return container.State.Running && !container.State.Restarting;
+}
+
+function isUnhealthy(container: ContainerInfo) {
+  return isRunning(container) && container.State.Health?.Status === "unhealthy";
+}
+
 function observe(container: ContainerInfo, needsHealthCheck?: true): Observed {
-  const running = container.State.Running && !container.State.Restarting;
+  const running = isRunning(container);
+  const unhealthy = needsHealthCheck && isUnhealthy(container);
   const ready =
     !needsHealthCheck || container.State.Health?.Status === "healthy";
   return {
-    state: running ? (ready ? "running" : "starting") : "failed",
-    ...(running
-      ? {}
-      : { problem: `It is ${container.State.Status ?? "not running"}` }),
+    state: !running || unhealthy ? "failed" : ready ? "running" : "starting",
+    ...(!running && {
+      problem: `It is ${container.State.Status ?? "not running"}`,
+    }),
+    ...(unhealthy && { problem: "It stopped answering" }),
     image: container.Config.Image,
     restarts: container.RestartCount ?? 0,
   };
@@ -146,6 +158,10 @@ export function createServices(options: {
   const totalMemory = options.totalMemory ?? totalmem;
   const cpus = options.cpus ?? availableParallelism;
   const seen = new Map<string, Observed>();
+  const endpointChecks = new Map<
+    string,
+    { until: number; result: Promise<Observed> }
+  >();
   // Large images on their way, or the last that failed, by service.
   const downloads = new Map<string, Download>();
   // Count old containers until Docker confirms their removal, even if the
@@ -159,6 +175,7 @@ export function createServices(options: {
     get: (name: string) => seen.get(name),
     set(name: string, next: Observed) {
       const before = seen.get(name);
+      endpointChecks.delete(name);
       seen.set(name, next);
       options.onObserved?.(name, before, next);
     },
@@ -223,6 +240,29 @@ export function createServices(options: {
       ...current,
       ...(url !== undefined && current.state === "running" ? { url } : {}),
     };
+  }
+
+  async function checkEndpoint(name: string) {
+    const before = observed.get(name);
+    const now = performance.now();
+    let check = endpointChecks.get(name);
+    if (!check || now >= check.until) {
+      check = {
+        until: now + endpointCheckMs,
+        result: inspectService(docker, name).then((container) =>
+          container ? observe(container, true) : { state: "starting" },
+        ),
+      };
+      endpointChecks.set(name, check);
+    }
+    try {
+      const result = await check.result;
+      // A reconcile may have changed the service while this check was pending.
+      return status(name, observed.get(name) === before ? result : undefined);
+    } catch (error) {
+      if (endpointChecks.get(name) === check) endpointChecks.delete(name);
+      throw error;
+    }
   }
 
   // Downloads a large image while the reconcile goes on, then reconciles
@@ -351,7 +391,21 @@ export function createServices(options: {
         spec: wanted,
         log,
         removeReplacedImage: definition.dataNeedsNoCopy,
+        ...(definition.readyWhenHealthy && {
+          onStarting: () => observed.set(name, { state: "starting" }),
+        }),
       });
+    }
+    if (definition.readyWhenHealthy && isUnhealthy(container)) {
+      observed.set(name, observe(container, true));
+      log(`Restarting ${name}: it stopped answering`);
+      await docker.getContainer(container.Id).restart();
+      const restarted = await inspectService(docker, name);
+      if (!restarted) {
+        observed.set(name, { state: "starting" });
+        return;
+      }
+      container = restarted;
     }
     if (isBroker(name)) await joinAppNetworks(docker, container, log);
     if (definition.forApps && definition.url) {
@@ -376,11 +430,7 @@ export function createServices(options: {
       let service = status(name);
       if (definition.readyWhenHealthy && service.state === "running") {
         // Docker may have restarted it since the last reconcile.
-        const container = await inspectService(docker, name);
-        service = status(
-          name,
-          container ? observe(container, true) : { state: "starting" },
-        );
+        service = await checkEndpoint(name);
       }
       const token =
         service.url && definition.token && store.current().tokens?.[name];

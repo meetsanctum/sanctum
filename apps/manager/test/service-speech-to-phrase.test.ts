@@ -26,6 +26,7 @@ const totalMemory = () => 4096 * 1024 * 1024;
 
 const servers: ReturnType<typeof createServer>[] = [];
 afterEach(async () => {
+  vi.useRealTimers();
   await Promise.all(servers.splice(0).map((server) => server.close()));
 });
 
@@ -218,7 +219,43 @@ describe("Speech-to-Phrase", () => {
     expect(byApp.statusCode).toBe(404);
   });
 
+  it("reports an unhealthy container and restarts it in place", async () => {
+    const { docker, services } = await home();
+    await services.wantForCore(name);
+    await services.reconcile();
+
+    const container = docker.container(containerName)!;
+    container.health = "unhealthy";
+    const failed = await services.endpoint(name);
+    expect(failed).toMatchObject({
+      state: "failed",
+      problem: "It stopped answering",
+    });
+    expect(failed).not.toHaveProperty("url");
+    expect(failed).not.toHaveProperty("token");
+
+    await services.reconcile();
+    expect(docker.container(containerName)?.id).toBe(container.id);
+    const starting = await services.endpoint(name);
+    expect(starting).toMatchObject({ state: "starting" });
+    expect(starting).not.toHaveProperty("url");
+    expect(starting).not.toHaveProperty("token");
+
+    await services.reconcile();
+    expect(
+      docker.events.filter((event) => event === `restart ${containerName}`),
+    ).toHaveLength(1);
+
+    container.health = "healthy";
+    await services.reconcile();
+    expect(await services.endpoint(name)).toMatchObject({
+      state: "running",
+      url,
+    });
+  });
+
   it("returns the endpoint and token only from the individual lookup when healthy", async () => {
+    vi.useFakeTimers({ toFake: ["performance"] });
     const { docker, server, services } = await home();
     docker.onStart = (container) => {
       if (container === containerName)
@@ -240,12 +277,16 @@ describe("Speech-to-Phrase", () => {
 
     docker.container(containerName)!.health = "healthy";
     await services.reconcile();
+    const getContainer = vi.spyOn(docker, "getContainer");
     const status = await server.inject(`/api/services/${name}`);
     expect(status.json().service).toMatchObject({
       state: "running",
       url,
       token: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
+    const repeated = await server.inject(`/api/services/${name}`);
+    expect(repeated.json()).toEqual(status.json());
+    expect(getContainer).toHaveBeenCalledExactlyOnceWith(containerName);
 
     const list = await server.inject("/api/services");
     const listed = list
@@ -256,9 +297,11 @@ describe("Speech-to-Phrase", () => {
 
     // Docker can restart the service between two reconciles.
     docker.container(containerName)!.health = "starting";
+    vi.advanceTimersByTime(2_000);
     const restarted = await server.inject(`/api/services/${name}`);
     expect(restarted.json().service).toMatchObject({ state: "starting" });
     expect(restarted.json().service).not.toHaveProperty("url");
     expect(restarted.json().service).not.toHaveProperty("token");
+    expect(getContainer).toHaveBeenCalledTimes(2);
   });
 });

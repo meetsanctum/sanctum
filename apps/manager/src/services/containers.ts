@@ -135,11 +135,15 @@ export async function reconcileServiceContainer(options: {
   spec: ServiceSpec;
   log: Log;
   removeReplacedImage?: boolean;
+  onStarting?: () => void;
 }) {
   const { docker, service, spec, log } = options;
   const desired = serviceContainerOptions(service, spec);
   const name = desired.name;
   const existing = await inspectService(docker, service);
+  if (!existing?.State.Running || existing.State.Restarting) {
+    options.onStarting?.();
+  }
   if (existing) {
     if (
       existing.Config.Labels?.[definitionLabel] ===
@@ -158,6 +162,7 @@ export async function reconcileServiceContainer(options: {
       // Pull first, so a failed pull leaves the old container running.
       await ensureImage(docker, spec.image);
       log(`Replacing ${name}: its definition changed`);
+      options.onStarting?.();
       await stopAndRemove(docker, name);
     }
   }
