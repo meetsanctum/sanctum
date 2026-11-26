@@ -7,8 +7,6 @@ import type {
 import {
   Button,
   Input,
-  NativeSelect,
-  NativeSelectOption,
   type LiveFeed,
   useHomeClock,
 } from "@meetsanctum/ui-sdk";
@@ -53,6 +51,8 @@ import {
 } from "../components/ui/dropdown-menu";
 import { coreJson } from "../core-fetch";
 import { AddSource } from "./add-source";
+import { ModelPicker } from "./model-picker";
+import { SourceCheck } from "./source-check";
 import { ollamaAppId } from "./add-sanctum";
 import { NoModel } from "./no-model";
 import { AppsUsing, TokensUsed } from "./usage";
@@ -222,6 +222,7 @@ export function ModelsPage(props: {
         <>
           <AddSource
             open={adding}
+            info={info}
             onOpenChange={setAdding}
             onAdded={answered}
             onCloseAutoFocus={() => {
@@ -236,6 +237,7 @@ export function ModelsPage(props: {
           />
           <EditSource
             editing={editing}
+            info={info}
             onClose={() => setEditing(undefined)}
             onDone={answered}
             onFocusFallback={focusAddSource}
@@ -409,6 +411,8 @@ const editTitles: Record<Editing["action"], (name: string) => string> = {
 // removing a source after saying what that does.
 function EditSource(props: {
   editing?: Editing;
+  // The home's sources as the page has them, for the check a change runs.
+  info: ModelsResponse;
   onClose: () => void;
   onDone: (info: ModelsResponse) => void;
   onFocusFallback: () => void;
@@ -424,6 +428,8 @@ function EditSource(props: {
   const [problem, setProblem] = useState<string>();
   const [working, setWorking] = useState(false);
   const wasRemoved = useRef(false);
+  // A new model or key is checked: the dialog follows it to its result.
+  const [checked, setChecked] = useState<string>();
   const { start, cancel } = useAuthAttempt();
   const action = editing?.action;
 
@@ -439,6 +445,7 @@ function EditSource(props: {
     setModels(undefined);
     setProblem(undefined);
     setWorking(false);
+    setChecked(undefined);
     const opened = props.editing;
     if (opened?.action !== "model") return;
     // Listed again, as a model may have been pulled since; a provider's
@@ -457,11 +464,6 @@ function EditSource(props: {
           setProblem("This source has no models to choose from.");
         } else {
           setModels(look.models);
-          if (
-            !look.models.some((choice) => choice.id === opened.source.model)
-          ) {
-            setModel(look.models[0]!.id);
-          }
         }
       })
       .catch(() => {
@@ -506,7 +508,12 @@ function EditSource(props: {
       signal.throwIfAborted();
       wasRemoved.current = action === "remove";
       props.onDone(info);
-      props.onClose();
+      if (action === "model" || action === "key") {
+        setWorking(false);
+        setChecked(source.id);
+      } else {
+        props.onClose();
+      }
     } catch (error) {
       if (signal.aborted) return;
       const status = (error as { status?: number }).status;
@@ -538,89 +545,97 @@ function EditSource(props: {
           else props.onFocusFallback();
         }}
       >
-        <form onSubmit={submit} className="flex flex-col gap-5">
-          <DialogHeader>
-            <DialogTitle>{action ? editTitles[action](name) : ""}</DialogTitle>
-            <DialogDescription>
-              {action === "rename" &&
-                "The name shows here and in the activity log."}
-              {action === "model" &&
-                (source?.kind === "sanctum"
-                  ? "The models in the Ollama app. For another, download it on Ollama's page."
-                  : source?.kind === "computer"
-                    ? "The models on that computer. For another, run ollama pull there."
-                    : "The models your key can use.")}
-              {action === "key" &&
-                `${productName} checks the new key, then keeps it sealed and never shows it again.`}
-              {action === "remove" &&
-                (source?.inUse
-                  ? "It's the source in use. Its key and tokens go with it. You can choose another source after removing it."
-                  : "Its key and the tokens it counted go with it.")}
-            </DialogDescription>
-          </DialogHeader>
-          {action === "rename" && (
-            <Input
-              aria-label="Computer"
-              value={text}
-              maxLength={64}
-              disabled={working}
-              onChange={(event) => setText(event.target.value)}
-              required
-              autoFocus
-            />
-          )}
-          {action === "key" && (
-            <Input
-              aria-label="API key"
-              type="password"
-              autoComplete="off"
-              value={text}
-              maxLength={512}
-              disabled={working}
-              onChange={(event) => setText(event.target.value)}
-              required
-              autoFocus
-            />
-          )}
-          {action === "model" && models && (
-            <NativeSelect
-              aria-label="Model"
-              value={model}
-              disabled={working}
-              onChange={(event) => setModel(event.target.value)}
-              className="w-full"
-            >
-              {models.map((choice) => (
-                <NativeSelectOption key={choice.id} value={choice.id}>
-                  {choice.name}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          )}
-          {problem && (
-            <p role="alert" className="m-0 text-sm text-destructive">
-              {problem}
-            </p>
-          )}
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              autoFocus={action === "remove"}
-              disabled={working}
-              onClick={close}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant={action === "remove" ? "destructive" : "default"}
-              disabled={working || !canSave}
-            >
-              {action === "remove" ? "Remove" : "Save"}
-            </Button>
-          </DialogFooter>
-        </form>
+        {checked ? (
+          <SourceCheck
+            source={props.info.sources.find((each) => each.id === checked)}
+            inUse={props.info.sources.find(
+              (each) => each.inUse && each.id !== checked,
+            )}
+            done={action === "key" ? "Key replaced" : "Model changed"}
+            onClose={close}
+            onChanged={props.onDone}
+          />
+        ) : (
+          <form onSubmit={submit} className="flex flex-col gap-5">
+            <DialogHeader>
+              <DialogTitle>
+                {action ? editTitles[action](name) : ""}
+              </DialogTitle>
+              <DialogDescription>
+                {action === "rename" &&
+                  "The name shows here and in the activity log."}
+                {action === "model" &&
+                  (source?.kind === "sanctum"
+                    ? "The models in the Ollama app. For another, download it on Ollama's page."
+                    : source?.kind === "computer"
+                      ? "The models on that computer. For another, run ollama pull there."
+                      : "The models your key can use.")}
+                {action === "key" &&
+                  `${productName} checks the new key, then stores it encrypted and never shows it again.`}
+                {action === "remove" &&
+                  (source?.inUse
+                    ? "It's the source in use. Its key and tokens go with it. You can choose another source after removing it."
+                    : "Its key and the tokens it counted go with it.")}
+              </DialogDescription>
+            </DialogHeader>
+            {action === "rename" && (
+              <Input
+                aria-label="Computer"
+                value={text}
+                maxLength={64}
+                disabled={working}
+                onChange={(event) => setText(event.target.value)}
+                required
+                autoFocus
+              />
+            )}
+            {action === "key" && (
+              <Input
+                aria-label="API key"
+                type="password"
+                autoComplete="off"
+                value={text}
+                maxLength={512}
+                disabled={working}
+                onChange={(event) => setText(event.target.value)}
+                required
+                autoFocus
+              />
+            )}
+            {action === "model" && models && (
+              <ModelPicker
+                aria-label="Model"
+                models={models}
+                value={model}
+                onChange={setModel}
+                disabled={working}
+              />
+            )}
+            {problem && (
+              <p role="alert" className="m-0 text-sm text-destructive">
+                {problem}
+              </p>
+            )}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                autoFocus={action === "remove"}
+                disabled={working}
+                onClick={close}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant={action === "remove" ? "destructive" : "default"}
+                disabled={working || !canSave}
+              >
+                {action === "remove" ? "Remove" : "Save"}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );

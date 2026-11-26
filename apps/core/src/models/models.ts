@@ -410,7 +410,12 @@ export function createModels(
       const current = rowOf(id);
       durably(db, () => {
         db.update(modelSources)
-          .set({ check: result.check })
+          .set({
+            check: {
+              ...result.check,
+              tokens: result.tokens.read + result.tokens.written,
+            },
+          })
           .where(eq(modelSources.id, id))
           .run();
         count(id, "check", result.tokens);

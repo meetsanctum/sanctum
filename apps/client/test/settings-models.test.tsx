@@ -96,11 +96,14 @@ const live = createLiveFeed();
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  // The model list scrolls its chosen row into view, which jsdom lacks.
+  Element.prototype.scrollIntoView ??= () => {};
   // Tokens used measures its width, which jsdom never lays out.
   vi.stubGlobal(
     "ResizeObserver",
     class {
       observe() {}
+      unobserve() {}
       disconnect() {}
     },
   );
@@ -239,6 +242,20 @@ const labelled = (name: string) =>
   [...document.querySelectorAll<HTMLInputElement>("input")].find(
     (input) => input.labels?.[0]?.textContent === name,
   )!;
+
+// A model in the dialog's list: the field opens a search over them.
+async function chooseModel(name: string) {
+  await click(
+    document.querySelector<HTMLButtonElement>(
+      '[role="dialog"] button[role="combobox"]',
+    )!,
+  );
+  await click(
+    [...document.querySelectorAll<HTMLElement>("[cmdk-item]")].find((item) =>
+      item.textContent?.startsWith(name),
+    )!,
+  );
+}
 
 async function selectMenuItem(action: string, source = mac) {
   const trigger = document.querySelector<HTMLButtonElement>(
@@ -498,22 +515,20 @@ describe("Settings → AI models", () => {
     sources = [];
     await show();
     const modelSelect = () =>
-      [
-        ...document.querySelectorAll<HTMLSelectElement>(
-          '[role="dialog"] select',
-        ),
-      ].find((select) => select.labels?.[0]?.textContent === "Model");
+      document.querySelector<HTMLButtonElement>(
+        '[role="dialog"] button[role="combobox"]',
+      ) ?? undefined;
     const provider = place("With an AI provider");
     await click(provider);
     expect(document.querySelector('input[name="where"]')).toBeNull();
-    expect(document.body.textContent).toContain("What goes to OpenRouter");
+    expect(document.body.textContent).toContain("Adding it runs a check");
     await click(button("Back"));
     const selected = document.querySelector<HTMLInputElement>(
       'input[name="where"]:checked',
     );
     expect(selected?.labels?.[0]?.textContent).toMatch(/^With an AI provider/);
     await click(button("Continue"));
-    expect(document.body.textContent).toContain("What goes to OpenRouter");
+    expect(document.body.textContent).toContain("Adding it runs a check");
     await type(labelled("API key"), "sk-or-v1-test-key-4f2a");
     await click(button("Check key"));
     expect(document.body.textContent).toContain("The key works");
@@ -580,7 +595,9 @@ describe("Settings → AI models", () => {
   it("can change to the sole available model when the saved model is gone", async () => {
     await show();
     await selectMenuItem("Change model");
-    expect(button("Save").disabled).toBe(false);
+    // The saved model is gone, and none is chosen for the household.
+    expect(button("Save").disabled).toBe(true);
+    await chooseModel("Llama3.2 3B");
     await click(button("Save"));
     expect(requests).toContainEqual([
       "PATCH",
@@ -604,6 +621,10 @@ describe("Settings → AI models", () => {
       "/api/models/sources/anthropic",
       { key: "sk-ant-api03-new-test-key" },
     ]);
+    // The new key is checked, and the dialog follows the check.
+    expect(document.body.textContent).toContain("Checking Claude Sonnet 5.5");
+    expect(document.body.textContent).toContain("Key replaced");
+    await click(button("Close"));
     expect(document.querySelector("[role=dialog]")).toBeNull();
   });
 
@@ -630,6 +651,8 @@ describe("Settings → AI models", () => {
       "Found Ollama at 192.168.1.50:11434, with 1 model",
     );
     await type(labelled("Computer"), "Studio Mac");
+    expect(button("Add and check").disabled).toBe(true);
+    await chooseModel("Llama3.2 3B");
     await click(button("Add and check"));
     expect(requests).toContainEqual([
       "POST",
@@ -641,6 +664,31 @@ describe("Settings → AI models", () => {
         model: "llama3.2:3b",
       },
     ]);
+    // The dialog stays on the new source's check until it ends.
+    expect(document.body.textContent).toContain("Checking Qwen3 8B");
+    expect(document.body.textContent).toContain("Added to your sources");
+    sources = sources.map((source) =>
+      source.id === "studio"
+        ? {
+            ...source,
+            checking: false,
+            check: {
+              at: "2026-11-23T12:00:00Z",
+              outcome: "answered",
+              firstWordMs: 1200,
+              tokens: 312,
+            },
+          }
+        : source,
+    );
+    await act(async () => live.refresh());
+    expect(document.body.textContent).toContain("Qwen3 8B is ready");
+    expect(document.body.textContent).toContain(
+      "Your home still uses Qwen3 8B on Office Mac.",
+    );
+    expect(document.body.textContent).toContain("The check used 312 tokens");
+    expect(button("Use it now")).toBeDefined();
+    await click(button("Done"));
     expect(document.querySelector("[role=dialog]")).toBeNull();
   });
 
@@ -652,10 +700,13 @@ describe("Settings → AI models", () => {
     ) as HTMLInputElement;
     await click(provider);
     await click(button("Continue"));
-    expect(document.body.textContent).toContain("What goes to OpenRouter");
+    expect(document.body.textContent).toContain("Adding it runs a check");
     await type(labelled("API key"), "sk-or-v1-test-key-4f2a");
     await click(button("Check key"));
-    expect(document.body.textContent).toContain("The key works");
+    expect(document.body.textContent).toContain(
+      "The key works. It can use 1 model.",
+    );
+    await chooseModel("Llama3.2 3B");
     await click(button("Add and check"));
     expect(requests).toContainEqual([
       "POST",
@@ -764,6 +815,7 @@ describe("Settings → AI models", () => {
       "/api/models/sources",
       { kind: "sanctum", model: "qwen3:1.7b" },
     ]);
+    await click(button("Close"));
     expect(opener.isConnected).toBe(false);
     const addSource = button("Add a source");
     expect(addSource).toBeDefined();

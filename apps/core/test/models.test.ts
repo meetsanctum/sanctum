@@ -144,7 +144,8 @@ describe("AI models", () => {
     expect(source).toMatchObject({
       computer: "Office Mac",
       address: "192.168.1.40:11434",
-      check: { outcome: "answered" },
+      // The check says what it used, for Settings to show.
+      check: { outcome: "answered", tokens: 46 },
       tokens: { today: 46, month: 46 },
     });
     expect(source!.check!.firstWordMs).toBeGreaterThanOrEqual(0);
@@ -418,7 +419,7 @@ describe("AI models", () => {
     );
     let [source] = (await checked(core)).sources;
     expect(source).toMatchObject({
-      check: { outcome: "failed", problem: "unreachable" },
+      check: { outcome: "failed", problem: "unreachable", tokens: 0 },
       downSince: "2026-10-26T12:00:00.000Z",
     });
     sources.ollama.up = true;

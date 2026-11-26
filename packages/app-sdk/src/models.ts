@@ -36,6 +36,8 @@ export type ModelCheck = {
   /** From asking to the first piece of the answer. */
   firstWordMs?: number;
   problem?: ModelProblem;
+  /** The tokens the check read and wrote, which the source may charge for. */
+  tokens?: number;
 };
 
 /** Why a source gave no answer, in words Settings turns into a sentence. */
