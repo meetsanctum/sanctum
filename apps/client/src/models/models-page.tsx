@@ -98,6 +98,7 @@ export function ModelsPage(props: {
   const [editing, setEditing] = useState<Editing>();
   const [isActing, setIsActing] = useState(false);
   const addButton = useRef<HTMLButtonElement>(null);
+  const firstChoice = useRef<HTMLButtonElement>(null);
   const supportsSanctum = info === undefined || info.usage !== undefined;
   const sources = info?.sources ?? [];
   const isEmpty = info !== undefined && sources.length === 0;
@@ -106,6 +107,8 @@ export function ModelsPage(props: {
   const hasOllamaPage = props.apps.some(
     (app) => app.id === ollamaAppId && app.pages.length > 0,
   );
+  const focusAddSource = () =>
+    (addButton.current ?? firstChoice.current)?.focus();
 
   const act = async (path: string) => {
     if (isActing) return;
@@ -166,6 +169,7 @@ export function ModelsPage(props: {
           <NoModel
             supportsSanctum={supportsSanctum}
             disabled={isActing}
+            firstChoiceRef={firstChoice}
             onChoose={(place, button) => {
               setStart(place);
               opener.current = button;
@@ -206,12 +210,10 @@ export function ModelsPage(props: {
         open={adding}
         onOpenChange={setAdding}
         onAdded={answered}
-        onCloseAutoFocus={() =>
-          (opener.current?.isConnected
-            ? opener.current
-            : addButton.current
-          )?.focus()
-        }
+        onCloseAutoFocus={() => {
+          if (opener.current?.isConnected) opener.current.focus();
+          else focusAddSource();
+        }}
         apps={props.apps}
         supportsSanctum={supportsSanctum}
         start={start}
@@ -222,7 +224,7 @@ export function ModelsPage(props: {
         editing={editing}
         onClose={() => setEditing(undefined)}
         onDone={answered}
-        onFocusFallback={() => addButton.current?.focus()}
+        onFocusFallback={focusAddSource}
       />
     </>
   );

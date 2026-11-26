@@ -29,6 +29,7 @@ import { coreJson } from "../core-fetch";
 import { AddSanctum, ollamaAppId } from "./add-sanctum";
 import type { ModelsResponse } from "./data";
 import {
+  availablePlaces,
   placeNames,
   problemText,
   providerList,
@@ -49,6 +50,11 @@ const help = "m-0 text-[13px] leading-[18px] text-muted-foreground";
 const fieldLabel = "text-[13px] font-medium";
 const choice =
   "flex cursor-pointer items-start gap-3 rounded-md border-2 border-transparent bg-card px-4 py-3 has-checked:border-primary has-checked:bg-background has-focus-visible:ring-3 has-focus-visible:ring-ring/50";
+const choiceDetails: Record<Place, string> = {
+  sanctum: "With the Ollama app. Your data never leaves your home.",
+  computer: "A Mac or PC that runs a local model with Ollama.",
+  provider: `${providerList}, with your own API key. Faster, but what's asked leaves your home.`,
+};
 const providerOptions = modelProviders.map((value) => ({
   value,
   label: providerNames[value],
@@ -70,8 +76,8 @@ export function AddSource(props: {
   onOpenApp?: (appId: string) => void;
 }) {
   const [step, setStep] = useState<"where" | Where>("where");
-  const { supportsSanctum } = props;
-  const defaultSource = supportsSanctum ? "sanctum" : "computer";
+  const places = availablePlaces(props.supportsSanctum);
+  const defaultSource = places[0];
   const [where, setWhere] = useState<Where>(defaultSource);
   const [address, setAddress] = useState("");
   const [computer, setComputer] = useState("");
@@ -261,60 +267,25 @@ export function AddSource(props: {
             </DialogHeader>
             <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
               <legend className="sr-only">Where it runs</legend>
-              {supportsSanctum && (
-                <label className={choice}>
+              {places.map((place) => (
+                <label key={place} className={choice}>
                   <input
                     type="radio"
                     name="where"
-                    checked={where === "sanctum"}
-                    onChange={() => setWhere("sanctum")}
+                    checked={where === place}
+                    onChange={() => setWhere(place)}
                     className="mt-0.5 size-4 shrink-0 accent-primary"
                   />
                   <span className="flex flex-col gap-0.5 leading-tight">
                     <span className="text-sm font-medium">
-                      {placeNames.sanctum}
+                      {placeNames[place]}
                     </span>
                     <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
-                      With the Ollama app. Your data never leaves your home.
+                      {choiceDetails[place]}
                     </span>
                   </span>
                 </label>
-              )}
-              <label className={choice}>
-                <input
-                  type="radio"
-                  name="where"
-                  checked={where === "computer"}
-                  onChange={() => setWhere("computer")}
-                  className="mt-0.5 size-4 shrink-0 accent-primary"
-                />
-                <span className="flex flex-col gap-0.5 leading-tight">
-                  <span className="text-sm font-medium">
-                    {placeNames.computer}
-                  </span>
-                  <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
-                    A Mac or PC that runs a local model with Ollama.
-                  </span>
-                </span>
-              </label>
-              <label className={choice}>
-                <input
-                  type="radio"
-                  name="where"
-                  checked={where === "provider"}
-                  onChange={() => setWhere("provider")}
-                  className="mt-0.5 size-4 shrink-0 accent-primary"
-                />
-                <span className="flex flex-col gap-0.5 leading-tight">
-                  <span className="text-sm font-medium">
-                    {placeNames.provider}
-                  </span>
-                  <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
-                    {providerList}, with your own API key. Faster, but what's
-                    asked leaves your home.
-                  </span>
-                </span>
-              </label>
+              ))}
             </fieldset>
             <DialogFooter>
               <Button

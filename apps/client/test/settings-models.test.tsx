@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type {
   AppInfo,
   ModelSourceInfo,
@@ -12,38 +11,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { coreJson } from "../src/core-fetch";
 import { ModelsPage } from "../src/models/models-page";
-import { checkLine, sourceDetail, sourceName } from "../src/models/words";
-
-// The device's own zone, which the expectations here are worked out in.
-const clock = homeClock();
+import { sourceName } from "../src/models/words";
+import { mac, now, router } from "./settings-models-fixtures";
 
 vi.mock("../src/core-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/core-fetch")>()),
   coreJson: vi.fn(),
 }));
 
-const now = new Date("2026-11-23T12:00:00Z");
-const mac: ModelSourceInfo = {
-  id: "mac",
-  kind: "computer",
-  model: "qwen3:8b",
-  modelName: "Qwen3 8B",
-  computer: "Office Mac",
-  address: "192.168.1.40:11434",
-  inUse: true,
-  check: { at: "2026-11-23T11:55:00Z", outcome: "answered", firstWordMs: 2100 },
-  tokens: { today: 46, month: 1_046 },
-};
-const router: ModelSourceInfo = {
-  id: "router",
-  kind: "openrouter",
-  model: "openai/gpt-5-mini",
-  modelName: "OpenAI: GPT-5 Mini",
-  keyEnd: "4f2a",
-  inUse: false,
-  check: { at: "2026-11-23T11:00:00Z", outcome: "noTool", firstWordMs: 800 },
-  tokens: { today: 0, month: 18_400 },
-};
 const anthropic: ModelSourceInfo = {
   id: "anthropic",
   kind: "anthropic",
@@ -196,6 +171,10 @@ beforeEach(() => {
       ];
       return info() as never;
     }
+    if (path === "/api/models/sources/mac" && method === "DELETE") {
+      sources = sources.filter((source) => source.id !== mac.id);
+      return info() as never;
+    }
     if (path === "/api/models/sources/anthropic" && method === "PATCH") {
       return info() as never;
     }
@@ -276,63 +255,6 @@ async function selectMenuItem(action: string, source = mac) {
     )!,
   );
 }
-
-describe("the words for AI models", () => {
-  it("names a source by its model and where it runs", () => {
-    expect(sourceName(mac)).toBe("Qwen3 8B on Office Mac");
-    expect(sourceName(router)).toBe("OpenAI: GPT-5 Mini with OpenRouter");
-    const sanctum = { ...mac, kind: "sanctum" as const, computer: undefined };
-    expect(sourceName(sanctum)).toBe("Qwen3 8B on Sanctum");
-    expect(sourceDetail(sanctum)).toBe("Ollama");
-    expect(sourceDetail(mac)).toBe("Ollama at 192.168.1.40:11434");
-    expect(sourceDetail(router)).toBe("Key ending in 4f2a");
-  });
-
-  it("says how the last check went", () => {
-    expect(checkLine(clock, mac, now)).toEqual({
-      text: "Answered in 2.1 s and used the tool · checked 5 minutes ago",
-      tone: "good",
-    });
-    expect(checkLine(clock, router, now)?.text).toBe(
-      "Answered, but may not use your home's AI tools well or act on your devices",
-    );
-    expect(
-      checkLine(
-        clock,
-        {
-          ...mac,
-          check: {
-            at: now.toISOString(),
-            outcome: "failed",
-            problem: "unreachable",
-          },
-        },
-        now,
-      ),
-    ).toMatchObject({
-      text: expect.stringContaining("Nothing answered at 192.168.1.40:11434"),
-      tone: "problem",
-    });
-    expect(
-      checkLine(clock, { ...mac, downSince: "2026-11-23T11:02:00Z" }, now)
-        ?.text,
-    ).toContain("Check that Office Mac is awake and Ollama is running there.");
-    expect(
-      checkLine(
-        clock,
-        {
-          ...router,
-          downSince: "2026-11-23T11:02:00Z",
-          check: { at: now.toISOString(), outcome: "failed", problem: "key" },
-        },
-        now,
-      )?.text,
-    ).toContain("OpenRouter didn't take that key.");
-    expect(checkLine(clock, { ...mac, checking: true }, now)?.tone).toBe(
-      "plain",
-    );
-  });
-});
 
 describe("Settings → AI models", () => {
   it("shows the source in use first, the others with Use, and their tokens", async () => {
@@ -555,9 +477,9 @@ describe("Settings → AI models", () => {
     expect(
       [...group.querySelectorAll("button")].map((each) => each.textContent),
     ).toEqual([
-      "On SanctumWith the Ollama app.Stays in your home",
-      "On a computer in your homeA Mac or PC that runs Ollama.Stays in your home",
-      "With an AI providerOpenRouter, Anthropic or OpenAI, with your own API key.Leaves your home",
+      "On SanctumWith the Ollama app.AI requests stay in your home",
+      "On a computer in your homeA Mac or PC that runs Ollama.AI requests go to this computer. Ollama may send them to the cloud.",
+      "With an AI providerOpenRouter, Anthropic or OpenAI, with your own API key.AI requests leave your home",
     ]);
   });
 
@@ -575,13 +497,27 @@ describe("Settings → AI models", () => {
   it("starts Add a source at the place chosen, and gives focus back to it", async () => {
     sources = [];
     await show();
+    const modelSelect = () =>
+      [
+        ...document.querySelectorAll<HTMLSelectElement>(
+          '[role="dialog"] select',
+        ),
+      ].find((select) => select.labels?.[0]?.textContent === "Model");
     const provider = place("With an AI provider");
     await click(provider);
     expect(document.querySelector('input[name="where"]')).toBeNull();
     expect(document.body.textContent).toContain("What goes to OpenRouter");
+    await click(button("Back"));
+    const selected = document.querySelector<HTMLInputElement>(
+      'input[name="where"]:checked',
+    );
+    expect(selected?.labels?.[0]?.textContent).toMatch(/^With an AI provider/);
+    await click(button("Continue"));
+    expect(document.body.textContent).toContain("What goes to OpenRouter");
     await type(labelled("API key"), "sk-or-v1-test-key-4f2a");
     await click(button("Check key"));
     expect(document.body.textContent).toContain("The key works");
+    expect(modelSelect()).toBeDefined();
 
     await act(async () => {
       document.dispatchEvent(
@@ -593,7 +529,36 @@ describe("Settings → AI models", () => {
 
     await click(place("On a computer in your home"));
     expect(labelled("Address")).toBeDefined();
-    expect(document.body.textContent).not.toContain("The key works");
+    expect(modelSelect()).toBeUndefined();
+    expect(button("Add and check").disabled).toBe(true);
+  });
+
+  it("focuses the first source choice after removing the last source", async () => {
+    sources = [mac];
+    await show();
+    await selectMenuItem("Remove");
+    await click(button("Remove"));
+    expect(requests).toContainEqual([
+      "DELETE",
+      "/api/models/sources/mac",
+      undefined,
+    ]);
+    const firstChoice = place("On Sanctum");
+    expect(firstChoice).toBeDefined();
+    await vi.waitFor(() => expect(document.activeElement).toBe(firstChoice));
+  });
+
+  it("focuses the first available choice if the last source disappears while adding", async () => {
+    sources = [mac];
+    usage = undefined;
+    await show();
+    await click(button("Add a source"));
+    sources = [];
+    await act(async () => live.refresh());
+    await click(button("Cancel"));
+    const firstChoice = place("On a computer in your home");
+    expect(firstChoice).toBeDefined();
+    await vi.waitFor(() => expect(document.activeElement).toBe(firstChoice));
   });
 
   it("keeps a typed computer name until it is saved", async () => {
@@ -779,15 +744,16 @@ describe("Settings → AI models", () => {
     expect(button("Open Ollama")).toBeDefined();
   });
 
-  it("adds one of the models Ollama on Sanctum has", async () => {
+  it("focuses Add a source after saving the first model on Sanctum", async () => {
+    sources = [];
     installed = [ollamaApp];
     sanctumModels = [
       { id: "qwen3:4b", name: "Qwen3 4B", size: 2_500_000_000 },
       { id: "qwen3:1.7b", name: "Qwen3 1.7B", size: 1_400_000_000 },
     ];
     await show();
-    await click(button("Add a source"));
-    await click(button("Continue"));
+    const opener = place("On Sanctum");
+    await click(opener);
 
     expect(document.body.textContent).toContain("Choose a model.");
     expect(document.body.textContent).toContain("qwen3:4b · 2.5 GB");
@@ -798,5 +764,9 @@ describe("Settings → AI models", () => {
       "/api/models/sources",
       { kind: "sanctum", model: "qwen3:1.7b" },
     ]);
+    expect(opener.isConnected).toBe(false);
+    const addSource = button("Add a source");
+    expect(addSource).toBeDefined();
+    await vi.waitFor(() => expect(document.activeElement).toBe(addSource));
   });
 });

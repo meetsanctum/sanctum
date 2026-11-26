@@ -34,6 +34,13 @@ export const placeNames = {
 
 export type Place = keyof typeof placeNames;
 
+const placesWithoutSanctum = ["computer", "provider"] as const;
+const places = ["sanctum", ...placesWithoutSanctum] as const;
+
+export function availablePlaces(supportsSanctum: boolean) {
+  return supportsSanctum ? places : placesWithoutSanctum;
+}
+
 /** A source as people read it, such as "Qwen3 8B on Office Mac". */
 export function sourceName(source: ModelSourceInfo) {
   switch (source.kind) {

@@ -8,7 +8,7 @@ import {
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
-import { useId } from "react";
+import { useId, type Ref } from "react";
 
 import {
   Empty,
@@ -17,50 +17,48 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "../components/ui/empty";
-import { placeNames, providerList, type Place } from "./words";
+import { availablePlaces, placeNames, providerList, type Place } from "./words";
 
 // Settings → AI Models before the home has a source: what's missing, then
 // the places it can run as equal choices, each starting Add a source there.
 // Whether what's asked stays in the home is said in words beside an icon,
 // never by colour; none of the places is the one to pick, so none is blue.
 
-const places: {
-  place: Place;
-  Icon: LucideIcon;
-  detail: string;
-  stays: boolean;
-}[] = [
-  {
-    place: "sanctum",
+const tiles: Record<
+  Place,
+  { Icon: LucideIcon; Where: LucideIcon; detail: string; privacy: string }
+> = {
+  sanctum: {
     Icon: Server,
+    Where: House,
     detail: "With the Ollama app.",
-    stays: true,
+    privacy: "AI requests stay in your home",
   },
-  {
-    place: "computer",
+  computer: {
     Icon: Laptop,
+    Where: House,
     detail: "A Mac or PC that runs Ollama.",
-    stays: true,
+    privacy:
+      "AI requests go to this computer. Ollama may send them to the cloud.",
   },
-  {
-    place: "provider",
+  provider: {
     Icon: Cloud,
+    Where: Globe,
     detail: `${providerList}, with your own API key.`,
-    stays: false,
+    privacy: "AI requests leave your home",
   },
-];
+};
 
 export function NoModel(props: {
   // Whether Ollama can run on Sanctum itself; where it can't, that place
   // isn't offered.
   supportsSanctum: boolean;
   disabled?: boolean;
+  firstChoiceRef: Ref<HTMLButtonElement>;
   onChoose: (place: Place, opener: HTMLButtonElement) => void;
 }) {
   const titleId = useId();
-  const shown = places.filter(
-    ({ place }) => place !== "sanctum" || props.supportsSanctum,
-  );
+  const shown = availablePlaces(props.supportsSanctum);
   return (
     <Empty>
       <EmptyHeader>
@@ -83,11 +81,12 @@ export function NoModel(props: {
               : "grid gap-2.5 @xl:grid-cols-2"
           }
         >
-          {shown.map(({ place, Icon, detail, stays }) => {
-            const Where = stays ? House : Globe;
+          {shown.map((place, index) => {
+            const { Icon, Where, detail, privacy } = tiles[place];
             return (
               <Button
                 key={place}
+                ref={index === 0 ? props.firstChoiceRef : undefined}
                 variant="tile"
                 size="card"
                 disabled={props.disabled}
@@ -104,7 +103,7 @@ export function NoModel(props: {
                     </span>
                     <span className="mt-0.5 flex items-center gap-1.5 text-xs leading-4 font-medium text-muted-foreground @xl:mt-auto @xl:pt-1">
                       <Where aria-hidden="true" className="size-3.5" />
-                      {stays ? "Stays in your home" : "Leaves your home"}
+                      {privacy}
                     </span>
                   </span>
                 </span>
