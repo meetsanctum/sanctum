@@ -1,6 +1,6 @@
-import type { Floor, LightsResult } from "@meetsanctum/app-sdk";
+import type { Floor, LightsResult, LightsSwitch } from "@meetsanctum/app-sdk";
 import { icons, SectionButton, type Tile } from "@meetsanctum/ui-sdk";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { Devices } from "./use-devices";
 
@@ -18,19 +18,29 @@ import type { Devices } from "./use-devices";
 // offline lights alone, so while all of them are offline it is disabled,
 // as their tiles are. It sends the core the way its words say, off or on,
 // and no toggle, so a screen a moment behind never does the opposite.
+//
+// Turning off shows at once, as the lights' tiles do. Turning on shows at
+// once on the button alone: a room's turn-on rule may leave some lights
+// off, so its tiles wait for what the core says, but once any light is on
+// the button is White, so it is White from the press. It stays so until a
+// light is on, and goes back if the core switched none or the press failed.
+
+/** How long a press the core answered may hold the button on, at most. */
+const turningOnMs = 5_000;
 
 const hasLightsOn = (lights: readonly Tile[]) =>
   lights.some((tile) => tile.on && !tile.disabled);
 
 /** A place's button for all its lights. */
 export type LightsButtonState = {
+  /** Whether any of its lights is on, as their tiles show. */
   isOn: boolean;
-  /** What it shows: "Turn off lights" or "Turn on lights". */
-  words: string;
-  /** Its words with whose lights they are, its accessible name. */
-  label: string;
+  /** Whose lights they are, in its accessible name: "in Kitchen". */
+  where: string;
+  /** A floor's only turns its lights off. */
+  offOnly?: boolean;
   isDisabled: boolean;
-  onPress: () => Promise<LightsResult>;
+  switchLights: (to: Exclude<LightsSwitch, "toggle">) => Promise<LightsResult>;
 };
 
 /**
@@ -41,18 +51,45 @@ export function LightsButton(props: { lights: LightsButtonState }) {
   const { lights } = props;
   const [failures, setFailures] = useState(0);
   const showFailure = () => setFailures((count) => count + 1);
+  // The press turning the lights on, until one shows on.
+  const [turningOn, setTurningOn] = useState<object>();
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  if (turningOn && lights.isOn) setTurningOn(undefined);
+  const isOn = lights.isOn || turningOn !== undefined;
+  const words = isOn || lights.offOnly ? "Turn off lights" : "Turn on lights";
+
   const press = () => {
+    clearTimeout(timer.current);
+    const to = isOn || lights.offOnly ? "off" : "on";
+    const pressed = to === "on" ? {} : undefined;
+    setTurningOn(pressed);
+    const stop = () =>
+      setTurningOn((current) => (current === pressed ? undefined : current));
     // Individual failures also show on the affected devices' tiles.
-    void lights.onPress().then(({ switched, failed }) => {
-      if (switched === 0 && failed.length > 0) showFailure();
-    }, showFailure);
+    void lights.switchLights(to).then(
+      ({ switched, failed }) => {
+        if (switched === 0) {
+          stop();
+          if (failed.length > 0) showFailure();
+        } else if (pressed) {
+          // Its lights' states are on their way; should they never come,
+          // the tiles say what is on.
+          timer.current = setTimeout(stop, turningOnMs);
+        }
+      },
+      () => {
+        stop();
+        showFailure();
+      },
+    );
   };
   return (
     <SectionButton
       icon={icons.Power}
-      name={lights.words}
-      label={lights.label}
-      lit={lights.isOn}
+      name={words}
+      label={`${words} ${lights.where}`}
+      lit={isOn}
       disabled={lights.isDisabled}
       failures={failures}
       onClick={press}
@@ -67,19 +104,12 @@ export function roomLightsButton(
   devices: Devices,
 ): LightsButtonState | undefined {
   if (lights.length === 0) return undefined;
-  const isOn = hasLightsOn(lights);
-  const words = isOn ? "Turn off lights" : "Turn on lights";
   return {
-    isOn,
-    words,
-    label: `${words} in ${room.name}`,
+    isOn: hasLightsOn(lights),
+    where: `in ${room.name}`,
     isDisabled: lights.every((tile) => tile.disabled),
-    onPress: () =>
-      devices.switchLights(
-        { kind: "room", id: room.id },
-        lights,
-        isOn ? "off" : "on",
-      ),
+    switchLights: (to) =>
+      devices.switchLights({ kind: "room", id: room.id }, lights, to),
   };
 }
 
@@ -93,10 +123,10 @@ export function floorLightsButton(
   const isOn = hasLightsOn(lights);
   return {
     isOn,
-    words: "Turn off lights",
-    label: `Turn off lights on ${floor.name}`,
+    where: `on ${floor.name}`,
+    offOnly: true,
     isDisabled: !isOn,
-    onPress: () =>
-      devices.switchLights({ kind: "floor", id: floor.id }, lights, "off"),
+    switchLights: (to) =>
+      devices.switchLights({ kind: "floor", id: floor.id }, lights, to),
   };
 }

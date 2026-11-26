@@ -141,7 +141,10 @@ export function useDevices(live: LiveFeed) {
   >(() => new Map());
   const ask = useCallback((keys: string[], asked: Asked | null) => {
     const by = {};
+    // Forgetting what nothing asked leaves the tiles as they are, without
+    // drawing them again.
     setAsks((current) => {
+      if (!asked && !keys.some((key) => current.has(key))) return current;
       const next = new Map(current);
       for (const key of keys) {
         if (asked) next.set(key, { asked, by });
