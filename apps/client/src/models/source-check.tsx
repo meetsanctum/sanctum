@@ -159,7 +159,8 @@ export function SourceCheck(props: {
     );
   }
 
-  const name = ownName(source);
+  // One name throughout, with its maker where another model shares it.
+  const name = ownName(source, props.inUse);
   if (source.checking || step === "asking" || step === "seeing") {
     const isSeeing = step === "seeing";
     return (
@@ -260,11 +261,10 @@ export function SourceCheck(props: {
     );
   }
 
-  const switchName = ownName(source, props.inUse);
   return (
     <Result
       badge={<CircleCheck className="size-6.5 text-(--leaf-text)" />}
-      title={`${switchName} is ready`}
+      title={`${name} is ready`}
       line={
         source.inUse
           ? "It's now your home's AI model."
@@ -287,7 +287,7 @@ export function SourceCheck(props: {
                 disabled={acting}
                 onClick={() => void act("use")}
               >
-                <span className="truncate">Switch to {switchName}</span>
+                <span className="truncate">Switch to {name}</span>
               </Button>
             </div>
           )}
