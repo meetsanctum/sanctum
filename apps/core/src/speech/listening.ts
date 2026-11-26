@@ -14,6 +14,7 @@ import {
   type ListenEnd,
   type ListenError,
   type ListenOpened,
+  type ListenRefusal,
   type ListenStep,
 } from "@meetsanctum/app-sdk";
 
@@ -28,14 +29,14 @@ import {
 // The run's own limits hold whatever the hearer does: one run per speaker
 // (a newer one ends the older), a few at once in the home, `listenMaxMs` of
 // sound, `listenQuietMs` without any, and a run that never finishes ends
-// after `runMs`. Each run keeps its moments: when its wake word was heard,
+// after `listeningRunMs`. Each run keeps its moments: when its wake word was heard,
 // its first sound, when listening stopped, when its reply was ready and
 // when that finished playing, which only its driver can say.
 
 /** The most runs at once in the home. */
 export const runsAtOnce = 4;
 /** The longest a run lasts, its reply included, before it ends as failed. */
-const runMs = 60_000;
+export const listeningRunMs = 60_000;
 /** How long a finished run's steps stay to be read. */
 const keptMs = 10_000;
 /** The most finished runs kept for their drivers to read. */
@@ -55,6 +56,8 @@ export type RunMoments = {
 export type HeardRun = {
   id: string;
   device: string;
+  /** The driver that opened it. */
+  driver: string;
   wakeWord: string | null;
   /** The sound as it comes, ending once listening stops. */
   sound: AsyncIterable<Buffer>;
@@ -67,7 +70,7 @@ export type HeardRun = {
   fail(error: ListenError): void;
   /** Ends the run. */
   done(): void;
-  /** Aborts when the run ends before its hearer is done with it. */
+  /** Aborts when the run ends. */
   signal: AbortSignal;
   readonly moments: Readonly<RunMoments>;
   /** How the driver ended it, once it did. */
@@ -77,9 +80,9 @@ export type HeardRun = {
 /** What hears the home's runs; without one, every run is refused `off`. */
 export type Hearer = (run: HeardRun) => void | Promise<void>;
 
-type Run = Omit<HeardRun, "moments"> & {
+type Run = Omit<HeardRun, "moments" | "ended"> & {
   moments: RunMoments;
-  driver: string;
+  ended: ListenEnd | null;
   steps: ListenStep[];
   finished: boolean;
   readers: Set<() => void>;
@@ -123,7 +126,10 @@ export function createListening(options: {
   idFor: (driver: string, key: string) => string | null;
   // Whether a device's `audio` part says it listens.
   listens: (device: string) => boolean;
-  hearer: () => Hearer | null;
+  // What hears a device's run, or why it's refused; none is `off`.
+  hearer: (device: string) => Hearer | ListenRefusal | null;
+  // A run the core refused on its own account, not the hearer's.
+  refused?: (device: string, refusal: ListenRefusal) => void;
   now?: () => number;
   log: (message: string) => void;
 }) {
@@ -197,18 +203,20 @@ export function createListening(options: {
       }
       const device = options.idFor(driver, parsed.data.key);
       if (!device) throw new ActionError("not_found");
+      if (closed) return { accepted: false, refusal: "unavailable" };
+      const refuse = (refusal: ListenRefusal): ListenOpened => {
+        options.refused?.(device, refusal);
+        return { accepted: false, refusal };
+      };
       // A request can arrive before an updated device registration does.
-      if (closed || !options.listens(device)) {
-        return { accepted: false, refusal: "unavailable" };
-      }
-      const hearer = options.hearer();
-      if (!hearer) return { accepted: false, refusal: "off" };
+      if (!options.listens(device)) return refuse("unavailable");
+      const hearer = options.hearer(device) ?? "off";
+      if (typeof hearer === "string")
+        return { accepted: false, refusal: hearer };
       // A speaker runs one request at a time: a newer one ends the older.
       const older = bySpeaker.get(device);
       if (older) fail(older, "failed");
-      if (bySpeaker.size >= runsAtOnce) {
-        return { accepted: false, refusal: "limited" };
-      }
+      if (bySpeaker.size >= runsAtOnce) return refuse("limited");
 
       const id = randomBytes(12).toString("base64url");
       const sound = soundQueue();
@@ -244,10 +252,12 @@ export function createListening(options: {
         },
         fail: (error) => fail(run, error),
         done() {
+          if (run.finished) return;
+          run.ended = "done";
           stopListening(run);
           tell(run, { step: "done" });
         },
-        limit: setTimeout(() => fail(run, "failed"), runMs),
+        limit: setTimeout(() => fail(run, "failed"), listeningRunMs),
       };
       run.limit.unref();
       runs.set(id, run);
@@ -326,14 +336,13 @@ export function createListening(options: {
         throw new Error(`${driver} closed a run the core cannot close`);
       }
       const run = runOf(driver, parsed.data.run);
-      if (!run) return;
+      if (!run || run.finished) return;
       const { end } = parsed.data;
-      (run as { ended: ListenEnd | null }).ended = end;
-      if (end === "played") run.moments.finishedPlaying ??= now();
-      if (!run.finished) {
-        stopListening(run);
-        tell(run, { step: "done" });
-      }
+      run.ended = end;
+      if (end === "played" && run.moments.replyReady !== null)
+        run.moments.finishedPlaying = now();
+      stopListening(run);
+      tell(run, { step: "done" });
     },
 
     /** A driver stopped: its runs end. */

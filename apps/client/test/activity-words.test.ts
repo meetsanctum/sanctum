@@ -176,6 +176,69 @@ describe("an entry's words", () => {
     });
   });
 
+  it("says what a smart speaker was asked by its moments, never its words", () => {
+    const speaker = {
+      type: "device" as const,
+      id: "speaker",
+      name: "Office Speaker",
+      gone: false,
+    };
+    const asked = (fields: Partial<ActivityInfo>) =>
+      activityWords(
+        clock,
+        entry({
+          action: "device.request",
+          subject: speaker,
+          who: { kind: "speaker", id: "speaker", name: "Office Speaker" },
+          detail: {
+            firstSoundMs: 300,
+            stoppedListeningMs: 2_400,
+            replyReadyMs: 3_200,
+            finishedPlayingMs: 4_000,
+          },
+          ...fields,
+        }),
+        "home",
+      );
+    expect(asked({})).toEqual({
+      title: "Office Speaker answered a request",
+      detail: "Listened 2.1 s, answered in 0.8 s, played 0.8 s",
+      problem: false,
+    });
+    expect(
+      asked({
+        detail: {
+          firstSoundMs: 300,
+          stoppedListeningMs: 2_400,
+          replyReadyMs: 7_400,
+          finishedPlayingMs: 8_000,
+          lateReplyMs: 9_100,
+        },
+      }).detail,
+    ).toBe("Listened 2.1 s, answered after 9.1 s");
+    expect(asked({ outcome: "failed", reason: "turn_ended" }).title).toBe(
+      "Office Speaker stopped a request for a newer one",
+    );
+    expect(
+      activityWords(
+        clock,
+        entry({
+          action: "device.declined",
+          outcome: "refused",
+          reason: "assistant_off",
+          subject: speaker,
+          who: { kind: "sanctum" },
+          detail: null,
+        }),
+        "device",
+      ),
+    ).toEqual({
+      title: "Declined a voice request",
+      detail: "The Assistant is off",
+      problem: false,
+    });
+  });
+
   it("starts with the device's name in the home's list", () => {
     expect(activityWords(clock, entry(), "home").title).toBe(
       "Lamp turned on at 80%",

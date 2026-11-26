@@ -5,12 +5,15 @@ import type {
   VoiceRun,
 } from "@meetsanctum/app-sdk";
 import {
+  entityId,
+  MediaPlayerState,
   VoiceAssistantEvent,
   VoiceAssistantSubscribeFlag,
 } from "esphome-client";
 
 import type { Session } from "./connection.js";
 import { hasVoiceAssistant } from "./registration.js";
+import { describeSession } from "./session-details.js";
 
 // A device with a voice assistant, such as a smart speaker, waits for an
 // assistant to follow its requests: until one does, it counts itself as
@@ -59,13 +62,19 @@ export function followRequests(
   let current: VoiceRun | null = null;
   let pending: symbol | null = null;
   let gone = false;
+  const player = describeSession(session).announcementPlayer;
+  let playback: {
+    run: VoiceRun;
+    started: boolean;
+    wasPlaying: boolean;
+  } | null = null;
 
   function decline() {
     requests.respondToRequest({ error: true });
     send(VoiceAssistantEvent.RUN_END);
   }
 
-  function show(step: ListenStep) {
+  function show(step: ListenStep, run: VoiceRun) {
     switch (step.step) {
       case "stopped":
         send(VoiceAssistantEvent.STT_VAD_END);
@@ -74,6 +83,16 @@ export function followRequests(
         send(VoiceAssistantEvent.STT_END, [{ name: "text", value: step.text }]);
         return;
       case "reply":
+        if (player) {
+          const before = client.latest(
+            entityId("media_player", player.objectId),
+          );
+          playback = {
+            run,
+            started: false,
+            wasPlaying: before?.state === MediaPlayerState.PLAYING,
+          };
+        }
         send(VoiceAssistantEvent.INTENT_START);
         send(VoiceAssistantEvent.INTENT_END, [
           { name: "conversation_id", value: "" },
@@ -100,7 +119,7 @@ export function followRequests(
     try {
       for await (const step of run.steps()) {
         if (current !== run || gone) return;
-        show(step);
+        show(step, run);
       }
       if (current === run) current = null;
       await run.close("done");
@@ -111,6 +130,8 @@ export function followRequests(
         send(VoiceAssistantEvent.RUN_END);
       }
       await run.close("done").catch(() => undefined);
+    } finally {
+      if (playback?.run === run) playback = null;
     }
   }
 
@@ -174,6 +195,31 @@ export function followRequests(
   const audio = client.on("voiceAssistantAudio", (chunk) => {
     if (chunk.data.byteLength > 0) current?.send(chunk.data);
   });
+  const telemetry =
+    player &&
+    client.on("telemetry", (event) => {
+      if (
+        !playback ||
+        current !== playback.run ||
+        event.type !== "media_player" ||
+        event.key !== player.key
+      )
+        return;
+      if (
+        event.state === MediaPlayerState.ANNOUNCING ||
+        (!playback.wasPlaying && event.state === MediaPlayerState.PLAYING)
+      ) {
+        playback.started = true;
+      } else if (playback.started) {
+        const { run } = playback;
+        playback = null;
+        void run.close("played").catch((error: unknown) => {
+          options.log(
+            `a voice run couldn't close after playback (${String(error)})`,
+          );
+        });
+      }
+    });
   const lifecycle = client.on("lifecycle", (event) => {
     if (event.kind !== "disconnect") return;
     gone = true;
@@ -183,6 +229,7 @@ export function followRequests(
     if (run) void run.close("disconnected").catch(() => undefined);
     request[Symbol.dispose]();
     audio[Symbol.dispose]();
+    telemetry?.[Symbol.dispose]();
     lifecycle[Symbol.dispose]();
   });
   requests.subscribe(

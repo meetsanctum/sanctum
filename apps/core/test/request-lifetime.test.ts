@@ -28,7 +28,12 @@ function setUp(
   overrides: Partial<Parameters<typeof createRequests>[0]> = {},
 ) {
   const app = { id: assistantAppId, name: "Assistant", requests: handler };
-  const entry = { app, granted: [aiAssistantPermission] } as InstalledApp;
+  const entry = {
+    app,
+    granted: [aiAssistantPermission],
+    manifest: { permissions: [] },
+    supervision: { phase: "running" },
+  } as unknown as InstalledApp;
   const turn = {
     open: vi.fn(),
     read: vi.fn(),
@@ -61,12 +66,18 @@ function setUp(
     log,
     ...overrides,
   });
-  const ask = (clientId = "tablet", checkClient = () => {}) =>
+  const ask = (clientId = "tablet", check = () => {}) =>
     requests.ask({
       actor: { kind: "client", id: clientId },
+      key: clientId,
       who: { clientId },
-      asked: { text: "Hello", language: "en", clientName: "Tablet" },
-      checkClient,
+      asked: {
+        text: "Hello",
+        language: "en",
+        room: null,
+        from: { kind: "client", name: "Tablet" },
+      },
+      check,
     });
   return {
     ask,
@@ -248,6 +259,64 @@ describe("Assistant request admission and lifetime", () => {
 
     await expect(ask()).rejects.toMatchObject({ code: "unavailable" });
     expect(arrives).not.toHaveBeenCalled();
+  });
+
+  it.each(["off", "paused"])(
+    "refuses requests while the Assistant is %s",
+    async (state) => {
+      const { ask, requests, arrives, entry } = setUp(vi.fn(), {
+        accepts: () => false,
+      });
+      if (state === "off") entry.off = true;
+      else {
+        entry.manifest.permissions = [
+          {
+            id: "models.use",
+            reason: "To answer.",
+            needed: true,
+            startsOn: false,
+            asked: null,
+          },
+        ];
+      }
+      expect(requests.answers()).toBe(false);
+      await expect(ask()).rejects.toMatchObject({ code: "unavailable" });
+      expect(arrives).not.toHaveBeenCalled();
+    },
+  );
+
+  it("drops the exchange for a speaker removed while the Assistant starts", async () => {
+    const arriving = deferredDelivery();
+    const seen = vi.fn();
+    let running = false;
+    const { requests } = setUp(async (_ctx, request) => seen(request.earlier), {
+      accepts: () => running,
+      arrives: async () => {
+        await arriving.promise;
+        return true;
+      },
+    });
+    const ask = () =>
+      requests.ask({
+        actor: { kind: "device", id: "speaker" },
+        key: "speaker",
+        who: { actor: "speaker:speaker" },
+        asked: {
+          text: "Hello",
+          language: "en",
+          room: null,
+          from: { kind: "speaker", name: "Speaker" },
+        },
+      });
+    expect(requests.answers()).toBe(true);
+    const pending = ask();
+    requests.forget("speaker");
+    arriving.resolve();
+    await expect(pending).resolves.toBeNull();
+
+    running = true;
+    await ask();
+    expect(seen).toHaveBeenCalledExactlyOnceWith([]);
   });
 
   it("checks the client's credential after the Assistant is ready", async () => {

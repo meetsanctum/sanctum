@@ -5,7 +5,8 @@ import type { Kind } from "./schema.js";
 //
 // - devices: what devices did and what was done to them: commands, changes
 //   outside Sanctum, presses, going offline and back, going quiet, a
-//   battery falling low and a new one, firmware;
+//   battery falling low and a new one, firmware, and what smart speakers
+//   were asked;
 // - automations: workflow runs, and apps' actions a workflow or an app
 //   called on its own;
 // - setup: what people set up and asked apps to do: people, sign-ins and
@@ -27,6 +28,8 @@ const deviceActions = new Set([
   "device.repair",
   "device.add",
   "device.announce",
+  "device.request",
+  "device.declined",
 ]);
 
 // What the core records of an app's place in the home, under the app's id.

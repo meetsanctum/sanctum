@@ -57,7 +57,8 @@ export function createEsphomeApp(options: DriverOptions = {}) {
     // playing them isn't the player's own. 0.11.0: a smart speaker that
     // streams its microphone listens: its requests go to the core, which
     // takes or declines each, and the driver shows the core's steps on it.
-    version: "0.11.0",
+    // 0.11.1: a run closes once the speaker's player has played its reply.
+    version: "0.11.1",
     core: "^2.0.0",
     summary:
       "Brings your ESPHome lights, plugs, sensors, buttons and speakers into your home.",

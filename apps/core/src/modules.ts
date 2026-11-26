@@ -1,5 +1,4 @@
 import {
-  announcePermission,
   answersTo,
   modelsUsePermission,
   shownQuestions,
@@ -39,8 +38,8 @@ import { createAppVersions } from "./app-host/versions.js";
 import { createAppSecrets, createSealer } from "./app-host/secrets.js";
 import { createAppSettings } from "./app-host/settings.js";
 import { createAuth, loginRule } from "./auth/auth.js";
-import { assembleSpeech } from "./speech/assembly.js";
-import { createListening } from "./speech/listening.js";
+import { assembleSpeakerAudio } from "./speech/assembly.js";
+import type { Transcriber } from "./speech/spoken.js";
 import type { Limits } from "./auth/limits.js";
 import { setCoreFollowers } from "./core-followers.js";
 import { createDashboards } from "./dashboards/dashboards.js";
@@ -172,6 +171,8 @@ export async function createModules(
     holdSettleMs?: number;
     // For tests: how many device commands AI agents may send a minute.
     agentCommandLimits?: AgentCommandLimits;
+    // For tests: what hears words in smart speakers' sound.
+    transcriber?: () => Transcriber | null;
     // For tests: the home's time zone and sun times, which otherwise come
     // from Places and from the app that provides the sun.
     timeZone?: () => string | null;
@@ -224,6 +225,11 @@ export async function createModules(
     tools: () => agentTools,
     commandLimits: options.agentCommandLimits,
     onAreaChanged: () => speech?.areaChanged(),
+    speakers: {
+      actsFor: (id) => spoken.actsFor(id),
+      isSpeaker: (id) => isSpeaker(id),
+      name: (id) => devices.get(id)?.name ?? null,
+    },
     now,
   });
   const { canUse: agentsCanUse, checkAgentCommand } = agentAccess;
@@ -457,19 +463,14 @@ export async function createModules(
   });
   // Pictures drivers hand over, in memory only (blobs/blobs.ts).
   const blobs = createBlobs({ now, log });
-  // Smart speakers' runs, which their drivers open as they hear their wake
-  // word (speech/listening.ts).
-  const listening = createListening({
-    idFor: (driver, key) => devices.idFor(driver, key),
-    listens: (id) =>
-      devices
-        .get(id)
-        ?.capabilities.some(
-          (part) => part.kind === "audio" && part.features.listens,
-        ) ?? false,
-    hearer: () => null,
-    log,
-  });
+  const { speech, startSpeech, stopSpeech, listening, spoken, isSpeaker } =
+    assembleSpeakerAudio(options, {
+      canUse: agentsCanUse,
+      devices,
+      places,
+      apps: () => apps,
+      record: activity.for("devices"),
+    });
   // The home's AI models, which the household adds in Settings, and the
   // turns in which apps ask the one in use.
   const models = createModels(db, {
@@ -649,13 +650,6 @@ export async function createModules(
       places.list().floors.find((floor) => floor.id === id)?.name ?? null,
     dashboard: (id) =>
       dashboards.list().find((dashboard) => dashboard.id === id)?.name ?? null,
-  });
-  const { speech, startSpeech, stopSpeech } = assembleSpeech({
-    speaker: options.speaker,
-    manager: options.manager,
-    devices,
-    areaOn: () => agentsCanUse.areaOn(announcePermission),
-    log,
   });
   const agentTools: AgentTools = assembleAgentTools(agentAccess, {
     apps,

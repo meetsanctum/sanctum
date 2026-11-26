@@ -1,5 +1,5 @@
 import {
-  assistantRequestSchema,
+  assistantPromptSchema,
   type AppGoBack,
   type AppRunning,
   type AppInfo,
@@ -96,9 +96,7 @@ import type { AppHost } from "./host.js";
 
 const appParams = z.object({ appId: z.string().min(1).max(128) });
 
-const askBody = assistantRequestSchema
-  .pick({ text: true, language: true })
-  .partial({ language: true });
+const askBody = assistantPromptSchema.partial({ language: true });
 const params = appParams.extend({ actionId: z.string().min(1).max(128) });
 const turnOff = z.strictObject({ off: z.boolean() });
 const confirmedId = z.string().min(1).max(64);
@@ -254,13 +252,15 @@ export function registerAppRoutes(
     const token = bearerToken(request.headers.authorization);
     const reply = await host.ask({
       actor,
+      key: principal.client.id,
       who: { personId: principal.person?.id, clientId: principal.client.id },
       asked: {
         text: parsed.data.text,
         language: parsed.data.language ?? "en",
-        clientName: principal.client.name,
+        room: null,
+        from: { kind: "client", name: principal.client.name },
       },
-      checkClient() {
+      check() {
         if (
           !token ||
           options.authenticate(token)?.client.id !== principal.client.id

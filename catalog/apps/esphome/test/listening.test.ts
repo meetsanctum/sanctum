@@ -1,4 +1,4 @@
-import { VoiceAssistantEvent } from "esphome-client";
+import { MediaPlayerState, VoiceAssistantEvent } from "esphome-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { add, startHome } from "./support.js";
@@ -189,6 +189,28 @@ describe("a smart speaker's request", () => {
       () => second.end === "done",
       "its second run closed as done",
     );
+  });
+
+  it("closes the voice run when the reply's player finishes", async () => {
+    const { device, run } = await taken();
+    home.core.listening.step(run.id, {
+      step: "reply",
+      url: "http://192.168.1.2:4180/r/abc.flac",
+      text: "Done",
+    });
+    await home.core.until(
+      () =>
+        device.voiceMessages.some(
+          (message) =>
+            message.type === "event" &&
+            message.eventType === VoiceAssistantEvent.TTS_END,
+        ),
+      "the player received the reply",
+    );
+    device.setState(201, { state: MediaPlayerState.ANNOUNCING });
+    device.setState(201, { state: MediaPlayerState.IDLE });
+    await waitForRunEnd(device);
+    expect(run.end).toBe("played");
   });
 
   it("ends the run when the speaker stops it itself", async () => {

@@ -3,7 +3,7 @@
   "name": "Ollama",
   "version": "0.1.0",
   "core": "^2.0.0",
-  "protocol": 25,
+  "protocol": 26,
   "summary": "AI models on Sanctum itself, so what's asked stays in your home.",
   "runtime": {
     "memory": 128,

@@ -75,7 +75,7 @@ export function setCoreFollowers(
         },
       },
     ],
-    // Speech runs while a smart speaker can announce.
+    // Speaker registrations change whether the home needs speech.
     ...(speech
       ? ([
           [

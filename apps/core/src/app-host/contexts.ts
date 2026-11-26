@@ -37,7 +37,7 @@ import type { Blobs } from "../blobs/blobs.js";
 import type { Listening } from "../speech/listening.js";
 import type { AppSecrets } from "./secrets.js";
 import type { ReadSnapshot } from "./snapshot.js";
-import type { AssistantCalls } from "../agents/assistants.js";
+import type { AssistantCalls, TurnOpener } from "../agents/assistants.js";
 import type { Turn } from "../models/turns.js";
 
 // What each call of an app's code gets from the core: a context acting as
@@ -59,10 +59,12 @@ type ContextOptions = {
   snapshot?: ReadSnapshot;
   withinMs?: number;
   turn?: Turn;
-  // A request's: how its reply reaches whoever asked, and how its tool
-  // calls are kept for the device's next requests.
+  // A request's: how its reply reaches whoever asked, how its tool calls
+  // are kept for the next requests where it was asked, and who opened it
+  // when that isn't the actor, as a smart speaker never is.
   reply?: (reply: RequestReply) => void;
   recordTool?: ToolRecorder;
+  opener?: TurnOpener;
   requestClientId?: string;
 };
 
@@ -191,6 +193,7 @@ export function createAppContexts(options: {
       turn,
       reply,
       recordTool,
+      opener,
       requestClientId,
     }: ContextOptions = {},
   ) {
@@ -267,6 +270,7 @@ export function createAppContexts(options: {
       assistant: options.assistant,
       ...(reply ? { reply } : {}),
       ...(recordTool ? { recordTool } : {}),
+      ...(opener ? { opener } : {}),
       ...(requestClientId === undefined ? {} : { requestClientId }),
       host: options.host,
       log: (text) => log(`${appId}: ${text}`),

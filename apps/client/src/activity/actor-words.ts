@@ -59,6 +59,8 @@ export function whoWords(who: ActivityWho): string {
       return who.name ?? "Someone who has left";
     case "client":
       return who.name ?? "A shared device";
+    case "speaker":
+      return who.name ?? "A smart speaker";
     case "workflow":
       return who.name ?? "An automation";
     case "app":
@@ -91,14 +93,18 @@ export function byWords(clock: HomeClock, entry: ActivityInfo) {
       if (attributedTo) {
         const { kind, name } = attributedTo;
         const fallback =
-          kind === "person" ? "someone who has left" : "a shared device";
-        // An assistant acts for a person, or for a shared device it was
-        // asked on.
+          kind === "person"
+            ? "someone who has left"
+            : kind === "speaker"
+              ? "a smart speaker"
+              : "a shared device";
+        // An assistant acts for a person, or for a shared device or smart
+        // speaker it was asked on.
         const how = !who.askedBy
           ? "added by"
-          : kind === "client"
-            ? "asked from"
-            : "asked by";
+          : kind === "person"
+            ? "asked by"
+            : "asked from";
         parts.push(`${how} ${name ?? fallback}`);
       }
     }

@@ -162,13 +162,15 @@ export function createActivityViews(
       case "assistant-run": {
         // Who added it, or for an assistant app who asked, by their name
         // now, or as it was while they're gone.
-        const named = origin.agentAddedBy && {
-          ...origin.agentAddedBy,
+        const by = origin.agentAddedBy;
+        const named = by && {
+          ...by,
           name:
-            (origin.agentAddedBy.kind === "person"
-              ? lookups.person(origin.agentAddedBy.id)?.name
-              : lookups.client(origin.agentAddedBy.id)) ??
-            origin.agentAddedBy.name,
+            (by.kind === "person"
+              ? lookups.person(by.id)?.name
+              : by.kind === "speaker"
+                ? lookups.device(by.id)
+                : lookups.client(by.id)) ?? by.name,
         };
         return assistantOf(actor.id)
           ? {
@@ -185,6 +187,13 @@ export function createActivityViews(
               addedBy: named,
             };
       }
+      // A smart speaker someone asked, by its name now or as it was then.
+      case "speaker":
+        return {
+          kind: "speaker",
+          id: actor.id,
+          name: lookups.device(actor.id) ?? origin.clientName,
+        };
       case "device":
         return { kind: "device" };
       case "sanctum":
