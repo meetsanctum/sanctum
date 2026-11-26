@@ -10,6 +10,9 @@ import {
   Circle,
   CircleAlert,
   CircleCheck,
+  Cloud,
+  Cpu,
+  Laptop,
   LoaderCircle,
   TriangleAlert,
 } from "lucide-react";
@@ -23,7 +26,6 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { coreJson } from "../core-fetch";
-import { KnotLoader } from "../knot-loader";
 import type { ModelsResponse } from "./data";
 import { ModelPicker } from "./model-picker";
 import {
@@ -172,7 +174,8 @@ export function SourceCheck(props: {
     const isSeeing = step === "seeing";
     return (
       <Result
-        badge={<KnotLoader className="size-7 text-(--secondary)" />}
+        // What's being checked, as its row shows it; the step below turns.
+        badge={<SourceIcon source={source} />}
         title={`Checking ${name}`}
         footer={
           <Button variant="outline" onClick={props.onClose}>
@@ -311,11 +314,20 @@ function DoneStep(props: { children: ReactNode }) {
   );
 }
 
+function SourceIcon(props: { source: ModelSourceInfo }) {
+  const Icon =
+    props.source.kind === "sanctum"
+      ? Cpu
+      : props.source.kind === "computer"
+        ? Laptop
+        : Cloud;
+  return <Icon className="size-6" />;
+}
+
 function CurrentStep(props: { children: ReactNode }) {
   return (
     <li className="flex items-center gap-2.5" aria-current="step">
-      {/* The step under way turns, as the knot above does; still under
-          Reduce motion. */}
+      {/* The step under way turns; still under Reduce motion. */}
       <LoaderCircle
         aria-hidden="true"
         className="size-4 animate-spin text-muted-foreground motion-reduce:animate-none"

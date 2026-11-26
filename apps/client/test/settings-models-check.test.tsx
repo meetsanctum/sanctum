@@ -45,6 +45,15 @@ afterEach(async () => {
 const text = () => document.body.textContent ?? "";
 const currentStep = () =>
   document.querySelector('[aria-current="step"]')?.textContent;
+function expectCurrentStepSpinner() {
+  const spinners = document.querySelectorAll(
+    'ol[aria-label="Steps"] .animate-spin',
+  );
+  expect(spinners).toHaveLength(1);
+  const [spinner] = spinners;
+  expect(spinner?.closest("li")?.getAttribute("aria-current")).toBe("step");
+  expect(spinner?.classList).toContain("motion-reduce:animate-none");
+}
 const elapse = (ms: number) => act(async () => vi.advanceTimersByTimeAsync(ms));
 const button = (name: string) =>
   [...document.querySelectorAll("button")].find(
@@ -121,6 +130,7 @@ describe("A source's check in the dialog", () => {
     try {
       await showCheck({ ...added, checking: true });
       expect(currentStep()).toBe("Asking it one short question");
+      expectCurrentStepSpinner();
       // The answer is in at once: asking still has its two seconds.
       await showCheck(added);
       expect(text()).not.toContain("the check carries on");
@@ -129,6 +139,7 @@ describe("A source's check in the dialog", () => {
       await elapse(1);
       expect(text()).toContain("Asked it one short question");
       expect(currentStep()).toBe("Seeing whether it uses the tool");
+      expectCurrentStepSpinner();
       expect(text()).not.toContain("the check carries on");
       await elapse(1_999);
       expect(currentStep()).toBe("Seeing whether it uses the tool");
