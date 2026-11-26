@@ -8,9 +8,9 @@
 // device draws it, shows it and never sends it. Whoever approves types all
 // eight characters on a device the home already trusts. The core runs
 // OPAQUE with the shared device. The core knows the secret, and the device
-// holds a one-time record of it. Only the real host learns the secret that way, so a
-// finished exchange shows that the device reached this home, with no second
-// value for anyone to compare.
+// holds a one-time record of it. Only the real host learns the secret that
+// way, so a finished exchange shows that the device reached this home, with
+// no second value for anyone to compare.
 
 /**
  * The characters a display code is made of: digits and capitals without
