@@ -19,9 +19,9 @@ import { targetType } from "./target.js";
 // from where the home is, so it needs no other app. Every light that takes
 // a colour temperature follows it unless the household leaves it out, new
 // ones too (choices.ts), and it brings a `naturalLight.target` entity for
-// each, and a Natural Light button beside the room's lights switch where
-// a light follows (rooms.ts). A switch in its settings turns it off
-// altogether. Workflows can have a light follow it, pause or resume, or
+// each, and the room's first tile, before its moods, where a light follows
+// (rooms.ts). A switch in its settings turns it off altogether. Workflows
+// can have a light follow it, pause or resume, or
 // bring a room to natural light. Its UI is in ./ui, which opens in frames
 // the core serves.
 //

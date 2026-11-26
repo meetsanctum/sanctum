@@ -213,6 +213,10 @@ describe("a room's row", () => {
     const grid = named("Relax in Office")!.parentElement!;
     expect(grid.matches(".tile-grid")).toBe(true);
     expect(grid.firstElementChild).toBe(named("Glow in Office"));
+    expect(named("Glow in Office")?.getAttribute("aria-pressed")).toBe("true");
+    expect(named("Relax in Office")?.getAttribute("aria-pressed")).toBe(
+      "false",
+    );
   });
 
   it("calls the section's action with the chip's input on a tap", async () => {

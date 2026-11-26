@@ -27,6 +27,7 @@ import {
 } from "../src/automations/blocked";
 import { CoreError, coreJson } from "../src/core-fetch";
 import { entry } from "./activity-fixtures";
+import { moods } from "./place-pages-fixtures";
 import { remote } from "./settings-devices-fixtures";
 
 // The device's own zone, which the expectations here are worked out in.
@@ -67,13 +68,23 @@ const withCard = app({
     widgets: [{ id: "weather.card", title: "Weather" }],
   },
 } as unknown as Partial<AppInfo>);
-const withMoods = app({
-  name: "Moods",
+const naturalLight = app({
+  id: "sanctum.natural-light",
+  name: "Natural Light",
   provides: {
     ...provides,
-    roomSections: [{ id: "moods.room", title: "Moods" }],
+    roomSections: [
+      {
+        id: "naturalLight.room",
+        title: "Natural Light",
+        entityType: "naturalLight.room",
+        kind: "tiles",
+        order: 100,
+        press: { action: "naturalLight.bringRoom" },
+      },
+    ],
   },
-} as unknown as Partial<AppInfo>);
+});
 
 let host: HTMLElement;
 let root: Root;
@@ -194,10 +205,16 @@ describe("what it asks before turning off", () => {
       "Its card leaves Home until you turn it back on. Its data stays.",
     ],
     [
-      "what it adds to rooms",
-      withMoods,
+      "the mood tiles it adds to rooms",
+      moods,
       0,
-      "Its moods leave every room until you turn it back on. Its data stays.",
+      "Its Moods tiles leave every room until you turn it back on. Its data stays.",
+    ],
+    [
+      "the Natural Light tiles it adds to rooms",
+      naturalLight,
+      0,
+      "Its Natural Light tiles leave every room until you turn it back on. Its data stays.",
     ],
     [
       "the buttons it adds to rooms",
@@ -239,6 +256,14 @@ describe("its notice", () => {
     await notice(app({ name: "Zigbee" }), 14);
 
     expect(host.textContent).toContain("Its 14 devices are offline.");
+  });
+
+  it("names the Natural Light tiles that are gone", async () => {
+    await notice(naturalLight);
+
+    expect(host.textContent).toContain(
+      "Its Natural Light tiles aren't in any room.",
+    );
   });
 
   it("says it frees its memory only where it has a container to stop", async () => {

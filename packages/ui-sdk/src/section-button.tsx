@@ -6,10 +6,10 @@ import { useShowFailed } from "./show-failed";
 
 /**
  * A small button with a section tile's icon and name, for a page that wants
- * one in a line rather than a tile, such as a room's lights button and
- * Natural Light's beside it: frosted glass, White and pressed while active,
- * or White without being pressed while lit. Its name shows on hover too,
- * where a narrow line cuts it. A failed tap shows on it as on a tile.
+ * one in a line rather than a tile, such as a room's lights button:
+ * frosted glass, White and pressed while active, or White without being
+ * pressed while lit. Its name shows on hover too, where a narrow line
+ * cuts it. A failed tap shows on it as on a tile.
  */
 export function SectionButton(props: {
   icon: LucideIcon;

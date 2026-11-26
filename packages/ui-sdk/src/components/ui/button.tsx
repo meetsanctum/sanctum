@@ -1,5 +1,5 @@
 import * as React from "react";
-import { cva, type VariantProps } from "class-variance-authority";
+import { cva, cx, type VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 import { Slot } from "radix-ui";
 
@@ -23,8 +23,12 @@ const checked =
 const cardSize =
   "h-auto w-full justify-start rounded-md p-3.5 text-start font-normal whitespace-normal";
 
-const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+const buttonBase =
+  "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
+
+const variants = cva(
+  // The section tile has its own base so its layout and drag stay the same.
+  null,
   {
     variants: {
       variant: {
@@ -62,6 +66,10 @@ const buttonVariants = cva(
         // with Carbon ink while on, as a switch or by its own words (data-on).
         glass:
           "bg-white/14 text-white hover:bg-white/20 hover:text-white active:bg-white/24 aria-pressed:bg-white aria-pressed:text-(--carbon) aria-pressed:hover:bg-white/90 aria-pressed:hover:text-(--carbon) data-on:bg-white data-on:text-(--carbon) data-on:hover:bg-white/90 data-on:hover:text-(--carbon)",
+        // A room's look, with its frame and drag states. It has no button
+        // border or press offset, so it also supplies its own base styles.
+        "section-tile":
+          "group overflow-hidden bg-(--tile) text-(--tile-ink) frosted transition-[opacity,transform] duration-150 outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 data-dragging:scale-[1.03] data-dragging:opacity-80 data-editing:[touch-action:none] data-[look=on]:bg-(--tile-on) data-[look=on]:text-(--tile-on-ink) motion-reduce:transition-none [touch-action:pan-y]",
         // A dashed outline where something can go but nothing is yet, such
         // as the sidebar's pins with nothing pinned.
         placeholder:
@@ -108,6 +116,9 @@ const buttonVariants = cva(
         item: "h-10 justify-start gap-2.5 rounded-md ps-2 pe-3 text-left text-sm",
         // A tile in a grid, as tall as its grid says (--tile-height).
         tile: "h-(--tile-height,3rem) w-full rounded-sm p-0",
+        // A room's look, with its name and status beside its icon.
+        "section-tile":
+          "relative flex min-w-0 items-center gap-3 rounded-lg px-3.5 py-3 text-left",
         // An app in Apps: its icon with its name under it.
         app: "h-auto w-26 flex-col gap-2 rounded-lg p-2 text-[13px] leading-[18px] font-normal",
         // A row in a card, in the card's type, which keeps its own words'
@@ -154,6 +165,9 @@ const buttonVariants = cva(
     },
   },
 );
+
+const buttonVariants: typeof variants = (props) =>
+  cx(props?.variant !== "section-tile" && buttonBase, variants(props));
 
 // Reusing classes for a variant, size and placement skips building the
 // variant class string and calling cn, which also caches merged strings.
