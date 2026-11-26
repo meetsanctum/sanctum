@@ -314,13 +314,17 @@ function DoneStep(props: { children: ReactNode }) {
   );
 }
 
+/** A source's icon, as its row and its check show it. */
+export function sourceIconOf(source: ModelSourceInfo) {
+  return source.kind === "sanctum"
+    ? Cpu
+    : source.kind === "computer"
+      ? Laptop
+      : Cloud;
+}
+
 function SourceIcon(props: { source: ModelSourceInfo }) {
-  const Icon =
-    props.source.kind === "sanctum"
-      ? Cpu
-      : props.source.kind === "computer"
-        ? Laptop
-        : Cloud;
+  const Icon = sourceIconOf(props.source);
   return <Icon className="size-6" />;
 }
 
