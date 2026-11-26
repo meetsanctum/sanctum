@@ -139,6 +139,16 @@ export function problemText(
 
 export type CheckLine = { text: string; tone: "good" | "problem" | "plain" };
 
+/** An Ollama refusal during a check comes from the model request. */
+export function checkProblemText(
+  problem: ModelProblem,
+  source: ModelSourceInfo,
+) {
+  return problem === "refused" && source.kind === "computer"
+    ? "Ollama refused the check. The model may not support tools."
+    : problemText(problem, source);
+}
+
 /** How a source's last check went, or what's happening now. */
 export function checkLine(
   clock: HomeClock,
@@ -179,10 +189,7 @@ export function checkLine(
       };
     case "failed":
       return {
-        text:
-          check.problem === "refused" && source.kind === "computer"
-            ? "Ollama refused the check. The model may not support tools."
-            : problemText(check.problem ?? "answer", source),
+        text: checkProblemText(check.problem ?? "answer", source),
         tone: "problem",
       };
   }

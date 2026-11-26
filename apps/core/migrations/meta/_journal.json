@@ -390,15 +390,29 @@
     {
       "idx": 55,
       "version": "6",
-      "when": 1795715591241,
-      "tag": "0055_pairing-requests-drop",
+      "when": 1795710670873,
+      "tag": "0055_client-drawing-choices-removed",
       "breakpoints": true
     },
     {
       "idx": 56,
       "version": "6",
-      "when": 1795715603777,
-      "tag": "0056_pairing-exchange",
+      "when": 1795710671490,
+      "tag": "0056_client-drawing-on-off",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "6",
+      "when": 1795719752137,
+      "tag": "0057_pairing-requests-drop",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "6",
+      "when": 1795719752811,
+      "tag": "0058_pairing-exchange",
       "breakpoints": true
     }
   ]

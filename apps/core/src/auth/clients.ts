@@ -3,7 +3,6 @@ import type {
   ClientKind,
   LiveClientChanged,
   Platform,
-  ReportClientDrawing,
   SetClientDrawing,
 } from "@meetsanctum/auth-protocol";
 import {
@@ -73,8 +72,6 @@ export function clientInfo(
     current: client.id === currentId,
     reduceEffects: client.reduceEffects,
     reduceMotion: client.reduceMotion,
-    drawingRevision: client.drawingRevision,
-    drawn: client.drawn ?? null,
   };
 }
 
@@ -383,10 +380,10 @@ export function createClients(
       });
     },
 
-    // How a client draws effects and motion, chosen on any client as its
-    // name is, and told to it at once so it draws so without waiting to
-    // read Me again. What it said it draws with is forgotten with a new
-    // choice, until it says again. Not for an agent, which draws nothing.
+    // Whether a client draws with Reduce effects and Reduce motion, each set
+    // on its own on any client as its name is, and told to it at once so it
+    // draws so without waiting to read Me again. Not for an agent, which
+    // draws nothing.
     setDrawing(principal: Principal, input: SetClientDrawing) {
       const { saved, changed } = db.transaction(() => {
         const client = manageable(input.id);
@@ -403,12 +400,7 @@ export function createClients(
         }
         const saved = db
           .update(authClients)
-          .set({
-            reduceEffects,
-            reduceMotion,
-            drawingRevision: client.drawingRevision + 1,
-            drawn: null,
-          })
+          .set({ reduceEffects, reduceMotion })
           .where(eq(authClients.id, input.id))
           .returning()
           .get()!;
@@ -424,23 +416,6 @@ export function createClients(
         principal.client.id,
         connections.connectedSince(saved.id),
       );
-    },
-
-    // What the calling client says it draws with now, for its row.
-    setDrawn(
-      principal: Principal,
-      { drawingRevision, ...drawn }: ReportClientDrawing,
-    ) {
-      db.update(authClients)
-        .set({ drawn })
-        .where(
-          and(
-            eq(authClients.id, principal.client.id),
-            eq(authClients.drawingRevision, drawingRevision),
-            isNull(authClients.revokedAt),
-          ),
-        )
-        .run();
     },
 
     // The home's agents that have reached it, oldest first: one whose setup

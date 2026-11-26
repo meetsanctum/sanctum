@@ -1,203 +1,85 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { Drawn } from "@meetsanctum/auth-protocol";
+import { chooseDrawing, followEffects } from "../src/effects";
 
-import {
-  chooseDrawing,
-  effectsOf,
-  followDrawn,
-  followEffects,
-  motionOf,
-} from "../src/effects";
+// Reduce effects and Reduce motion, each on or off on its own as set for
+// this client, and off until set: what a device is and what its system asks
+// for turn neither on. Development and display benchmark builds can use
+// `?effects=` and `?motion=` instead.
 
-// How a device draws effects and motion: plainly on a Shelly wall display,
-// where the system asks for reduced transparency or reduced motion, or as
-// the address says.
-
-const browser =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
 const shelly =
-  "Mozilla/5.0 (Linux; Android 11; Blake Build/RD2A.211001.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/157.0.8103.38 Safari/537.36 ShellyStargate/2.8.5-b566114e7;SAWD-3A1XE10EU2";
+  "Mozilla/5.0 (Linux; Android 11; Blake Build/RD2A.211001.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/157.0.8103.38 Safari/537.36 ShellyStargate/2.8.5-b566114e7";
 
-describe("how a device draws effects", () => {
-  it.each([
-    ["a browser", browser, false, "", "regular"],
-    ["a Shelly wall display", shelly, false, "", "reduced"],
-    ["a browser asked for reduced transparency", browser, true, "", "reduced"],
-    [
-      "any device the address asks for",
-      browser,
-      false,
-      "?effects=reduced",
-      "reduced",
-    ],
-    [
-      "a Shelly the address asks for",
-      shelly,
-      true,
-      "?effects=regular",
-      "regular",
-    ],
-    [
-      "an address that asks for neither",
-      shelly,
-      false,
-      "?effects=plain",
-      "reduced",
-    ],
-  ] as const)("%s", (_, userAgent, reducedTransparency, search, effects) => {
-    expect(effectsOf({ userAgent, reducedTransparency, search })).toBe(effects);
-  });
+const html = document.documentElement;
+const said = () => ({
+  effects: html.dataset.effects ?? "regular",
+  motion: html.dataset.motion ?? "regular",
 });
 
-describe("how a device draws motion", () => {
-  it.each([
-    ["a browser", browser, false, "", "regular"],
-    ["a Shelly wall display", shelly, false, "", "reduced"],
-    ["a browser asked for reduced motion", browser, true, "", "reduced"],
-    [
-      "any device the address asks for",
-      browser,
-      false,
-      "?motion=reduced",
-      "reduced",
-    ],
-    [
-      "a Shelly the address asks for",
-      shelly,
-      true,
-      "?motion=regular",
-      "regular",
-    ],
-    [
-      "an address that asks for effects only",
-      shelly,
-      false,
-      "?effects=regular",
-      "reduced",
-    ],
-  ] as const)("%s", (_, userAgent, reducedMotion, search, motion) => {
-    expect(motionOf({ userAgent, reducedMotion, search })).toBe(motion);
-  });
-});
+// A window on a slow device whose system asks for reduced transparency and
+// reduced motion, which the shell doesn't follow.
+function windowAt(search = "") {
+  const asks = Object.assign(new EventTarget(), { matches: true });
+  return {
+    matchMedia: () => asks,
+    navigator: { userAgent: shelly },
+    location: { search },
+    document,
+  } as unknown as Window;
+}
 
 describe("what the page says", () => {
+  let stop = () => {};
   afterEach(() => {
-    delete document.documentElement.dataset.effects;
-    delete document.documentElement.dataset.motion;
-  });
-
-  // A window whose system turns reduced transparency and reduced motion on
-  // and off.
-  function windowWith(userAgent: string, search = "") {
-    const transparency = Object.assign(new EventTarget(), { matches: false });
-    const motion = Object.assign(new EventTarget(), { matches: false });
-    const win = {
-      matchMedia: (media: string) => {
-        if (media === "(prefers-reduced-motion: reduce)") return motion;
-        expect(media).toBe("(prefers-reduced-transparency: reduce)");
-        return transparency;
-      },
-      navigator: { userAgent },
-      location: { search },
-      document,
-    } as unknown as Window;
-    const set = (query: typeof motion) => (matches: boolean) => {
-      query.matches = matches;
-      query.dispatchEvent(new Event("change"));
-    };
-    return { win, setReduced: set(transparency), setMotion: set(motion) };
-  }
-
-  it("says reduced on <html> on a Shelly, before anything is drawn", () => {
-    followEffects(windowWith(shelly).win);
-    expect(document.documentElement.dataset.effects).toBe("reduced");
-    expect(document.documentElement.dataset.motion).toBe("reduced");
-  });
-
-  it("follows the system's reduced motion as it changes, apart from effects", () => {
-    const { win, setMotion } = windowWith(browser);
-    const stop = followEffects(win);
-    expect(document.documentElement.hasAttribute("data-motion")).toBe(false);
-
-    setMotion(true);
-    expect(document.documentElement.dataset.motion).toBe("reduced");
-    expect(document.documentElement.hasAttribute("data-effects")).toBe(false);
-    setMotion(false);
-    expect(document.documentElement.hasAttribute("data-motion")).toBe(false);
-
     stop();
-    setMotion(true);
-    expect(document.documentElement.hasAttribute("data-motion")).toBe(false);
+    delete html.dataset.effects;
+    delete html.dataset.motion;
   });
 
-  it("follows the system's reduced transparency as it changes", () => {
-    const { win, setReduced } = windowWith(browser);
-    const stop = followEffects(win);
-    expect(document.documentElement.hasAttribute("data-effects")).toBe(false);
+  it("draws everything regular until either is turned on, whatever the device", () => {
+    stop = followEffects(windowAt());
+    expect(said()).toEqual({ effects: "regular", motion: "regular" });
+  });
 
-    setReduced(true);
-    expect(document.documentElement.dataset.effects).toBe("reduced");
-    setReduced(false);
-    expect(document.documentElement.hasAttribute("data-effects")).toBe(false);
+  it("turns each on and off on its own", () => {
+    stop = followEffects(windowAt());
 
+    chooseDrawing({ reduceEffects: true, reduceMotion: false });
+    expect(said()).toEqual({ effects: "reduced", motion: "regular" });
+    chooseDrawing({ reduceEffects: true, reduceMotion: true });
+    expect(said()).toEqual({ effects: "reduced", motion: "reduced" });
+    chooseDrawing({ reduceEffects: false, reduceMotion: true });
+    expect(said()).toEqual({ effects: "regular", motion: "reduced" });
+    chooseDrawing({ reduceEffects: false, reduceMotion: false });
+    expect(said()).toEqual({ effects: "regular", motion: "regular" });
+  });
+
+  it("goes back to off once it stops following", () => {
+    stop = followEffects(windowAt());
+    chooseDrawing({ reduceEffects: true, reduceMotion: true });
     stop();
-    setReduced(true);
-    expect(document.documentElement.hasAttribute("data-effects")).toBe(false);
+    stop = followEffects(windowAt());
+    expect(said()).toEqual({ effects: "regular", motion: "regular" });
   });
-});
 
-describe("its choices", () => {
-  afterEach(() => {
-    delete document.documentElement.dataset.effects;
-    delete document.documentElement.dataset.motion;
+  it("uses the switches when address overrides are disabled", () => {
+    stop = followEffects(windowAt("?effects=reduced&motion=regular"));
+    chooseDrawing({ reduceEffects: false, reduceMotion: true });
+    expect(said()).toEqual({ effects: "regular", motion: "reduced" });
   });
 
   it.each([
-    ["On", browser, "on", "reduced"],
-    ["Off", shelly, "off", "regular"],
-    ["Automatic", shelly, "automatic", "reduced"],
-  ] as const)("draws %s as chosen", (_, userAgent, choice, drawn) => {
-    const device = { userAgent, search: "" };
-    expect(effectsOf({ ...device, reducedTransparency: false }, choice)).toBe(
-      drawn,
-    );
-    expect(motionOf({ ...device, reducedMotion: false }, choice)).toBe(drawn);
-  });
-
-  it("leaves the address the last word while developing", () => {
-    const device = { userAgent: browser, search: "?effects=regular" };
-    expect(effectsOf({ ...device, reducedTransparency: true }, "on")).toBe(
-      "regular",
-    );
-  });
-
-  it("follows each new choice on <html> and says what it draws with", () => {
-    const win = {
-      matchMedia: () => Object.assign(new EventTarget(), { matches: false }),
-      navigator: { userAgent: shelly },
-      location: { search: "" },
-      document,
-    } as unknown as Window;
-    const stop = followEffects(win);
-    const said: Drawn[] = [];
-    const stopHearing = followDrawn((drawn) => said.push(drawn));
-    expect(said).toEqual([
-      { effects: "reduced", motion: "reduced", slowDevice: true },
-    ]);
-
-    chooseDrawing({ effects: "automatic", motion: "off" });
-    expect(document.documentElement.dataset.effects).toBe("reduced");
-    expect(document.documentElement.hasAttribute("data-motion")).toBe(false);
-    // The same choices again say nothing new.
-    chooseDrawing({ effects: "automatic", motion: "off" });
-    expect(said).toEqual([
-      { effects: "reduced", motion: "reduced", slowDevice: true },
-      { effects: "reduced", motion: "regular", slowDevice: true },
-    ]);
-
-    stopHearing();
-    stop();
-  });
+    ["?effects=reduced&motion=reduced", false, "reduced", "reduced"],
+    ["?effects=regular&motion=regular", true, "regular", "regular"],
+    ["?effects=reduced", false, "reduced", "regular"],
+    ["?motion=sideways", true, "reduced", "reduced"],
+  ] as const)(
+    "lets %s in the address decide",
+    (search, on, effects, motion) => {
+      stop = followEffects(windowAt(search), true);
+      chooseDrawing({ reduceEffects: on, reduceMotion: on });
+      expect(said()).toEqual({ effects, motion });
+    },
+  );
 });

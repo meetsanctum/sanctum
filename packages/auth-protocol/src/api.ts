@@ -106,39 +106,17 @@ export type ClientInfo = {
   connectedSince: string | null;
   /** The client the request came from. */
   current: boolean;
-  /** How it draws effects: chosen on any client (Settings → Clients). */
-  reduceEffects: DrawingChoice;
-  /** How it draws motion: chosen on any client, as Reduce effects. */
-  reduceMotion: DrawingChoice;
-  /** Changes whenever either drawing choice changes. */
-  drawingRevision: number;
-  /** What it last said it draws with, once it has said. */
-  drawn: Drawn | null;
+  /** Whether it draws with Reduce effects: set on any client (Settings → Clients). */
+  reduceEffects: boolean;
+  /** Whether it draws with Reduce motion, set on its own as Reduce effects is. */
+  reduceMotion: boolean;
 };
 
-/**
- * A client's choice for Reduce effects or Reduce motion: Automatic follows
- * the device, on for one known to be slow or whose system asks for it.
- */
-export const drawingChoices = ["automatic", "on", "off"] as const;
-export type DrawingChoice = (typeof drawingChoices)[number];
-
-/** What a client draws with now, from its choices and what it is. */
-export type Drawn = {
-  effects: "regular" | "reduced";
-  motion: "regular" | "reduced";
-  /** Whether it is a device known to be slow, which Automatic reduces. */
-  slowDevice: boolean;
-};
-
-/** Reports how the device draws with a specific set of saved choices. */
-export type ReportClientDrawing = Drawn & { drawingRevision: number };
-
-/** Sets a client's choices; one left out stays as it is. */
+/** Turns a client's Reduce effects or Reduce motion on or off; one left out stays as it is. */
 export type SetClientDrawing = {
   id: string;
-  reduceEffects?: DrawingChoice;
-  reduceMotion?: DrawingChoice;
+  reduceEffects?: boolean;
+  reduceMotion?: boolean;
 };
 
 /** The device a claim or sign-in creates a client for. */

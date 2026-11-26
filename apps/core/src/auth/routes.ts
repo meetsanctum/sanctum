@@ -23,8 +23,6 @@ import {
   type RenameClient,
   type RevokeClient,
   type SetClientDrawing,
-  drawingChoices,
-  type ReportClientDrawing,
   type SetLoginFinish,
   type SetLoginStart,
   type SignInFinish,
@@ -100,15 +98,9 @@ const schemas = {
   revoke: z.object({ id }) satisfies z.ZodType<RevokeClient>,
   drawing: z.object({
     id,
-    reduceEffects: z.enum(drawingChoices).optional(),
-    reduceMotion: z.enum(drawingChoices).optional(),
+    reduceEffects: z.boolean().optional(),
+    reduceMotion: z.boolean().optional(),
   }) satisfies z.ZodType<SetClientDrawing>,
-  drawn: z.object({
-    effects: z.enum(["regular", "reduced"]),
-    motion: z.enum(["regular", "reduced"]),
-    slowDevice: z.boolean(),
-    drawingRevision: z.number().int().nonnegative(),
-  }) satisfies z.ZodType<ReportClientDrawing>,
   setLoginStart: z.object({
     personId: id,
     username,
@@ -355,10 +347,6 @@ export async function registerAuth(
       parse(schemas.drawing, request.body),
     ),
   );
-  app.post("/api/auth/me/drawn", async (request, reply) => {
-    clients.setDrawn(principal(request), parse(schemas.drawn, request.body));
-    return reply.code(204).send();
-  });
   app.post("/api/auth/clients/revoke", async (request, reply) => {
     clients.revoke(principal(request), parse(schemas.revoke, request.body));
     return reply.code(204).send();

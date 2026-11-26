@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c676bbf9-c0a1-4548-8cad-45738af17112",
-  "prevId": "151b88ab-fbe6-4930-8038-2491199d6da3",
+  "id": "4ee089d6-1c4c-4307-a134-25eede59f8ee",
+  "prevId": "0b0e909e-14d7-43ee-abbe-1b3ebe931cb4",
   "tables": {
     "activity": {
       "name": "activity",
@@ -987,36 +987,21 @@
           "notNull": false,
           "autoincrement": false
         },
-        "reduce_effects": {
-          "name": "reduce_effects",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'automatic'"
-        },
-        "reduce_motion": {
-          "name": "reduce_motion",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'automatic'"
-        },
-        "drawing_revision": {
-          "name": "drawing_revision",
+        "reduced_effects": {
+          "name": "reduced_effects",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 0
+          "default": false
         },
-        "drawn": {
-          "name": "drawn",
-          "type": "text",
+        "reduced_motion": {
+          "name": "reduced_motion",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         }
       },
       "indexes": {},
@@ -1151,8 +1136,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "lookup": {
-          "name": "lookup",
+        "code_hash": {
+          "name": "code_hash",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -1200,14 +1185,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "exchanges": {
-          "name": "exchanges",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
         "approved_by": {
           "name": "approved_by",
           "type": "text",
@@ -1238,10 +1215,10 @@
         }
       },
       "indexes": {
-        "auth_pairing_requests_lookup_unique": {
-          "name": "auth_pairing_requests_lookup_unique",
+        "auth_pairing_requests_code_hash_unique": {
+          "name": "auth_pairing_requests_code_hash_unique",
           "columns": [
-            "lookup"
+            "code_hash"
           ],
           "isUnique": true
         },

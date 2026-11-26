@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "151b88ab-fbe6-4930-8038-2491199d6da3",
+  "id": "0b0e909e-14d7-43ee-abbe-1b3ebe931cb4",
   "prevId": "c5f98133-7aed-43cd-b443-aaa8f132f759",
   "tables": {
     "activity": {
@@ -986,37 +986,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "reduce_effects": {
-          "name": "reduce_effects",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'automatic'"
-        },
-        "reduce_motion": {
-          "name": "reduce_motion",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'automatic'"
-        },
-        "drawing_revision": {
-          "name": "drawing_revision",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "drawn": {
-          "name": "drawn",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {},
@@ -1137,6 +1106,115 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "auth_pairing_requests": {
+      "name": "auth_pairing_requests",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "code_hash": {
+          "name": "code_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "device_secret_hash": {
+          "name": "device_secret_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "platform": {
+          "name": "platform",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "suggested_name": {
+          "name": "suggested_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source_address": {
+          "name": "source_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "approved_by": {
+          "name": "approved_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "approved_at": {
+          "name": "approved_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "auth_pairing_requests_code_hash_unique": {
+          "name": "auth_pairing_requests_code_hash_unique",
+          "columns": [
+            "code_hash"
+          ],
+          "isUnique": true
+        },
+        "auth_pairing_requests_device_secret_hash_unique": {
+          "name": "auth_pairing_requests_device_secret_hash_unique",
+          "columns": [
+            "device_secret_hash"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
