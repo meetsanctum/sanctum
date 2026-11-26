@@ -8,7 +8,7 @@ import {
   InputOTPGroup,
   InputOTPSeparator,
   InputOTPSlot,
-} from "../src/components/ui/input-otp";
+} from "../src/kit";
 
 // A code typed into boxes: one real input under them, which keeps what the
 // filter allows up to the length, fills the boxes in order and says once

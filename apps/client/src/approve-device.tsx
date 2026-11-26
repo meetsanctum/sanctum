@@ -8,7 +8,14 @@ import {
   type PairingRequestInfo,
   type Platform,
 } from "@meetsanctum/auth-protocol";
-import { Button, Input } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  Input,
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSeparator,
+  InputOTPSlot,
+} from "@meetsanctum/ui-sdk";
 import { Globe, Monitor, Tablet } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
@@ -20,12 +27,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./components/ui/dialog";
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSeparator,
-  InputOTPSlot,
-} from "./components/ui/input-otp";
 import { productName } from "./brand";
 import { CoreError } from "./core-fetch";
 import {
@@ -223,7 +224,8 @@ export function ApproveDevice(props: {
     }, normalised);
   };
 
-  const approve = () => {
+  const approve = (event: FormEvent) => {
+    event.preventDefault();
     const deviceName = name.trim();
     if (step.name !== "details" || working || !deviceName) return;
     void run(async (signal) => {
@@ -333,7 +335,7 @@ export function ApproveDevice(props: {
           </form>
         )}
         {step.name === "details" && (
-          <div className="flex flex-col gap-5">
+          <form onSubmit={approve} className="flex flex-col gap-5">
             <DialogHeader>
               <DialogTitle>Approve this device?</DialogTitle>
               <DialogDescription>
@@ -382,15 +384,11 @@ export function ApproveDevice(props: {
               >
                 Back
               </Button>
-              <Button
-                type="button"
-                onClick={approve}
-                disabled={working || !name.trim()}
-              >
+              <Button type="submit" disabled={working || !name.trim()}>
                 {working ? "Approving…" : "Approve"}
               </Button>
             </DialogFooter>
-          </div>
+          </form>
         )}
         {step.name === "done" && (
           <div className="flex flex-col gap-5">

@@ -157,8 +157,9 @@ describe("adding a shared device", () => {
     expect(dialog().textContent).not.toContain("certificate");
     const name = dialog().querySelector<HTMLInputElement>("input")!;
     expect(name.value).toBe("Lenovo Tab");
-    expect(name.form).toBeNull();
-    expect(button("Approve").type).toBe("button");
+    // Return in the name approves it, as the form's one primary action.
+    expect(name.form).not.toBeNull();
+    expect(button("Approve").type).toBe("submit");
     expect(approved).toEqual([]);
 
     await type(name, "Kitchen Tablet");
