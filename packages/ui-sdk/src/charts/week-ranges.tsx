@@ -1,16 +1,16 @@
 import { memo, useMemo } from "react";
 
 import { SpokenPin } from "./cursor";
-import { plotClass, Readout, useWidth } from "./frame";
+import { ChartFoot, plotClass, Readout, useWidth } from "./frame";
 import type { ChartFormat } from "./line";
 import { scaleFraction, scaleOf, type ChartScale } from "./scale";
 import { useHomeClock } from "../home-clock";
 import { useWeekCursor, WeekNames, weekSlots } from "./week";
 
 // A week as a bar a day from its lowest to its highest, such as a sensor's
-// readings, on round gridlines with their values at the right. It shows a
-// day's range under a mouse or where a tap or the arrow keys pin it,
-// and lists the days for screen readers.
+// readings, on round gridlines with their values at the right, over a
+// hairline along its foot. It shows a day's range under a mouse or where a
+// tap or the arrow keys pin it, and lists the days for screen readers.
 
 /** A day of a week's ranges, from the start of its day on the home clock: its lowest and highest, or none when nothing was known. */
 export type WeekRange =
@@ -146,6 +146,7 @@ export function WeekRangeChart(props: WeekRangeChartProps) {
           height={barsHeight}
           className="block"
         >
+          <ChartFoot plot={plot} height={barsHeight} page={page} />
           {plot > 0 && (
             <RangeMarks
               days={days}

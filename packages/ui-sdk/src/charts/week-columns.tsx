@@ -1,7 +1,7 @@
 import { memo } from "react";
 
 import { SpokenPin } from "./cursor";
-import { plotClass, Readout, useWidth } from "./frame";
+import { ChartFoot, plotClass, Readout, useWidth } from "./frame";
 import { useHomeClock } from "../home-clock";
 import { useWeekCursor, WeekNames, weekSlots } from "./week";
 
@@ -138,13 +138,7 @@ export function WeekColumnsChart<Day extends WeekColumn>(
             height={1}
             className={page ? "fill-foreground/8" : "fill-white/8"}
           />
-          <rect
-            x={0}
-            y={columnsHeight - 1}
-            width={plot}
-            height={1}
-            className={page ? "fill-foreground/14" : "fill-white/14"}
-          />
+          <ChartFoot plot={plot} height={columnsHeight} page={page} />
           {plot > 0 && (
             <ColumnMarks
               days={days}

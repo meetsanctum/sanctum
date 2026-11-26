@@ -2,15 +2,16 @@ import { memo } from "react";
 
 import { TimeTicks } from "./axis";
 import { SpokenPin, useCursor } from "./cursor";
-import { plotClass, Readout, useWidth } from "./frame";
+import { ChartFoot, plotClass, Readout, useWidth } from "./frame";
 import { useHomeClock } from "../home-clock";
 
 // A day as a band 40 px tall: what is on as solid spans, what is faint as a
-// faint fill across the band, the rest as a hairline along its foot, and
-// nothing where nothing was known. As a whole chart it has the time every 6
-// hours under it, a readout a mouse shows or a tap pins (cursor.tsx), and the
-// spans listed for screen readers; its marks alone go inside something that
-// is itself the control, such as a row's button, with one axis over them all.
+// faint fill across the band, the rest as a 2 px line along its foot, and
+// nothing where nothing was known. As a whole chart it has a hairline along
+// its whole foot, which off covers, the time every 6 hours under it, a
+// readout a mouse shows or a tap pins (cursor.tsx), and the spans listed for
+// screen readers; its marks alone go inside something that is itself the
+// control, such as a row's button, with one axis over them all.
 
 /** How a band draws a span. */
 export type BandLevel = "on" | "faint" | "off" | "unknown";
@@ -63,9 +64,9 @@ const BandRects = memo(function BandRects(props: {
         <rect
           key={span.from}
           x={left}
-          y={bandHeight - 1}
+          y={bandHeight - 2}
           width={Math.max(0, right - left)}
-          height={1}
+          height={2}
           className={off}
         />
       );
@@ -240,6 +241,7 @@ export function DayBandChart<Span extends BandSpan>(
           height={bandHeight}
           className="block overflow-visible"
         >
+          <ChartFoot plot={plot} height={bandHeight} page={page} />
           {plot > 0 && (
             <BandRects
               spans={spans}

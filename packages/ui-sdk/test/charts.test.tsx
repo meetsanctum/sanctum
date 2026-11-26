@@ -100,9 +100,11 @@ describe("a day's band", () => {
     expect(group().getAttribute("aria-label")).toBe(
       "Motion over the last 24 hours",
     );
-    // Nothing for the unknown span; a hairline, a span, a faint fill, a hairline.
+    // The axis along its whole foot, then nothing for the unknown span; off,
+    // a span, a faint fill, off.
     const rects = [...container.querySelectorAll("svg rect")];
     expect(rects.map((rect) => rect.getAttribute("class"))).toEqual([
+      "fill-white/14",
       "fill-white/30",
       "fill-white/70",
       "fill-white/16",
@@ -167,7 +169,7 @@ describe("a day's band", () => {
       [...container.querySelectorAll("svg rect")].map((rect) =>
         rect.getAttribute("class"),
       ),
-    ).toEqual(["fill-foreground/70", "fill-foreground"]);
+    ).toEqual(["fill-foreground/14", "fill-foreground/70", "fill-foreground"]);
   });
 });
 
@@ -231,7 +233,7 @@ describe("a day's strip", () => {
       path.getAttribute("d"),
     ]);
     expect(fills).toEqual([
-      [null, "M80 87h160v1h-160z"],
+      [null, "M80 86h160v2h-160z"],
       ["#ff8800", "M240 44h120v44h-120z"],
       ["#ff8800", "M240 44h120v2h-120z"],
       ["#fff", "M360 0h120v88h-120z"],
@@ -503,5 +505,78 @@ describe("a week's ranges", () => {
     );
     expect(container.querySelector("span.text-muted-foreground")).toBeTruthy();
     expect(listed()[2]).toBe("Sat 14 Nov: Unbekannt");
+  });
+});
+
+describe("every chart's foot", () => {
+  // The hairline along a plot's whole foot, whatever its marks show.
+  const foot = () =>
+    [...container.querySelectorAll("svg rect")].find(
+      (rect) =>
+        rect.getAttribute("x") === "0" &&
+        rect.getAttribute("width") === "480" &&
+        rect.getAttribute("class") === "fill-white/14",
+    );
+
+  it("runs under a strip and a band where nothing was known", async () => {
+    const unknown = [{ from, to: now, mark: "unknown" as const }];
+    await render(
+      <DayStripChart spans={unknown} from={from} to={now} width={480} />,
+    );
+    expect(foot()?.getAttribute("y")).toBe("39");
+    expect(container.querySelectorAll("path")).toHaveLength(0);
+    await render(
+      <DayBandChart
+        spans={[{ from, to: now, level: "unknown" }]}
+        from={from}
+        to={now}
+        label="Motion"
+        text={() => "Not known"}
+        width={480}
+      />,
+    );
+    expect(foot()?.getAttribute("y")).toBe("39");
+  });
+
+  it("runs under a line and a week's ranges, apart from their gridlines", async () => {
+    const format = {
+      gutter: 40,
+      shown: (value: number) => value,
+      text: (value: number) => `${value}°`,
+      grid: (value: number) => `${value}°`,
+    };
+    await render(
+      <LineChart
+        runs={[[{ at: now, value: 20 }]]}
+        now={now}
+        format={format}
+        name="Temperature"
+        height={100}
+        width={520}
+      />,
+    );
+    expect(foot()?.getAttribute("y")).toBe("99");
+    await render(
+      <WeekRangeChart
+        days={week().map((start) => ({ start, min: 18, max: 21 }))}
+        now={now}
+        format={{ ...format, range: (min, max) => `${min}–${max}°` }}
+        name="Temperature"
+        width={520}
+      />,
+    );
+    expect(foot()).toBeTruthy();
+  });
+
+  it("is left to what holds a band's marks alone", async () => {
+    await render(
+      <DayBandMarks
+        spans={[{ from, to: now, level: "unknown" }]}
+        from={from}
+        to={now}
+        width={480}
+      />,
+    );
+    expect(container.querySelectorAll("rect")).toHaveLength(0);
   });
 });

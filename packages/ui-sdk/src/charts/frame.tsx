@@ -105,6 +105,27 @@ export function RowsReadout(props: {
   );
 }
 
+/**
+ * A chart's axis: a hairline along its plot's foot, the whole width
+ * whatever it shows, so a chart with nothing known for a while still has
+ * its ground. Drawn first, so marks along the foot cover it.
+ */
+export function ChartFoot(props: {
+  plot: number;
+  height: number;
+  page: boolean;
+}) {
+  return (
+    <rect
+      x={0}
+      y={props.height - 1}
+      width={props.plot}
+      height={1}
+      className={props.page ? "fill-foreground/14" : "fill-white/14"}
+    />
+  );
+}
+
 /** The classes of a chart's plot, which takes focus for its cursor. */
 export const plotClass =
   "relative rounded-xs outline-none focus-visible:ring-3 focus-visible:ring-ring/50";

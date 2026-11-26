@@ -12,10 +12,10 @@ import { dayMs, hourMs } from "./time";
 
 // A day as a line through each 5 minutes' mean, such as a sensor's reading.
 // It is broken where nothing was known, has two or three faint gridlines with
-// their values at the right and the hours every 6 below, and shows its value
-// under a mouse or where a tap or the arrow keys pin it; screen readers
-// get each hour's mean as a list. On glass it is drawn in White; on a page,
-// in the page's ink.
+// their values at the right, a hairline along its foot and the hours every 6
+// below, and shows its value under a mouse or where a tap or the arrow keys
+// pin it; screen readers get each hour's mean as a list. On glass it is drawn
+// in White; on a page, in the page's ink.
 
 const slots = 24 * 12;
 const slotMs = dayMs / slots;
