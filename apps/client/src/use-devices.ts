@@ -137,41 +137,32 @@ export function useDevices(live: LiveFeed) {
   // What the latest command from here asks of each tile, by its key, until
   // the core has answered it; null forgets what an earlier one asked.
   const [asks, setAsks] = useState<
-    ReadonlyMap<string, { asked: Asked; by: number }>
+    ReadonlyMap<string, { asked: Asked; by: object }>
   >(() => new Map());
-  const askOrder = useRef(0);
-  const ask = useCallback(
-    (keys: string[], asked: Asked | null, after?: Promise<unknown>) => {
-      const by = ++askOrder.current;
-      const show = () =>
-        setAsks((current) => {
-          if (!asked && current.size === 0) return current;
-          const next = new Map(current);
-          for (const key of keys) {
-            if (asked) next.set(key, { asked, by });
-            // A queued turn-on may clear only asks from before its press.
-            else if ((current.get(key)?.by ?? by) < by) next.delete(key);
-          }
-          return asked || next.size !== current.size ? next : current;
-        });
-
-      if (after) void after.then(show, show);
-      else show();
-      if (!asked) return;
-
-      // Answered: the tile shows what the core says, unless a later command
-      // from here asks something else meanwhile.
-      return () =>
-        setAsks((current) => {
-          const next = new Map(current);
-          for (const key of keys) {
-            if (next.get(key)?.by === by) next.delete(key);
-          }
-          return next.size === current.size ? current : next;
-        });
-    },
-    [],
-  );
+  const ask = useCallback((keys: string[], asked: Asked | null) => {
+    const by = {};
+    // Forgetting what nothing asked leaves the tiles as they are, without
+    // drawing them again.
+    setAsks((current) => {
+      if (!asked && !keys.some((key) => current.has(key))) return current;
+      const next = new Map(current);
+      for (const key of keys) {
+        if (asked) next.set(key, { asked, by });
+        else next.delete(key);
+      }
+      return next;
+    });
+    // Answered: the tile shows what the core says, unless a later command
+    // from here asks something else meanwhile.
+    return () =>
+      setAsks((current) => {
+        const next = new Map(current);
+        for (const key of keys) {
+          if (next.get(key)?.by === by) next.delete(key);
+        }
+        return next.size === current.size ? current : next;
+      });
+  }, []);
   const fail = useCallback((keys: string[]) => {
     if (keys.length === 0) return;
     setFailures((current) => {
@@ -444,10 +435,10 @@ export function useDevices(live: LiveFeed) {
           : undefined;
       // A room's turn-on rule can leave individual lights off. Only the
       // core knows which ones it will turn on, so they wait for its live
-      // state. Keep earlier tile feedback until the queued turn-on starts.
+      // state, and what an earlier command from here asked of them goes.
       // A queued off press also covers lights an earlier press may turn on.
       const answered = on
-        ? ask(keys, null, previous)
+        ? ask(keys, null)
         : ask(
             previous
               ? keys
@@ -478,7 +469,7 @@ export function useDevices(live: LiveFeed) {
           failOnce(commands.filter(([key]) => switching.has(key)));
           throw error;
         } finally {
-          answered?.();
+          answered();
         }
       };
       // The core skips lights already in the requested state. Give the

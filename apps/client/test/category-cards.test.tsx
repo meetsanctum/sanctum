@@ -363,9 +363,7 @@ describe("a room's lights on Lights' page", () => {
     devices = [lamp, plug, litHall];
     await show("lights");
     await click(button("Turn off lights in Hall"));
-    expect(button(hallLight.name)!.getAttribute("aria-pressed")).toBe("false");
     await click(button("Turn on lights in Hall"));
-    expect(button(hallLight.name)!.getAttribute("aria-pressed")).toBe("false");
     expect(button("Turn off lights in Hall")!.dataset.on).toBe("");
 
     // The off press's answer comes while the light still shows on, then

@@ -472,7 +472,7 @@ describe("commands from here", () => {
     expect(devices.tiles[0]).toMatchObject({ on: false, status: "Off" });
   });
 
-  it("keeps a room's turn-off feedback until its queued turn-on starts", async () => {
+  it("drop a room's turning off once it is turned on again before the core answers", async () => {
     await seed();
     act(() =>
       devices.apply({ type: "device", id: "device", device: device(true) }),
@@ -495,18 +495,13 @@ describe("commands from here", () => {
         devices.switchLights({ kind: "room", id: "room" }, devices.tiles, "on"),
       );
     });
-    expect(devices.tiles[0]).toMatchObject({ on: false, status: "Off" });
-
-    await act(async () => {
-      off.resolve({ on: false, switched: 1, failed: [] });
-      await switching[0];
-    });
-    // The core's reported state takes over while the turn-on is pending.
+    // The core still shows the light on, and it stays so.
     expect(devices.tiles[0]).toMatchObject({ on: true, status: "On" });
 
     await act(async () => {
+      off.resolve({ on: false, switched: 1, failed: [] });
       on.resolve({ on: true, switched: 1, failed: [] });
-      await switching[1];
+      await Promise.all(switching);
     });
     expect(devices.tiles[0]).toMatchObject({ on: true, status: "On" });
   });
