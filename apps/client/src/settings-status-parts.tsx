@@ -32,12 +32,13 @@ const colourOf: Record<string, string> = {
   graphite: "bg-gray",
 };
 
-// The services' colours, as Status shows them.
+// The services' colours, as Status shows them. Piper's yellow leans a
+// little to green, so it stays apart from Natural Light's beside it.
 const serviceColours: Record<string, string> = {
   zigbee2mqtt: "bg-gray",
   mosquitto: "bg-orange",
   ollama: "bg-purple",
-  piper: "bg-yellow",
+  piper: "bg-[color-mix(in_oklch,var(--color-yellow)_82%,var(--color-green))]",
 };
 
 const systemColour = "bg-foreground/24";

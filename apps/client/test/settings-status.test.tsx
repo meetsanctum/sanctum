@@ -296,7 +296,10 @@ describe("the Status page", () => {
 
       expect(parts("status-memory")[0]).toBe("Piper302 MB");
       const bar = section("status-memory")!.querySelector('[role="img"]')!;
-      expect(bar.querySelector("span")?.className).toContain("bg-yellow");
+      // A yellow of its own, apart from Natural Light's.
+      const colour = bar.querySelector("span")!.className;
+      expect(colour).toContain("var(--color-yellow)");
+      expect(colour.split(" ")).not.toContain("bg-yellow");
     });
 
     it("shows each app's icon, as Storage does", async () => {
