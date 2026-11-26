@@ -428,6 +428,9 @@ export function defineApp(app: AppDefinition): AppDefinition {
     if (app.id !== assistantAppId) {
       throw new Error("Only Sanctum's Assistant brings sentences");
     }
+    if (typeof app.requests !== "function") {
+      throw new Error("An Assistant with sentences needs a requests handler");
+    }
     const issues = sentenceIssues(app.sentences);
     if (issues.length > 0) throw new Error(issues.join("; "));
   }

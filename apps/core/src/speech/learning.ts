@@ -7,6 +7,7 @@ import {
   type SentenceBlank,
 } from "@meetsanctum/app-sdk";
 
+import { ManagerRefusal } from "../manager.js";
 import type { Transcriber } from "./spoken.js";
 import { train, transcribe, type Lesson } from "./words.js";
 
@@ -20,11 +21,13 @@ import { train, transcribe, type Lesson } from "./words.js";
 
 /** The service the manager runs for it. */
 export const wordsService = "speech-to-phrase";
+export const moodEntityType = "moods.mood";
 
 /** How long after the last change it retrains. */
 export const retrainAfterMs = 60_000;
 /** How often it looks for the service while it starts. */
 const lookEveryMs = 10_000;
+const maxAdmissionRetryMs = 60_000;
 
 /** Why nothing hears a speaker's run now. */
 export type NotHearing = "no_sentences" | "no_speech_to_text";
@@ -32,6 +35,7 @@ export type NotHearing = "no_sentences" | "no_speech_to_text";
 type Manager = {
   serviceConnection(
     service: string,
+    signal?: AbortSignal,
   ): Promise<{ url: string; token: string | null } | null>;
   wantServiceForCore(
     service: string,
@@ -67,13 +71,15 @@ export function createLearning(options: {
 }) {
   const retrainMs = options.retrainAfterMs ?? retrainAfterMs;
   let running = false;
-  let wanted = false;
+  let wanted: boolean | null = null;
+  let admitted = false;
   // The lesson the service last learned, which it hears with.
   let learned: { language: RequestLanguage; digest: string } | null = null;
   let changing: AbortController | null = null;
   let teaching: AbortController | null = null;
   let retrain: NodeJS.Timeout | undefined;
   let looking: NodeJS.Timeout | undefined;
+  let retryAdmission: NodeJS.Timeout | undefined;
 
   function templates() {
     return options.sentences()?.[options.language()] ?? null;
@@ -104,9 +110,10 @@ export function createLearning(options: {
     };
   }
 
-  async function connection() {
+  async function connection(signal: AbortSignal) {
+    signal.throwIfAborted();
     const found = await options.manager
-      .serviceConnection(wordsService)
+      .serviceConnection(wordsService, signal)
       .catch(() => null);
     const endpoint = found ? endpointOf(found.url) : null;
     return endpoint && found?.token
@@ -117,12 +124,13 @@ export function createLearning(options: {
   // Teaches the current lesson once the service runs, looking again while
   // it starts.
   async function teach() {
+    if (!running || !admitted) return;
     clearTimeout(looking);
     teaching?.abort();
     const controller = new AbortController();
     teaching = controller;
     const now = lesson();
-    if (!running || !wanted || !now) return;
+    if (!now) return;
     const steps = grammarSteps(now.templates, now.lists);
     if (steps > sentenceLimits.grammarSteps) {
       options.log(
@@ -130,7 +138,7 @@ export function createLearning(options: {
       );
       return;
     }
-    const at = await connection();
+    const at = await connection(controller.signal);
     if (controller.signal.aborted) return;
     if (!at) {
       looking = setTimeout(() => void teach(), lookEveryMs);
@@ -157,30 +165,43 @@ export function createLearning(options: {
 
   // Wants or releases the service as the home needs it, one write at a
   // time; the newest state wins.
-  async function apply(want: boolean) {
-    changing?.abort();
-    const controller = new AbortController();
-    changing = controller;
-    try {
-      if (want) {
-        await options.manager.wantServiceForCore(wordsService, {
-          signal: controller.signal,
-        });
-        if (!controller.signal.aborted) void teach();
-      } else {
-        teaching?.abort();
-        clearTimeout(looking);
-        learned = null;
-        await options.manager.releaseServiceForCore(wordsService, {
-          signal: controller.signal,
-        });
+  async function apply(delay = lookEveryMs) {
+    while (running && wanted !== null) {
+      const want: boolean = wanted;
+      const controller = new AbortController();
+      changing = controller;
+      try {
+        if (want) {
+          await options.manager.wantServiceForCore(wordsService, {
+            signal: controller.signal,
+          });
+          if (!controller.signal.aborted) {
+            admitted = true;
+            void teach();
+          }
+        } else {
+          await options.manager.releaseServiceForCore(wordsService, {
+            signal: controller.signal,
+          });
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          options.log(
+            `speech: speech recognition couldn't ${want ? "start" : "stop"} (${error instanceof Error ? error.message : String(error)})`,
+          );
+          // Memory may become available when another service or app stops.
+          if (want && error instanceof ManagerRefusal && error.status === 409) {
+            retryAdmission = setTimeout(
+              () => void apply(Math.min(delay * 2, maxAdmissionRetryMs)),
+              delay,
+            ).unref();
+          }
+        }
+      } finally {
+        changing = null;
       }
-    } catch (error) {
-      if (!controller.signal.aborted) {
-        options.log(
-          `speech: speech recognition couldn't ${want ? "start" : "stop"} (${error instanceof Error ? error.message : String(error)})`,
-        );
-      }
+      if (!controller.signal.aborted) return;
+      delay = lookEveryMs;
     }
   }
 
@@ -189,14 +210,20 @@ export function createLearning(options: {
     const want = templates() !== null && options.speakersListen();
     if (want === wanted) return;
     wanted = want;
+    admitted = false;
+    teaching?.abort();
+    clearTimeout(retrain);
+    clearTimeout(looking);
+    clearTimeout(retryAdmission);
+    learned = null;
     options.onWanted?.();
-    void apply(want);
+    if (changing) changing.abort();
+    else void apply();
   }
 
   return {
     start() {
       running = true;
-      wanted = false;
       reconcile();
     },
 
@@ -207,7 +234,10 @@ export function createLearning(options: {
      */
     changed() {
       if (!running) return;
+      const before = wanted;
       reconcile();
+      // A newly wanted service learns its first lesson when it starts.
+      if (wanted !== before) return;
       if (!wanted) return;
       clearTimeout(retrain);
       retrain = setTimeout(() => void teach(), retrainMs);
@@ -215,7 +245,9 @@ export function createLearning(options: {
     },
 
     /** Whether the core wants the service now, and Piper for its replies. */
-    wanted: () => wanted,
+    wanted: () => wanted === true,
+
+    speakersChanged: reconcile,
 
     /** Why nothing hears a run, or null while something does. */
     notHearing(): NotHearing | null {
@@ -228,7 +260,8 @@ export function createLearning(options: {
       if (!learned) return null;
       const { language } = learned;
       return async (run) => {
-        const at = await connection();
+        const at = await connection(run.signal);
+        run.signal.throwIfAborted();
         if (!at) throw new Error("Speech recognition isn't running");
         return transcribe({ ...at, ...run, language });
       };
@@ -236,8 +269,12 @@ export function createLearning(options: {
 
     stop() {
       running = false;
+      wanted = null;
+      admitted = false;
+      learned = null;
       clearTimeout(retrain);
       clearTimeout(looking);
+      clearTimeout(retryAdmission);
       changing?.abort();
       teaching?.abort();
     },

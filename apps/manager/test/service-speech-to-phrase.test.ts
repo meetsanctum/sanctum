@@ -34,10 +34,12 @@ async function home({
   saved,
   imageIsLocal = true,
   held = [],
+  beforeAdmission,
 }: {
   saved?: object;
   imageIsLocal?: boolean;
   held?: HeldApp[];
+  beforeAdmission?: () => Promise<void>;
 } = {}) {
   const docker = new FakeDocker();
   if (imageIsLocal) {
@@ -60,7 +62,14 @@ async function home({
     hostDevDir: dev.root,
     totalMemory,
     admitCoreService: (name, save) =>
-      capacity.admitService(name, async () => held, save),
+      capacity.admitService(
+        name,
+        async () => {
+          await beforeAdmission?.();
+          return held;
+        },
+        save,
+      ),
     log: () => {},
     onChange: changed,
   });
@@ -207,6 +216,21 @@ describe("Speech-to-Phrase", () => {
     await services.wantForCore(name);
 
     expect(await capacity.freeMb([])).toBe(before - 2200);
+  });
+
+  it("applies a release after an earlier start finishes checking memory", async () => {
+    let finishCheck!: () => void;
+    const checked = new Promise<void>((resolve) => (finishCheck = resolve));
+    const checking = vi.fn(() => checked);
+    const { services } = await home({
+      beforeAdmission: checking,
+    });
+    const start = services.wantForCore(name);
+    await vi.waitFor(() => expect(checking).toHaveBeenCalledOnce());
+    const release = services.releaseForCore(name);
+    finishCheck();
+    await Promise.all([start, release]);
+    expect(services.wanted().has(name)).toBe(false);
   });
 
   it("is no app's to ask for", async () => {

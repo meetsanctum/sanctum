@@ -1,6 +1,7 @@
 import type { AssistantSentences } from "@meetsanctum/app-sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ManagerRefusal } from "../src/manager.js";
 import { createLearning } from "../src/speech/learning.js";
 import { noVoiceMs, train, transcribe } from "../src/speech/words.js";
 import { fakeSpeechToPhrase } from "./speech-support.js";
@@ -100,7 +101,11 @@ describe("hearing a run's words", () => {
   );
 
   it("asks for the transcript once listening ends before speech does", async () => {
-    const fake = await service({ endAfter: null, transcript: "lights on" });
+    const fake = await service({
+      endAfter: null,
+      transcript: "lights on",
+      answerAfterStopMs: 1_200,
+    });
     const run = sound(5);
     expect(
       await transcribe({
@@ -113,6 +118,33 @@ describe("hearing a run's words", () => {
       }),
     ).toBe("lights on");
     expect(fake.heard.at(-1)?.type).toBe("audio-stop");
+  });
+
+  it("rejects a refused training connection", async () => {
+    const fake = await fakeSpeechToPhrase();
+    await new Promise<void>((resolve) => fake.server.close(() => resolve()));
+    await expect(
+      train({
+        host: "127.0.0.1",
+        port: fake.port,
+        token: "secret",
+        lesson: { language: "en", templates: ["lights on"], lists: {} },
+      }),
+    ).rejects.toThrow("ECONNREFUSED");
+  });
+
+  it("rejects an already cancelled transcription before dialing", async () => {
+    const run = sound(1);
+    await expect(
+      transcribe({
+        host: "127.0.0.1",
+        port: 0,
+        language: "en",
+        sound: run.sound,
+        stopListening: run.stopListening,
+        signal: AbortSignal.abort(),
+      }),
+    ).rejects.toThrow("cancelled");
   });
 
   it("teaches a lesson with the service's token, or fails without it", async () => {
@@ -194,7 +226,9 @@ describe("what speech recognition learns", () => {
     expect(learning.notHearing()).toBe("no_speech_to_text");
     learning.start();
 
-    await vi.waitFor(() => expect(fake.lessons).toHaveLength(1));
+    await vi.waitFor(() =>
+      expect(learning.transcriber()).toBeTypeOf("function"),
+    );
     expect(calls).toEqual(["want speech-to-phrase"]);
     expect(fake.lessons[0]).toEqual({
       language: "en",
@@ -209,11 +243,11 @@ describe("what speech recognition learns", () => {
   });
 
   it("wants nothing while no speaker listens or the Assistant has no sentences in the home's language", async () => {
-    const fake = await service({});
+    const fake = { url: "" };
     const quiet = learningSetup(fake, { listens: false });
     quiet.learning.start();
     expect(quiet.learning.wanted()).toBe(false);
-    expect(quiet.calls).toEqual([]);
+    expect(quiet.calls).toEqual(["release speech-to-phrase"]);
 
     const german = learningSetup(fake);
     german.setLanguage("de");
@@ -221,13 +255,18 @@ describe("what speech recognition learns", () => {
     expect(german.learning.wanted()).toBe(false);
     expect(german.learning.notHearing()).toBe("no_sentences");
     expect(german.learning.transcriber()).toBeNull();
+    expect(german.calls).toEqual(["release speech-to-phrase"]);
+    quiet.learning.stop();
+    german.learning.stop();
   });
 
   it("releases the service once the Assistant goes, and hears nothing", async () => {
     const fake = await service({});
     const { learning, calls, setSentences } = learningSetup(fake);
     learning.start();
-    await vi.waitFor(() => expect(fake.lessons).toHaveLength(1));
+    await vi.waitFor(() =>
+      expect(learning.transcriber()).toBeTypeOf("function"),
+    );
 
     setSentences(null);
     learning.changed();
@@ -246,7 +285,9 @@ describe("what speech recognition learns", () => {
     const fake = await service({});
     const { learning, names } = learningSetup(fake);
     learning.start();
-    await vi.waitFor(() => expect(fake.lessons).toHaveLength(1));
+    await vi.waitFor(() =>
+      expect(learning.transcriber()).toBeTypeOf("function"),
+    );
 
     names.room.push("Hallway");
     learning.changed();
@@ -268,11 +309,13 @@ describe("what speech recognition learns", () => {
     learning.stop();
   });
 
-  it("keeps what it learned when a retrain fails or is too large to learn", async () => {
+  it("keeps what it learned when a new lesson is too large", async () => {
     const fake = await service({});
     const { learning, names, logs, setSentences } = learningSetup(fake);
     learning.start();
-    await vi.waitFor(() => expect(fake.lessons).toHaveLength(1));
+    await vi.waitFor(() =>
+      expect(learning.transcriber()).toBeTypeOf("function"),
+    );
 
     // A home whose names make the lesson too large to learn on the host.
     names.light.push(
@@ -289,6 +332,88 @@ describe("what speech recognition learns", () => {
     expect(logs.at(-1)).toContain("keeping what it learned");
     expect(learning.transcriber()).toBeTypeOf("function");
     learning.stop();
+  });
+
+  it("keeps hearing with the old lesson and retries a rejected lesson", async () => {
+    let reject = false;
+    const fake = await service({
+      trainError: () => {
+        if (!reject) return;
+        reject = false;
+        return "Could not teach the lesson";
+      },
+    });
+    const { learning, names, logs } = learningSetup(fake);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      learning.start();
+      await vi.waitFor(() =>
+        expect(learning.transcriber()).toBeTypeOf("function"),
+      );
+      reject = true;
+      names.room.push("Hallway");
+      learning.changed();
+      await vi.advanceTimersByTimeAsync(200);
+      await vi.waitFor(() =>
+        expect(logs.at(-1)).toContain("Could not teach the lesson"),
+      );
+      expect(fake.lessons).toHaveLength(1);
+      expect(learning.transcriber()).toBeTypeOf("function");
+      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.waitFor(() =>
+        expect(fake.lessons.at(-1)).toMatchObject({
+          lists: { room: ["Office", "Kitchen", "Hallway"] },
+        }),
+      );
+      expect(learning.transcriber()).toBeTypeOf("function");
+    } finally {
+      learning.stop();
+    }
+  });
+
+  it("waits for a superseded start to settle before releasing the service", async () => {
+    const { learning, manager, setListens } = learningSetup({ url: "" });
+    let finishStart!: () => void;
+    const started = new Promise<void>((resolve) => (finishStart = resolve));
+    manager.wantServiceForCore.mockReturnValueOnce(started);
+    learning.start();
+    setListens(false);
+    learning.speakersChanged();
+    expect(manager.wantServiceForCore).toHaveBeenCalledWith(
+      "speech-to-phrase",
+      { signal: expect.objectContaining({ aborted: true }) },
+    );
+    expect(manager.releaseServiceForCore).not.toHaveBeenCalled();
+    finishStart();
+    await vi.waitFor(() =>
+      expect(manager.releaseServiceForCore).toHaveBeenCalledOnce(),
+    );
+    expect(manager.serviceConnection).not.toHaveBeenCalled();
+    learning.stop();
+  });
+
+  it("tries again when memory is unavailable and stops retrying when no speaker listens", async () => {
+    const { learning, manager, setListens } = learningSetup({ url: "" });
+    manager.wantServiceForCore.mockRejectedValue(
+      new ManagerRefusal("Not enough memory", 409),
+    );
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      learning.start();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(manager.wantServiceForCore).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(19_999);
+      expect(manager.wantServiceForCore).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(manager.wantServiceForCore).toHaveBeenCalledTimes(3);
+      setListens(false);
+      learning.speakersChanged();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(manager.wantServiceForCore).toHaveBeenCalledTimes(3);
+      expect(manager.releaseServiceForCore).toHaveBeenCalledOnce();
+    } finally {
+      learning.stop();
+    }
   });
 
   it("looks again while the service starts", async () => {

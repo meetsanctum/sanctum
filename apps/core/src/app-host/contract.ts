@@ -8,6 +8,7 @@ import {
   appManifestSchema,
   assistantAppId,
   sentenceIssues,
+  speechListenPermission,
   assistantOfferOf,
   deviceActionActivitySchema,
   roomSectionKinds,
@@ -572,6 +573,14 @@ export function checkManifest(manifest: StaticManifest): StaticManifest {
   // a range was built for a core that read it as no port, so a grant saved
   // for it then never meant those ports.
   const lan = manifest.permissions.map((each) => each.id);
+  if (
+    manifest.permissions.some(
+      ({ id, needed, startsOn }) =>
+        id === speechListenPermission && (needed || startsOn),
+    )
+  ) {
+    throw new Error("Listening needs an explicit household grant");
+  }
   const knowsRanges = manifest.protocol >= lanRangesProtocol;
   if (!knowsRanges && lanRanges(lan).some(({ from, to }) => from < to)) {
     throw new Error(

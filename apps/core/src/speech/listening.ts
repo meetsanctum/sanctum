@@ -183,6 +183,10 @@ export function createListening(options: {
     tell(run, { step: "done" });
   }
 
+  function cancelRuns() {
+    for (const run of bySpeaker.values()) fail(run, "failed");
+  }
+
   function quietFor(run: Run) {
     clearTimeout(run.quiet);
     run.quiet = setTimeout(() => fail(run, "nothing-heard"), listenQuietMs);
@@ -210,13 +214,13 @@ export function createListening(options: {
       };
       // A request can arrive before an updated device registration does.
       if (!options.listens(device)) return refuse("unavailable");
+      const older = bySpeaker.get(device);
+      if (!older && bySpeaker.size >= runsAtOnce) return refuse("limited");
       const hearer = options.hearer(device) ?? "off";
       if (typeof hearer === "string")
         return { accepted: false, refusal: hearer };
       // A speaker runs one request at a time: a newer one ends the older.
-      const older = bySpeaker.get(device);
       if (older) fail(older, "failed");
-      if (bySpeaker.size >= runsAtOnce) return refuse("limited");
 
       const id = randomBytes(12).toString("base64url");
       const sound = soundQueue();
@@ -358,10 +362,12 @@ export function createListening(options: {
       if (run) fail(run, "failed");
     },
 
+    cancelRuns,
+
     /** The core stops: runs end and no new one is taken. */
     stop() {
       closed = true;
-      for (const run of bySpeaker.values()) fail(run, "failed");
+      cancelRuns();
     },
 
     /** Final steps are no longer needed once the app host closes. */

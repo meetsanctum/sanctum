@@ -199,10 +199,11 @@ export function createManagerClient(options: {
     path: string,
     body?: unknown,
     timeoutMs?: number,
+    signal?: AbortSignal,
   ) {
     let response: { status: number; body: string };
     try {
-      response = await call(socketPath, method, path, body, timeoutMs);
+      response = await call(socketPath, method, path, body, timeoutMs, signal);
     } catch {
       throw new ManagerUnavailable("The manager did not answer");
     }

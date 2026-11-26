@@ -16,6 +16,7 @@ import {
   readPermission,
   registerPermission,
   roomSectionTile,
+  speechListenPermission,
   standardEntityTypes,
   workflowsManagePermission,
   type ActionErrorCode,
@@ -658,6 +659,7 @@ export function createCoreCalls(options: {
     // device, and an AI agent's call never does (speech/listening.ts).
     async openListen(open) {
       need(registerPermission);
+      need(speechListenPermission);
       notForAgents();
       if (!options.listening)
         return { accepted: false, refusal: "unavailable" };
@@ -666,6 +668,7 @@ export function createCoreCalls(options: {
 
     async sendListen(send) {
       need(registerPermission);
+      need(speechListenPermission);
       notForAgents();
       if (!options.listening) throw new ActionError("not_found");
       options.listening.send(appId, send);

@@ -5,10 +5,11 @@ import {
 } from "@meetsanctum/app-sdk";
 
 import type { AgentsCanUse } from "../agents/can-use.js";
+import type { Entities } from "../entities/entities.js";
 import type { ManagerClient } from "../manager.js";
 import { createAnnouncements } from "./announcements.js";
-import { assembleHearing } from "./hearing.js";
-import { createLearning } from "./learning.js";
+import { assembleHearing, hasListeningPart } from "./hearing.js";
+import { createLearning, moodEntityType } from "./learning.js";
 import { createSpeech, speechLanguages, speechService } from "./speech.js";
 import { spokenPhrases } from "./spoken.js";
 
@@ -26,11 +27,13 @@ export function assembleSpeakerAudio(
   > &
     Pick<HearingOptions, "transcriber"> & {
       manager: Partial<Pick<ManagerClient, "serviceConnection">>;
-      // The home's language for speech, English until the Assistant says.
+      // Speaker requests use English.
       language?: () => RequestLanguage;
+      speechRetrainAfterMs?: number;
     },
   options: Pick<HearingOptions, "devices" | "places" | "apps" | "record"> & {
     canUse: Pick<AgentsCanUse, "areaOn">;
+    entities: Pick<Entities, "list">;
   },
 ) {
   const { manager } = config;
@@ -61,19 +64,15 @@ export function assembleSpeakerAudio(
                   device.capabilities.some((part) => part.kind === "light"),
                 )
                 .map((device) => device.name),
-              mood: [],
+              mood: options.entities
+                .list({ type: moodEntityType })
+                .map((mood) => mood.name),
             };
           },
           language,
           onWanted: () => speech.speech?.hearingChanged(),
-          speakersListen: () =>
-            devices
-              .list()
-              .some((device) =>
-                device.capabilities.some(
-                  (part) => part.kind === "audio" && part.features.listens,
-                ),
-              ),
+          speakersListen: () => devices.list().some(hasListeningPart),
+          retrainAfterMs: config.speechRetrainAfterMs,
           log: config.log,
         })
       : undefined;

@@ -2,17 +2,20 @@ import {
   aiAssistantPermission,
   assistantAppId,
   defineApp,
+  defineEntityType,
   registerPermission,
+  speechListenPermission,
   type AppContext,
   type ListenStep,
   type VoiceRun,
 } from "@meetsanctum/app-sdk";
 import { expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import { base, running, useCleanUps } from "./app-apart-support.js";
 import { fakeManager } from "./manager-support.js";
 import { fakePiper, fakeSpeechToPhrase } from "./speech-support.js";
-import { claimed, testCore } from "./support.js";
+import { claimed, post, testCore } from "./support.js";
 
 // Speech recognition in a running core: once the Assistant, with its
 // sentences, runs and a smart speaker listens, the core wants
@@ -27,10 +30,20 @@ it("teaches the Assistant's sentences and hears a speaker's words with them", as
     ...base,
     id: assistantAppId,
     name: "Assistant",
-    permissions: [{ id: aiAssistantPermission, reason: "To do what you ask." }],
+    permissions: [
+      {
+        id: aiAssistantPermission,
+        reason: "To do what you ask.",
+        needed: true,
+      },
+    ],
     actions: [],
     sentences: {
-      en: ["turn (on|off) the {room} lights", "turn (on|off) [the] {light}"],
+      en: [
+        "turn (on|off) the {room} lights",
+        "turn (on|off) [the] {light}",
+        "set the mood to {mood}",
+      ],
     },
     async requests(_ctx, request) {
       asked.push(request.text);
@@ -38,10 +51,19 @@ it("teaches the Assistant's sentences and hears a speaker's words with them", as
     },
   });
   let driverCtx: AppContext | undefined;
+  const mood = defineEntityType({
+    id: "moods.mood",
+    title: "Mood",
+    state: z.object({}),
+  });
   const driver = defineApp({
     ...base,
     id: "sanctum.example",
-    permissions: [{ id: registerPermission, reason: "For the test." }],
+    permissions: [
+      { id: registerPermission, reason: "To register devices.", needed: true },
+      { id: speechListenPermission, reason: "To send voice requests." },
+    ],
+    provides: { entities: [mood] },
     actions: [],
     start: async (ctx) => {
       driverCtx = ctx;
@@ -53,7 +75,7 @@ it("teaches the Assistant's sentences and hears a speaker's words with them", as
           {
             id: "audio",
             kind: "audio",
-            features: { listens: true, announces: true },
+            features: { listens: true, announces: true, mutes: true },
           },
         ],
       } as never);
@@ -100,17 +122,19 @@ it("teaches the Assistant's sentences and hears a speaker's words with them", as
     });
     const core = await testCore({
       manager,
+      allowed: false,
       speakerPort: 0,
+      speechRetrainAfterMs: 100,
       apps: [
         { app: assistant, origin: "official" },
         { app: driver, origin: "official" },
       ],
     });
-    await claimed(core);
+    const home = await claimed(core);
     await running(core, assistantAppId);
     await running(core, "sanctum.example");
 
-    await vi.waitFor(() => expect(stp.lessons).toHaveLength(1), {
+    await vi.waitFor(() => expect(stp.lessons[0]).toBeDefined(), {
       timeout: 5_000,
     });
     // The names come as they register; a change retrains a minute later.
@@ -119,13 +143,26 @@ it("teaches the Assistant's sentences and hears a speaker's words with them", as
       templates: [
         "turn (on|off) the {room} lights",
         "turn (on|off) [the] {light}",
+        "set the mood to {mood}",
       ],
       lists: { room: ["no room"] },
     });
     expect(wanted).toEqual(new Set(["speech-to-phrase", "piper"]));
 
-    const run = (await driverCtx!.audio.listen("speaker", {
-      wakeWord: "Okay Nabu",
+    const wake = () =>
+      driverCtx!.audio.listen("speaker", { wakeWord: "Okay Nabu" });
+    await expect(wake()).rejects.toThrow(speechListenPermission);
+    const grant = await post(
+      core,
+      "/api/apps/sanctum.example/permissions/update",
+      { permission: speechListenPermission, granted: true },
+      home,
+    );
+    expect(grant.statusCode).toBe(200);
+    const run = (await vi.waitFor(async () => {
+      const opened = await wake();
+      expect(opened.accepted).toBe(true);
+      return opened;
     })) as VoiceRun;
     expect(run.accepted).toBe(true);
     for (let i = 0; i < 3; i += 1) run.send(new Uint8Array(3_200));
@@ -141,6 +178,88 @@ it("teaches the Assistant's sentences and hears a speaker's words with them", as
     expect(asked).toEqual(["turn off the office lights"]);
     expect(steps.at(-1)).toMatchObject({ step: "reply", text: "Done" });
     await run.close("played");
+
+    const room = await post(
+      core,
+      "/api/places/rooms/add",
+      { name: "Office" },
+      home,
+    );
+    expect(room.statusCode).toBe(200);
+    const { id } = room.json() as { id: string };
+    await vi.waitFor(() =>
+      expect(stp.lessons.at(-1)).toMatchObject({ lists: { room: ["Office"] } }),
+    );
+    const renamed = await post(
+      core,
+      "/api/places/rooms/update",
+      { id, name: "Study" },
+      home,
+    );
+    expect(renamed.statusCode).toBe(200);
+    // Wait for the rename on its own so another change can't hide a missed event.
+    await vi.waitFor(() =>
+      expect(stp.lessons.at(-1)).toMatchObject({ lists: { room: ["Study"] } }),
+    );
+    await driverCtx!.entities.publish({
+      type: mood.id,
+      key: "evening",
+      name: "Evening",
+      state: {},
+    });
+    await vi.waitFor(() =>
+      expect(stp.lessons.at(-1)).toMatchObject({
+        lists: { mood: ["Evening"] },
+      }),
+    );
+
+    const reportMute = (muted: boolean) =>
+      driverCtx!.devices.report({
+        key: "speaker",
+        availability: "online",
+        states: { audio: { muted } },
+      });
+    async function streaming() {
+      const starts = stp.heard.filter(
+        (event) => event.type === "audio-start",
+      ).length;
+      const opened = await wake();
+      if (!opened.accepted) throw new Error("Speaker run refused");
+      await vi.waitFor(() =>
+        expect(
+          stp.heard.filter((event) => event.type === "audio-start"),
+        ).toHaveLength(starts + 1),
+      );
+      return opened;
+    }
+    async function expectCancelled(active: VoiceRun) {
+      const collected: ListenStep[] = [];
+      for await (const step of active.steps()) collected.push(step);
+      expect(collected).toEqual([
+        { step: "stopped" },
+        { step: "error", error: "failed" },
+        { step: "done" },
+      ]);
+    }
+
+    const mutedRun = await streaming();
+    await reportMute(true);
+    await expectCancelled(mutedRun);
+    await expect(wake()).resolves.toEqual({
+      accepted: false,
+      refusal: "unavailable",
+    });
+    await reportMute(false);
+
+    const offRun = await streaming();
+    const off = await post(
+      core,
+      `/api/apps/${assistantAppId}/off`,
+      { off: true },
+      home,
+    );
+    expect(off.statusCode).toBe(200);
+    await expectCancelled(offRun);
   } finally {
     stp.server.close();
     piper.server.close();

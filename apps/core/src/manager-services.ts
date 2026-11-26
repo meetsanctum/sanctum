@@ -26,6 +26,7 @@ export function createManagerServices(options: {
     path: string,
     body?: unknown,
     timeoutMs?: number,
+    signal?: AbortSignal,
   ) => Promise<string>;
   ask: <T>(attempt: () => Promise<T>, signal?: AbortSignal) => Promise<T>;
   expectGranted: (response: Response) => void;
@@ -50,7 +51,7 @@ export function createManagerServices(options: {
 
     // Where a service answers while it runs and the token it takes from the
     // core, or null while it doesn't run.
-    async serviceConnection(service: string) {
+    async serviceConnection(service: string, signal?: AbortSignal) {
       const answer = parseBody(
         serviceStatus,
         await once(
@@ -58,6 +59,7 @@ export function createManagerServices(options: {
           `/api/services/${encodeURIComponent(service)}`,
           undefined,
           5_000,
+          signal,
         ),
       );
       const { url, token } = answer.service;

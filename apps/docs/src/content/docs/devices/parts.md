@@ -126,12 +126,9 @@ word. It never carries what the microphones hear.
   use](/ai-agents/what-they-can-use/)); no app or person sends one as a
   command.
 - **Listens:** whether its wake word or button starts a request whose sound
-  its driver can hand Sanctum. While the Assistant is on, speech recognition
-  on Sanctum turns what was said into words, knowing only the sentences the
-  Assistant understands, and the Assistant answers on the speaker. The sound
-  never leaves the home. Otherwise Sanctum declines the request before any
-  of its sound leaves the device, and the speaker's Activity says why, such
-  as "The Assistant is off".
+  its driver can hand Sanctum. Sanctum declines voice requests on a standard
+  installation. The speaker's Activity can show why, such as "The Assistant
+  is off".
 
 Muting and unmuting wait for the device to say it did them. History keeps
 nothing of its microphones. Where Sanctum can mute its microphones, a smart

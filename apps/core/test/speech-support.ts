@@ -53,7 +53,8 @@ export async function fakeSpeechToPhrase(
     voiceAfter?: number | null;
     endAfter?: number | null;
     transcript?: string;
-    trainError?: string;
+    trainError?: () => string | undefined;
+    answerAfterStopMs?: number;
   } = {},
 ) {
   const lessons: Record<string, unknown>[] = [];
@@ -105,10 +106,11 @@ export async function fakeSpeechToPhrase(
         heard.push({ type: head.type, data, bytes: payload });
         if (head.type === "train") {
           const { token, ...lesson } = data;
+          const error = options.trainError?.();
           if (token !== (options.token ?? "secret")) {
             send("error", { text: "Training requires a valid token" });
-          } else if (options.trainError) {
-            send("error", { text: options.trainError });
+          } else if (error) {
+            send("error", { text: error });
           } else {
             lessons.push(lesson);
             send("trained", {
@@ -129,7 +131,10 @@ export async function fakeSpeechToPhrase(
             options.endAfter === undefined ? 9_600 : options.endAfter;
           if (voice && endAfter !== null && bytes >= endAfter) answer();
         }
-        if (head.type === "audio-stop") answer();
+        if (head.type === "audio-stop") {
+          if (options.answerAfterStopMs === undefined) answer();
+          else setTimeout(answer, options.answerAfterStopMs).unref();
+        }
       }
     });
   });

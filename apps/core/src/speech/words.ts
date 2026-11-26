@@ -15,6 +15,7 @@ import { createReader, SpeechError, type WyomingEvent } from "./wyoming.js";
 export const noVoiceMs = 4_000;
 /** How long the service may take to answer once the sound has stopped. */
 const answerMs = 15_000;
+const connectMs = 5_000;
 /** How long a lesson may take, a model's first download included. */
 export const lessonMs = 15 * 60_000;
 
@@ -28,6 +29,8 @@ export type Lesson = {
 // One connection to the service: events out, and the next event back
 // within a time.
 function open(endpoint: { host: string; port: number }, signal?: AbortSignal) {
+  const cancelled = new SpeechError("Speech recognition was cancelled");
+  if (signal?.aborted) throw cancelled;
   const socket = connect(endpoint);
   const reader = createReader();
   const queue: (Buffer | Error | null)[] = [];
@@ -39,11 +42,38 @@ function open(endpoint: { host: string; port: number }, signal?: AbortSignal) {
   socket.on("data", (bytes: Buffer) => push(bytes));
   socket.on("error", (error) => push(error));
   socket.on("close", () => push(null));
-  const abort = () => push(new SpeechError("Speech recognition was cancelled"));
+  let connecting: ((error?: Error) => void) | undefined;
+  const abort = () => {
+    connecting?.(cancelled);
+    push(cancelled);
+    socket.destroy();
+  };
+  const disconnected = () =>
+    connecting?.(new SpeechError("Speech recognition closed the connection"));
+  const failed = (error: Error) => connecting?.(new SpeechError(error.message));
   signal?.addEventListener("abort", abort, { once: true });
-  const connected = new Promise<void>((resolve) =>
-    socket.once("connect", () => resolve()),
-  );
+  const connected = new Promise<void>((resolve, reject) => {
+    const ready = () => connecting?.();
+    const timer = setTimeout(
+      () =>
+        connecting?.(
+          new SpeechError("Speech recognition didn't connect in time"),
+        ),
+      connectMs,
+    );
+    connecting = (error) => {
+      connecting = undefined;
+      clearTimeout(timer);
+      socket.off("connect", ready);
+      socket.off("close", disconnected);
+      socket.off("error", failed);
+      if (error) reject(error);
+      else resolve();
+    };
+    socket.once("connect", ready);
+    socket.once("close", disconnected);
+    socket.once("error", failed);
+  });
 
   return {
     connected,
@@ -124,16 +154,25 @@ export async function transcribe(options: {
   let voice = false;
   let transcript: string | null = null;
   let firstSound: number | null = null;
-  let streaming = true;
+  let answerBy: number | null = null;
   try {
     await connection.connected;
+    options.signal.throwIfAborted();
     connection.send("transcribe", { language: options.language });
     connection.send("audio-start", format);
     // The service's answers, read while the sound goes out.
     const answer = (async () => {
       for (;;) {
+        const now = performance.now();
+        if (answerBy !== null && now >= answerBy) {
+          throw new SpeechError("Speech recognition didn't answer in time");
+        }
         const event = await connection.next(
-          !streaming ? answerMs : voice || firstSound === null ? 1_000 : 100,
+          answerBy === null
+            ? voice || firstSound === null
+              ? 1_000
+              : 100
+            : answerBy - now,
         );
         if (event?.type === "voice-started") voice = true;
         if (event?.type === "transcript") {
@@ -141,9 +180,6 @@ export async function transcribe(options: {
             typeof event.data.text === "string" ? event.data.text : "";
           options.stopListening();
           return;
-        }
-        if (!event && !streaming) {
-          throw new SpeechError("Speech recognition didn't answer in time");
         }
         if (
           !voice &&
@@ -157,18 +193,21 @@ export async function transcribe(options: {
     })();
     const sent = (async () => {
       for await (const chunk of options.sound) {
-        if (transcript !== null) break;
+        if (options.signal.aborted || transcript !== null) break;
         firstSound ??= Date.now();
         connection.send("audio-chunk", format, chunk);
       }
-      streaming = false;
-      if (transcript === null) connection.send("audio-stop");
+      if (!options.signal.aborted && transcript === null) {
+        connection.send("audio-stop");
+        answerBy = performance.now() + answerMs;
+      }
     })();
     await Promise.all([answer, sent]);
     if (transcript === null || (!voice && transcript === "")) return null;
     return transcript;
   } finally {
     connection.close();
+    options.stopListening();
   }
 }
 
@@ -186,6 +225,7 @@ export async function train(options: {
   const connection = open(options, options.signal);
   try {
     await connection.connected;
+    options.signal?.throwIfAborted();
     connection.send("train", { token: options.token, ...options.lesson });
     for (;;) {
       const event = await connection.next(lessonMs);

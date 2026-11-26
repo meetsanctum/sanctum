@@ -50,6 +50,15 @@ describe("the Assistant's sentences", () => {
     ).toThrow("Only Sanctum's Assistant brings sentences");
   });
 
+  it("require a request handler", () => {
+    expect(() =>
+      defineApp({
+        ...assistant({ en: ["turn on the lights"] }),
+        requests: undefined,
+      }),
+    ).toThrow("needs a requests handler");
+  });
+
   it("leave only the home's names blank", () => {
     expect(sentenceIssues({ en: ["set the {thermostat} to warm"] })).toEqual([
       expect.stringContaining(
@@ -103,6 +112,21 @@ describe("the Assistant's sentences", () => {
     );
     expect(grammarSteps(["{room}"], { room: ["Office", "Kitchen"] })).toBe(
       (7 + 8) * 4,
+    );
+  });
+
+  it("bounds the combinations of adjacent fragments within a word", () => {
+    const joined = "light" + "[x]".repeat(18);
+    expect(sentenceIssues({ en: [joined] })).toEqual([
+      expect.stringContaining("en sentences take about"),
+    ]);
+    const nested = "light" + "[(x|y)]".repeat(12);
+    expect(grammarSteps([nested], {})).toBeGreaterThan(
+      sentenceLimits.grammarSteps,
+    );
+    const spaced = "light " + "[x] ".repeat(18);
+    expect(grammarSteps([spaced], {})).toBeLessThan(
+      sentenceLimits.grammarSteps,
     );
   });
 });

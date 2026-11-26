@@ -62,7 +62,7 @@ import { createPresses } from "./devices/presses.js";
 import { createEntities, type Entities } from "./entities/entities.js";
 import { createEventBus } from "./event-bus.js";
 import { createHistory } from "./history/history.js";
-import type { CoreSteps } from "./lifecycle.js";
+import { assembleShutdown } from "./shutdown.js";
 import { createModels } from "./models/models.js";
 import { createTurns } from "./models/turns.js";
 import type { ModelFetchers } from "./models/endpoints.js";
@@ -174,6 +174,8 @@ export async function createModules(
     agentCommandLimits?: AgentCommandLimits;
     // For tests: what hears words in smart speakers' sound.
     transcriber?: () => Transcriber | null;
+    // For tests: how soon speech recognition retrains after a change.
+    speechRetrainAfterMs?: number;
     // For tests: the home's time zone and sun times, which otherwise come
     // from Places and from the app that provides the sun.
     timeZone?: () => string | null;
@@ -475,6 +477,7 @@ export async function createModules(
   } = assembleSpeakerAudio(options, {
     canUse: agentsCanUse,
     devices,
+    entities,
     places,
     apps: () => apps,
     record: activity.for("devices"),
@@ -547,7 +550,10 @@ export async function createModules(
       // interrupted adding it back.
       if (app.state === "running") workflows.forApps.added(app.id);
       // The Assistant brings what speech recognition learns.
-      if (app.id === assistantAppId) learning?.changed();
+      if (app.id === assistantAppId) {
+        if (!apps.answersRequests()) listening.cancelRuns();
+        learning?.changed();
+      }
       // A driver that starts or stops lets devices join, or lists what it
       // found, or no longer does.
       pairing.refresh();
@@ -703,46 +709,34 @@ export async function createModules(
     workflows,
   });
 
-  // Stop new workflow runs and offer checks before waiting on shutdown.
-  const stopNewWork = [
-    ["workflows", () => workflows.interrupt()],
-    ["look for sticks", () => hardwareOffers.interrupt()],
-    ["check Add devices' offers", () => deviceOffers.interrupt()],
-    ["try updates that wait for room", () => roomWaits.interrupt()],
-    ["stop Assistant requests", () => apps.stopRequests()],
-    ["stop smart speakers' runs", () => listening.stop()],
-    ["take no more turns with the AI model", () => turns.close()],
-  ] as const satisfies CoreSteps["stopNewWork"];
-  // Nothing goes to a device again while the apps stop. Devices' and
-  // firmware's deadlines are the last that change a device, so the bus closes
-  // after them, and history then records that nothing is known from then on.
-  const stoppingSteps = [
-    ["stop announcements", stopSpeech],
-    ["stop discovery", () => sightings?.close()],
-    ["stop the manager's audit", () => managerAudit?.close()],
-    ["stop removed apps' deadlines", () => appDeleting.close()],
-    ["finish looking for sticks", () => hardwareOffers.close()],
-    ["stop Add devices' offers", () => deviceOffers.close()],
-    ["stop trying updates that wait for room", () => roomWaits.close()],
-    ["stop commands to devices", () => devices.closing()],
-    ["stop workflows", () => workflows.close()],
-    ["stop holds", () => holds.close()],
-    ["finish changes to apps", () => listTurns.settled()],
-    ["stop adding and repairing that ask", () => asking.close()],
-    ["stop the app host", () => apps.close()],
-    ["clear finished smart speaker runs", () => listening.clearFinished()],
-    ["stop watching the AI model", () => models.stop()],
-    ["stop devices", () => devices.close()],
-    ["stop firmware", () => firmware.close()],
-    ["close the bus", () => eventBus.close()],
-    ["let drivers' pictures go", () => blobs.close()],
-    ["stop history", () => history.close()],
-    ["stop pairing", () => pairing.stop()],
-  ] as const satisfies CoreSteps["stopping"];
   const audit = options.manager.audit;
   const managerAudit = audit
     ? createManagerAuditCopy({ db, activity, audit, log })
     : undefined;
+
+  const shutdown = assembleShutdown({
+    workflows,
+    hardwareOffers,
+    deviceOffers,
+    roomWaits,
+    apps,
+    listening,
+    turns,
+    stopSpeech,
+    sightings,
+    managerAudit,
+    appDeleting,
+    devices,
+    holds,
+    listTurns,
+    asking,
+    models,
+    firmware,
+    eventBus,
+    blobs,
+    history,
+    pairing,
+  });
 
   return {
     activity,
@@ -788,10 +782,7 @@ export async function createModules(
     // core (core.ts); none under a manager that can't look.
     discovery: sightings,
     startSpeech,
-    // At stopping's first moment, before anything is awaited (lifecycle.ts).
-    stopNewWork,
-    // The modules' steps of stopping, in order (lifecycle.ts).
-    stoppingSteps,
+    ...shutdown,
   };
 }
 

@@ -49,26 +49,87 @@ export const referenceHome: Record<
 
 const blankPattern = /\{([^{}]*)\}/g;
 
+const overBudget = sentenceLimits.grammarSteps + 1;
+
+// The recognizer builds each variant of a word before tokenizing it.
+// Spaces and list references end a word, so choices across those breaks
+// never multiply together.
+function joinedWordSteps(template: string) {
+  const tokens = template.match(/\{[^{}]*\}|[^\s()[\]{}|]+|./gsu) ?? [];
+  let index = 0;
+  let steps = 0;
+
+  function alternatives(): { count: number; length: number } | null {
+    let count = 0;
+    let length = 0;
+    let allFragments = true;
+    for (;;) {
+      let choices = 1;
+      let wordLength = 0;
+      let parts = 0;
+      while (index < tokens.length) {
+        const token = tokens[index]!;
+        if (token === "|" || token === ")" || token === "]") break;
+        index++;
+        let part: { count: number; length: number } | null;
+        if (token === "(" || token === "[") {
+          part = alternatives();
+          if (tokens[index] === (token === "(" ? ")" : "]")) index++;
+          if (part && token === "[") part.count++;
+        } else {
+          part = /^(?:\s|\{)/u.test(token)
+            ? null
+            : { count: 1, length: token.length };
+        }
+        if (!part) {
+          allFragments = false;
+          choices = 1;
+          wordLength = 0;
+          parts = 0;
+          continue;
+        }
+        choices = Math.min(overBudget, choices * part.count);
+        wordLength += part.length;
+        parts++;
+        if (parts > 1 && choices > 1) {
+          steps = Math.min(overBudget, steps + choices * (1 + 4 * wordLength));
+        }
+      }
+      count = Math.min(overBudget, count + choices);
+      length = Math.max(length, wordLength);
+      if (tokens[index] !== "|") break;
+      index++;
+    }
+    return allFragments ? { count, length } : null;
+  }
+
+  alternatives();
+  return steps;
+}
+
 /**
  * About how many steps speech recognition takes to build the grammar for
- * these templates with these names. Measured on the image with English and
- * German lessons, the steps were 2.2–2.6 times the characters the templates
- * and their names spell, so four times is always above it.
+ * these templates with these names. Count the ordinary text and list cost
+ * and allow for the variants formed by adjacent fragments in a word.
  */
 export function grammarSteps(
   templates: readonly string[],
   names: Partial<Record<SentenceBlank, readonly string[]>>,
 ) {
-  let characters = 0;
+  let steps = 0;
   for (const template of templates) {
-    characters += template.replace(blankPattern, "").length;
+    steps +=
+      template.replace(blankPattern, "").length * 4 + joinedWordSteps(template);
+    if (steps >= overBudget) return overBudget;
     for (const [, blank] of template.matchAll(blankPattern)) {
+      if (!Object.hasOwn(names, blank!)) continue;
       for (const name of names[blank as SentenceBlank] ?? []) {
-        characters += name.length + 1;
+        steps += (name.length + 1) * 4;
+        if (steps >= overBudget) return overBudget;
       }
     }
   }
-  return characters * 4;
+  return steps;
 }
 
 const referenceNames = Object.fromEntries(

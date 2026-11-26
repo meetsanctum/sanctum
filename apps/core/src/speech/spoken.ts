@@ -155,6 +155,11 @@ export function createSpokenRequests(options: {
     { agentPerMinute: 1, homePerMinute: 4 },
     now,
   );
+  // Count microphone runs even when no words reach the Assistant.
+  const takeRecognition = minuteWindows(
+    { agentPerMinute: 12, homePerMinute: 60 },
+    now,
+  );
 
   function isCurrent({ run, cancel }: Asking) {
     return (
@@ -486,7 +491,10 @@ export function createSpokenRequests(options: {
         declined(device, options.notHearing?.() ?? "no_speech_to_text");
         return "off";
       }
-      if (!options.requests.hasRoom(device)) {
+      if (
+        !options.requests.hasRoom(device) ||
+        takeRecognition(device) !== undefined
+      ) {
         declined(device, "limited");
         return "limited";
       }
@@ -504,6 +512,10 @@ export function createSpokenRequests(options: {
     /** A smart speaker went: its request ends, and its window goes. */
     deviceGone(device: string) {
       options.requests.forget(device);
+      asking.get(device)?.cancel.abort();
+    },
+
+    cancelDevice(device: string) {
       asking.get(device)?.cancel.abort();
     },
 

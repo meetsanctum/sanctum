@@ -180,8 +180,8 @@ export function createServices(options: {
       options.onObserved?.(name, before, next);
     },
   };
-  // What an app's need and erasing a service's data do to one service, in
-  // turns.
+  // Requests that need a service and operations that clear its demand or
+  // data take turns, even when the caller stops waiting for a reply.
   const serviceTurns = new Map<string, Promise<unknown>>();
   function inServiceTurn<T>(name: string, work: () => Promise<T>) {
     const next = (serviceTurns.get(name) ?? Promise.resolve()).then(work);
@@ -528,11 +528,11 @@ export function createServices(options: {
             };
           }
         });
-      if (definition.checkMemory && options.admitCoreService) {
-        await options.admitCoreService(name, save);
-      } else {
-        await save();
-      }
+      await inServiceTurn(name, () =>
+        definition.checkMemory && options.admitCoreService
+          ? options.admitCoreService(name, save)
+          : save(),
+      );
       void options.onChange?.();
       return { service: status(name) };
     },
@@ -542,14 +542,16 @@ export function createServices(options: {
     // it, as an app's release does.
     async releaseForCore(name: string) {
       forCore(name);
-      await store.update((draft) => {
-        const core = (draft.core ?? []).filter((each) => each !== name);
-        if (core.length > 0) {
-          draft.core = core;
-        } else {
-          delete draft.core;
-        }
-      });
+      await inServiceTurn(name, () =>
+        store.update((draft) => {
+          const core = (draft.core ?? []).filter((each) => each !== name);
+          if (core.length > 0) {
+            draft.core = core;
+          } else {
+            delete draft.core;
+          }
+        }),
+      );
       await options.onChange?.();
     },
 

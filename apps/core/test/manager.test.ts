@@ -594,6 +594,41 @@ describe("the manager client", () => {
     ]);
   });
 
+  it("reads the recognition service's endpoint and token only while it runs", async () => {
+    const { client, socketPath } = await setUp();
+    const paths: (string | undefined)[] = [];
+    let service: { name: string; state: string; url?: string; token?: string } =
+      {
+        name: "speech-to-phrase",
+        state: "running",
+        url: "tcp://172.20.0.2:10300",
+        token: "training-token",
+      };
+    const server = createServer((request, response) => {
+      paths.push(request.url);
+      response.end(JSON.stringify({ service }));
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(socketPath, () => {
+        server.off("error", reject);
+        resolve();
+      });
+    });
+    open.push({ server });
+
+    await expect(client.serviceConnection(service.name)).resolves.toEqual({
+      url: service.url,
+      token: service.token,
+    });
+    service = { name: service.name, state: "starting" };
+    await expect(client.serviceConnection(service.name)).resolves.toBeNull();
+    expect(paths).toEqual([
+      "/api/services/speech-to-phrase",
+      "/api/services/speech-to-phrase",
+    ]);
+  });
+
   it("keeps asking a manager that does not know the host's id yet", async () => {
     const { client, socketPath } = await setUp();
     const { server, received } = await listen(socketPath, 404);
