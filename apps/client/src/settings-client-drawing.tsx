@@ -4,7 +4,6 @@ import type {
   SetClientDrawing,
 } from "@meetsanctum/auth-protocol";
 import { Button, SegmentedControl } from "@meetsanctum/ui-sdk";
-import { Gauge } from "lucide-react";
 import { useId, useLayoutEffect, useRef, useState } from "react";
 
 import { productName } from "./brand";
@@ -44,7 +43,8 @@ export function drawnText(client: ClientInfo) {
 }
 
 // Why Automatic has one on now, by what the client said it draws with under
-// its current choices: a status under its choices, and nothing otherwise.
+// its current choices: the reason in a status under its choices, after On,
+// and nothing otherwise.
 // The device's own reduced transparency or reduced motion is its
 // accessibility settings' doing.
 function onNow(
@@ -61,9 +61,9 @@ function onNow(
   ) {
     return null;
   }
-  if (drawn.slowDevice) return "On, low performance detected";
-  const whose = client.current ? "this device's" : `${client.name}'s`;
-  return `On, by ${whose} accessibility settings`;
+  if (drawn.slowDevice) return "Low performance detected";
+  const whose = client.current ? "This device's" : `${client.name}'s`;
+  return `${whose} accessibility settings`;
 }
 
 type DrawingChange = Omit<SetClientDrawing, "id">;
@@ -190,7 +190,8 @@ export function ClientDrawing(props: {
 }
 
 // One setting: its name, what it does, its three choices, and under them
-// why Automatic has it on now.
+// why Automatic has it on now: a badge of two segments, On and the reason,
+// which a screen reader hears after a comma.
 function Group(props: {
   id: string;
   title: string;
@@ -228,13 +229,13 @@ function Group(props: {
         className="flex flex-col"
       >
         {props.status && (
-          <span className="mt-2 flex w-fit max-w-full items-start gap-1.5 rounded-sm bg-green/6 px-2 py-1 text-[13px] leading-[18px] font-medium text-green dark:bg-green/12">
-            <Gauge
-              aria-hidden="true"
-              className="mt-px size-3.5 shrink-0"
-              strokeWidth={2.25}
-            />
-            {props.status}
+          <span className="mt-2 flex w-fit max-w-full gap-px text-[13px] leading-[18px] font-medium">
+            <span className="shrink-0 rounded-l-sm bg-foreground/5 px-2 py-1 text-green dark:bg-foreground/8">
+              On<span className="sr-only">, </span>
+            </span>
+            <span className="rounded-r-sm bg-foreground/5 px-2 py-1 text-muted-foreground dark:bg-foreground/8">
+              {props.status}
+            </span>
           </span>
         )}
       </div>

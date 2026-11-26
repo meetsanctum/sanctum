@@ -284,7 +284,7 @@ describe("Settings → Clients", () => {
     expect(choice("Reduce motion", "On").dataset.state).toBe("on");
     expect(statusRegion("Reduce effects")).toBe(effectsStatus);
     expect(effectsStatus.textContent).toBe(
-      "On, by Kitchen tablet's accessibility settings",
+      "On, Kitchen tablet's accessibility settings",
     );
     expect(
       settingGroup("Reduce effects")
@@ -351,9 +351,13 @@ describe("Settings → Clients", () => {
     await refreshClients();
     await editClient(tablet.name, "Effects and motion");
 
-    expect(statusRegion("Reduce effects").textContent).toBe(
-      "On, low performance detected",
-    );
+    const status = statusRegion("Reduce effects");
+    expect(status.textContent).toBe("On, Low performance detected");
+    // Only On is green; the reason is grey.
+    const [on, reason] = [...status.firstElementChild!.children];
+    expect(on!.className).toContain("text-green");
+    expect(reason!.className).toContain("text-muted-foreground");
+    expect(reason!.className).not.toContain("text-green");
   });
 
   it("credits this device's accessibility settings when only Automatic motion is reduced", async () => {
@@ -367,7 +371,7 @@ describe("Settings → Clients", () => {
     expect(statusRegion("Reduce effects").textContent).toBe("");
     const motionStatus = statusRegion("Reduce motion");
     expect(motionStatus.textContent).toBe(
-      "On, by this device's accessibility settings",
+      "On, This device's accessibility settings",
     );
     expect(
       settingGroup("Reduce motion")
