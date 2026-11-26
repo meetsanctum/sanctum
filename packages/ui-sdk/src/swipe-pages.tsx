@@ -43,7 +43,7 @@ export type SwipePage = {
 
 const SwipePageSelected = createContext(true);
 
-/** Whether this content is on a selected swipe page, or outside SwipePages. */
+/** Whether the page this is on is the one on show, or true outside SwipePages. */
 export function useSwipePageSelected(): boolean {
   return useContext(SwipePageSelected);
 }
@@ -80,7 +80,7 @@ export function SwipePages(props: {
   pages: SwipePage[];
   /** The page it opens on, by its id: the first unless said. */
   initial?: string;
-  /** Called in a transition after the page selection commits, including on open. */
+  /** The page on show, including when it first opens, told in a transition once the pages start to slide. */
   onPageChange?: (id: string) => void;
 }) {
   const { pages } = props;
