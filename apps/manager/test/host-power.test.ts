@@ -8,7 +8,7 @@ import { createPower } from "../src/host/power.js";
 import { createServer } from "../src/server.js";
 import { notFound } from "./fake-docker.js";
 
-// Restart and Shut down from Settings → Status: a privileged helper from the
+// Restart and Shut down from Settings → System: a privileged helper from the
 // manager's own image asks the host's systemd, a moment after the manager
 // answers, and never during an update.
 

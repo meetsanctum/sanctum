@@ -14,10 +14,8 @@ import {
 } from "./components/ui/dialog";
 import { CoreError, coreJson } from "./core-fetch";
 import { goneWithinMs } from "./power-notice";
-import { systemUpdate } from "./system-update";
-import { everyWhileShown } from "./while-shown";
 
-// Restart and Shut down, at the end of Status' Sanctum card, under Running
+// Restart and Shut down, at the end of System's Sanctum card, under Running
 // for, which they reset. Each asks first, saying what happens and how to
 // start it again; the confirming button names the result, and Cancel comes
 // first. Once it is asked, every screen's veil says Restarting or Shutting
@@ -55,33 +53,11 @@ function reasonOf(error: unknown) {
   return `${productName} didn't answer. Try again in a moment`;
 }
 
-// Whether an update runs now, asked every 10 seconds while Status is open.
-function useUpdateRunning() {
-  const [running, setRunning] = useState(false);
-  useEffect(() => {
-    let current = true;
-    const check = async () => {
-      try {
-        const { update } = await systemUpdate.status();
-        if (current) setRunning(!!update && update.step !== "done");
-      } catch {
-        // Unknown for now; the core refuses during an update anyway.
-      }
-    };
-    void check();
-    const stopChecks = everyWhileShown(10_000, () => void check());
-    return () => {
-      current = false;
-      stopChecks();
-    };
-  }, []);
-  return running;
-}
-
 export function PowerButtons(props: {
+  updating: boolean;
   onPowerAccepted?: (action: PowerAction) => void;
 }) {
-  const updating = useUpdateRunning();
+  const { updating } = props;
   const [asking, setAsking] = useState<PowerAction>();
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState<PowerAction>();
@@ -101,7 +77,7 @@ export function PowerButtons(props: {
   }, [sent]);
 
   const confirm = async () => {
-    if (!asking) return;
+    if (!asking || updating || sending) return;
     const action = asking;
     setSending(true);
     setProblem(undefined);
@@ -177,7 +153,10 @@ export function PowerButtons(props: {
                 Cancel
               </Button>
             </DialogClose>
-            <Button disabled={sending} onClick={() => void confirm()}>
+            <Button
+              disabled={sending || updating}
+              onClick={() => void confirm()}
+            >
               {asked[shown].button}
             </Button>
           </DialogFooter>

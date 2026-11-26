@@ -6,7 +6,7 @@ import { fakeManager, piStatus } from "./manager-support.js";
 import { claimed, post, testCore } from "./support.js";
 
 // ctx.host.resources(): what the host has, from what the manager reports for
-// Settings → Status, so an app can tell whether something fits before it
+// Settings → System, so an app can tell whether something fits before it
 // starts it. It needs no permission: nothing in it names the home.
 
 const app = defineApp({

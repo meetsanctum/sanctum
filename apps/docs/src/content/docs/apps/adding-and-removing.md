@@ -28,7 +28,7 @@ The sheet says why, and what would help:
 - **There isn't room for it.** The app needs more memory than is available.
   Turning off an app you don't use can make room.
 - **There isn't space for it.** The app's data won't fit on the disk.
-  Settings → System → Status shows what is using the space.
+  Settings → System shows what is using the space.
 
 ### Zigbee and ESPHome
 

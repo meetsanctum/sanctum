@@ -10,7 +10,7 @@ import { platformNames } from "./platforms";
 import { lastAtText } from "./system-status";
 import { everyWhileShown } from "./while-shown";
 
-// Connected now, Status' last section: each screen with a live connection
+// Connected now, System's last section: each screen with a live connection
 // open, drawn as Settings → Clients draws it, this device first and then the
 // longest connected. Renaming and removing stay in Clients.
 

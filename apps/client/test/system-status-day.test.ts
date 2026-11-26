@@ -8,7 +8,7 @@ import {
   type HostPoint,
 } from "../src/system-status-day";
 
-// Status' last 24 hours (system-status-day.ts): each 5 minutes the manager
+// System's last 24 hours (system-status-day.ts): each 5 minutes the manager
 // keeps as a line, broken where nothing was read.
 
 const minute = 60_000;

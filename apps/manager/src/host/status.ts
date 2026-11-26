@@ -24,7 +24,7 @@ import {
 } from "./readings.js";
 import { isOurs, stacked } from "../stack.js";
 
-// The host's status for Settings → Status, on the manager's socket as
+// The host's status for Settings → System, on the manager's socket as
 // GET /api/host/status. The core adds its own data and works out what needs
 // someone; the manager only reports.
 //

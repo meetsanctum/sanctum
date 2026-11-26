@@ -218,7 +218,7 @@ export function AutomationPage(props: {
           action={
             blocked.kind === "stopped" ? (
               <Button variant="outline" onClick={props.openStatus}>
-                Open Status
+                Open System
               </Button>
             ) : (
               <Button

@@ -48,7 +48,7 @@ appears later is listed by itself.
 
 ## Zigbee does not start
 
-Settings → System → Status says what is missing: no stick plugged in, or
+Settings → System says what is missing: no stick plugged in, or
 several. If it asks you to choose the stick's adapter type, Sanctum does not
 recognise that type by itself. On the machine, list the sticks it sees:
 

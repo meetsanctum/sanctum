@@ -64,7 +64,7 @@ import {
   appSettingsPage,
   automationsApp,
   settingsApp,
-  statusSettingsPage,
+  systemSettingsPage,
 } from "./system-apps";
 
 function useCoreStatus() {
@@ -631,7 +631,7 @@ function HomeScreen(
             }}
             onOpenStatus={() => {
               closeDevice();
-              opener(settingsApp.id)(statusSettingsPage);
+              opener(settingsApp.id)(systemSettingsPage);
             }}
           />
           {permissionSheet.sheet}

@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { attentionTile } from "../src/attention";
 import { coreJson } from "../src/core-fetch";
-import { StatusPage, StatusRow } from "../src/settings-status";
+import { SanctumAttentionRow, SystemPage } from "../src/settings-status";
 import {
   fineText,
   formatBytes,
@@ -27,7 +27,7 @@ import { piStatus, statusApps } from "./system-status-fixtures";
 // The device's own zone, which the expectations here are worked out in.
 const clock = homeClock();
 
-// Settings → Status: the verdict first, then Sanctum with its processor and
+// Settings → System: the verdict first, then Sanctum with its processor and
 // power supply, its storage and memory with what fills them, what each reading
 // of the last 24 hours reads now and the network, from GET /api/system/status
 // every 5 seconds.
@@ -36,6 +36,10 @@ vi.mock("../src/core-fetch", async (original) => ({
   ...(await original<typeof import("../src/core-fetch")>()),
   coreJson: vi.fn(),
 }));
+
+// The core away, so the page's Updates asks nothing of it here
+// (settings-updates.test.tsx covers them).
+const offline = { state: "offline" } as const;
 
 let root: Root;
 let container: HTMLDivElement;
@@ -68,7 +72,12 @@ async function render(
   await act(async () => {
     root.render(
       <TemperatureUnitProvider unit={unit}>
-        <StatusPage apps={apps} onDone={() => {}} />
+        <SystemPage
+          apps={apps}
+          core={offline}
+          onUpdating={() => {}}
+          onDone={() => {}}
+        />
       </TemperatureUnitProvider>,
     );
   });
@@ -95,7 +104,7 @@ const facts = (id: string) =>
     fact.querySelector("dd")?.textContent,
   ]);
 
-describe("the Status page", () => {
+describe("the System page", () => {
   it("leads with a green check while everything's running, then what Sanctum is", async () => {
     await render();
 
@@ -111,7 +120,6 @@ describe("the Status page", () => {
       ["Model", "Raspberry Pi 4 Model B, 8 GB"],
       ["Processor", "4 cores at 1.8 GHz"],
       ["Power supply", "Enough power"],
-      ["Version", "dev-ed4f70b · Dev channel"],
       ["Operating system", "Debian 13 (trixie), 64-bit"],
       ["Running for", "4 days, 21 hours"],
     ]);
@@ -404,7 +412,7 @@ describe("the Status page", () => {
     await render();
 
     expect(section("status-sanctum")?.textContent).toBe(
-      "SanctumCan't check right nowSanctum's updater isn't answering. It's usually back within a minute, and this fills in by itselfVersiondev-ed4f70b",
+      "SanctumCan't check right nowSanctum's updater isn't answering. It's usually back within a minute, and this fills in by itself",
     );
     expect(section("status-storage")).toBeNull();
   });
@@ -488,26 +496,22 @@ describe("the Status page", () => {
     expect(container.textContent).toContain("Can't check right now");
     expect(container.textContent).not.toContain("Everything's running");
     expect(section("status-storage")).toBeNull();
-
-    await act(async () =>
-      root.render(<StatusRow status={piStatus()} failed onOpen={() => {}} />),
-    );
-    const row = container.querySelector("button")!;
-    expect(row.textContent).toContain("Can't check right now");
-    expect(row.getAttribute("aria-label")).toContain("can't check right now");
   });
 
-  it("says Checking on System's row, to a screen reader too, while the first answer is on its way", async () => {
+  it("names Sanctum's first problem in Needs attention, opening System", async () => {
     await act(async () =>
       root.render(
-        <StatusRow status={undefined} failed={false} onOpen={() => {}} />,
+        <SanctumAttentionRow
+          status={piStatus({ problems: [{ kind: "clock" }] })}
+          onOpen={() => {}}
+        />,
       ),
     );
 
     const row = container.querySelector("button")!;
-    expect(row.textContent).toBe("StatusChecking…");
+    expect(row.textContent).toBe("SanctumClock not synchronised");
     expect(row.getAttribute("aria-label")).toBe(
-      "Status: checking. Opens Status",
+      "Sanctum: Clock not synchronised. Opens System",
     );
   });
 });
@@ -650,7 +654,7 @@ describe("the dashboard's Attention tile", () => {
     lastLowAt: "2026-11-02T18:40:00Z",
   };
 
-  it("names what is wrong above and how below, and opens Status, while only Sanctum needs someone", () => {
+  it("names what is wrong above and how below, and opens System, while only Sanctum needs someone", () => {
     expect(attentionTile([], [power])).toEqual({
       title: "Power",
       value: "Too weak",

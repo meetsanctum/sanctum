@@ -3,7 +3,7 @@ import { cpus, hostname, networkInterfaces } from "node:os";
 import { join } from "node:path";
 
 // What the host's kernel says about it, as the manager's container sees it
-// (Settings → Status). /proc and /sys are the host's, apart from the device
+// (Settings → System). /proc and /sys are the host's, apart from the device
 // tree, which Docker masks, and the manager shares the host's network. Each
 // reading is null where this host can't say, as on a machine that isn't a
 // Raspberry Pi.

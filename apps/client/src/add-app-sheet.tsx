@@ -106,7 +106,7 @@ export function shortfallWords(
     case "space":
       return {
         title: "There isn't space for it.",
-        line: `Its data needs ${sizeWords(shortfall.needs)}, and ${sizeWords(shortfall.free)} are free beside what your other apps and updates need. Settings → Status says what takes it.`,
+        line: `Its data needs ${sizeWords(shortfall.needs)}, and ${sizeWords(shortfall.free)} are free beside what your other apps and updates need. Settings → System says what takes it.`,
       };
   }
 }

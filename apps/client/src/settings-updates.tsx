@@ -1,11 +1,16 @@
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import { Button, useHomeClock } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
-import { Check, Circle, LoaderCircle } from "lucide-react";
+import { Check, ChevronDown, Circle, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { productName } from "./brand";
-import { Row } from "./components";
+import { Section } from "./components";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "./components/ui/collapsible";
 import {
   Dialog,
   DialogClose,
@@ -16,8 +21,7 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import type { CoreStatus } from "./core-status";
-import { StatusRow } from "./settings-status";
-import type { SystemStatus } from "./system-status";
+import { Fact, Facts } from "./settings-status-facts";
 import {
   channelNames,
   isAway,
@@ -29,25 +33,25 @@ import {
   type UpdateStatus,
   type UpdateStep,
 } from "./system-update";
+import { isShown } from "./while-shown";
 
-// Settings → System, for every client: Status, which opens its page
-// (settings-status.tsx), the version the home runs, the last restore from a
-// backup, and updates: the versions the host can update to, a confirmed
-// Update, the update's progress as the manager reports it and how it ended.
-// The core restarts during an update; meanwhile the connection veil covers
-// the page, and the progress carries on when the core is back.
+// System's Updates, for every client (settings-status.tsx): the core's
+// running version, the last update, and the versions the host can update to; on
+// the dev channel its builds, folded under a row that names the one chosen,
+// then a confirmed Update, the update's progress as the manager reports it
+// and how it ended. The core restarts during an update; meanwhile the
+// connection veil covers the page, and the progress carries on when the
+// core is back. The last restore from a backup is said in Sanctum's card.
 
 // A day and a time on the home clock: "25 Nov, 14:03".
 const dayAndTime = (clock: HomeClock, at: Date) =>
   `${clock.dayText(at)}, ${clock.timeText(at)}`;
 
-export function SystemSettings(props: {
+export function UpdatesSection(props: {
   core: CoreStatus;
-  onUpdating: (updating: boolean) => void;
-  // The host's status, which Home asks for now and then.
-  status: SystemStatus | undefined;
-  statusFailed: boolean;
-  onOpenStatus: () => void;
+  system: ReturnType<typeof useSystemUpdate>;
+  freeing: boolean;
+  cleanupRevision: number;
 }) {
   const { core } = props;
   const version =
@@ -55,21 +59,21 @@ export function SystemSettings(props: {
       ? core.version
       : undefined;
   return (
-    <>
-      <StatusRow
-        status={props.status}
-        failed={props.statusFailed}
-        onOpen={props.onOpenStatus}
+    <Section id="status-updates" title="Updates">
+      <Updates
+        online={core.state === "online"}
+        version={version}
+        system={props.system}
+        freeing={props.freeing}
+        cleanupRevision={props.cleanupRevision}
       />
-      <RestoreNotice online={core.state === "online"} />
-      <Updates core={core} version={version} onUpdating={props.onUpdating} />
-    </>
+    </Section>
   );
 }
 
 // After a restore from a backup every device was signed out; the first to
 // look is told what that means.
-function RestoreNotice(props: { online: boolean }) {
+export function RestoreNotice(props: { online: boolean }) {
   const clock = useHomeClock();
   const [restore, setRestore] = useState<RestoreInfo | null>(null);
 
@@ -109,19 +113,8 @@ function RestoreNotice(props: { online: boolean }) {
   );
 }
 
-function Updates(props: {
-  core: CoreStatus;
-  // The version the core's health check reports, while it answers.
-  version?: string;
-  onUpdating: (updating: boolean) => void;
-}) {
-  const { core, onUpdating } = props;
+export function useSystemUpdate(online: boolean) {
   const [status, setStatus] = useState<UpdateStatus>();
-  const [versions, setVersions] = useState<AvailableVersion[]>();
-  const [selected, setSelected] = useState<string>();
-  const [confirming, setConfirming] = useState(false);
-  const [starting, setStarting] = useState(false);
-  const [problem, setProblem] = useState<string>();
   // The last answer was that the core or the manager is restarting.
   const [isWaiting, setIsWaiting] = useState(false);
   // An update this screen has seen running, whose ending it shows in full.
@@ -130,11 +123,6 @@ function Updates(props: {
 
   const update = status?.update ?? null;
   const running = !!update && update.step !== "done";
-  const online = core.state === "online";
-  const coreVersion = props.version ?? status?.version;
-
-  useEffect(() => onUpdating(running), [running, onUpdating]);
-  useEffect(() => () => onUpdating(false), [onUpdating]);
 
   // The update's status, often while one runs. While the core is away the
   // veil covers this page; it asks again as soon as the core is back.
@@ -143,7 +131,7 @@ function Updates(props: {
     let isStopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
-      let next = 30_000;
+      let next = isShown() ? 10_000 : 30_000;
       const revision = statusRevision.current;
       try {
         const answer = await systemUpdate.status();
@@ -172,17 +160,52 @@ function Updates(props: {
     };
   }, [online, running]);
 
-  // What the host can update to, again once an update has ended.
   const ended = update?.step === "done" ? update.id : undefined;
+  const followStart = (started: UpdateInfo) => {
+    statusRevision.current += 1;
+    setStatus((current) => current && { ...current, update: started });
+    setFollowed(started.id);
+  };
+  return { status, update, running, ended, followed, isWaiting, followStart };
+}
+
+function Updates(props: {
+  online: boolean;
+  // The version the core's health check reports, while it answers.
+  version?: string;
+  system: ReturnType<typeof useSystemUpdate>;
+  freeing: boolean;
+  cleanupRevision: number;
+}) {
+  const { online, freeing, cleanupRevision } = props;
+  const { status, update, running, ended, followed, isWaiting, followStart } =
+    props.system;
+  const coreVersion = props.version ?? status?.version;
+  const [builds, setBuilds] = useState<{
+    versions: AvailableVersion[];
+    cleanupRevision: number;
+    ended: string | undefined;
+  }>();
+  const [selected, setSelected] = useState<string>();
+  const [confirming, setConfirming] = useState<string>();
+  const [starting, setStarting] = useState(false);
+  const [problem, setProblem] = useState<string>();
+
+  // What the host can update to. Cleanup can remove builds from the registry.
   useEffect(() => {
-    if (!online) return;
+    if (!online || freeing) return;
     let isCurrent = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const load = async () => {
       try {
         const answer = await systemUpdate.versions();
         if (!isCurrent) return;
-        setVersions(answer.versions);
+        setBuilds({ versions: answer.versions, cleanupRevision, ended });
+        setSelected((current) =>
+          answer.versions.some(({ version }) => version === current)
+            ? current
+            : undefined,
+        );
         setProblem(undefined);
       } catch (error) {
         if (!isCurrent) return;
@@ -195,11 +218,11 @@ function Updates(props: {
       isCurrent = false;
       clearTimeout(timer);
     };
-  }, [online, ended]);
+  }, [online, ended, freeing, cleanupRevision]);
 
   // The newest build, when it is newer than the one the host runs and is not
   // the one that just failed, until someone chooses.
-  const choices = versions ?? [];
+  const choices = builds?.versions ?? [];
   const isDev = status?.channel === "dev";
   const newest = choices[0]?.version;
   const failed =
@@ -210,29 +233,39 @@ function Updates(props: {
     ? (selected ??
       (newest !== coreVersion && newest !== failed ? newest : undefined))
     : status?.channel;
+  const canUpdate =
+    online &&
+    !freeing &&
+    !running &&
+    !starting &&
+    !!choice &&
+    (!isDev ||
+      (choice !== coreVersion &&
+        builds?.cleanupRevision === cleanupRevision &&
+        builds.ended === ended));
 
   const start = async () => {
-    if (!choice) return;
+    if (!canUpdate || !confirming || confirming !== choice) return;
     setStarting(true);
     setProblem(undefined);
     try {
-      const { update: started } = await systemUpdate.start(choice);
-      statusRevision.current += 1;
-      setStatus((current) => current && { ...current, update: started });
-      setFollowed(started.id);
+      const { update: started } = await systemUpdate.start(confirming);
+      followStart(started);
       setSelected(undefined);
     } catch (error) {
       setProblem(problemText(error));
     } finally {
       setStarting(false);
-      setConfirming(false);
+      setConfirming(undefined);
     }
   };
 
   if (!status) {
     return (
       <>
-        <Row title="Version" detail={coreVersion ?? "Not known right now"} />
+        <Facts>
+          <Fact label="Version">{coreVersion ?? "Not known right now"}</Fact>
+        </Facts>
         {isWaiting && (
           <p className="m-0 text-[13px] text-muted-foreground">
             Waiting for {productName} to answer…
@@ -242,23 +275,27 @@ function Updates(props: {
     );
   }
 
+  // The last update, ended before this screen opened.
+  const lastUpdate =
+    update && !running && update.id !== followed ? update : undefined;
   // The core that answers runs the new version, and the manager is away:
   // it is replacing itself, the last step.
   const step: UpdateStep =
-    running && isWaiting && coreVersion === update.version
+    update && running && isWaiting && coreVersion === update.version
       ? "finish"
       : (update?.step ?? "done");
 
   return (
-    <div className="flex flex-col gap-4">
-      <Row
-        title="Version"
-        detail={`${coreVersion ?? status.version} · ${channelNames[status.channel]}`}
-      />
-      {update && (running || update.id === followed) ? (
+    <>
+      <Facts>
+        <Fact label="Version">
+          {`${coreVersion ?? status.version} · ${channelNames[status.channel]}`}
+        </Fact>
+        {lastUpdate && <LastUpdate update={lastUpdate} />}
+      </Facts>
+      {lastUpdate && <WhyItFailed update={lastUpdate} />}
+      {update && (running || update.id === followed) && (
         <Progress update={update} step={step} />
-      ) : (
-        update && <LastUpdate update={update} />
       )}
       {!running && (
         <>
@@ -276,8 +313,8 @@ function Updates(props: {
           )}
           <Button
             className="self-start"
-            disabled={!choice || (isDev && choice === coreVersion) || starting}
-            onClick={() => setConfirming(true)}
+            disabled={!canUpdate}
+            onClick={() => setConfirming(choice)}
           >
             {status.channel === "dev" && choice
               ? `Update to ${choice}`
@@ -290,12 +327,17 @@ function Updates(props: {
           {problem}
         </p>
       )}
-      <Dialog open={confirming} onOpenChange={setConfirming}>
+      <Dialog
+        open={confirming !== undefined}
+        onOpenChange={(open) => {
+          if (!open) setConfirming(undefined);
+        }}
+      >
         <DialogContent showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>
               {status.channel === "dev"
-                ? `Update to ${choice}?`
+                ? `Update to ${confirming}?`
                 : `Update to the newest ${status.channel} release?`}
             </DialogTitle>
             <DialogDescription>
@@ -309,13 +351,16 @@ function Updates(props: {
             <DialogClose asChild>
               <Button variant="outline">Cancel</Button>
             </DialogClose>
-            <Button disabled={starting} onClick={() => void start()}>
+            <Button
+              disabled={!canUpdate || confirming !== choice}
+              onClick={() => void start()}
+            >
               Update
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
 
@@ -454,30 +499,35 @@ function Outcome(props: { update: UpdateInfo }) {
   );
 }
 
-// The last update, ended before this screen opened.
+// The last update, ended before this screen opened, as one of the card's
+// facts.
 function LastUpdate(props: { update: UpdateInfo }) {
   const { update } = props;
   const clock = useHomeClock();
   const { title } = outcomeText(update);
   const when = update.finishedAt ?? update.startedAt;
-  const failed =
-    update.outcome === "rolled-back" || update.outcome === "failed";
   return (
-    <div className="flex flex-col gap-px leading-tight">
-      <span className="text-sm font-medium">Last update</span>
-      <span className="text-[13px] font-medium text-muted-foreground">
-        {title} · {dayAndTime(clock, new Date(when))}
-      </span>
-      {failed && update.error && (
-        <span className="text-[13px] break-words text-muted-foreground">
-          Reason: {update.error}
-        </span>
-      )}
-    </div>
+    <Fact label="Last update">
+      {title} · {dayAndTime(clock, new Date(when))}
+    </Fact>
   );
 }
 
-// A dev host's builds, newest first; the one it runs cannot be chosen.
+// Why that update did not work, under the facts.
+function WhyItFailed(props: { update: UpdateInfo }) {
+  const { update } = props;
+  const failed =
+    update.outcome === "rolled-back" || update.outcome === "failed";
+  if (!failed || !update.error) return null;
+  return (
+    <p className="m-0 text-[13px] break-words text-muted-foreground">
+      Reason: {update.error}
+    </p>
+  );
+}
+
+// A dev host's builds, newest first, folded under a row that says which is
+// chosen and how many there are; the one it runs cannot be chosen.
 function VersionPicker(props: {
   versions: AvailableVersion[];
   running?: string;
@@ -492,43 +542,85 @@ function VersionPicker(props: {
       </p>
     );
   }
+  const count =
+    props.versions.length === 1 ? "1 build" : `${props.versions.length} builds`;
   return (
-    <fieldset className="m-0 flex flex-col gap-1 border-0 p-0">
-      <legend className="sr-only">Version to update to</legend>
-      {props.versions.map(({ version, builtAt }) => {
-        const isRunning = version === props.running;
-        const detail = [
-          builtAt && `Built ${dayAndTime(clock, new Date(builtAt))}`,
-          isRunning && "Running",
-        ]
-          .filter(Boolean)
-          .join(" · ");
-        return (
-          <label
-            key={version}
-            className={cn(
-              "flex cursor-pointer items-center justify-between gap-3 rounded-md px-3 py-2 has-focus-visible:ring-3 has-focus-visible:ring-ring/50 has-checked:bg-foreground has-checked:text-background",
-              isRunning && "cursor-default text-muted-foreground",
-            )}
-          >
-            <input
-              type="radio"
-              name="version"
-              value={version}
-              checked={props.selected === version}
-              disabled={isRunning}
-              onChange={() => props.onSelect(version)}
-              className="sr-only"
-            />
-            <span className="truncate text-sm font-medium">{version}</span>
-            <span
-              className={cn("shrink-0 text-[13px]", !isRunning && "opacity-65")}
-            >
-              {detail}
+    <Collapsible className="flex flex-col gap-1">
+      <CollapsibleTrigger asChild>
+        <Button
+          variant="row"
+          size="row"
+          type="button"
+          className="group -mx-2.5 w-[calc(100%+20px)]"
+        >
+          <span className="flex min-w-0 flex-1 flex-col gap-px leading-tight">
+            <span className="truncate text-sm font-medium">Builds</span>
+            <span className="truncate text-[13px] font-medium text-muted-foreground">
+              {props.selected
+                ? `${props.selected} chosen · ${count}`
+                : `None chosen · ${count}`}
             </span>
-          </label>
-        );
-      })}
-    </fieldset>
+          </span>
+          <ChevronDown
+            aria-hidden="true"
+            className="ms-auto size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none"
+          />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <fieldset className="m-0 flex flex-col gap-1 border-0 p-0">
+          <legend className="sr-only">Build to update to</legend>
+          {props.versions.map(({ version, builtAt }) => {
+            const isRunning = version === props.running;
+            const isChosen = props.selected === version;
+            const detail = [
+              builtAt && `Built ${dayAndTime(clock, new Date(builtAt))}`,
+              isRunning && "Running",
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            return (
+              <label
+                key={version}
+                className={cn(
+                  "flex cursor-pointer items-center justify-between gap-3 rounded-md px-3 py-2 has-focus-visible:ring-3 has-focus-visible:ring-ring/50 has-checked:bg-foreground has-checked:text-background",
+                  isRunning && "cursor-default text-muted-foreground",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="version"
+                  value={version}
+                  checked={isChosen}
+                  disabled={isRunning}
+                  onChange={() => props.onSelect(version)}
+                  className="sr-only"
+                />
+                <span className="flex min-w-0 items-center gap-1.5">
+                  {isChosen && (
+                    <Check
+                      aria-hidden="true"
+                      className="size-3.5 shrink-0"
+                      strokeWidth={2.5}
+                    />
+                  )}
+                  <span className="truncate text-sm font-medium">
+                    {version}
+                  </span>
+                </span>
+                <span
+                  className={cn(
+                    "shrink-0 text-[13px]",
+                    !isRunning && "opacity-65",
+                  )}
+                >
+                  {detail}
+                </span>
+              </label>
+            );
+          })}
+        </fieldset>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

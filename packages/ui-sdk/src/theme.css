@@ -172,7 +172,7 @@
   --color-accent-foreground: var(--ink);
   --color-destructive: var(--danger);
   /* The app colours by their plain names, in the mode's text shade, for
-     marks that aren't an app's icon or title, such as Status' bars and its
+     marks that aren't an app's icon or title, such as System's bars and its
      green check: bg-pink, text-green. */
   --color-orange: var(--ember-text);
   --color-yellow: var(--sun-text);

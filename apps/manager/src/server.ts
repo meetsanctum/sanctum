@@ -84,7 +84,7 @@ export type ServerOptions = {
   clock?: () => Promise<boolean | null>;
   // What the manager did on its own, which the core copies (audit.ts).
   audit?: Audit;
-  // The host's status, for Settings → Status (host/status.ts).
+  // The host's status, for Settings → System (host/status.ts).
   status?: Pick<HostStatusReporter, "status" | "resources">;
   // The host's last 24 hours (host/history.ts).
   history?: Pick<HostHistory, "points">;

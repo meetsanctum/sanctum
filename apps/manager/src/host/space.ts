@@ -22,7 +22,7 @@ import {
 import type { AvailableVersion } from "../update/versions.js";
 import { isOurs, stacked } from "../stack.js";
 
-// Free up space, from Settings → Status: removes the versions of Sanctum and
+// Free up space, from Settings → System: removes the versions of Sanctum and
 // its services that nothing needs any more, and on a dev host the builds in
 // its registry it will neither go back nor forward to. It keeps what runs,
 // the version before, which a rollback needs, and on a dev host the newest
