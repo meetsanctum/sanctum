@@ -124,6 +124,7 @@ async function show(
   Page: ComponentType<PageProps>,
   params: PageProps["params"],
   hourCycle: HourCycle = "24h",
+  frameTimeZone = places.home.timeZone,
 ) {
   client = fakeClient();
   client.devices.mockResolvedValue([
@@ -134,10 +135,7 @@ async function show(
   client.call.mockImplementation(answer);
   await act(async () => {
     root.render(
-      <HomeTimeZoneProvider
-        timeZone={places.home.timeZone}
-        hourCycle={hourCycle}
-      >
+      <HomeTimeZoneProvider timeZone={frameTimeZone} hourCycle={hourCycle}>
         <AppScope client={client}>
           <MoodsProvider>
             <Page
@@ -246,6 +244,41 @@ describe("a room's schedule", () => {
     expect(day?.getAttribute("aria-label")).toBe(
       "Morning 6:30 AM to 9:00 AM, Focus 9:00 AM to 5:00 PM, Evening 6:30 PM to 10:00 PM, Night 10:00 PM to 6:30 AM, overnight. Now 3:20 PM.",
     );
+    expect(
+      [...(day?.nextElementSibling?.children ?? [])].map(
+        (tick) => tick.textContent,
+      ),
+    ).toEqual(["12:00 AM", "6:00 AM", "12:00 PM", "6:00 PM", "12:00 AM"]);
+  });
+
+  it("shows when a full-day mood ends in 12-hour time", async () => {
+    schedule.scheduled = [
+      { id: "s2", roomId: "office", moodId: "focus", start: 0, end: 1440 },
+    ];
+    await show(RoomMoodsPage, { placeId: "office" }, "12h");
+
+    expect(scheduleRow("Focus")?.textContent).toBe(
+      "Focus12:00 AM to 12:00 AM, next dayNow",
+    );
+    expect(
+      container.querySelector('[role="img"]')?.getAttribute("aria-label"),
+    ).toBe("Focus 12:00 AM to 12:00 AM, next day. Now 3:20 PM.");
+  });
+
+  it("uses the loaded household zone for the schedule and turn-on summary", async () => {
+    await show(
+      RoomMoodsPage,
+      { placeId: "office" },
+      "12h",
+      "America/Los_Angeles",
+    );
+
+    expect(scheduleRow("Focus")?.textContent).toBe(
+      "Focus9:00 AM to 5:00 PMNow",
+    );
+    expect(container.querySelector('[aria-live="polite"]')?.textContent).toBe(
+      "Turning the lights on now brings Focus, until 5:00 PM.",
+    );
   });
 
   it("opens a scheduled mood, or a new one, in the editor", async () => {
@@ -307,12 +340,14 @@ describe("a scheduled mood's editor", () => {
   const selects = () => [...container.querySelectorAll("select")];
 
   it("starts a new one at the first free hour, with a mood not yet scheduled", async () => {
-    await show(ScheduledMoodPage, { room: "office" });
+    await show(ScheduledMoodPage, { room: "office" }, "12h");
 
     expect(container.querySelector("h1")?.textContent).toBe("Schedule a mood");
     const [from, to] = selects();
     expect(from?.value).toBe("1020");
     expect(to?.value).toBe("1080");
+    expect(from?.selectedOptions[0]?.textContent).toBe("5:00 PM");
+    expect(to?.selectedOptions[0]?.textContent).toBe("6:00 PM");
     const checked = container.querySelector(
       '[role="radio"][aria-checked="true"]',
     );
@@ -383,8 +418,8 @@ describe("Moods' main page", () => {
     expect(open).toHaveBeenCalledWith("room", { placeId: "office" });
   });
 
-  it("writes its times as the home does, with 12 hours", async () => {
-    await show(MainPage, {}, "12h");
+  it("uses the loaded household zone and writes the time with 12 hours", async () => {
+    await show(MainPage, {}, "12h", "America/Los_Angeles");
     expect(row("Office")?.textContent).toBe(
       "OfficeFocus until 5:00 PM · 5 moods",
     );

@@ -1,10 +1,5 @@
-import {
-  Button,
-  icons,
-  PageSection,
-  tileIconOf,
-  useHomeClock,
-} from "@meetsanctum/ui-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
+import { Button, icons, PageSection, tileIconOf } from "@meetsanctum/ui-sdk";
 import { useEffect, useState, type ReactNode } from "react";
 
 import {
@@ -73,9 +68,9 @@ export function DayBar(props: {
   scheduled: RoomSchedule["scheduled"];
   moods: ReadonlyMap<string, Mood>;
   minute: number;
+  clock: HomeClock;
 }) {
-  const { scheduled, moods, minute } = props;
-  const clock = useHomeClock();
+  const { scheduled, moods, minute, clock } = props;
   const summary = scheduled.length
     ? scheduled
         .map(
@@ -123,15 +118,17 @@ export function DayBar(props: {
         aria-hidden="true"
         className="relative h-[18px] text-[13px] leading-[18px] text-muted-foreground tabular-nums"
       >
-        <span className="absolute start-0">00:00</span>
+        <span className="absolute start-0">{minuteWords(clock, 0)}</span>
         <span className="absolute start-1/4 -translate-x-1/2 max-sm:hidden">
-          06:00
+          {minuteWords(clock, day / 4)}
         </span>
-        <span className="absolute start-1/2 -translate-x-1/2">12:00</span>
+        <span className="absolute start-1/2 -translate-x-1/2">
+          {minuteWords(clock, day / 2)}
+        </span>
         <span className="absolute start-3/4 -translate-x-1/2 max-sm:hidden">
-          18:00
+          {minuteWords(clock, (day * 3) / 4)}
         </span>
-        <span className="absolute end-0">24:00</span>
+        <span className="absolute end-0">{minuteWords(clock, day)}</span>
       </div>
     </div>
   );
@@ -141,11 +138,11 @@ export function DayBar(props: {
 export function ScheduleSection(props: {
   schedule: RoomSchedule;
   moods: readonly Mood[];
+  clock: HomeClock;
   now: Date;
   open: (id?: string) => void;
 }) {
-  const { schedule, now } = props;
-  const clock = useHomeClock();
+  const { schedule, now, clock } = props;
   const minute = minuteOfDay(clock, now);
   const moods = new Map(props.moods.map((mood) => [mood.id, mood]));
   const scheduled = byStart(schedule.scheduled);
@@ -153,7 +150,12 @@ export function ScheduleSection(props: {
   return (
     <div className="flex flex-col gap-2">
       <PageSection id="schedule-heading" title="Schedule" hint="Every day">
-        <DayBar scheduled={scheduled} moods={moods} minute={minute} />
+        <DayBar
+          scheduled={scheduled}
+          moods={moods}
+          minute={minute}
+          clock={clock}
+        />
         {scheduled.map((span) => {
           const mood = moods.get(span.moodId);
           const Icon = mood ? tileIconOf[mood.icon] : icons.Sparkles;
@@ -241,11 +243,11 @@ export function TurnOnSection(props: {
   schedule: RoomSchedule;
   moods: readonly Mood[];
   lightName: (light: { device: string; capability: string }) => string;
+  clock: HomeClock;
   now: Date;
   onChoose: (turnOn: TurnOnBehaviour) => void;
 }) {
-  const { schedule, now } = props;
-  const clock = useHomeClock();
+  const { schedule, now, clock } = props;
   const words = turnOnWords({
     schedule,
     moodNames: new Map(props.moods.map((mood) => [mood.id, mood.name])),

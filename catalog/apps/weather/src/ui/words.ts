@@ -16,19 +16,12 @@ export function timeAt(clock: HomeClock, instant: string, timeZone: string) {
   return clock.withTimeZone(timeZone).timeText(Date.parse(instant));
 }
 
-/** An hour above its column: 16:00, or 4 PM with 12 hours, which a column has the room for. */
-export function hourLabel(clock: HomeClock, instant: string, timeZone: string) {
-  return clock.withTimeZone(timeZone).hourText(Date.parse(instant));
-}
-
-/** The short weekday of an instant in the home, such as Tue. */
-export function weekdayAt(clock: HomeClock, instant: string, timeZone: string) {
-  return clock.withTimeZone(timeZone).weekdayText(Date.parse(instant));
-}
-
-/** The short weekday of one of the home's dates, such as Tue for 2026-11-17. */
-export function weekdayOf(clock: HomeClock, date: string) {
-  return clock.withTimeZone("UTC").weekdayText(Date.parse(`${date}T12:00:00Z`));
+/** A column's time in the forecast zone, with whole hours shortened to 4 PM in 12-hour mode. */
+export function hourLabel(clock: HomeClock, instant: string) {
+  const at = Date.parse(instant);
+  return clock.hourCycle === "12h" && clock.parts(at).minute === 0
+    ? clock.hourText(at)
+    : clock.timeText(at);
 }
 
 /**
@@ -44,7 +37,11 @@ export function updatedWords(
   const there = clock.withTimeZone(timeZone);
   const at = Date.parse(updatedAt);
   const time = there.timeText(at);
-  return there.date(at) === there.date(now)
-    ? `Updated ${time}`
-    : `Updated ${there.dayText(at)}, ${time}`;
+  if (there.date(at) === there.date(now)) return `Updated ${time}`;
+  const date = new Intl.DateTimeFormat(undefined, {
+    timeZone: there.timeZone,
+    day: "numeric",
+    month: "short",
+  }).format(at);
+  return `Updated ${date}, ${time}`;
 }

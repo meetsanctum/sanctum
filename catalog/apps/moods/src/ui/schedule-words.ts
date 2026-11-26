@@ -30,9 +30,17 @@ export function minuteWords(clock: HomeClock, minute: number) {
     : clock.wallTimeText(formatMinute(minute % day));
 }
 
+/** Midnight at the end of the day needs a day label in 12-hour time. */
+export function endWords(clock: HomeClock, minute: number) {
+  const time = minuteWords(clock, minute);
+  return minute === day && clock.hourCycle === "12h"
+    ? `${time}, next day`
+    : time;
+}
+
 /** Such as "06:30 to 09:00", or "22:00 to 06:30, overnight". */
 export function spanWords(clock: HomeClock, span: Span) {
-  const words = `${minuteWords(clock, span.start)} to ${minuteWords(clock, span.end)}`;
+  const words = `${minuteWords(clock, span.start)} to ${endWords(clock, span.end)}`;
   return isOvernight(span) && span.end !== 0 ? `${words}, overnight` : words;
 }
 
@@ -83,7 +91,7 @@ export function turnOnWords(options: {
   const holding = spanAt(schedule.scheduled, minute);
   const mood = holding && moodNames.get(holding.moodId);
   if (schedule.turnOn === "followSchedule" && holding && mood) {
-    return `Turning the lights on now brings ${mood}, until ${minuteWords(clock, holding.end)}.`;
+    return `Turning the lights on now brings ${mood}, until ${endWords(clock, holding.end)}.`;
   }
   const snapshot = schedule.snapshot;
   if (!snapshot || snapshot.lights.length === 0) {

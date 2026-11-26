@@ -236,9 +236,7 @@ describe("natural light's page", () => {
       "12h",
     );
 
-    expect(text).toMatch(
-      /Sunrise 7:04 AM · Peak \d{1,2}:\d\d [AP]M · Sunset \d{1,2}:\d\d PM/,
-    );
+    expect(text).toContain("Sunrise 7:04 AM · Peak 12:09 PM · Sunset 5:13 PM");
   });
 
   it("shows today's curve and where each light stands", async () => {
@@ -258,10 +256,7 @@ describe("natural light's page", () => {
     expect(text).toContain(
       `${(Math.round(today.now.kelvin / 50) * 50).toLocaleString()} K`,
     );
-    expect(text).toMatch(/Sunrise 07:04 · Peak \d\d:\d\d · Sunset \d\d:\d\d/);
-    // The peak, which need not be the brightest time: night can be set
-    // brighter.
-    expect(text).toMatch(/Peak\s*\d/);
+    expect(text).toContain("Sunrise 07:04 · Peak 12:09 · Sunset 17:13");
     // In name order; a light without colour temperature is left out.
     expect(rows()).toEqual([
       "Desk lampNot following",

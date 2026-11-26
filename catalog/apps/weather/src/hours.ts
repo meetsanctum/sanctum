@@ -1,8 +1,6 @@
 import type { Forecast, ForecastHour } from "@meetsanctum/app-sdk";
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 
-import { dateIn } from "./days.js";
-
 // The forecast hour by hour, as Weather's page shows it: the weather now,
 // the hours from this one on, the columns of the next 24 hours and the line
 // their temperatures draw.
@@ -118,9 +116,8 @@ export function hourColumns(
   const hours = hoursFromNow(forecast, now)
     .filter((_, index) => index % options.every === 0)
     .slice(0, options.count);
-  const dates = hours.map((hour) =>
-    dateIn(clock, forecast.timeZone, Date.parse(hour.time)),
-  );
+  const there = clock.withTimeZone(forecast.timeZone);
+  const dates = hours.map((hour) => there.date(Date.parse(hour.time)));
   const current = weatherNow(forecast, now);
   return hours.map((hour, index) => ({
     time: hour.time,

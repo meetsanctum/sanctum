@@ -20,7 +20,12 @@ import {
   type Span,
 } from "../schedules/times.js";
 import type { Mood } from "./mood-draft";
-import { lengthWords, minuteWords, spanWords } from "./schedule-words";
+import {
+  endWords,
+  lengthWords,
+  minuteWords,
+  spanWords,
+} from "./schedule-words";
 import type { RoomSchedule } from "./schedules";
 import { useMoodsApp } from "./state";
 
@@ -220,9 +225,9 @@ function Editor(props: {
             >
               {ends.map((end) => (
                 <NativeSelectOption key={end} value={String(end)}>
-                  {end <= draft.start && end !== day
+                  {end <= draft.start
                     ? `${minuteWords(clock, end)}, next day`
-                    : minuteWords(clock, end)}
+                    : endWords(clock, end)}
                 </NativeSelectOption>
               ))}
             </NativeSelect>

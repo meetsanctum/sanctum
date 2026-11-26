@@ -1,10 +1,11 @@
 import type { Forecast, TemperatureUnit } from "@meetsanctum/app-sdk";
 import { PageSection, useHomeClock, widgetIconOf } from "@meetsanctum/ui-sdk";
+import { useMemo } from "react";
 
 import { condition } from "../conditions";
 import { dateIn, daysFromToday, temperatureSpans } from "../days";
 import { Chance } from "./parts";
-import { degrees, weekdayOf } from "./words";
+import { degrees } from "./words";
 
 // The next ten days in one card, a row each: the day, its sky, its chance
 // of rain, and its low and high either side of a bar that runs from one to
@@ -18,6 +19,11 @@ export function DaysCard(props: {
 }) {
   const { forecast, unit, now } = props;
   const clock = useHomeClock();
+  const weekday = useMemo(
+    () =>
+      new Intl.DateTimeFormat(undefined, { timeZone: "UTC", weekday: "short" }),
+    [],
+  );
   const days = daysFromToday(clock, forecast, now).slice(0, 10);
   const today = dateIn(clock, forecast.timeZone, now);
   const spans = temperatureSpans(days);
@@ -37,7 +43,9 @@ export function DaysCard(props: {
               className="flex h-[42px] items-center gap-2 rounded-sm px-2.5 text-[15px] leading-[22px] whitespace-nowrap max-sm:h-[46px]"
             >
               <span className="w-[58px] shrink-0">
-                {day.date === today ? "Today" : weekdayOf(clock, day.date)}
+                {day.date === today
+                  ? "Today"
+                  : weekday.format(Date.parse(`${day.date}T12:00:00Z`))}
               </span>
               <Icon
                 role="img"

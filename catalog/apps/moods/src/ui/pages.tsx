@@ -13,7 +13,7 @@ import { byStart, holds } from "../schedules/times.js";
 import { roomLights } from "./mood-draft";
 import { motionLine } from "./motion-words";
 import { useNow } from "./schedule-sections";
-import { minuteOfDay, minuteWords } from "./schedule-words";
+import { endWords, minuteOfDay, minuteWords } from "./schedule-words";
 import type { RoomSchedule } from "./schedules";
 import { useMoodsApp } from "./state";
 
@@ -35,7 +35,7 @@ function scheduleWords(
   if (now) {
     return {
       moodId: now.moodId,
-      words: `${names.get(now.moodId) ?? "A mood"} until ${minuteWords(clock, now.end)}`,
+      words: `${names.get(now.moodId) ?? "A mood"} until ${endWords(clock, now.end)}`,
     };
   }
   const next = scheduled.find((span) => span.start > minute) ?? scheduled[0];
@@ -55,7 +55,12 @@ export function MainPage(props: PageProps) {
   const rooms = (places?.rooms ?? []).filter(
     (room) => roomLights(devices, room.id).length > 0,
   );
-  const clock = useHomeClock();
+  const frameClock = useHomeClock();
+  const timeZone = places?.home.timeZone;
+  const clock =
+    timeZone && timeZone !== frameClock.timeZone
+      ? frameClock.withTimeZone(timeZone)
+      : frameClock;
   const minute = minuteOfDay(clock, now);
   return (
     <>
