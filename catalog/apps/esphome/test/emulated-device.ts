@@ -67,6 +67,8 @@ export type EmulatedOptions = {
   sleeps?: boolean;
   /** It has a voice assistant, which asks whoever follows it to listen. */
   voiceAssistant?: boolean;
+  /** Its voice assistant streams its microphone over the API, as a Voice PE's does. */
+  streamsOverApi?: boolean;
   entities: EmulatedEntity[];
   /** Each entity's state by its key, by the library's field names. */
   states?: Record<number, Record<string, FieldValue>>;
@@ -90,6 +92,7 @@ const message = {
   voiceAssistantRequest: 90,
   voiceAssistantResponse: 91,
   voiceAssistantEvent: 92,
+  voiceAssistantAudio: 106,
 } as const;
 
 export class EmulatedDevice {
@@ -138,8 +141,10 @@ export class EmulatedDevice {
   /** Responses and events the voice assistant received, in wire order. */
   readonly voiceMessages: (
     | { type: "response"; isDeclined: boolean }
-    | { type: "event"; eventType: number }
+    | { type: "event"; eventType: number; data?: Record<string, string> }
   )[] = [];
+  /** The flags its voice assistant was last followed with. */
+  voiceFlags = 0;
   // Who follows its voice assistant's requests, as a session's send.
   private voiceFollower: ((type: number, payload: Buffer) => void) | null =
     null;
@@ -260,6 +265,23 @@ export class EmulatedDevice {
           : []),
       ]),
     );
+  }
+
+  /** Sends its microphone's sound to whoever follows its requests. */
+  stream(pcm: Buffer) {
+    if (!this.voiceFollower)
+      throw new Error("nobody follows its voice requests");
+    this.voiceFollower(
+      message.voiceAssistantAudio,
+      Buffer.concat([varint((1 << 3) | 2), varint(pcm.length), pcm]),
+    );
+  }
+
+  /** Stops its request itself, as a press of its button does. */
+  stopRequest() {
+    if (!this.voiceFollower)
+      throw new Error("nobody follows its voice requests");
+    this.voiceFollower(message.voiceAssistantRequest, Buffer.alloc(0));
   }
 
   /** One of its event entities firing, as a button's press does. */
@@ -525,7 +547,9 @@ export class EmulatedDevice {
           ...(this.options.friendlyName
             ? [text(13, this.options.friendlyName)]
             : []),
-          ...(this.options.voiceAssistant ? [flag(17, 1)] : []),
+          ...(this.options.voiceAssistant
+            ? [flag(17, this.options.streamsOverApi ? 5 : 1)]
+            : []),
           flag(
             19,
             this.psk !== null || this.waiting || this.options.older === true,
@@ -575,6 +599,7 @@ export class EmulatedDevice {
       for (const entity of this.options.entities) this.sendState(send, entity);
     } else if (type === message.subscribeVoiceAssistant) {
       if (decode(payload).get(1)?.[0] === 1) {
+        this.voiceFlags = Number(decode(payload).get(2)?.[0] ?? 0);
         this.voiceFollower = send;
         socket.on("close", () => {
           if (this.voiceFollower === send) this.voiceFollower = null;
@@ -586,9 +611,20 @@ export class EmulatedDevice {
         isDeclined: decode(payload).get(2)?.[0] === 1,
       });
     } else if (type === message.voiceAssistantEvent) {
+      const fields = decode(payload);
+      const data = Object.fromEntries(
+        (fields.get(2) ?? []).map((entry) => {
+          const inner = decode(entry as Buffer);
+          return [
+            String(valueOf(inner.get(1)?.[0], "string") ?? ""),
+            String(valueOf(inner.get(2)?.[0], "string") ?? ""),
+          ];
+        }),
+      );
       this.voiceMessages.push({
         type: "event",
-        eventType: Number(decode(payload).get(1)?.[0] ?? 0),
+        eventType: Number(fields.get(1)?.[0] ?? 0),
+        ...(Object.keys(data).length > 0 ? { data } : {}),
       });
     } else if (type === message.pingRequest) {
       if (this.answersPings) send(message.pingResponse, Buffer.alloc(0));

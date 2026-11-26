@@ -8,7 +8,8 @@ import { player, voicePe } from "./voice-pe.js";
 // assistant that plays. It's declared a smart speaker, its player is a media
 // player, its button's presses are a button's, and its ring and mute switch
 // stay its own. Its voice assistant waits for someone to follow its
-// requests, which Sanctum does, declining each before any sound is sent.
+// requests, which Sanctum does, declining each the core doesn't take before
+// any sound is sent (listening.test.ts).
 
 let home: Awaited<ReturnType<typeof startHome>>;
 
@@ -54,6 +55,7 @@ describe("a smart speaker", () => {
           muteSwitch: true,
           announces: true,
           announcementPlayer: "media-media_player",
+          listens: true,
         },
       },
     ]);

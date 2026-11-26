@@ -44,6 +44,8 @@
 // it uses, and distinguish ordinary playback after the core sees a fetch.
 // 24 gives an app the home clock: ctx.clock, the home's time zone and how it
 // writes times.
-export const protocolVersion = 24;
+// 25 lets a smart speaker's driver hand the core its microphone: a run it
+// opens with ctx.audio.listen, its sound, and the steps the core tells it.
+export const protocolVersion = 25;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 11;

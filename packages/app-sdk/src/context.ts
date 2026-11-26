@@ -40,6 +40,17 @@ import type {
 import { homeClock, type HomeClock, type HourCycle } from "./clock.js";
 import type { HostResources } from "./host.js";
 import type { RequestReply } from "./requests.js";
+import {
+  openVoiceRun,
+  type ListenClose,
+  type ListenOpen,
+  type ListenOpened,
+  type ListenRead,
+  type ListenSend,
+  type ListenStep,
+  type RefusedRun,
+  type VoiceRun,
+} from "./listening.js";
 import { modelAnswerOf } from "./model-answers.js";
 import type { AiToolAnswer } from "./ai-agents.js";
 import type {
@@ -173,6 +184,14 @@ export interface CoreCalls {
   }): Promise<AiToolAnswer>;
   /** Answers the request this call runs for, once; Sanctum's Assistant only. */
   replyRequest(reply: RequestReply): Promise<void>;
+  /** Opens a run for one of the driver's smart speakers (listening.ts); needs `devices.register`. */
+  openListen(open: ListenOpen): Promise<ListenOpened>;
+  /** Hands the core a run's next sound. */
+  sendListen(send: ListenSend): Promise<void>;
+  /** A run's steps after the first `after`, waiting a moment for one when there's none yet. */
+  readListen(read: ListenRead): Promise<ListenStep[]>;
+  /** Ends a run. */
+  closeListen(close: ListenClose): Promise<void>;
   log(message: string): void;
 }
 
@@ -409,6 +428,18 @@ export interface AppContext {
    */
   readonly blobs: {
     put(blob: AppBlob): Promise<PutBlob>;
+  };
+  /**
+   * A smart speaker's request, for a driver holding devices.register: when
+   * one of its speakers whose `audio` part `listens` hears its wake word,
+   * the driver opens a run before the speaker streams. The core takes it or
+   * refuses it, and a refused run is declined on the speaker (listening.ts).
+   */
+  readonly audio: {
+    listen(
+      key: string,
+      options: { wakeWord: string | null },
+    ): Promise<VoiceRun | RefusedRun>;
   };
   /**
    * The home's AI model, the one the household chose in Settings; needs
@@ -660,6 +691,9 @@ export function createRequestContext(options: ContextOptions): RequestContext {
     ai: {
       list: () => core.aiTools(),
       call: (name, input = {}) => core.callAiTool({ name, input }),
+    },
+    audio: {
+      listen: (key, { wakeWord }) => openVoiceRun(core, { key, wakeWord }),
     },
     host: { resources: () => core.hostResources() },
     log: (message) => core.log(message),

@@ -76,6 +76,10 @@ export const coreCallMethods = [
   "aiTools",
   "callAiTool",
   "replyRequest",
+  "openListen",
+  "sendListen",
+  "readListen",
+  "closeListen",
 ] as const satisfies readonly Exclude<keyof CoreCalls, "query" | "log">[];
 export type CoreCallMethod = (typeof coreCallMethods)[number];
 

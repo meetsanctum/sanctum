@@ -125,6 +125,12 @@ word. It never carries what the microphones hear.
   agent asks it to speak (see [What AI agents can
   use](/ai-agents/what-they-can-use/)); no app or person sends one as a
   command.
+- **Listens:** whether its wake word or button starts a request whose
+  sound its driver hands Sanctum. Sanctum takes a request only while the
+  Assistant is on; otherwise the device shows for a moment that it was
+  declined, and nothing it heard leaves it. The sound goes to Sanctum
+  alone, never to an app, and Sanctum keeps it only while the request
+  lasts: at most 8 seconds of it.
 
 Muting and unmuting wait for the device to say it did them. History keeps
 nothing of its microphones. Where Sanctum can mute its microphones, a smart
