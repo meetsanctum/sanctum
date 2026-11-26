@@ -4,7 +4,6 @@ import {
   SectionTile,
   tileIconOf,
   useAppClient,
-  useHomeClock,
   type PageProps,
 } from "@meetsanctum/ui-sdk";
 import {
@@ -45,7 +44,6 @@ type Drag = {
 export function RoomMoodsPage(props: PageProps) {
   const client = useAppClient();
   const { devices, places, moods, schedules, motion } = useMoodsApp();
-  const frameClock = useHomeClock();
   const now = useNow();
   const { open, back } = props;
   const roomId = props.params.placeId ?? "";
@@ -68,10 +66,6 @@ export function RoomMoodsPage(props: PageProps) {
     if (gone) back();
   }, [gone, back]);
   if (gone || !room || !places) return null;
-  const clock =
-    places.home.timeZone === frameClock.timeZone
-      ? frameClock
-      : frameClock.withTimeZone(places.home.timeZone);
   const schedule = schedules.of(roomId);
   const roomMotion = motion.of(roomId);
   const lightName = (light: { device: string }) =>
@@ -235,7 +229,6 @@ export function RoomMoodsPage(props: PageProps) {
           <ScheduleSection
             schedule={schedule}
             moods={own}
-            clock={clock}
             now={now}
             open={(id) =>
               open("scheduled", id ? { room: roomId, id } : { room: roomId })
@@ -245,7 +238,6 @@ export function RoomMoodsPage(props: PageProps) {
             schedule={schedule}
             moods={own}
             lightName={lightName}
-            clock={clock}
             now={now}
             onChoose={turnOn}
           />

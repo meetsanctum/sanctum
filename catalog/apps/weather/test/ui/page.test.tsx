@@ -188,12 +188,8 @@ const texts = (within: Element | null, selector: string) =>
 // A time as the home writes it with 24 hours, such as 07:05 or 16:00.
 const time = (hour: number, minute = "00") =>
   `${String(hour).padStart(2, "0")}:${minute}`;
-// Friday, the day after the forecast's, as the device shortens it.
-const fridayAt = new Date("2026-10-30T12:00:00Z");
-const weekdayOptions = { weekday: "short", timeZone: "UTC" } as const;
-const friday = new Intl.DateTimeFormat(undefined, weekdayOptions).format(
-  fridayAt,
-);
+// Friday, the day after the forecast's.
+const friday = "Fri";
 // An hour above its column, such as 16:00.
 const column = (hour: number) => new RegExp(`^${time(hour)}$`);
 
@@ -293,29 +289,6 @@ describe("Weather's page", () => {
       ).toEqual(["Now", label]);
     },
   );
-
-  it("uses the device's language for forecast weekdays", async () => {
-    const DateTimeFormat = Intl.DateTimeFormat;
-    const germanFriday = new DateTimeFormat("de-DE", weekdayOptions).format(
-      fridayAt,
-    );
-    const format = vi
-      .spyOn(Intl, "DateTimeFormat")
-      .mockImplementation(function (locales, options) {
-        return new DateTimeFormat(locales ?? "de-DE", options);
-      });
-    try {
-      await show(fakeClient(shown).client);
-      expect(
-        texts(section("Next 24 hours"), "ol > li > span:first-child")[7],
-      ).toBe(germanFriday);
-      expect(
-        texts(section("Next 10 days"), "ul > li > span:first-child")[1],
-      ).toBe(germanFriday);
-    } finally {
-      format.mockRestore();
-    }
-  });
 
   it("shows the next 24 hours, two hours apart from the hour it is", async () => {
     await show(fakeClient(shown).client);

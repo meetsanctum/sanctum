@@ -24,6 +24,16 @@ export function hourLabel(clock: HomeClock, instant: string) {
     : clock.timeText(at);
 }
 
+/** The short weekday of an instant, such as Tue. */
+export function weekdayAt(clock: HomeClock, instant: string) {
+  return clock.weekdayText(Date.parse(instant));
+}
+
+/** The short weekday of one of the home's dates, such as Tue for 2026-11-17. */
+export function weekdayOf(clock: HomeClock, date: string) {
+  return clock.withTimeZone("UTC").weekdayText(Date.parse(`${date}T12:00:00Z`));
+}
+
 /**
  * When the forecast was fetched: its time, and its day too once that isn't
  * the home's today, so one kept while offline says how old it is.
@@ -37,11 +47,7 @@ export function updatedWords(
   const there = clock.withTimeZone(timeZone);
   const at = Date.parse(updatedAt);
   const time = there.timeText(at);
-  if (there.date(at) === there.date(now)) return `Updated ${time}`;
-  const date = new Intl.DateTimeFormat(undefined, {
-    timeZone: there.timeZone,
-    day: "numeric",
-    month: "short",
-  }).format(at);
-  return `Updated ${date}, ${time}`;
+  return there.date(at) === there.date(now)
+    ? `Updated ${time}`
+    : `Updated ${there.dayText(at)}, ${time}`;
 }

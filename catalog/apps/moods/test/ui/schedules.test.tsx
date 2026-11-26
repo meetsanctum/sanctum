@@ -124,7 +124,6 @@ async function show(
   Page: ComponentType<PageProps>,
   params: PageProps["params"],
   hourCycle: HourCycle = "24h",
-  frameTimeZone = places.home.timeZone,
 ) {
   client = fakeClient();
   client.devices.mockResolvedValue([
@@ -135,7 +134,10 @@ async function show(
   client.call.mockImplementation(answer);
   await act(async () => {
     root.render(
-      <HomeTimeZoneProvider timeZone={frameTimeZone} hourCycle={hourCycle}>
+      <HomeTimeZoneProvider
+        timeZone={places.home.timeZone}
+        hourCycle={hourCycle}
+      >
         <AppScope client={client}>
           <MoodsProvider>
             <Page
@@ -263,22 +265,6 @@ describe("a room's schedule", () => {
     expect(
       container.querySelector('[role="img"]')?.getAttribute("aria-label"),
     ).toBe("Focus 12:00 AM to 12:00 AM, next day. Now 3:20 PM.");
-  });
-
-  it("uses the loaded household zone for the schedule and turn-on summary", async () => {
-    await show(
-      RoomMoodsPage,
-      { placeId: "office" },
-      "12h",
-      "America/Los_Angeles",
-    );
-
-    expect(scheduleRow("Focus")?.textContent).toBe(
-      "Focus9:00 AM to 5:00 PMNow",
-    );
-    expect(container.querySelector('[aria-live="polite"]')?.textContent).toBe(
-      "Turning the lights on now brings Focus, until 5:00 PM.",
-    );
   });
 
   it("opens a scheduled mood, or a new one, in the editor", async () => {
@@ -418,8 +404,8 @@ describe("Moods' main page", () => {
     expect(open).toHaveBeenCalledWith("room", { placeId: "office" });
   });
 
-  it("uses the loaded household zone and writes the time with 12 hours", async () => {
-    await show(MainPage, {}, "12h", "America/Los_Angeles");
+  it("writes its times as the home does, with 12 hours", async () => {
+    await show(MainPage, {}, "12h");
     expect(row("Office")?.textContent).toBe(
       "OfficeFocus until 5:00 PM · 5 moods",
     );

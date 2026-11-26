@@ -55,12 +55,7 @@ export function MainPage(props: PageProps) {
   const rooms = (places?.rooms ?? []).filter(
     (room) => roomLights(devices, room.id).length > 0,
   );
-  const frameClock = useHomeClock();
-  const timeZone = places?.home.timeZone;
-  const clock =
-    timeZone && timeZone !== frameClock.timeZone
-      ? frameClock.withTimeZone(timeZone)
-      : frameClock;
+  const clock = useHomeClock();
   const minute = minuteOfDay(clock, now);
   return (
     <>

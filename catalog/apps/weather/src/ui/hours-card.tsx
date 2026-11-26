@@ -5,12 +5,11 @@ import {
   usePhone,
   widgetIconOf,
 } from "@meetsanctum/ui-sdk";
-import { useMemo } from "react";
 
 import { condition } from "../conditions";
 import { hourColumns, plotOf } from "../hours";
 import { Chance } from "./parts";
-import { degrees, hourLabel } from "./words";
+import { degrees, hourLabel, weekdayAt } from "./words";
 
 // The next 24 hours in one card: twelve columns two hours apart, and on a
 // phone eight, three apart. Each has its time, its temperature, its sky and
@@ -29,11 +28,6 @@ export function HoursCard(props: {
   const { forecast, unit, now } = props;
   const clock = useHomeClock();
   const forecastClock = clock.withTimeZone(forecast.timeZone);
-  const { timeZone } = forecastClock;
-  const weekday = useMemo(
-    () => new Intl.DateTimeFormat(undefined, { timeZone, weekday: "short" }),
-    [timeZone],
-  );
   const isPhone = usePhone();
   const count = isPhone ? 8 : 12;
   const columns = hourColumns(
@@ -99,7 +93,7 @@ export function HoursCard(props: {
                   {column.isNow
                     ? "Now"
                     : column.startsDay
-                      ? weekday.format(Date.parse(column.time))
+                      ? weekdayAt(forecastClock, column.time)
                       : hourLabel(forecastClock, column.time)}
                 </span>
                 <span className="mt-[42px] text-[15px] leading-[22px] font-medium">

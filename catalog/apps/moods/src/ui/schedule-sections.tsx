@@ -1,5 +1,10 @@
-import type { HomeClock } from "@meetsanctum/app-sdk/clock";
-import { Button, icons, PageSection, tileIconOf } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  icons,
+  PageSection,
+  tileIconOf,
+  useHomeClock,
+} from "@meetsanctum/ui-sdk";
 import { useEffect, useState, type ReactNode } from "react";
 
 import {
@@ -68,9 +73,9 @@ export function DayBar(props: {
   scheduled: RoomSchedule["scheduled"];
   moods: ReadonlyMap<string, Mood>;
   minute: number;
-  clock: HomeClock;
 }) {
-  const { scheduled, moods, minute, clock } = props;
+  const { scheduled, moods, minute } = props;
+  const clock = useHomeClock();
   const summary = scheduled.length
     ? scheduled
         .map(
@@ -138,11 +143,11 @@ export function DayBar(props: {
 export function ScheduleSection(props: {
   schedule: RoomSchedule;
   moods: readonly Mood[];
-  clock: HomeClock;
   now: Date;
   open: (id?: string) => void;
 }) {
-  const { schedule, now, clock } = props;
+  const { schedule, now } = props;
+  const clock = useHomeClock();
   const minute = minuteOfDay(clock, now);
   const moods = new Map(props.moods.map((mood) => [mood.id, mood]));
   const scheduled = byStart(schedule.scheduled);
@@ -150,12 +155,7 @@ export function ScheduleSection(props: {
   return (
     <div className="flex flex-col gap-2">
       <PageSection id="schedule-heading" title="Schedule" hint="Every day">
-        <DayBar
-          scheduled={scheduled}
-          moods={moods}
-          minute={minute}
-          clock={clock}
-        />
+        <DayBar scheduled={scheduled} moods={moods} minute={minute} />
         {scheduled.map((span) => {
           const mood = moods.get(span.moodId);
           const Icon = mood ? tileIconOf[mood.icon] : icons.Sparkles;
@@ -243,11 +243,11 @@ export function TurnOnSection(props: {
   schedule: RoomSchedule;
   moods: readonly Mood[];
   lightName: (light: { device: string; capability: string }) => string;
-  clock: HomeClock;
   now: Date;
   onChoose: (turnOn: TurnOnBehaviour) => void;
 }) {
-  const { schedule, now, clock } = props;
+  const { schedule, now } = props;
+  const clock = useHomeClock();
   const words = turnOnWords({
     schedule,
     moodNames: new Map(props.moods.map((mood) => [mood.id, mood.name])),
