@@ -1,4 +1,4 @@
-import { link, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { link, mkdir, mkdtemp, statfs, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +13,11 @@ import type { ServiceStatus } from "../src/services/services.js";
 // Settings → Status: what the host's kernel and Docker say about it, as the
 // manager reports it on GET /api/host/status. The files are a Raspberry Pi
 // 4's, read inside the manager's container on the dev Pi (2026-11-02).
+
+vi.mock("node:fs/promises", async (original) => {
+  const fs = await original<typeof import("node:fs/promises")>();
+  return { ...fs, statfs: vi.fn(fs.statfs) };
+});
 
 const servers: ReturnType<typeof createServer>[] = [];
 afterEach(async () => {
@@ -540,15 +545,27 @@ describe("the host's status", () => {
 });
 
 describe("GET /api/host/status", () => {
-  it("answers with the host's status", async () => {
+  it("reports occupied and available space separately when the disk has reserved blocks", async () => {
     const { status } = await reporter();
     const server = createServer({ version: "dev-1" }, { status });
     servers.push(server);
+    vi.mocked(statfs).mockResolvedValueOnce({
+      type: 0,
+      bsize: 4096,
+      blocks: 100,
+      bfree: 60,
+      bavail: 55,
+      files: 0,
+      ffree: 0,
+    });
 
     const response = await server.inject("/api/host/status");
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ model: "Raspberry Pi 4 Model B" });
+    expect(response.json()).toMatchObject({
+      model: "Raspberry Pi 4 Model B",
+      storage: { total: 409_600, used: 163_840, free: 225_280 },
+    });
   });
 
   it("refuses where the manager reports no host", async () => {

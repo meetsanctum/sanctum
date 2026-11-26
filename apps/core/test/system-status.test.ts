@@ -341,10 +341,28 @@ describe("the host's status", () => {
     const counted = storage!.parts
       .slice(0, -1)
       .reduce((sum, part) => sum + part.bytes, 0);
-    expect(system.bytes).toBe(
-      host.storage!.total - host.storage!.free - counted,
-    );
+    expect(storage).toMatchObject({ used: 7_654_955_776, free: 6_917_287_936 });
+    expect(system.bytes).toBe(storage!.used - counted);
   });
+
+  it.each([
+    { source: "reported", reading: 7_654_955_776, used: 7_654_955_776 },
+    { source: "estimated", reading: undefined, used: 8_154_955_776 },
+  ])(
+    "sizes the storage parts from the $source occupied space",
+    async ({ reading, used }) => {
+      const host = piStatus();
+      host.storage!.used = reading;
+      const { read } = await statusOf(async () => host);
+
+      const { storage } = (await read()).host!;
+
+      expect(storage).toMatchObject({ used, free: 6_917_287_936 });
+      expect(storage!.parts.reduce((sum, part) => sum + part.bytes, 0)).toBe(
+        used,
+      );
+    },
+  );
 
   it("counts an app's image even when its database lives outside the core", async () => {
     const host = piStatus();

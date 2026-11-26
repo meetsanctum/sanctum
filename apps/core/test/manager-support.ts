@@ -60,6 +60,7 @@ export function piStatus(): HostStatus {
     },
     storage: {
       total: 15_072_243_712,
+      used: 7_654_955_776,
       free: 6_917_287_936,
       software: 1_207_000_000,
       devBuilds: 1_349_000_000,
