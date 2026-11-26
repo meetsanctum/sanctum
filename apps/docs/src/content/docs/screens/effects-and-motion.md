@@ -15,7 +15,7 @@ can turn on one, the other or both.
 
 ## Reduce effects
 
-Draws Sanctum without blur, fades or shadows. This makes a slow device
+Removes frosted blur, edge fades and soft shadows. This makes a slow device
 faster. A wall display, such as Shelly's, usually needs it.
 
 With Reduce effects on:
@@ -28,14 +28,13 @@ With Reduce effects on:
 
 ## Reduce motion
 
-Things appear and change in place, without sliding, zooming or flying in.
-This is for anyone who'd rather see less movement, and it also helps a slow
-device.
+Cuts down on sliding, zooming and other movement. This is for anyone who'd
+rather see less movement, and it also helps a slow device.
 
 With Reduce motion on:
 
 - Tabs change the page in place.
-- The colour wheel shows its colours at once.
+- The colour swatches appear without flying in.
 - Sanctum's loader breathes instead of drawing its line.
 
 Pages you swipe with your finger or drag with the mouse still slide the
@@ -52,9 +51,10 @@ setting. To have less movement in Sanctum, turn on Reduce motion here.
    **Reduce motion** on or off.
 
 Any device can change any other's, so you can set a wall display from your
-computer without touching it. The device you changed draws the new way at
-once, and its row in Clients ends with what's on, such as "Reduced effects
-and motion".
+computer without touching it. Its row in Clients shows the saved settings,
+such as "Reduced effects and motion". A device with a live connection
+applies the change right away. Otherwise, it applies the change the next
+time it checks for updates, such as when it reconnects.
 
 Apps' pages follow the same two switches on each device.
 
