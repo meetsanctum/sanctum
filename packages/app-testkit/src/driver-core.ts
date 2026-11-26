@@ -45,6 +45,7 @@ import {
 import { z } from "zod";
 
 import { addingFlow, createAttempt, repairingFlow } from "./driver-asking.js";
+import { createListeningCore } from "./listening-core.js";
 import { createSecretCalls } from "./secret-calls.js";
 import { createTestStorage } from "./storage.js";
 
@@ -92,6 +93,7 @@ export function createDriverCore(
     // Calls the core doesn't answer, failing as when it can't be reached.
     unanswered?: (keyof CoreCalls)[];
     beforeReport?: (report: Reported) => void;
+    beforeListenReply?: () => Promise<void>;
     // The app's migrations, for its own database.
     migrationsFolder?: string;
   } = {},
@@ -113,6 +115,14 @@ export function createDriverCore(
   // Each list of the devices the driver said are here.
   const presented: string[][] = [];
   const { secrets, calls: secretCalls } = createSecretCalls(app.id, refuse);
+  // Its speakers' runs (listening.ts): refused as with the Assistant off,
+  // until a test takes them with `listening.take()`.
+  let listenRefusal: "off" | "limited" | "unavailable" | null = "off";
+  const listening = createListeningCore({
+    refuse: () => listenRefusal,
+    refuseCall: refuse,
+    beforeListenReply: options.beforeListenReply,
+  });
   // The blobs the driver handed over, by their hash.
   const blobs = new Map<string, { type: BlobType; bytes: Uint8Array }>();
   // What the driver says is wrong with each of its devices, as the core
@@ -237,6 +247,7 @@ export function createDriverCore(
     aiTools: absent,
     callAiTool: absent,
     replyRequest: absent,
+    ...listening.calls,
     devices: async () => [...registered.values()].map(infoOf),
     async device(id) {
       const device = [...registered.values()].find(
@@ -467,6 +478,16 @@ export function createDriverCore(
   }
 
   return {
+    /** Its speakers' runs, refused until `take()`, and the steps to tell them. */
+    listening: {
+      ...listening,
+      take() {
+        listenRefusal = null;
+      },
+      refuse(refusal: "off" | "limited" | "unavailable") {
+        listenRefusal = refusal;
+      },
+    },
     registered,
     reports,
     presses,

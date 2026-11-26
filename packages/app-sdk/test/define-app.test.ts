@@ -706,6 +706,10 @@ const noCore: CoreCalls = {
   aiTools: unused,
   callAiTool: unused,
   replyRequest: unused,
+  openListen: unused,
+  sendListen: unused,
+  readListen: unused,
+  closeListen: unused,
   log() {},
 };
 

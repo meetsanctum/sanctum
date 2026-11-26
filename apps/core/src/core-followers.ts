@@ -9,6 +9,7 @@ import type { EventBus } from "./event-bus.js";
 import type { History } from "./history/history.js";
 import type { createLiveUpdates } from "./live-updates.js";
 import type { Speech } from "./speech/speech.js";
+import type { Listening } from "./speech/listening.js";
 import type { Workflows } from "./workflows/workflows.js";
 
 // The core's event followers, in delivery order. Handlers call through so
@@ -22,6 +23,7 @@ export function setCoreFollowers(
     devices,
     history,
     holds,
+    listening,
     live,
     motion,
     pairing,
@@ -34,6 +36,7 @@ export function setCoreFollowers(
     devices: Pick<Devices, "renameAll">;
     history: Pick<History, "deviceChanged">;
     holds: Pick<Holds, "pressed">;
+    listening: Pick<Listening, "deviceGone">;
     live: Pick<
       ReturnType<typeof createLiveUpdates>,
       "device" | "press" | "places" | "entity"
@@ -63,6 +66,15 @@ export function setCoreFollowers(
       },
     ],
     ["events for apps", apps.eventsForApps],
+    // A speaker that goes takes its run with it.
+    [
+      "listening",
+      {
+        "device.changed": ({ id, after }: DeviceChange) => {
+          if (after === null) listening.deviceGone(id);
+        },
+      },
+    ],
     // Speech runs while a smart speaker can announce.
     ...(speech
       ? ([

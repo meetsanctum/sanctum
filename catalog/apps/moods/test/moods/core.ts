@@ -233,6 +233,10 @@ export function startableHome(options: { devices?: DeviceInfo[] } = {}) {
     aiTools: unused,
     callAiTool: unused,
     replyRequest: unused,
+    openListen: unused,
+    sendListen: unused,
+    readListen: unused,
+    closeListen: unused,
     log() {},
   };
   const context = (actor: Actor) => {

@@ -40,6 +40,12 @@ import type {
 import { homeClock, type HomeClock, type HourCycle } from "./clock.js";
 import type { HostResources } from "./host.js";
 import type { RequestReply } from "./requests.js";
+import {
+  openVoiceRun,
+  type ListenCalls,
+  type RefusedRun,
+  type VoiceRun,
+} from "./listening.js";
 import { modelAnswerOf } from "./model-answers.js";
 import type { AiToolAnswer } from "./ai-agents.js";
 import type {
@@ -97,7 +103,7 @@ export type ServiceConnection = {
  * the app's permissions and, where a person or client is behind the call,
  * against what that actor may do; a refusal arrives as an ActionError.
  */
-export interface CoreCalls {
+export interface CoreCalls extends ListenCalls {
   /** Runs one statement on the app's own database file, and nowhere else. */
   query(query: StorageQuery): Promise<StorageResult>;
   /** The connection details of a service the app holds `services:<name>` for. */
@@ -411,6 +417,18 @@ export interface AppContext {
     put(blob: AppBlob): Promise<PutBlob>;
   };
   /**
+   * A smart speaker's request, for a driver holding devices.register: when
+   * one of its speakers whose `audio` part `listens` hears its wake word,
+   * the driver opens a run before the speaker streams. The core takes it or
+   * refuses it, and a refused run is declined on the speaker (listening.ts).
+   */
+  readonly audio: {
+    listen(
+      key: string,
+      options: { wakeWord: string | null },
+    ): Promise<VoiceRun | RefusedRun>;
+  };
+  /**
    * The home's AI model, the one the household chose in Settings; needs
    * `models.use`. The core asks it for the app, which never learns its
    * address or key. An answer needs a turn opened for a person's or shared
@@ -660,6 +678,9 @@ export function createRequestContext(options: ContextOptions): RequestContext {
     ai: {
       list: () => core.aiTools(),
       call: (name, input = {}) => core.callAiTool({ name, input }),
+    },
+    audio: {
+      listen: (key, { wakeWord }) => openVoiceRun(core, { key, wakeWord }),
     },
     host: { resources: () => core.hostResources() },
     log: (message) => core.log(message),

@@ -54,8 +54,10 @@ export function createEsphomeApp(options: DriverOptions = {}) {
     // microphones are its `audio` part, which the shell shows, and leave
     // its page. 0.9.1: an unmute its side switch holds is refused at once.
     // 0.10.0: a smart speaker plays the core's announcements, and its
-    // playing them isn't the player's own.
-    version: "0.10.0",
+    // playing them isn't the player's own. 0.11.0: a smart speaker that
+    // streams its microphone listens: its requests go to the core, which
+    // takes or declines each, and the driver shows the core's steps on it.
+    version: "0.11.0",
     core: "^2.0.0",
     summary:
       "Brings your ESPHome lights, plugs, sensors, buttons and speakers into your home.",

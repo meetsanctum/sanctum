@@ -34,6 +34,7 @@ import type { InstalledApp } from "./installed.js";
 import type { NetFetch } from "./net.js";
 import type { AppSettingsStore } from "./settings.js";
 import type { Blobs } from "../blobs/blobs.js";
+import type { Listening } from "../speech/listening.js";
 import type { AppSecrets } from "./secrets.js";
 import type { ReadSnapshot } from "./snapshot.js";
 import type { AssistantCalls } from "../agents/assistants.js";
@@ -86,6 +87,7 @@ export function createAppContexts(options: {
   pairing: () => Pick<Pairing, "joining">;
   secrets: AppSecrets;
   blobs: Blobs;
+  listening?: Listening;
   isInstalled: (entry: InstalledApp) => boolean;
   agents: Pick<AgentsCanUse, "areaOn" | "canUse" | "readableDeviceKinds">;
   // The home's AI model in use, as apps see it.
@@ -259,6 +261,7 @@ export function createAppContexts(options: {
       pairing: options.pairing,
       secrets: options.secrets,
       blobs: () => (options.isInstalled(entry) ? options.blobs : undefined),
+      ...(options.listening ? { listening: options.listening } : {}),
       agents: options.agents,
       models: { source: options.modelSource, ...(turn ? { turn } : {}) },
       assistant: options.assistant,

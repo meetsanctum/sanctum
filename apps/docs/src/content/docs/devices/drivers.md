@@ -107,6 +107,7 @@ The types, categories and parts are defined in `@meetsanctum/app-sdk`
 | `device-registration.ts` | What a driver registers, and the check of its type      |
 | `media.ts`               | The media part: what a player can do, says and is asked |
 | `audio.ts`               | The microphones part: muting, and the wake word heard   |
+| `listening.ts`           | A smart speaker's request: its sound and its steps      |
 | `blobs.ts`               | Pictures a driver hands over, and their limits          |
 
 The Zigbee and ESPHome drivers, in `catalog/apps/zigbee` and

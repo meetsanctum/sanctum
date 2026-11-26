@@ -3,6 +3,7 @@ import { MediaPlayerFormatPurpose, type Entity } from "esphome-client";
 
 import type { Session } from "./connection.js";
 import { mapEntities } from "./entities.js";
+import { streamsOverApi } from "./registration.js";
 import { speakerPartsOf } from "./speaker.js";
 
 // Each connection has its own entity keys and capabilities. A device with a
@@ -10,13 +11,16 @@ import { speakerPartsOf } from "./speaker.js";
 // switch where it has one, a setting of its own that no other device's
 // switch would be, which Sanctum then mutes it with. It announces where its
 // media player lists a format for announcements, which it then plays over
-// whatever it was playing.
-type SessionDescription = Parameters<typeof speakerPartsOf>[0];
+// whatever it was playing. It listens where it can stream its microphone
+// over the encrypted API connection, which its driver then hands the core.
+type SessionDescription = Parameters<typeof speakerPartsOf>[0] &
+  Pick<Session, "encrypted">;
 const sessions = new WeakMap<
   SessionDescription,
   {
     parts: ReturnType<typeof speakerPartsOf>;
     mapping: ReturnType<typeof mapEntities>;
+    listens: boolean;
     announcementPlayer: Extract<Entity, { type: "media_player" }> | undefined;
   }
 >();
@@ -38,6 +42,8 @@ export function describeSession(session: SessionDescription) {
     announcement ??
     mapping.mapped.find(({ capability }) => capability.kind === "media");
   const parts = player ? speakerPartsOf(session) : null;
+  const listens =
+    parts !== null && session.encrypted && streamsOverApi(session.info);
   if (parts && player) {
     if (mapping.mapped.length === maxDeviceCapabilities) {
       // Keep playback and make room for the speaker's microphones.
@@ -59,6 +65,7 @@ export function describeSession(session: SessionDescription) {
           mutes,
           muteSwitch: mutes,
           announces: announcement !== undefined,
+          listens,
           announcementPlayer: announcement?.capability.id,
         },
       },
@@ -70,6 +77,7 @@ export function describeSession(session: SessionDescription) {
   const details = {
     parts,
     mapping,
+    listens,
     announcementPlayer:
       parts && announcement?.entity.type === "media_player"
         ? announcement.entity

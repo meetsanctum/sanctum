@@ -40,6 +40,7 @@ import { createAppSecrets, createSealer } from "./app-host/secrets.js";
 import { createAppSettings } from "./app-host/settings.js";
 import { createAuth, loginRule } from "./auth/auth.js";
 import { assembleSpeech } from "./speech/assembly.js";
+import { createListening } from "./speech/listening.js";
 import type { Limits } from "./auth/limits.js";
 import { setCoreFollowers } from "./core-followers.js";
 import { createDashboards } from "./dashboards/dashboards.js";
@@ -456,6 +457,19 @@ export async function createModules(
   });
   // Pictures drivers hand over, in memory only (blobs/blobs.ts).
   const blobs = createBlobs({ now, log });
+  // Smart speakers' runs, which their drivers open as they hear their wake
+  // word (speech/listening.ts).
+  const listening = createListening({
+    idFor: (driver, key) => devices.idFor(driver, key),
+    listens: (id) =>
+      devices
+        .get(id)
+        ?.capabilities.some(
+          (part) => part.kind === "audio" && part.features.listens,
+        ) ?? false,
+    hearer: () => null,
+    log,
+  });
   // The home's AI models, which the household adds in Settings, and the
   // turns in which apps ask the one in use.
   const models = createModels(db, {
@@ -502,6 +516,7 @@ export async function createModules(
     settings: appSettingsStore,
     secrets: createAppSecrets(db, { dataDir: options.dataDir, log, now }),
     blobs,
+    listening,
     sightings: () => sightings?.list() ?? [],
     updates: appUpdates,
     versions: appVersions,
@@ -675,6 +690,7 @@ export async function createModules(
     devices,
     history,
     holds,
+    listening,
     live,
     motion,
     pairing,
@@ -689,6 +705,7 @@ export async function createModules(
     ["check Add devices' offers", () => deviceOffers.interrupt()],
     ["try updates that wait for room", () => roomWaits.interrupt()],
     ["stop Assistant requests", () => apps.stopRequests()],
+    ["stop smart speakers' runs", () => listening.stop()],
     ["take no more turns with the AI model", () => turns.close()],
   ] as const satisfies CoreSteps["stopNewWork"];
   // Nothing goes to a device again while the apps stop. Devices' and
@@ -708,6 +725,7 @@ export async function createModules(
     ["finish changes to apps", () => listTurns.settled()],
     ["stop adding and repairing that ask", () => asking.close()],
     ["stop the app host", () => apps.close()],
+    ["clear finished smart speaker runs", () => listening.clearFinished()],
     ["stop watching the AI model", () => models.stop()],
     ["stop devices", () => devices.close()],
     ["stop firmware", () => firmware.close()],

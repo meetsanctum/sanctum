@@ -50,6 +50,7 @@ import type { JobCalls, KeptWorkflowCalls } from "./app-work.js";
 import type { Turn } from "../models/turns.js";
 import type { NetFetch, NetHolds } from "./net.js";
 import type { Blobs } from "../blobs/blobs.js";
+import type { Listening } from "../speech/listening.js";
 import { secretName, secretValue, type AppSecrets } from "./secrets.js";
 
 const isTurnOpener = (actor: Actor): actor is TurnOpener =>
@@ -198,6 +199,8 @@ export function createCoreCalls(options: {
   secrets: AppSecrets;
   // The pictures drivers hand over (blobs/blobs.ts).
   blobs?: () => Blobs | undefined;
+  // Smart speakers' runs, which drivers open (speech/listening.ts).
+  listening?: Listening;
   // What AI agents can use, which an AI agent's call holds to.
   agents: Pick<AgentsCanUse, "areaOn" | "canUse" | "readableDeviceKinds">;
   // The home's AI model, and the turn this call opened, if it opened one.
@@ -639,6 +642,36 @@ export function createCoreCalls(options: {
       const { turn } = options.models;
       if (!turn) throw new ActionError("no_turn");
       turn.cancel(handle);
+    },
+
+    // A driver's smart speaker's run: only a driver opens one, for its own
+    // device, and an AI agent's call never does (speech/listening.ts).
+    async openListen(open) {
+      need(registerPermission);
+      notForAgents();
+      if (!options.listening)
+        return { accepted: false, refusal: "unavailable" };
+      return options.listening.open(appId, open);
+    },
+
+    async sendListen(send) {
+      need(registerPermission);
+      notForAgents();
+      if (!options.listening) throw new ActionError("not_found");
+      options.listening.send(appId, send);
+    },
+
+    async readListen(read) {
+      need(registerPermission);
+      notForAgents();
+      if (!options.listening) return [{ step: "done" }];
+      return options.listening.read(appId, read);
+    },
+
+    async closeListen(close) {
+      need(registerPermission);
+      notForAgents();
+      options.listening?.close(appId, close);
     },
 
     // Sanctum's Assistant answers the request its call runs for, once.

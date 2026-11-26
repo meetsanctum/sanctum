@@ -290,6 +290,39 @@ describe("what arrives on an app's socket", () => {
     ]);
   });
 
+  it("declines a registered speaker's request while listening is off", async () => {
+    const { ask } = await onSocket(driver);
+    expect(
+      await ask("register", [
+        {
+          key: "speaker",
+          name: "Speaker",
+          type: "smart-speaker",
+          capabilities: [
+            { id: "audio", kind: "audio", features: { listens: true } },
+          ],
+        },
+      ]),
+    ).toMatchObject({ ok: true });
+
+    expect(
+      await ask("openListen", [{ key: "speaker", wakeWord: null }]),
+    ).toEqual({
+      ok: true,
+      value: { accepted: false, refusal: "off" },
+    });
+  });
+
+  it("refuses a listening request from an app without devices.register", async () => {
+    const { ask } = await onSocket(nosy);
+    expect(
+      await ask("openListen", [{ key: "speaker", wakeWord: null }]),
+    ).toMatchObject({
+      ok: false,
+      message: expect.stringContaining(`does not hold ${registerPermission}`),
+    });
+  });
+
   it("answers anything at all, and the core goes on", async () => {
     const garbage: unknown[] = [
       null,

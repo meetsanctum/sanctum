@@ -12,7 +12,7 @@ import type { Facts } from "./facts.js";
 import { connectionFactsOf, describeSession } from "./session-details.js";
 import { audioStateOf, mutedOf } from "./speaker.js";
 import { stateOf } from "./states.js";
-import { declineRequests } from "./voice.js";
+import { followRequests } from "./voice.js";
 
 // An announcement Sanctum sent, on the player that got it. The Voice PE's
 // firmware reports an announcement it was asked for as playing, not
@@ -70,16 +70,21 @@ function audioReports(
       if (session) send(session);
     },
     follow(session: Session, order: (write: () => Promise<void>) => void) {
-      const { parts } = describeSession(session);
-      declineRequests(session, () => {
-        if (!parts) return;
-        // Capture the time promptly. The caller orders the write with setup.
-        const at = Date.now();
-        heardAt = at;
-        order(async () => {
-          await facts.heard(key, at, connectionFactsOf(session));
-          send(session);
-        });
+      const { parts, listens } = describeSession(session);
+      followRequests(session, {
+        listens,
+        listen: (wakeWord) => ctx.audio.listen(key, { wakeWord }),
+        heard() {
+          if (!parts) return;
+          // Capture the time promptly. The caller orders the write with setup.
+          const at = Date.now();
+          heardAt = at;
+          order(async () => {
+            await facts.heard(key, at, connectionFactsOf(session));
+            send(session);
+          });
+        },
+        log: (message) => ctx.log(`${key}: ${message}`),
       });
     },
   };

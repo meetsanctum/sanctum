@@ -17,6 +17,9 @@ export const audioFeatures = z.strictObject({
   // Whether it plays an announcement from an address the core gives it,
   // over whatever it was playing.
   announces: z.boolean().default(false),
+  // Whether its wake word or button starts a request whose sound its
+  // driver hands the core (listening.ts).
+  listens: z.boolean().default(false),
   // The media capability whose volume and mute apply to announcements.
   announcementPlayer: z
     .string()

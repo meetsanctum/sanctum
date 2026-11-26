@@ -126,6 +126,10 @@ function home(
     aiTools: unused,
     callAiTool: unused,
     replyRequest: unused,
+    openListen: unused,
+    sendListen: unused,
+    readListen: unused,
+    closeListen: unused,
     log() {},
   };
   return {

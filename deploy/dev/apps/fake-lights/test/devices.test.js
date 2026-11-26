@@ -231,7 +231,12 @@ test("a smart speaker has microphones, which it mutes when asked", async () => {
     {
       id: "microphones",
       kind: "audio",
-      features: { mutes: true, muteSwitch: false, announces: false },
+      features: {
+        mutes: true,
+        muteSwitch: false,
+        announces: false,
+        listens: false,
+      },
     },
   );
   const reports = [];
