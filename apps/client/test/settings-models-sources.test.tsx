@@ -291,6 +291,12 @@ describe("AI model source dialogs", () => {
     expect(document.body.textContent).toContain(
       "The key works. It can use 1 model.",
     );
+    // What the check costs, as a ceiling a thinking model can reach.
+    expect(document.body.textContent).toContain(
+      "It uses up to about 1,000 tokens, which OpenRouter charges for.",
+    );
+    // A provider lists only models that can use the tool: no help to give.
+    expect(document.body.textContent).not.toContain("can use tools");
     await chooseModel("Llama3.2 3B");
     await click(button("Add and check"));
     expect(page.requests).toContainEqual([

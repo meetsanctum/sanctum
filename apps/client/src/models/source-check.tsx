@@ -30,6 +30,7 @@ import type { ModelsResponse } from "./data";
 import { ModelPicker } from "./model-picker";
 import {
   checkProblemText,
+  checkTokensText,
   otherName,
   ownName,
   problemText,
@@ -460,7 +461,7 @@ function ChooseModel(props: {
         <DialogDescription>
           {source.kind === "computer" || source.kind === "sanctum"
             ? "Choose one that can use tools, so it can act on your devices."
-            : `Choose one that can use tools, so it can act on your devices. Checking it uses tokens again, and ${providerNames[source.kind]} charges for them.`}
+            : `Checking it uses ${checkTokensText}, which ${providerNames[source.kind]} charges for.`}
         </DialogDescription>
       </DialogHeader>
       {models && models.length > 0 && (
