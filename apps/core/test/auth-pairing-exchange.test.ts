@@ -133,7 +133,7 @@ describe("the pairing exchange", () => {
     expect(second.json()).toEqual({ error: "busy" });
   });
 
-  it("keeps a verified exchange while the approver names the device", async () => {
+  it("lets the same client resume a verified exchange with the right code", async () => {
     const core = await testCore();
     const maya = await claimed(core);
     const other = sharedClient(core);
@@ -143,8 +143,13 @@ describe("the pairing exchange", () => {
     expect((await lookUp(core, other.token, shown.code)).json()).toEqual({
       error: "busy",
     });
+    expect((await lookUp(core, maya.token, mistyped(shown))).json()).toEqual({
+      error: "busy",
+    });
+    const resumed = await typed(core, maya.token, shown);
+    expect(resumed).toEqual(started);
     expect(
-      (await approve(core, maya.token, started, "Kitchen tablet")).statusCode,
+      (await approve(core, maya.token, resumed, "Kitchen tablet")).statusCode,
     ).toBe(204);
   });
 

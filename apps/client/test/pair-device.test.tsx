@@ -251,6 +251,25 @@ describe("a shared device's pairing screen", () => {
     ]);
   });
 
+  it("asks for an app update and stops retrying when pairing is incompatible", async () => {
+    const original = vi.mocked(coreJson).getMockImplementation()!;
+    const request = vi
+      .fn()
+      .mockRejectedValue(new CoreError(409, "pairing_outdated"));
+    vi.mocked(coreJson).mockImplementation((path, init) =>
+      path === "/api/auth/pair/request" ? request() : original(path, init),
+    );
+
+    await render();
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      "Update this app to pair it with this home.",
+    );
+    expect(shownCode()).toBeNull();
+
+    await settle(15_000);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
   it("answers the exchange for its code, binds it to the host it sees, and saves the confirmed token", async () => {
     const onPaired = await render();
     await typeCode();

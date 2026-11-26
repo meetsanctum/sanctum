@@ -32,6 +32,8 @@ export function problemText(error: unknown): string {
         return `${productName} is busy. Try again in a moment.`;
       case "claimed":
         return "This home has just been set up. Sign in instead.";
+      case "pairing_outdated":
+        return "Update this app to pair it with this home.";
       case "invalid_request":
         return "Check the details and try again.";
     }

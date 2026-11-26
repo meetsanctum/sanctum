@@ -244,6 +244,9 @@ export function PairDevice(props: {
           setIsAnotherHome(
             error instanceof SignInError && error.code === "another_host",
           );
+          if (error instanceof CoreError && error.code === "pairing_outdated") {
+            return;
+          }
           delay = Math.min(delay * 2, retryMaxMs);
         }
         await waitForPairingPoll(delay, signal);
@@ -279,6 +282,8 @@ export function PairDevice(props: {
               onClick={() => {
                 setStopped(false);
                 setShown(undefined);
+                // The previous request can still count against the address
+                // cap until it expires.
                 setRound((current) => current + 1);
               }}
             >

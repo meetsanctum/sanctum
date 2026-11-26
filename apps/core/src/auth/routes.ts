@@ -10,7 +10,6 @@ import {
   type ClaimStart,
   type CollectAgentToken,
   type Me,
-  pairingProtocol,
   type PairAnswer,
   type PairApprove,
   type PairBind,
@@ -128,7 +127,8 @@ const schemas = {
   pairRequest: z.object({
     platform: z.enum(platforms),
     suggestedName: clientName,
-    protocol: z.literal(pairingProtocol),
+    // Older clients sent no version.
+    protocol: z.number().int().default(1),
   }) satisfies z.ZodType<PairRequest>,
   pairLookup: z.object({
     code: z.string().max(32),

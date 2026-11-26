@@ -5,6 +5,7 @@ import {
   pairingConfirmation,
   pairingExchangesPerRequest,
   pairingOpaque,
+  pairingProtocol,
   pairingRequestMs,
   splitPairingCode,
   verifyPairingBinding,
@@ -25,7 +26,13 @@ import {
 } from "@meetsanctum/auth-protocol";
 import * as opaque from "@serenity-kit/opaque";
 import { and, eq, gt, isNull, lte, sql } from "drizzle-orm";
-import { randomBytes, randomInt, randomUUID } from "node:crypto";
+import {
+  createHmac,
+  randomBytes,
+  randomInt,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 
 import type { RecordActivity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
@@ -71,6 +78,7 @@ type Exchange = {
   // Once it answered.
   finishLoginRequest?: string;
   sessionKey?: string;
+  secretDigest?: Buffer;
   reason?: PairExchangeFailure;
   // The device answers by then, and binds by then once it answered.
   until: number;
@@ -104,6 +112,12 @@ export function createPairing(
   const reported = new Map<string, number>();
   // Every request's latest exchange, by request id.
   const exchanges = new Map<string, Exchange>();
+  // The short typed secret needs a keyed hash to compare it on resume.
+  const secretDigestKey = randomBytes(32);
+
+  function digestSecret(secret: string) {
+    return createHmac("sha256", secretDigestKey).update(secret).digest();
+  }
 
   // Requests are kept until their lookup has rested, used up or not.
   function sweep() {
@@ -167,6 +181,7 @@ export function createPairing(
     delete exchange.secret;
     delete exchange.clientLoginState;
     delete exchange.sessionKey;
+    delete exchange.secretDigest;
     const request = byId(exchange.requestId);
     if (!isOpen(request)) {
       return;
@@ -245,6 +260,9 @@ export function createPairing(
     // Step 1, before a principal exists. Open requests are capped per
     // address and across the host.
     request(address: string, input: PairRequest): PairRequested {
+      if (input.protocol !== pairingProtocol) {
+        throw new AuthError("pairing_outdated");
+      }
       const key = addressKey(address);
       const made = db.transaction(
         (): { over: string } | { requested: PairRequested } => {
@@ -334,8 +352,16 @@ export function createPairing(
         throw new AuthError("not_found");
       }
       // Keep the active exchange through approval, including while the
-      // approver names a verified device.
+      // approver names a verified device or returns and types its code again.
       if (current && current.stage !== "failed") {
+        if (
+          current.stage === "verified" &&
+          current.approverId === principal.client.id &&
+          current.secretDigest &&
+          timingSafeEqual(current.secretDigest, digestSecret(secret))
+        ) {
+          return { requestId: request.id, exchangeId: current.id };
+        }
         throw new AuthError("busy");
       }
       if (request.exchanges >= pairingExchangesPerRequest) {
@@ -505,12 +531,13 @@ export function createPairing(
         return { status: "failed" };
       }
       limiter.work();
+      const secret = exchange.secret!;
       let finished: opaque.client.FinishLoginResult | undefined;
       try {
         finished = opaque.client.finishLogin({
           clientLoginState: exchange.clientLoginState!,
           loginResponse: input.loginResponse,
-          password: exchange.secret!,
+          password: secret,
           identifiers: pairingOpaque.identifiers,
           keyStretching: pairingOpaque.keyStretching,
         });
@@ -527,6 +554,7 @@ export function createPairing(
       exchange.stage = "answered";
       exchange.sessionKey = finished.sessionKey;
       exchange.finishLoginRequest = finished.finishLoginRequest;
+      exchange.secretDigest = digestSecret(secret);
       exchange.until = now().getTime() + pairingAnswerMs;
       return {
         status: "continue",

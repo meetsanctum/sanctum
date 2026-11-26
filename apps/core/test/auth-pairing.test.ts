@@ -348,6 +348,22 @@ describe("pairing a shared device", () => {
     await paired(core, shared.token, "Hall");
   });
 
+  it("refuses incompatible pairing versions before creating a request", async () => {
+    const core = await testCore();
+    await claimed(core);
+
+    for (const body of [
+      { ...tablet, protocol: 1 },
+      { ...tablet, protocol: tablet.protocol + 1 },
+      { platform: tablet.platform, suggestedName: tablet.suggestedName },
+    ]) {
+      const response = await post(core, "/api/auth/pair/request", body);
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: "pairing_outdated" });
+    }
+    expect(core.db.select().from(authPairingRequests).all()).toEqual([]);
+  });
+
   it("checks what each route is given", async () => {
     const core = await testCore();
     const maya = await claimed(core);
@@ -356,9 +372,8 @@ describe("pairing a shared device", () => {
     for (const [route, body, token] of [
       ["/api/auth/pair/request", { ...tablet, platform: "amiga" }],
       ["/api/auth/pair/request", { ...tablet, suggestedName: " " }],
-      // A device that speaks another pairing exchange.
-      ["/api/auth/pair/request", { ...tablet, protocol: 1 }],
-      ["/api/auth/pair/request", { platform: "android", suggestedName: "A" }],
+      ["/api/auth/pair/request", { ...tablet, protocol: "2" }],
+      ["/api/auth/pair/request", { ...tablet, protocol: 1.5 }],
       ["/api/auth/pair/poll", { deviceSecret: "not a secret!" }],
       ["/api/auth/pair/answer", { ...secret, exchangeId: "x" }],
       ["/api/auth/pair/bind", { ...secret, exchangeId: "x", binding: "b" }],

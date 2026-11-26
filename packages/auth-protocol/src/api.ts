@@ -306,6 +306,7 @@ export type AuthErrorCode =
   // A pending registration, password change or pairing request expired or
   // was used.
   | "expired"
+  | "pairing_outdated"
   | "channel_mismatch"
   | "forbidden"
   // Changing a password needs the person it belongs to: a shared client
