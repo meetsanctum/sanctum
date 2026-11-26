@@ -90,7 +90,6 @@ export function ModelsPage(props: {
   onOpenApp?: (appId: string) => void;
 }) {
   const { info, hasFailed, refresh, answered } = useModels(props.live);
-  const [isRetrying, setIsRetrying] = useState(false);
   const [adding, setAdding] = useState(false);
   // Where Add a source starts, when the empty page asked where it runs, and
   // the choice that opened it, which gets focus back when it closes.
@@ -148,6 +147,8 @@ export function ModelsPage(props: {
       <Section
         id="settings-models"
         title={modelsTitle}
+        // Until the first answer it isn't known whether the home has a
+        // source or needs the empty page, so only the bar shows.
         hideBody={info === undefined && !hasFailed}
         action={
           // With no source yet, the empty page's places are the way in.
@@ -168,23 +169,13 @@ export function ModelsPage(props: {
         page={props.page}
       >
         {hasFailed && (
-          <>
-            <p role="alert" className="m-0 text-sm text-destructive">
-              AI models couldn't load.
-            </p>
-            <Button
-              variant="outline"
-              className="self-start"
-              disabled={isRetrying}
-              onClick={async () => {
-                setIsRetrying(true);
-                await refresh();
-                setIsRetrying(false);
-              }}
-            >
-              Try again
-            </Button>
-          </>
+          // As Status says it: the page asks again on its own.
+          <p
+            role="status"
+            className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground"
+          >
+            Couldn't read your AI models. It checks again by itself.
+          </p>
         )}
         {isEmpty && (
           <NoModel

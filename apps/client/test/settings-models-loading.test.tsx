@@ -89,27 +89,6 @@ describe("Loading AI Models", () => {
     expect(onBack).toHaveBeenCalledOnce();
   });
 
-  it("offers a manual retry after the first request fails", async () => {
-    const { promise, reply } = holdReply();
-    fetchModels
-      .mockRejectedValueOnce(new Error("Request failed"))
-      .mockReturnValueOnce(promise);
-    await show();
-    expect(body.querySelector('[role="alert"]')?.textContent).toContain(
-      "AI models couldn't load.",
-    );
-    expect(button("Add a source", bar)).toBeUndefined();
-
-    const retry = button("Try again", body)!;
-    await act(async () => retry.click());
-    expect(coreJson).toHaveBeenCalledTimes(2);
-    expect(retry.disabled).toBe(true);
-
-    await act(async () => reply({ sources: [], apps: [] }));
-    expect(body.querySelector('[role="alert"]')).toBeNull();
-    expect(body.textContent).toContain("No AI model yet");
-  });
-
   it("shows the configured source when polling recovers from a failed first request", async () => {
     vi.useFakeTimers();
     vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
@@ -117,12 +96,14 @@ describe("Loading AI Models", () => {
       .mockRejectedValueOnce(new Error("Request failed"))
       .mockResolvedValueOnce({ sources: [mac], apps: [] });
     await show();
-    expect(body.querySelector('[role="alert"]')).not.toBeNull();
+    expect(body.querySelector('[role="status"]')?.textContent).toBe(
+      "Couldn't read your AI models. It checks again by itself.",
+    );
     expect(button("Add a source", bar)).toBeUndefined();
 
     await act(async () => vi.advanceTimersByTimeAsync(30_000));
     expect(coreJson).toHaveBeenCalledTimes(2);
-    expect(body.querySelector('[role="alert"]')).toBeNull();
+    expect(body.textContent).not.toContain("Couldn't read");
     expect(body.querySelector("#settings-models")?.textContent).toContain(
       sourceName(mac),
     );
