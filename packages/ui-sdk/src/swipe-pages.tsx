@@ -67,7 +67,6 @@ const pageScroll = cn(
 
 type Swipe = {
   pointerId: number;
-  pointerType: string;
   x: number;
   y: number;
   active: boolean;
@@ -114,9 +113,9 @@ export function SwipePages(props: {
   const cell = useRef<HTMLDivElement>(null);
   const sections = useRef<(HTMLElement | null)[]>([]);
   const dragOffset = useRef<number | null>(null);
-  // Under Reduce motion the pages change in place, but those a finger
-  // swiped slide on to their places when it lets go, as its own movement
-  // carried on: stopping them where the finger left them would have the
+  // Under Reduce motion the pages change in place, but those a finger or a
+  // mouse swiped slide on to their places when it lets go, as its own
+  // movement carried on: stopping them where it left them would have the
   // page jump.
   const glide = useRef<ReturnType<typeof setTimeout>>(undefined);
   const endGlide = () => {
@@ -148,8 +147,21 @@ export function SwipePages(props: {
   // so what opens draws only what is seen first: on a slow tablet a
   // device's history and activity cost as much as the rest together.
   const [drawsAll, setDrawsAll] = useState(false);
+  // The page the pages slide away from stays reachable until they have
+  // slid, while the one they slide to is reachable at once, so a tap on it
+  // lands there: making a page unreachable has every element on it looked
+  // at again, which on a slow device would hold the slide back.
+  const [leaving, setLeaving] = useState<string>();
+  useEffect(() => {
+    if (leaving === undefined) return;
+    const later = setTimeout(() => setLeaving(undefined), slide);
+    return () => clearTimeout(later);
+  }, [leaving, page]);
   const setPage = (index: number) => {
-    if (index !== page) setDrawsAll(true);
+    if (index === page) return;
+    setDrawsAll(true);
+    const slides = !isMotionReduced() || glide.current !== undefined;
+    setLeaving(slides ? pages[page]?.id : undefined);
     setChosen({ id: pages[index]?.id, index });
   };
   const selectTab = (index: number) => {
@@ -227,7 +239,6 @@ export function SwipePages(props: {
     }
     swipe.current = {
       pointerId: event.pointerId,
-      pointerType: event.pointerType,
       x: event.clientX,
       y: event.clientY,
       active: false,
@@ -262,7 +273,7 @@ export function SwipePages(props: {
     swipe.current = null;
     if (!at.active) return;
     follow(null);
-    if (at.pointerType === "touch" && isMotionReduced()) {
+    if (isMotionReduced()) {
       for (const section of sections.current) {
         if (!section) continue;
         section.style.transition = ["transform", "translate"]
@@ -368,7 +379,7 @@ export function SwipePages(props: {
                 pages.length > 1 ? `${id}-${each.id}-tab` : undefined
               }
               // Only the page on show can be reached.
-              inert={index !== page}
+              inert={index !== page && each.id !== leaving}
               style={{
                 transform: `translateX(${(index - page) * 100}%)`,
               }}

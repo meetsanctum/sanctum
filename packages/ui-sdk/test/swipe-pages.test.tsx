@@ -380,7 +380,7 @@ it("measures no tabs while they fit", async () => {
   }
 });
 
-it("makes only the selected page reachable as soon as the tab changes", async () => {
+it("makes the selected page reachable at once, and the page left once the pages have slid", async () => {
   vi.useFakeTimers();
   try {
     await renderPages();
@@ -390,6 +390,11 @@ it("makes only the selected page reachable as soon as the tab changes", async ()
     const tabs = [...container.querySelectorAll<HTMLElement>('[role="tab"]')];
     await act(async () => tabs[1]!.click());
     expect(currentPage()).toBe("Second");
+    // A tap on the page sliding in lands there.
+    expect(second!.hasAttribute("inert")).toBe(false);
+    expect(first!.hasAttribute("inert")).toBe(false);
+
+    await act(async () => vi.advanceTimersByTime(300));
     expect(first!.hasAttribute("inert")).toBe(true);
     expect(second!.hasAttribute("inert")).toBe(false);
   } finally {
@@ -433,13 +438,15 @@ describe("with Reduce motion", () => {
     for (const panel of panels()) expect(panel.style.transition).toBe("");
   });
 
-  it("changes pages in place when a mouse drag is released", async () => {
+  it("slides pages a mouse dragged on to their places too", async () => {
     await swipe("mouse");
-    for (const panel of panels()) expect(panel.style.transition).toBe("");
+    for (const panel of panels()) {
+      expect(panel.style.transition).toMatch(/^transform 300ms/);
+    }
   });
 
   it.each(["click", "keyboard"])(
-    "changes tabs in place by %s during a touch glide",
+    "changes tabs in place by %s while swiped pages slide",
     async (input) => {
       await swipe();
       expect(panels()[2]!.style.transition).toMatch(/^transform 300ms/);
