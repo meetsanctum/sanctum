@@ -680,3 +680,30 @@ export function onMeta(tiles: readonly Tile[]) {
   const on = tiles.filter((tile) => tile.on).length;
   return on ? `${on} on` : tiles.length ? "Off" : "";
 }
+
+// The types a switch is shown as, in the order Switches' summary lists
+// them, each as its summary tile names it. A switch on a device of any
+// other type counts with the switches.
+const switchSummaryTypes = [
+  { type: "plug", title: "Plugs" },
+  { type: "switch", title: "Switches" },
+] as const satisfies readonly { type: DeviceType; title: string }[];
+
+/**
+ * Switches' summary: for each type the home's switches are shown as, how
+ * many are on, or "Off" while none is, as Home's status tile says.
+ */
+export function switchesSummary(
+  tiles: readonly Tile[],
+  devices: readonly DeviceInfo[],
+): { type: "plug" | "switch"; title: string; status: string }[] {
+  const typeOf = new Map(devices.map((device) => [device.id, device.type]));
+  return switchSummaryTypes.flatMap(({ type, title }) => {
+    const own = tiles.filter(
+      (tile) =>
+        tile.kind === "switch" &&
+        (typeOf.get(tile.deviceId) === "plug") === (type === "plug"),
+    );
+    return own.length > 0 ? [{ type, title, status: onMeta(own) }] : [];
+  });
+}

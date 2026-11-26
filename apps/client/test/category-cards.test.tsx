@@ -23,7 +23,8 @@ import {
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
 // What a category's page opens with: Lights' card and its switch, a
-// button for each room's lights, Environment's cards and Security's.
+// button for each room's lights, Environment's cards, Security's and
+// Switches'.
 
 let root: Root;
 let container: HTMLDivElement;
@@ -486,10 +487,57 @@ describe("Security's card", () => {
   });
 });
 
-describe("Switches' page", () => {
-  it("has no card: it keeps the line under its name", async () => {
+describe("Switches' cards", () => {
+  const asPlug = (device: DeviceInfo, id: string, on: boolean): DeviceInfo => ({
+    ...device,
+    id,
+    type: "plug",
+    capabilities: device.capabilities.map((each) => ({
+      ...each,
+      state: { on },
+      observed: { on },
+    })) as DeviceInfo["capabilities"],
+  });
+
+  it("say how many are on, as Home's status tile in Ember, with no line under the name", async () => {
     await show("switches");
-    expect(cards()).toEqual([]);
-    expect(container.querySelector("header p")?.textContent).toBe("1 on");
+
+    expect(cards().map(said)).toEqual([["Switches", "1 on"]]);
+    expect(white(card()!)).toBe(false);
+    expect(iconColour(card()!)).toBe("var(--ember-text)");
+    expect(card()!.querySelector("button, a")).toBeNull();
+    expect(container.querySelector("header p")).toBeNull();
+  });
+
+  it("are one for the plugs and one for the other switches, each only where the home has one", async () => {
+    devices = [
+      ...devices,
+      asPlug(plug, "tv-plug", false),
+      asPlug(plug, "fan-plug", true),
+    ];
+    await show("switches");
+
+    expect(cards().map(said)).toEqual([
+      ["Plugs", "1 on"],
+      ["Switches", "1 on"],
+    ]);
+    const glyphs = ["plug", "toggle-right"];
+    expect(
+      cards().map((each, index) =>
+        each
+          .querySelector("svg")!
+          .classList.contains(`lucide-${glyphs[index]}`),
+      ),
+    ).toEqual([true, true]);
+
+    devices = devices.filter((each) => each.id !== "plug");
+    await show("switches");
+    expect(cards().map(said)).toEqual([["Plugs", "1 on"]]);
+  });
+
+  it("say Off while none is on", async () => {
+    devices = [asPlug(plug, "tv-plug", false)];
+    await show("switches");
+    expect(cards().map(said)).toEqual([["Plugs", "Off"]]);
   });
 });
