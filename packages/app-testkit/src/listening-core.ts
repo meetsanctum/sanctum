@@ -30,9 +30,10 @@ export function createListeningCore(options: {
   // Whether a run is taken: a refusal turns it away.
   refuse: () => ListenRefusal | null;
   refuseCall: (error: Error) => never;
+  beforeListenReply?: () => Promise<void>;
 }) {
   const runs = new Map<string, FakeRun>();
-  const waiting = new Map<string, () => void>();
+  const waiting = new Map<string, Set<() => void>>();
   let next = 0;
 
   function parsed<T>(schema: z.ZodType<T>, input: unknown, what: string) {
@@ -51,6 +52,16 @@ export function createListeningCore(options: {
     return run!;
   }
 
+  /** Tells a run's driver a step, as the core would. */
+  function step(id: string, step: ListenStep) {
+    const run = runOf(id);
+    if (run.steps.at(-1)?.step === "done") return;
+    run.steps.push(step);
+    const readers = waiting.get(id);
+    waiting.delete(id);
+    for (const wake of readers ?? []) wake();
+  }
+
   const calls: ListenCalls = {
     async openListen(input) {
       const open = parsed(listenOpenSchema, input, "A run");
@@ -59,6 +70,7 @@ export function createListeningCore(options: {
       next += 1;
       const id = `run-test-${next}`;
       runs.set(id, { id, open, audio: Buffer.alloc(0), end: null, steps: [] });
+      if (options.beforeListenReply) await options.beforeListenReply();
       return { accepted: true, run: id };
     },
     async sendListen(input) {
@@ -69,14 +81,19 @@ export function createListeningCore(options: {
     async readListen(input) {
       const read = parsed(listenReadSchema, input, "A run's read");
       const run = runOf(read.run);
-      if (run.steps.length <= read.after) {
-        await new Promise<void>((resolve) => waiting.set(run.id, resolve));
+      if (run.steps.length <= read.after && run.steps.at(-1)?.step !== "done") {
+        await new Promise<void>((resolve) => {
+          const readers = waiting.get(run.id) ?? new Set<() => void>();
+          readers.add(resolve);
+          waiting.set(run.id, readers);
+        });
       }
       return run.steps.slice(read.after);
     },
     async closeListen(input) {
       const close = parsed(listenCloseSchema, input, "A run's end");
       runOf(close.run).end = close.end;
+      step(close.run, { step: "done" });
     },
   };
 
@@ -87,12 +104,6 @@ export function createListeningCore(options: {
     latest() {
       return [...runs.values()].at(-1) ?? null;
     },
-    /** Tells a run's driver a step, as the core would. */
-    step(id: string, step: ListenStep) {
-      runOf(id).steps.push(step);
-      const wake = waiting.get(id);
-      waiting.delete(id);
-      wake?.();
-    },
+    step,
   };
 }

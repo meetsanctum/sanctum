@@ -203,7 +203,7 @@ export async function startHome(
   timingOverrides?: Partial<typeof timings>,
   options?: Pick<
     NonNullable<Parameters<typeof createDriverCore>[1]>,
-    "beforeReport"
+    "beforeReport" | "beforeListenReply"
   >,
 ) {
   const devices: EmulatedDevice[] = [];

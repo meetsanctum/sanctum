@@ -36,9 +36,9 @@ export const listenReadWaitMs = 5_000;
 
 /** Why the core doesn't take a run: the speaker shows it was declined. */
 export const listenRefusals = [
-  // Nothing listens: the Assistant is off, or not running.
+  // No audio handler is active.
   "off",
-  // Too many runs in the home at once, or a speaker asking too often.
+  // Too many runs in the home at once.
   "limited",
   // The core can't hear now, as when it is stopping.
   "unavailable",
@@ -100,7 +100,7 @@ export const listenSendSchema = z.strictObject({
   run: runId,
   // The PCM, in base64.
   audio: z
-    .string()
+    .base64()
     .min(1)
     .max(Math.ceil(maxListenChunkBytes / 3) * 4),
 });
@@ -121,9 +121,13 @@ export type ListenClose = z.infer<typeof listenCloseSchema>;
 
 /** The calls a run makes, as CoreCalls has them. */
 export type ListenCalls = {
+  /** Opens a run for one of the driver's smart speakers; needs `devices.register`. */
   openListen(open: ListenOpen): Promise<ListenOpened>;
+  /** Hands the core a run's next sound. */
   sendListen(send: ListenSend): Promise<void>;
+  /** A run's steps after the first `after`, waiting a moment for one when there's none yet. */
   readListen(read: ListenRead): Promise<ListenStep[]>;
+  /** Ends a run. */
   closeListen(close: ListenClose): Promise<void>;
 };
 

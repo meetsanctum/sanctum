@@ -52,7 +52,7 @@ function setup(options: { hearing?: boolean } = {}) {
 async function sounded(run: HeardRun) {
   const chunks: Buffer[] = [];
   for await (const chunk of run.sound) chunks.push(chunk);
-  return Buffer.concat(chunks).byteLength;
+  return Buffer.concat(chunks);
 }
 
 const kinds = (steps: ListenStep[]) => steps.map((step) => step.step);
@@ -90,12 +90,20 @@ describe("a smart speaker's run", () => {
     const run = open();
     const [hearing] = heard;
     expect(hearing?.wakeWord).toBe("Okay Nabu");
-    listening.send("sanctum.example", { run, audio: sound(100) });
-    listening.send("sanctum.example", { run, audio: sound(100) });
+    const first = Buffer.alloc(3_200, 1);
+    const second = Buffer.alloc(3_200, 2);
+    for (const chunk of [first, second]) {
+      listening.send("sanctum.example", {
+        run,
+        audio: chunk.toString("base64"),
+      });
+    }
     hearing!.stopListening();
     // The speaker sends a little more before it stops: dropped.
     listening.send("sanctum.example", { run, audio: sound(100) });
-    await expect(sounded(hearing!)).resolves.toBe(6_400);
+    await expect(sounded(hearing!)).resolves.toEqual(
+      Buffer.concat([first, second]),
+    );
     expect(kinds(await read(run))).toEqual(["stopped"]);
   });
 
@@ -137,11 +145,33 @@ describe("a smart speaker's run", () => {
   it("stops listening after eight seconds of sound", async () => {
     const { listening, heard, open, read } = setup();
     const run = open();
-    for (let i = 0; i < 32; i += 1) {
+    for (let i = 0; i < 31; i += 1) {
       listening.send("sanctum.example", { run, audio: sound(250) });
     }
+    listening.send("sanctum.example", { run, audio: sound(150) });
+    listening.send("sanctum.example", { run, audio: sound(250) });
     expect(kinds(await read(run))).toEqual(["stopped"]);
     expect(heard[0]!.moments.stoppedListening).not.toBeNull();
+    expect((await sounded(heard[0]!)).byteLength).toBe(256_000);
+  });
+
+  it.each(["", "invalid base64", "AA=="])(
+    "rejects invalid sound %j without marking the first sound",
+    (audio) => {
+      const { listening, heard, open } = setup();
+      const run = open();
+      expect(() => listening.send("sanctum.example", { run, audio })).toThrow();
+      expect(heard[0]!.moments.firstSound).toBeNull();
+    },
+  );
+
+  it("discards unread sound when the run finishes", async () => {
+    const { listening, heard, open } = setup();
+    const run = open();
+    listening.send("sanctum.example", { run, audio: sound(100) });
+    heard[0]!.stopListening();
+    heard[0]!.done();
+    expect((await sounded(heard[0]!)).byteLength).toBe(0);
   });
 
   it("ends as nothing heard after two seconds without sound", async () => {
@@ -170,6 +200,22 @@ describe("a smart speaker's run", () => {
     ]);
     expect(heard[0]!.signal.aborted).toBe(true);
     expect(heard[1]!.signal.aborted).toBe(false);
+  });
+
+  it("keeps only the most recent finished runs and expires their steps", async () => {
+    vi.useFakeTimers();
+    const { open, read } = setup();
+    const oldest = open();
+    for (let i = 0; i < 16; i += 1) open();
+    const kept = open();
+    open();
+
+    expect(kinds(await read(oldest))).toEqual(["done"]);
+    expect(kinds(await read(kept))).toEqual(["stopped", "error", "done"]);
+    expect(vi.getTimerCount()).toBe(18); // Sixteen expiry timers and two for the active run.
+
+    vi.advanceTimersByTime(10_000);
+    expect(kinds(await read(kept))).toEqual(["done"]);
   });
 
   it("takes only a few at once in the home", () => {
@@ -226,21 +272,43 @@ describe("a smart speaker's run", () => {
     const c = open("speaker-c");
     listening.deviceGone("device:speaker-c");
     expect(kinds(await read(c))).toContain("done");
+    const d = open("speaker-d");
+    const reading = read(d);
     listening.stop();
+    expect(kinds(await reading)).toEqual(["stopped", "error", "done"]);
     expect(
       listening.open("sanctum.example", { key: "speaker", wakeWord: null }),
     ).toEqual({ accepted: false, refusal: "unavailable" });
     expect(heard.every((run) => run.signal.aborted)).toBe(true);
   });
 
-  it("fails a run whose hearer throws", async () => {
+  it("releases finished runs and expiry timers once the app host closes", async () => {
+    vi.useFakeTimers();
+    const { listening, open, read } = setup();
+    const run = open();
+    listening.stop();
+    expect(kinds(await read(run))).toEqual(["stopped", "error", "done"]);
+    expect(vi.getTimerCount()).toBe(1);
+
+    listening.clearFinished();
+    expect(kinds(await read(run))).toEqual(["done"]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    [
+      "throws",
+      () => {
+        throw new Error("broken");
+      },
+    ],
+    ["rejects", () => Promise.reject(new Error("broken"))],
+  ])("fails a run whose hearer %s", async (_how, hear) => {
     const logs: string[] = [];
     const listening = createListening({
       idFor: () => "device:speaker",
       listens: () => true,
-      hearer: () => () => {
-        throw new Error("broken");
-      },
+      hearer: () => hear,
       log: (line) => logs.push(line),
     });
     const opened = listening.open("sanctum.example", {

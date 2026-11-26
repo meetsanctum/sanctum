@@ -42,12 +42,7 @@ import type { HostResources } from "./host.js";
 import type { RequestReply } from "./requests.js";
 import {
   openVoiceRun,
-  type ListenClose,
-  type ListenOpen,
-  type ListenOpened,
-  type ListenRead,
-  type ListenSend,
-  type ListenStep,
+  type ListenCalls,
   type RefusedRun,
   type VoiceRun,
 } from "./listening.js";
@@ -108,7 +103,7 @@ export type ServiceConnection = {
  * the app's permissions and, where a person or client is behind the call,
  * against what that actor may do; a refusal arrives as an ActionError.
  */
-export interface CoreCalls {
+export interface CoreCalls extends ListenCalls {
   /** Runs one statement on the app's own database file, and nowhere else. */
   query(query: StorageQuery): Promise<StorageResult>;
   /** The connection details of a service the app holds `services:<name>` for. */
@@ -184,14 +179,6 @@ export interface CoreCalls {
   }): Promise<AiToolAnswer>;
   /** Answers the request this call runs for, once; Sanctum's Assistant only. */
   replyRequest(reply: RequestReply): Promise<void>;
-  /** Opens a run for one of the driver's smart speakers (listening.ts); needs `devices.register`. */
-  openListen(open: ListenOpen): Promise<ListenOpened>;
-  /** Hands the core a run's next sound. */
-  sendListen(send: ListenSend): Promise<void>;
-  /** A run's steps after the first `after`, waiting a moment for one when there's none yet. */
-  readListen(read: ListenRead): Promise<ListenStep[]>;
-  /** Ends a run. */
-  closeListen(close: ListenClose): Promise<void>;
   log(message: string): void;
 }
 

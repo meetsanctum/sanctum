@@ -725,6 +725,7 @@ export async function createModules(
     ["finish changes to apps", () => listTurns.settled()],
     ["stop adding and repairing that ask", () => asking.close()],
     ["stop the app host", () => apps.close()],
+    ["clear finished smart speaker runs", () => listening.clearFinished()],
     ["stop watching the AI model", () => models.stop()],
     ["stop devices", () => devices.close()],
     ["stop firmware", () => firmware.close()],

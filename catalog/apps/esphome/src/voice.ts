@@ -10,7 +10,7 @@ import {
 } from "esphome-client";
 
 import type { Session } from "./connection.js";
-import { hasVoiceAssistant, streamsOverApi } from "./registration.js";
+import { hasVoiceAssistant } from "./registration.js";
 
 // A device with a voice assistant, such as a smart speaker, waits for an
 // assistant to follow its requests: until one does, it counts itself as
@@ -45,6 +45,7 @@ type Data = { name: string; value: string }[];
 export function followRequests(
   session: Session,
   options: {
+    listens: boolean;
     listen: (wakeWord: string | null) => Promise<VoiceRun | RefusedRun>;
     heard: () => void;
     log: (message: string) => void;
@@ -53,10 +54,10 @@ export function followRequests(
   if (!hasVoiceAssistant(session.info)) return;
   const { client } = session;
   const requests = client.voiceAssistant;
-  const streams = streamsOverApi(session.info);
   const send = (event: VoiceAssistantEvent, data?: Data) =>
     requests.sendEvent(event, data);
   let current: VoiceRun | null = null;
+  let pending: symbol | null = null;
   let gone = false;
 
   function decline() {
@@ -104,19 +105,24 @@ export function followRequests(
       if (current === run) current = null;
       await run.close("done");
     } catch (error) {
-      if (current === run) current = null;
       options.log(`a voice run ended early (${String(error)})`);
-      if (!gone) send(VoiceAssistantEvent.RUN_END);
+      if (current === run) {
+        current = null;
+        send(VoiceAssistantEvent.RUN_END);
+      }
       await run.close("done").catch(() => undefined);
     }
   }
 
   async function start(wakeWord: string | null) {
     // A newer request takes over from one still under way.
+    const opening = Symbol();
+    pending = opening;
     const older = current;
     current = null;
     if (older) void older.close("stopped").catch(() => undefined);
-    if (!streams) {
+    if (!options.listens) {
+      pending = null;
       decline();
       return;
     }
@@ -125,13 +131,21 @@ export function followRequests(
       run = await options.listen(wakeWord);
     } catch (error) {
       options.log(`a voice request couldn't open (${String(error)})`);
-      if (!gone) decline();
+      if (pending === opening) {
+        pending = null;
+        decline();
+      }
       return;
     }
-    if (gone) {
-      if (run.accepted) await run.close("disconnected").catch(() => undefined);
+    if (pending !== opening) {
+      if (run.accepted) {
+        await run
+          .close(gone ? "disconnected" : "stopped")
+          .catch(() => undefined);
+      }
       return;
     }
+    pending = null;
     if (!run.accepted) {
       decline();
       return;
@@ -147,7 +161,10 @@ export function followRequests(
     if (!asked.start) {
       // The device stopped it itself, as with a press of its button.
       const run = current;
+      const hadRequest = pending !== null || run !== null;
+      pending = null;
       current = null;
+      if (hadRequest) send(VoiceAssistantEvent.RUN_END);
       if (run) void run.close("stopped").catch(() => undefined);
       return;
     }
@@ -160,6 +177,7 @@ export function followRequests(
   const lifecycle = client.on("lifecycle", (event) => {
     if (event.kind !== "disconnect") return;
     gone = true;
+    pending = null;
     const run = current;
     current = null;
     if (run) void run.close("disconnected").catch(() => undefined);
@@ -169,7 +187,7 @@ export function followRequests(
   });
   // Its microphone is asked for only where it can stream it over the API.
   requests.subscribe(
-    streams
+    options.listens
       ? VoiceAssistantSubscribeFlag.API_AUDIO
       : VoiceAssistantSubscribeFlag.NONE,
   );

@@ -93,6 +93,7 @@ export function createDriverCore(
     // Calls the core doesn't answer, failing as when it can't be reached.
     unanswered?: (keyof CoreCalls)[];
     beforeReport?: (report: Reported) => void;
+    beforeListenReply?: () => Promise<void>;
     // The app's migrations, for its own database.
     migrationsFolder?: string;
   } = {},
@@ -120,6 +121,7 @@ export function createDriverCore(
   const listening = createListeningCore({
     refuse: () => listenRefusal,
     refuseCall: refuse,
+    beforeListenReply: options.beforeListenReply,
   });
   // The blobs the driver handed over, by their hash.
   const blobs = new Map<string, { type: BlobType; bytes: Uint8Array }>();

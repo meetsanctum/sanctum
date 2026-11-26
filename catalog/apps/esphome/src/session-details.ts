@@ -19,6 +19,7 @@ const sessions = new WeakMap<
   {
     parts: ReturnType<typeof speakerPartsOf>;
     mapping: ReturnType<typeof mapEntities>;
+    listens: boolean;
     announcementPlayer: Extract<Entity, { type: "media_player" }> | undefined;
   }
 >();
@@ -40,6 +41,7 @@ export function describeSession(session: SessionDescription) {
     announcement ??
     mapping.mapped.find(({ capability }) => capability.kind === "media");
   const parts = player ? speakerPartsOf(session) : null;
+  const listens = parts !== null && streamsOverApi(session.info);
   if (parts && player) {
     if (mapping.mapped.length === maxDeviceCapabilities) {
       // Keep playback and make room for the speaker's microphones.
@@ -61,7 +63,7 @@ export function describeSession(session: SessionDescription) {
           mutes,
           muteSwitch: mutes,
           announces: announcement !== undefined,
-          listens: streamsOverApi(session.info),
+          listens,
           announcementPlayer: announcement?.capability.id,
         },
       },
@@ -73,6 +75,7 @@ export function describeSession(session: SessionDescription) {
   const details = {
     parts,
     mapping,
+    listens,
     announcementPlayer:
       parts && announcement?.entity.type === "media_player"
         ? announcement.entity

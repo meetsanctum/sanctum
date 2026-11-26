@@ -70,8 +70,9 @@ function audioReports(
       if (session) send(session);
     },
     follow(session: Session, order: (write: () => Promise<void>) => void) {
-      const { parts } = describeSession(session);
+      const { parts, listens } = describeSession(session);
       followRequests(session, {
+        listens,
         listen: (wakeWord) => ctx.audio.listen(key, { wakeWord }),
         heard() {
           if (!parts) return;

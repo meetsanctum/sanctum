@@ -10,6 +10,7 @@ import {
   listenReadSchema,
   listenReadWaitMs,
   listenSendSchema,
+  maxListenChunkBytes,
   type ListenEnd,
   type ListenError,
   type ListenOpened,
@@ -37,6 +38,9 @@ export const runsAtOnce = 4;
 const runMs = 60_000;
 /** How long a finished run's steps stay to be read. */
 const keptMs = 10_000;
+/** The most finished runs kept for their drivers to read. */
+const keptRuns = 16;
+const maxSoundBytes = (listenRate * 2 * listenMaxMs) / 1000;
 
 /** When each part of a run happened, in ms since the epoch, or null while it hasn't. */
 export type RunMoments = {
@@ -65,28 +69,27 @@ export type HeardRun = {
   done(): void;
   /** Aborts when the run ends before its hearer is done with it. */
   signal: AbortSignal;
-  readonly moments: RunMoments;
+  readonly moments: Readonly<RunMoments>;
   /** How the driver ended it, once it did. */
   readonly ended: ListenEnd | null;
 };
 
 /** What hears the home's runs; without one, every run is refused `off`. */
-export type Hearer = (run: HeardRun) => void;
+export type Hearer = (run: HeardRun) => void | Promise<void>;
 
-type Run = HeardRun & {
+type Run = Omit<HeardRun, "moments"> & {
+  moments: RunMoments;
   driver: string;
   steps: ListenStep[];
   finished: boolean;
   readers: Set<() => void>;
   push(chunk: Buffer): void;
-  endSound(): void;
-  soundMs: number;
+  endSound(discard?: boolean): void;
+  soundBytes: number;
   quiet?: NodeJS.Timeout;
   limit: NodeJS.Timeout;
   controller: AbortController;
 };
-
-const msOf = (bytes: number) => (bytes / 2 / listenRate) * 1000;
 
 // Sound as an async iterable that ends when told.
 function soundQueue() {
@@ -99,7 +102,8 @@ function soundQueue() {
       chunks.push(chunk);
       wake?.();
     },
-    end() {
+    end(discard = false) {
+      if (discard) chunks.length = 0;
       ended = true;
       wake?.();
     },
@@ -126,25 +130,35 @@ export function createListening(options: {
   const now = options.now ?? Date.now;
   const runs = new Map<string, Run>();
   const bySpeaker = new Map<string, Run>();
+  const expiry = new Map<string, NodeJS.Timeout>();
   let closed = false;
 
   function tell(run: Run, step: ListenStep) {
     if (run.finished) return;
     run.steps.push(step);
     for (const read of run.readers) read();
-    run.readers.clear();
     if (step.step === "done") finish(run);
   }
 
-  // A run whose last step is told: its steps stay a while to be read.
+  function forget(id: string) {
+    clearTimeout(expiry.get(id));
+    expiry.delete(id);
+    runs.delete(id);
+  }
+
+  // A run whose last step is told: only its steps stay a while to be read.
   function finish(run: Run) {
     run.finished = true;
-    run.endSound();
+    run.endSound(true);
     clearTimeout(run.quiet);
     clearTimeout(run.limit);
     if (bySpeaker.get(run.device) === run) bySpeaker.delete(run.device);
+    expiry.set(run.id, setTimeout(() => forget(run.id), keptMs).unref());
+    if (expiry.size > keptRuns) {
+      const oldest = expiry.keys().next().value!;
+      forget(oldest);
+    }
     run.controller.abort();
-    setTimeout(() => runs.delete(run.id), keptMs).unref();
   }
 
   function stopListening(run: Run) {
@@ -210,7 +224,7 @@ export function createListening(options: {
         steps: [],
         finished: false,
         readers: new Set(),
-        soundMs: 0,
+        soundBytes: 0,
         controller,
         signal: controller.signal,
         ended: null,
@@ -222,7 +236,7 @@ export function createListening(options: {
           finishedPlaying: null,
         },
         push: (chunk) => sound.push(chunk),
-        endSound: () => sound.end(),
+        endSound: sound.end,
         stopListening: () => stopListening(run),
         heard: (text) => tell(run, { step: "heard", text }),
         reply(url, text) {
@@ -241,13 +255,17 @@ export function createListening(options: {
       runs.set(id, run);
       bySpeaker.set(device, run);
       quietFor(run);
-      try {
-        hearer(run);
-      } catch (error) {
+      const hearingFailed = (error: unknown) => {
+        if (run.finished) return;
         options.log(
           `listening: a run couldn't be heard (${error instanceof Error ? error.message : String(error)})`,
         );
         fail(run, "failed");
+      };
+      try {
+        void hearer(run)?.catch(hearingFailed);
+      } catch (error) {
+        hearingFailed(error);
       }
       return { accepted: true, run: id };
     },
@@ -261,16 +279,21 @@ export function createListening(options: {
       }
       const run = runOf(driver, parsed.data.run);
       if (!run || run.finished) throw new ActionError("not_found");
-      if (run.moments.stoppedListening !== null) return;
       const chunk = Buffer.from(parsed.data.audio, "base64");
-      if (chunk.byteLength % 2 !== 0) {
+      if (
+        chunk.byteLength === 0 ||
+        chunk.byteLength > maxListenChunkBytes ||
+        chunk.byteLength % 2 !== 0
+      ) {
         throw new Error(`${driver} sent sound that isn't 16-bit PCM`);
       }
+      if (run.moments.stoppedListening !== null) return;
+      const taken = chunk.subarray(0, maxSoundBytes - run.soundBytes);
       run.moments.firstSound ??= now();
-      run.soundMs += msOf(chunk.byteLength);
-      quietFor(run);
-      run.push(chunk);
-      if (run.soundMs >= listenMaxMs) stopListening(run);
+      run.soundBytes += taken.byteLength;
+      run.push(taken);
+      if (run.soundBytes === maxSoundBytes) stopListening(run);
+      else quietFor(run);
     },
 
     // The run's steps after the first `after`, waiting a moment for one.
@@ -285,15 +308,13 @@ export function createListening(options: {
       const { after } = parsed.data;
       if (run.steps.length <= after && !run.finished) {
         await new Promise<void>((resolve) => {
-          const timer = setTimeout(() => {
-            run.readers.delete(resolve);
-            resolve();
-          }, listenReadWaitMs);
-          timer.unref();
-          run.readers.add(() => {
+          const wake = () => {
             clearTimeout(timer);
+            run.readers.delete(wake);
             resolve();
-          });
+          };
+          const timer = setTimeout(wake, listenReadWaitMs).unref();
+          run.readers.add(wake);
         });
       }
       return run.steps.slice(after);
@@ -319,7 +340,7 @@ export function createListening(options: {
 
     /** A driver stopped: its runs end. */
     driverStopped(driver: string) {
-      for (const run of runs.values()) {
+      for (const run of bySpeaker.values()) {
         if (run.driver === driver) fail(run, "failed");
       }
     },
@@ -333,7 +354,12 @@ export function createListening(options: {
     /** The core stops: runs end and no new one is taken. */
     stop() {
       closed = true;
-      for (const run of runs.values()) fail(run, "failed");
+      for (const run of bySpeaker.values()) fail(run, "failed");
+    },
+
+    /** Final steps are no longer needed once the app host closes. */
+    clearFinished() {
+      for (const id of expiry.keys()) forget(id);
     },
   };
 }

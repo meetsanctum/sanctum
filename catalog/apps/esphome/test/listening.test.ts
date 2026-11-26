@@ -1,5 +1,5 @@
 import { VoiceAssistantEvent } from "esphome-client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { add, startHome } from "./support.js";
 import { voicePe } from "./voice-pe.js";
@@ -20,8 +20,11 @@ const declined = [
   { type: "event", eventType: VoiceAssistantEvent.RUN_END },
 ];
 
-async function speaker(options: { streamsOverApi?: boolean } = {}) {
-  home = await startHome();
+async function speaker(
+  options: { streamsOverApi?: boolean } = {},
+  coreOptions?: Parameters<typeof startHome>[1],
+) {
+  home = await startHome(undefined, coreOptions);
   const device = await voicePe(home, options);
   const key = await add(home.core, device);
   await home.core.until(() => device.voiceFollowed, "its requests followed");
@@ -38,6 +41,33 @@ async function taken() {
   );
   const run = home.core.listening.latest()!;
   return { device, key, run };
+}
+
+async function waitForRunEnd(
+  device: Awaited<ReturnType<typeof voicePe>>,
+  after = 0,
+) {
+  await home.core.until(
+    () =>
+      device.voiceMessages
+        .slice(after)
+        .some(
+          (message) =>
+            message.type === "event" &&
+            message.eventType === VoiceAssistantEvent.RUN_END,
+        ),
+    "its speaker received the run end",
+  );
+}
+
+function holdNextOpenReply() {
+  let release!: () => void;
+  const waiting = new Promise<void>((resolve) => (release = resolve));
+  const beforeListenReply = vi
+    .fn<() => Promise<void>>()
+    .mockResolvedValue(undefined)
+    .mockReturnValueOnce(waiting);
+  return { beforeListenReply, release };
 }
 
 describe("a smart speaker's request", () => {
@@ -91,7 +121,7 @@ describe("a smart speaker's request", () => {
       text: "Done",
     });
     listening.step(run.id, { step: "done" });
-    await home.core.until(() => run.end !== null, "its run closed");
+    await waitForRunEnd(device);
     expect(device.voiceMessages.slice(3)).toEqual([
       { type: "event", eventType: VoiceAssistantEvent.STT_VAD_END },
       {
@@ -117,7 +147,7 @@ describe("a smart speaker's request", () => {
       },
       { type: "event", eventType: VoiceAssistantEvent.RUN_END },
     ]);
-    expect(run.end).toBe("done");
+    await home.core.until(() => run.end === "done", "its run closed as done");
   });
 
   it("shows an error the speaker lights, but no light for nothing heard", async () => {
@@ -127,7 +157,7 @@ describe("a smart speaker's request", () => {
       error: "not-understood",
     });
     home.core.listening.step(run.id, { step: "done" });
-    await home.core.until(() => run.end !== null, "its run closed");
+    await waitForRunEnd(device);
     expect(device.voiceMessages.slice(3)).toEqual([
       {
         type: "event",
@@ -136,7 +166,9 @@ describe("a smart speaker's request", () => {
       },
       { type: "event", eventType: VoiceAssistantEvent.RUN_END },
     ]);
+    await home.core.until(() => run.end === "done", "its run closed as done");
 
+    const afterFirst = device.voiceMessages.length;
     device.wake();
     await home.core.until(
       () => home.core.listening.runs.size === 2,
@@ -148,18 +180,87 @@ describe("a smart speaker's request", () => {
       error: "nothing-heard",
     });
     home.core.listening.step(second.id, { step: "done" });
-    await home.core.until(() => second.end !== null, "its run closed");
+    await waitForRunEnd(device, afterFirst);
     expect(device.voiceMessages.at(-2)).toMatchObject({
       eventType: VoiceAssistantEvent.ERROR,
       data: { code: "stt-no-text-recognized" },
     });
+    await home.core.until(
+      () => second.end === "done",
+      "its second run closed as done",
+    );
   });
 
   it("ends the run when the speaker stops it itself", async () => {
     const { device, run } = await taken();
+    home.core.listening.step(run.id, { step: "stopped" });
+    await home.core.until(
+      () =>
+        device.voiceMessages.some(
+          (message) =>
+            message.type === "event" &&
+            message.eventType === VoiceAssistantEvent.STT_VAD_END,
+        ),
+      "its speaker stopped listening",
+    );
     device.stopRequest();
+    await waitForRunEnd(device);
     await home.core.until(() => run.end !== null, "its run closed");
     expect(run.end).toBe("stopped");
+  });
+
+  it("closes a late acceptance when the speaker stops while opening", async () => {
+    const { beforeListenReply, release } = holdNextOpenReply();
+    const { device } = await speaker({}, { beforeListenReply });
+    home.core.listening.take();
+    device.wake();
+    await home.core.until(
+      () => home.core.listening.latest() !== null,
+      "its run opening",
+    );
+    const run = home.core.listening.latest()!;
+
+    device.stopRequest();
+    await waitForRunEnd(device);
+    release();
+
+    await home.core.until(() => run.end !== null, "its late run closed");
+    expect(run.end).toBe("stopped");
+    expect(device.voiceMessages).toEqual([
+      { type: "event", eventType: VoiceAssistantEvent.RUN_END },
+    ]);
+  });
+
+  it("keeps the newer request when an older acceptance arrives late", async () => {
+    const { beforeListenReply, release } = holdNextOpenReply();
+    const { device } = await speaker({}, { beforeListenReply });
+    home.core.listening.take();
+    device.wake();
+    await home.core.until(
+      () => home.core.listening.latest() !== null,
+      "its first run opening",
+    );
+    const older = home.core.listening.latest()!;
+
+    device.wake();
+    await home.core.until(
+      () => device.voiceMessages.length >= 3,
+      "its newer run accepted",
+    );
+    const newer = home.core.listening.latest()!;
+    release();
+    await home.core.until(
+      () => older.end === "stopped",
+      "its older run closed",
+    );
+
+    device.stream(Buffer.alloc(1_024, 1));
+    await home.core.until(
+      () => newer.audio.byteLength === 1_024,
+      "its newer run received audio",
+    );
+    expect(older.audio.byteLength).toBe(0);
+    expect(device.voiceMessages).toHaveLength(3);
   });
 
   it("ends the run when the speaker's connection goes", async () => {
@@ -183,6 +284,27 @@ describe("a smart speaker's request", () => {
       () => device.voiceMessages.length >= declined.length,
       "its run ended",
     );
+    expect(device.voiceMessages).toEqual(declined);
+    expect(home.core.listening.latest()).toBeNull();
+  });
+
+  it("declines a request from an API audio device without a media player", async () => {
+    home = await startHome();
+    const device = await home.plugIn({
+      voiceAssistant: true,
+      streamsOverApi: true,
+    });
+    const key = await add(home.core, device);
+    await home.core.until(() => device.voiceFollowed, "its requests followed");
+
+    expect(device.voiceFlags).toBe(0);
+    expect(
+      home.core.registered.get(key)!.capabilities.map((part) => part.kind),
+    ).toEqual(["switch"]);
+    home.core.listening.take();
+    device.wake();
+
+    await waitForRunEnd(device);
     expect(device.voiceMessages).toEqual(declined);
     expect(home.core.listening.latest()).toBeNull();
   });
