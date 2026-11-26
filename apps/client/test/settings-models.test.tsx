@@ -477,9 +477,9 @@ describe("Settings → AI models", () => {
     expect(
       [...group.querySelectorAll("button")].map((each) => each.textContent),
     ).toEqual([
-      "On SanctumWith the Ollama app.AI requests stay in your home",
-      "On a computer in your homeA Mac or PC that runs Ollama.AI requests go to this computer. Ollama may send them to the cloud.",
-      "With an AI providerOpenRouter, Anthropic or OpenAI, with your own API key.AI requests leave your home",
+      "On SanctumWith the Ollama app.Stays in your home",
+      "On a computer in your homeA Mac or PC that runs Ollama.Stays in your home",
+      "With an AI providerOpenRouter, Anthropic or OpenAI, with your own API key.Leaves your home",
     ]);
   });
 

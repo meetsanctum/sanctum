@@ -32,20 +32,21 @@ const tiles: Record<
     Icon: Server,
     Where: House,
     detail: "With the Ollama app.",
-    privacy: "AI requests stay in your home",
+    privacy: "Stays in your home",
   },
   computer: {
     Icon: Laptop,
     Where: House,
     detail: "A Mac or PC that runs Ollama.",
-    privacy:
-      "AI requests go to this computer. Ollama may send them to the cloud.",
+    // Sanctum lists only a computer's local models, never Ollama's cloud
+    // ones, so what's asked stays on that computer.
+    privacy: "Stays in your home",
   },
   provider: {
     Icon: Cloud,
     Where: Globe,
     detail: `${providerList}, with your own API key.`,
-    privacy: "AI requests leave your home",
+    privacy: "Leaves your home",
   },
 };
 
