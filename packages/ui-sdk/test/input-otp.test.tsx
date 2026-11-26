@@ -242,11 +242,17 @@ describe("a code shown in the boxes", () => {
     ]);
   });
 
-  it("ignores a tab index passed through extra props", async () => {
-    const props = { value: "K", maxLength: 1, tabIndex: 0 };
+  it("stays hidden from screen readers and out of the tab order despite extra props", async () => {
+    const props = {
+      value: "K",
+      maxLength: 1,
+      "aria-hidden": false,
+      tabIndex: 0,
+    };
     await act(async () => root.render(<InputOTPDisplay {...props} />));
 
     const display = container.querySelector('[data-slot="input-otp-display"]')!;
+    expect(display.getAttribute("aria-hidden")).toBe("true");
     expect(display.hasAttribute("tabindex")).toBe(false);
   });
 });

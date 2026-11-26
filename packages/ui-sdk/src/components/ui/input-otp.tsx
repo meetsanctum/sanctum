@@ -113,7 +113,7 @@ function InputOTPDisplay({
   className,
   children,
   ...props
-}: Omit<React.ComponentProps<"div">, "tabIndex"> & {
+}: Omit<React.ComponentProps<"div">, "aria-hidden" | "tabIndex"> & {
   value: string;
   maxLength: number;
 }) {
@@ -123,12 +123,12 @@ function InputOTPDisplay({
     >
       <div
         data-slot="input-otp-display"
-        aria-hidden="true"
         className={cn(
           "flex w-full items-center justify-center gap-2 max-sm:gap-1",
           className,
         )}
         {...props}
+        aria-hidden="true"
         tabIndex={undefined}
       >
         {children}

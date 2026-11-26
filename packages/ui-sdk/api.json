@@ -1,5 +1,5 @@
 {
-  "version": "0.1.36",
+  "version": "0.1.37",
   "react": "19.3.1",
   "exports": {
     "@meetsanctum/ui-sdk": [
@@ -2627,7 +2627,7 @@
       "    filter?: (typed: string) => string;",
       "    containerClassName?: string;",
       "}): React.JSX.Element;",
-      "declare function InputOTPDisplay({ value, maxLength, className, children, ...props }: Omit<React.ComponentProps<\"div\">, \"tabIndex\"> & {",
+      "declare function InputOTPDisplay({ value, maxLength, className, children, ...props }: Omit<React.ComponentProps<\"div\">, \"aria-hidden\" | \"tabIndex\"> & {",
       "    value: string;",
       "    maxLength: number;",
       "}): React.JSX.Element;",
