@@ -21,7 +21,7 @@ const declined = [
 ];
 
 async function speaker(
-  options: { streamsOverApi?: boolean } = {},
+  options: Parameters<typeof voicePe>[1] = {},
   coreOptions?: Parameters<typeof startHome>[1],
 ) {
   home = await startHome(undefined, coreOptions);
@@ -284,6 +284,22 @@ describe("a smart speaker's request", () => {
       () => device.voiceMessages.length >= declined.length,
       "its run ended",
     );
+    expect(device.voiceMessages).toEqual(declined);
+    expect(home.core.listening.latest()).toBeNull();
+  });
+
+  it("declines microphone streaming over an unencrypted connection", async () => {
+    const { device, key } = await speaker({ psk: null });
+    expect(device.voiceFlags).toBe(0);
+    expect(
+      home.core.registered
+        .get(key)!
+        .capabilities.find((part) => part.kind === "audio")?.features,
+    ).toMatchObject({ listens: false, mutes: true, announces: true });
+    home.core.listening.take();
+    device.wake();
+
+    await waitForRunEnd(device);
     expect(device.voiceMessages).toEqual(declined);
     expect(home.core.listening.latest()).toBeNull();
   });

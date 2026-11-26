@@ -19,8 +19,8 @@ import { hasVoiceAssistant } from "./registration.js";
 //
 // As the device hears its wake word, the driver asks the core whether it
 // takes the request (ctx.audio.listen) before the device sends any sound.
-// Refused, or on a device that can't stream its microphone over the API,
-// the request is declined at once, so nothing it hears leaves it, and its
+// Refused, or on a device that can't stream its microphone over an encrypted
+// API connection, the request is declined before any sound leaves it, and its
 // run is ended: a device ends its run only when told, and until then a
 // Voice PE's ring stays red, as Home Assistant ends a run after an error.
 // Taken, the device streams its microphone, which goes to the core as it
@@ -185,7 +185,6 @@ export function followRequests(
     audio[Symbol.dispose]();
     lifecycle[Symbol.dispose]();
   });
-  // Its microphone is asked for only where it can stream it over the API.
   requests.subscribe(
     options.listens
       ? VoiceAssistantSubscribeFlag.API_AUDIO

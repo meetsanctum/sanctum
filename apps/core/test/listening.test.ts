@@ -69,20 +69,25 @@ describe("a smart speaker's run", () => {
     ).toEqual({ accepted: false, refusal: "off" });
   });
 
-  it("is only a driver's own speaker's, one that listens", () => {
+  it("rejects invalid requests and requests from another driver", () => {
     const { listening } = setup();
     expect(() =>
       listening.open("sanctum.other", { key: "speaker", wakeWord: null }),
     ).toThrow(ActionError);
     expect(() =>
+      listening.open("sanctum.example", { key: "", wakeWord: null }),
+    ).toThrow(/cannot take/);
+  });
+
+  it("declines a request when the speaker is registered without listening", () => {
+    const { listening, heard } = setup();
+    expect(
       listening.open("sanctum.example", {
         key: "speaker-mute",
         wakeWord: null,
       }),
-    ).toThrow(/doesn't listen/);
-    expect(() =>
-      listening.open("sanctum.example", { key: "", wakeWord: null }),
-    ).toThrow(/cannot take/);
+    ).toEqual({ accepted: false, refusal: "unavailable" });
+    expect(heard).toHaveLength(0);
   });
 
   it("hands its hearer the sound, in order, until listening stops", async () => {

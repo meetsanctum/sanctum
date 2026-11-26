@@ -159,20 +159,26 @@ export async function openVoiceRun(
   if (!opened.accepted) return opened;
   const run = opened.run;
   let closed = false;
+  let sending = true;
   let inFlight = 0;
   const queued: Uint8Array[] = [];
   let queuedBytes = 0;
 
+  const stopSending = () => {
+    sending = false;
+    queued.length = 0;
+    queuedBytes = 0;
+  };
+
   const close = async (end: ListenEnd) => {
     if (closed) return;
     closed = true;
-    queued.length = 0;
-    queuedBytes = 0;
+    stopSending();
     await core.closeListen({ run, end });
   };
 
   const pump = () => {
-    while (!closed && inFlight < listenAhead && queued.length > 0) {
+    while (sending && inFlight < listenAhead && queued.length > 0) {
       const chunk = queued.shift()!;
       queuedBytes -= chunk.byteLength;
       inFlight += 1;
@@ -183,10 +189,9 @@ export async function openVoiceRun(
             inFlight -= 1;
             pump();
           },
-          // The core ended the run, which its steps say.
           () => {
             inFlight -= 1;
-            closed = true;
+            stopSending();
           },
         );
     }
@@ -195,7 +200,7 @@ export async function openVoiceRun(
   return {
     accepted: true,
     send(pcm) {
-      if (closed || pcm.byteLength === 0) return;
+      if (!sending || pcm.byteLength === 0) return;
       for (let at = 0; at < pcm.byteLength; at += maxListenChunkBytes) {
         const chunk = pcm.subarray(at, at + maxListenChunkBytes);
         queued.push(chunk);

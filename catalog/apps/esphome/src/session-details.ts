@@ -11,9 +11,10 @@ import { speakerPartsOf } from "./speaker.js";
 // switch where it has one, a setting of its own that no other device's
 // switch would be, which Sanctum then mutes it with. It announces where its
 // media player lists a format for announcements, which it then plays over
-// whatever it was playing. It listens where it streams its microphone over
-// the API, which its driver then hands the core (voice.ts).
-type SessionDescription = Parameters<typeof speakerPartsOf>[0];
+// whatever it was playing. It listens where it can stream its microphone
+// over the encrypted API connection, which its driver then hands the core.
+type SessionDescription = Parameters<typeof speakerPartsOf>[0] &
+  Pick<Session, "encrypted">;
 const sessions = new WeakMap<
   SessionDescription,
   {
@@ -41,7 +42,8 @@ export function describeSession(session: SessionDescription) {
     announcement ??
     mapping.mapped.find(({ capability }) => capability.kind === "media");
   const parts = player ? speakerPartsOf(session) : null;
-  const listens = parts !== null && streamsOverApi(session.info);
+  const listens =
+    parts !== null && session.encrypted && streamsOverApi(session.info);
   if (parts && player) {
     if (mapping.mapped.length === maxDeviceCapabilities) {
       // Keep playback and make room for the speaker's microphones.

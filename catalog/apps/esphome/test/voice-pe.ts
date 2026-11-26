@@ -91,12 +91,13 @@ const voicePeEntities: EmulatedEntity[] = [
 /** A Voice PE on the home's network, its microphones on and its ring as it ships. */
 export const voicePe = (
   home: Awaited<ReturnType<typeof startHome>>,
-  options: { streamsOverApi?: boolean } = {},
+  options: { streamsOverApi?: boolean; psk?: string | null } = {},
 ) =>
   home.plugIn({
     name: "voice",
     project: "Nabu Casa.Home Assistant Voice PE",
     voiceAssistant: true,
+    ...options,
     streamsOverApi: options.streamsOverApi ?? true,
     entities: voicePeEntities,
     states: {

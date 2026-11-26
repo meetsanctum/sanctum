@@ -86,15 +86,20 @@ describe("a voice run", () => {
     expect(sent).toHaveLength(listenAhead);
   });
 
-  it("stops sending once the core ends the run", async () => {
-    const { run, sent } = await opened();
-    run.send(new Uint8Array(10));
-    await settle();
+  it("stops sending after a failed send and still closes once", async () => {
+    const { run, sent, closed } = await opened();
+    run.send(new Uint8Array(maxListenChunkBytes * (listenAhead + 1)));
+    expect(sent).toHaveLength(listenAhead);
     sent[0]!.fail();
+    for (const call of sent.slice(1)) call.answer();
     await settle();
     run.send(new Uint8Array(10));
     await settle();
-    expect(sent).toHaveLength(1);
+    expect(sent).toHaveLength(listenAhead);
+
+    await run.close("played");
+    await run.close("done");
+    expect(closed).toEqual(["played"]);
   });
 
   it("reads its steps in order until done", async () => {

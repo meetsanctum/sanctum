@@ -197,12 +197,10 @@ export function createListening(options: {
       }
       const device = options.idFor(driver, parsed.data.key);
       if (!device) throw new ActionError("not_found");
-      if (!options.listens(device)) {
-        throw new Error(
-          `${driver} opened a run for a device that doesn't listen`,
-        );
+      // A request can arrive before an updated device registration does.
+      if (closed || !options.listens(device)) {
+        return { accepted: false, refusal: "unavailable" };
       }
-      if (closed) return { accepted: false, refusal: "unavailable" };
       const hearer = options.hearer();
       if (!hearer) return { accepted: false, refusal: "off" };
       // A speaker runs one request at a time: a newer one ends the older.
