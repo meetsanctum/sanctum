@@ -1,11 +1,5 @@
 import type { AppInfo } from "@meetsanctum/app-sdk";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Route } from "./apps";
 import type { SetupTarget } from "./setup-guide";
@@ -37,7 +31,6 @@ export function useSettingsNavigation(
   const [setupStep, setSetupStep] = useState<SetupTarget>();
   const onStarted = useCallback(() => setSetupStep(undefined), []);
   const remembered = useRef<Route>(undefined);
-  const scrollArea = useRef<HTMLElement>(null);
   const route = routes.at(-1);
   const parent = routes.at(-2);
   const [first, area] = routes;
@@ -55,12 +48,6 @@ export function useSettingsNavigation(
       remembered.current = undefined;
     }
   }, [area, apps, isInSettings]);
-
-  useLayoutEffect(() => {
-    if (route?.app === settingsApp.id && scrollArea.current) {
-      scrollArea.current.scrollTop = 0;
-    }
-  }, [route]);
 
   function openOverview() {
     setSetupStep(undefined);
@@ -96,7 +83,6 @@ export function useSettingsNavigation(
     openSettings,
     openOverview,
     openSetup,
-    scrollArea,
     backTo,
     start:
       setupStep && route?.page === setupPage[setupStep] ? setupStep : undefined,

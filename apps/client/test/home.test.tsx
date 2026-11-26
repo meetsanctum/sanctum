@@ -129,6 +129,21 @@ describe("navigation", () => {
     expect(pageTitle()).toBe("Kitchen");
   });
 
+  it("starts the next room's page at the top, not where the last was left", async () => {
+    homeData.rooms = [
+      ...homeData.rooms,
+      { id: "bedroom", name: "Bedroom", floorId: null },
+    ];
+    await refresh();
+    await openKitchen();
+    container.querySelector("main")!.scrollTop = 250;
+
+    await choose("Bedroom");
+
+    expect(pageTitle()).toBe("Bedroom");
+    expect(container.querySelector("main")!.scrollTop).toBe(0);
+  });
+
   it("keeps a room's page when Moods goes: rooms are the shell's", async () => {
     await openKitchen();
     homeData.installed = [];
@@ -512,10 +527,10 @@ describe("the home's dashboards", () => {
   const dashboardItems = async () =>
     (await showSidebar()).slice(0, homeData.dashboards.length);
 
-  async function openDashboardMenu() {
+  async function openDashboardMenu(name = "Night") {
     await act(async () =>
       container
-        .querySelector('button[aria-label="Night: more"]')!
+        .querySelector(`button[aria-label="${name}: more"]`)!
         .dispatchEvent(
           new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
         ),
@@ -608,6 +623,25 @@ describe("the home's dashboards", () => {
     ).toEqual([null, "page"]);
   });
 
+  it("starts the next dashboard at the top, not where the last was left", async () => {
+    container.querySelector("main")!.scrollTop = 250;
+
+    await choose("Night");
+
+    expect(title()).toBe("Night");
+    expect(container.querySelector("main")!.scrollTop).toBe(0);
+  });
+
+  it("starts Home at the top when returning from a room", async () => {
+    await openKitchen();
+    container.querySelector("main")!.scrollTop = 250;
+
+    await choose("Home");
+
+    expect(pageTitle()).toBe("Home");
+    expect(container.querySelector("main")!.scrollTop).toBe(0);
+  });
+
   it("marks none in the sidebar while another page is on show", async () => {
     await openKitchen();
     expect(
@@ -637,6 +671,23 @@ describe("the home's dashboards", () => {
     expect(title()).toBe("Home");
   });
 
+  it("keeps a room's scroll position when the selected dashboard is removed", async () => {
+    await choose("Night");
+    expect(pageTitle()).toBe("Night");
+    await openKitchen();
+    container.querySelector("main")!.scrollTop = 250;
+
+    await act(async () =>
+      pushLive({ type: "dashboards", dashboards: [homeDashboard] }),
+    );
+
+    expect((await showSidebar()).map((item) => item.textContent)).not.toContain(
+      "Night",
+    );
+    expect(pageTitle()).toBe("Kitchen");
+    expect(container.querySelector("main")!.scrollTop).toBe(250);
+  });
+
   it("renames the one on show from its menu, on a shared client too", async () => {
     await choose("Night");
     await startRenaming();
@@ -664,6 +715,30 @@ describe("the home's dashboards", () => {
     await vi.waitFor(() =>
       expect(document.querySelector("[role=dialog]")).toBeNull(),
     );
+  });
+
+  it("starts at the top when entering and leaving Edit Home", async () => {
+    homeData.devices = [light("lamp", "Lamp", { roomId: "kitchen" })];
+    await refresh();
+    await openDashboardMenu("Home");
+    container.querySelector("main")!.scrollTop = 250;
+
+    await act(async () =>
+      document.querySelector<HTMLElement>("[role=menuitem]")!.click(),
+    );
+
+    expect(pageTitle()).toBe("Edit Home");
+    expect(container.querySelector("main")!.scrollTop).toBe(0);
+    container.querySelector("main")!.scrollTop = 250;
+
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>("header button")]
+        .find((button) => button.textContent === "Done")!
+        .click();
+    });
+
+    expect(pageTitle()).toBe("Home");
+    expect(container.querySelector("main")!.scrollTop).toBe(0);
   });
 
   it("opens Home editing from the empty card on another dashboard", async () => {
