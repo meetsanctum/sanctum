@@ -115,22 +115,6 @@ export function ClientsSection(props: {
     setPeople(nextPeople);
   }, []);
 
-  const drawingChanged = (saved: ClientInfo) => {
-    // A read already under way can still contain the old choices.
-    lastAppliedRefresh.current = ++refreshId.current;
-    setClients((current) =>
-      current?.map((client) =>
-        client.id === saved.id
-          ? {
-              ...client,
-              reduceEffects: saved.reduceEffects,
-              reduceMotion: saved.reduceMotion,
-            }
-          : client,
-      ),
-    );
-  };
-
   // A device approved here shows up once it collects its token, and
   // last-seen times move on.
   useEffect(() => {
@@ -186,7 +170,7 @@ export function ClientsSection(props: {
             : undefined
         }
         onClose={() => setEditing(undefined)}
-        onChanged={drawingChanged}
+        onChanged={() => refresh().catch(() => undefined)}
       />
       <EditClient
         editing={editing?.action === "drawing" ? undefined : editing}

@@ -60,6 +60,7 @@ export function clientInfo(
   currentId?: string,
   connectedSince?: Date | null,
 ): ClientInfo {
+  const { reduceEffects, reduceMotion } = client;
   return {
     id: client.id,
     name: client.name,
@@ -70,8 +71,15 @@ export function clientInfo(
     lastSeenAt: client.lastSeenAt?.toISOString() ?? null,
     connectedSince: connectedSince?.toISOString() ?? null,
     current: client.id === currentId,
-    reduceEffects: client.reduceEffects,
-    reduceMotion: client.reduceMotion,
+    drawing: { reduceEffects, reduceMotion },
+    reduceEffects: reduceEffects ? "on" : "off",
+    reduceMotion: reduceMotion ? "on" : "off",
+    drawingRevision: client.drawingRevision,
+    drawn: {
+      effects: reduceEffects ? "reduced" : "regular",
+      motion: reduceMotion ? "reduced" : "regular",
+      slowDevice: false,
+    },
   };
 }
 
@@ -400,7 +408,11 @@ export function createClients(
         }
         const saved = db
           .update(authClients)
-          .set({ reduceEffects, reduceMotion })
+          .set({
+            reduceEffects,
+            reduceMotion,
+            drawingRevision: client.drawingRevision + 1,
+          })
           .where(eq(authClients.id, input.id))
           .returning()
           .get()!;

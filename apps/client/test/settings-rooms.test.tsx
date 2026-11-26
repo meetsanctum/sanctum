@@ -64,8 +64,11 @@ const macbook = {
   lastSeenAt: "2026-10-28T11:59:30Z",
   connectedSince: null,
   current: true,
-  reduceEffects: false,
-  reduceMotion: false,
+  drawing: { reduceEffects: false, reduceMotion: false },
+  reduceEffects: "off",
+  reduceMotion: "off",
+  drawingRevision: 0,
+  drawn: null,
 } as const;
 const admin: Me = { client: macbook, person: maya };
 const apps: AppInfo[] = [];

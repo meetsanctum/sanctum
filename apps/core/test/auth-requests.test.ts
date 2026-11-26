@@ -160,8 +160,7 @@ describe("clients", () => {
     const me = async () =>
       (await get(core, "/api/auth/me", { token: display.token })).json().client;
     expect(await me()).toMatchObject({
-      reduceEffects: false,
-      reduceMotion: false,
+      drawing: { reduceEffects: false, reduceMotion: false },
     });
 
     const set = await post(
@@ -173,8 +172,7 @@ describe("clients", () => {
     // Reduce motion stays off: each is turned on on its own.
     expect(set.json()).toMatchObject({
       id: display.id,
-      reduceEffects: true,
-      reduceMotion: false,
+      drawing: { reduceEffects: true, reduceMotion: false },
       current: false,
     });
     expect(heard).toEqual([{ type: "client" }]);
@@ -192,34 +190,92 @@ describe("clients", () => {
       { token: claim.token },
     );
     expect(await me()).toMatchObject({
-      reduceEffects: false,
-      reduceMotion: true,
+      drawing: { reduceEffects: false, reduceMotion: true },
     });
     const listed = (
       await get(core, "/api/auth/clients", { token: claim.token })
     ).json();
     expect(
       listed.find((client: { id: string }) => client.id === display.id),
-    ).toMatchObject({ reduceEffects: false, reduceMotion: true });
+    ).toMatchObject({ drawing: { reduceEffects: false, reduceMotion: true } });
     expect(heard).toHaveLength(3);
+
+    await post(
+      core,
+      "/api/auth/clients/drawing",
+      { id: display.id, reduceEffects: true },
+      { token: claim.token },
+    );
+    const motionOff = await post(
+      core,
+      "/api/auth/clients/drawing",
+      { id: display.id, reduceMotion: false },
+      { token: claim.token },
+    );
+    const effectsOnly = {
+      drawing: { reduceEffects: true, reduceMotion: false },
+    };
+    expect(motionOff.statusCode).toBe(200);
+    expect(motionOff.json()).toMatchObject(effectsOnly);
+    expect(await me()).toMatchObject(effectsOnly);
+    expect(heard).toHaveLength(5);
 
     // The same again tells it nothing.
     await post(
       core,
       "/api/auth/clients/drawing",
-      { id: display.id, reduceMotion: true },
+      { id: display.id, reduceMotion: false },
       { token: claim.token },
     );
-    expect(heard).toHaveLength(3);
+    expect(heard).toHaveLength(5);
   });
 
-  it("refuse anything but on or off, and an agent's drawing", async () => {
+  it("accepts three-way drawing choices from older clients", async () => {
+    const core = await testCore();
+    const claim = await claimed(core);
+    const display = sharedClient(core);
+    const me = async () =>
+      (await get(core, "/api/auth/me", { token: display.token })).json().client;
+    const before = await me();
+    expect(before).toMatchObject({ reduceEffects: "off", reduceMotion: "off" });
+
+    const saved = await post(
+      core,
+      "/api/auth/clients/drawing",
+      { id: display.id, reduceEffects: "on", reduceMotion: "automatic" },
+      { token: claim.token },
+    );
+    const drawing = {
+      drawing: { reduceEffects: true, reduceMotion: false },
+      reduceEffects: "on",
+      reduceMotion: "off",
+      drawingRevision: before.drawingRevision + 1,
+      drawn: { effects: "reduced", motion: "regular", slowDevice: false },
+    };
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toMatchObject(drawing);
+
+    const report = await post(
+      core,
+      "/api/auth/me/drawn",
+      {
+        ...drawing.drawn,
+        motion: "reduced",
+        drawingRevision: drawing.drawingRevision,
+      },
+      { token: display.token },
+    );
+    expect(report.statusCode).toBe(204);
+    expect(await me()).toMatchObject(drawing);
+  });
+
+  it("refuse invalid drawing values and an agent's drawing", async () => {
     const core = await testCore();
     const claim = await claimed(core);
     const display = sharedClient(core);
     for (const body of [
-      { id: display.id, reduceEffects: "on" },
-      { id: display.id, reduceMotion: "automatic" },
+      { id: display.id, reduceEffects: "yes" },
+      { id: display.id, reduceMotion: 1 },
     ]) {
       const refused = await post(core, "/api/auth/clients/drawing", body, {
         token: claim.token,

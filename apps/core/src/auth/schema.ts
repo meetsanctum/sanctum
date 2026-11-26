@@ -75,6 +75,7 @@ export const authClients = sqliteTable(
     reduceMotion: integer("reduced_motion", { mode: "boolean" })
       .notNull()
       .default(false),
+    drawingRevision: integer("drawing_revision").notNull().default(0),
   },
   (table) => [
     check(

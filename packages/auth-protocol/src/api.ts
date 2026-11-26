@@ -94,6 +94,16 @@ export type AddPerson = {
 export type ChangePerson = { id: string } & Partial<AddPerson>;
 export type RemovePerson = { id: string };
 
+export type DrawingSwitches = { reduceEffects: boolean; reduceMotion: boolean };
+
+export const legacyDrawingChoices = ["automatic", "on", "off"] as const;
+export type LegacyDrawingChoice = (typeof legacyDrawingChoices)[number];
+export type LegacyDrawn = {
+  effects: "regular" | "reduced";
+  motion: "regular" | "reduced";
+  slowDevice: boolean;
+};
+
 export type ClientInfo = {
   id: string;
   name: string;
@@ -106,17 +116,22 @@ export type ClientInfo = {
   connectedSince: string | null;
   /** The client the request came from. */
   current: boolean;
-  /** Whether it draws with Reduce effects: set on any client (Settings → Clients). */
-  reduceEffects: boolean;
-  /** Whether it draws with Reduce motion, set on its own as Reduce effects is. */
-  reduceMotion: boolean;
+  /** The saved switches. Cores with three-way drawing choices omit this. */
+  drawing?: DrawingSwitches;
+  /** The drawing fields understood by clients with three-way choices. */
+  reduceEffects: LegacyDrawingChoice;
+  reduceMotion: LegacyDrawingChoice;
+  drawingRevision: number;
+  drawn: LegacyDrawn | null;
 };
 
 /** Turns a client's Reduce effects or Reduce motion on or off; one left out stays as it is. */
-export type SetClientDrawing = {
+export type SetClientDrawing = { id: string } & Partial<DrawingSwitches>;
+
+export type LegacySetClientDrawing = {
   id: string;
-  reduceEffects?: boolean;
-  reduceMotion?: boolean;
+  reduceEffects?: LegacyDrawingChoice;
+  reduceMotion?: LegacyDrawingChoice;
 };
 
 /** The device a claim or sign-in creates a client for. */

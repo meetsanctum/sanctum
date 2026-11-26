@@ -5,7 +5,8 @@ import { chooseDrawing, followEffects } from "../src/effects";
 
 // Reduce effects and Reduce motion, each on or off on its own as set for
 // this client, and off until set: what a device is and what its system asks
-// for turn neither on. `?effects=` and `?motion=` decide them instead.
+// for turn neither on. Development and display benchmark builds can use
+// `?effects=` and `?motion=` instead.
 
 const shelly =
   "Mozilla/5.0 (Linux; Android 11; Blake Build/RD2A.211001.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/157.0.8103.38 Safari/537.36 ShellyStargate/2.8.5-b566114e7";
@@ -62,6 +63,12 @@ describe("what the page says", () => {
     expect(said()).toEqual({ effects: "regular", motion: "regular" });
   });
 
+  it("uses the switches when address overrides are disabled", () => {
+    stop = followEffects(windowAt("?effects=reduced&motion=regular"));
+    chooseDrawing({ reduceEffects: false, reduceMotion: true });
+    expect(said()).toEqual({ effects: "regular", motion: "reduced" });
+  });
+
   it.each([
     ["?effects=reduced&motion=reduced", false, "reduced", "reduced"],
     ["?effects=regular&motion=regular", true, "regular", "regular"],
@@ -70,7 +77,7 @@ describe("what the page says", () => {
   ] as const)(
     "lets %s in the address decide",
     (search, on, effects, motion) => {
-      stop = followEffects(windowAt(search));
+      stop = followEffects(windowAt(search), true);
       chooseDrawing({ reduceEffects: on, reduceMotion: on });
       expect(said()).toEqual({ effects, motion });
     },

@@ -1,3 +1,5 @@
+import type { DrawingSwitches } from "@meetsanctum/auth-protocol";
+
 // Reduce effects and Reduce motion: this device draws the same screens more
 // plainly, without live blur where the screen says data-effects="reduced" on
 // <html>, and without movement where it says data-motion="reduced"
@@ -6,18 +8,13 @@
 //
 // Each is on or off for this client, on its own, set on any client
 // (Settings → Clients), and off until it is turned on: nothing else turns
-// either on. `?effects=` and `?motion=` in the page's address, `reduced` or
-// `regular`, decide them instead, to see either look on any device while
-// developing.
+// either on. Development and display benchmark builds can use `?effects=`
+// and `?motion=` in the page's address to see either look on any device.
 
-/** Whether this client draws with Reduce effects and with Reduce motion. */
-export type DrawingChoices = { reduceEffects: boolean; reduceMotion: boolean };
-
-const off: DrawingChoices = { reduceEffects: false, reduceMotion: false };
+const off: DrawingSwitches = { reduceEffects: false, reduceMotion: false };
 
 // "reduced" or "regular", as the page's address asks, else as it is set.
-function drawn(search: string, name: "effects" | "motion", on: boolean) {
-  const asked = new URLSearchParams(search).get(name);
+function drawn(asked: string | null | undefined, on: boolean) {
   if (asked === "reduced" || asked === "regular") return asked;
   return on ? "reduced" : "regular";
 }
@@ -30,13 +27,18 @@ let applyAll = () => {};
  * current as its settings change. Called before the first render, so no
  * frame is drawn with the other look.
  */
-export function followEffects(win: Window = window) {
+export function followEffects(
+  win: Window = window,
+  allowAddressOverrides = false,
+) {
   const apply = () => {
-    const { search } = win.location;
+    const query = allowAddressOverrides
+      ? new URLSearchParams(win.location.search)
+      : undefined;
     const { dataset } = win.document.documentElement;
     const on = { effects: chosen.reduceEffects, motion: chosen.reduceMotion };
     for (const name of ["effects", "motion"] as const) {
-      if (drawn(search, name, on[name]) === "reduced") {
+      if (drawn(query?.get(name), on[name]) === "reduced") {
         dataset[name] = "reduced";
       } else {
         delete dataset[name];
@@ -52,7 +54,7 @@ export function followEffects(win: Window = window) {
 }
 
 /** Draws with these settings from now on. */
-export function chooseDrawing(choices: DrawingChoices) {
+export function chooseDrawing(choices: DrawingSwitches) {
   if (
     choices.reduceEffects === chosen.reduceEffects &&
     choices.reduceMotion === chosen.reduceMotion

@@ -37,8 +37,11 @@ const macbook: ClientInfo = {
   lastSeenAt: "2026-10-28T11:59:30Z",
   connectedSince: null,
   current: true,
-  reduceEffects: false,
-  reduceMotion: false,
+  drawing: { reduceEffects: false, reduceMotion: false },
+  reduceEffects: "off",
+  reduceMotion: "off",
+  drawingRevision: 0,
+  drawn: null,
 };
 const tablet: ClientInfo = {
   id: "tablet",
@@ -50,8 +53,11 @@ const tablet: ClientInfo = {
   lastSeenAt: null,
   connectedSince: null,
   current: false,
-  reduceEffects: false,
-  reduceMotion: false,
+  drawing: { reduceEffects: false, reduceMotion: false },
+  reduceEffects: "off",
+  reduceMotion: "off",
+  drawingRevision: 0,
+  drawn: null,
 };
 
 describe("a client's detail", () => {
@@ -93,7 +99,7 @@ describe("a client's detail", () => {
   ] as const)(
     "says what it draws with, Reduce effects %s and Reduce motion %s",
     (reduceEffects, reduceMotion, said) => {
-      const client = { ...tablet, reduceEffects, reduceMotion };
+      const client = { ...tablet, drawing: { reduceEffects, reduceMotion } };
       expect(clientDetail(clock, client, undefined, now)).toBe(
         `Shared · Web browser · Never seen${said}`,
       );
@@ -139,9 +145,14 @@ describe("Settings → Clients", () => {
           return undefined;
         case "/api/auth/clients/drawing":
           drawing.push(init.json);
+          const { reduceEffects, reduceMotion } = init.json as SetClientDrawing;
           shownTablet = {
             ...shownTablet,
-            ...(init.json as SetClientDrawing),
+            drawing: {
+              reduceEffects:
+                reduceEffects ?? shownTablet.drawing!.reduceEffects,
+              reduceMotion: reduceMotion ?? shownTablet.drawing!.reduceMotion,
+            },
           };
           return shownTablet;
         default:
@@ -260,6 +271,35 @@ describe("Settings → Clients", () => {
     ).toBe("That did not work. Try again.");
   });
 
+  it("reads and saves explicit choices when the core uses three-way choices", async () => {
+    shownTablet = { ...tablet, drawing: undefined, reduceMotion: "automatic" };
+    await refreshClients();
+    expect(container.textContent).not.toContain("Reduced effects");
+    expect(container.textContent).not.toContain("Reduced motion");
+    await editClient("Kitchen tablet", "Effects and motion");
+    expect(isOn("Reduce effects")).toBe(false);
+    expect(isOn("Reduce motion")).toBe(false);
+
+    vi.mocked(coreJson).mockImplementationOnce(async (path, init) => {
+      expect(path).toBe("/api/auth/clients/drawing");
+      expect(init?.json).toEqual({ id: tablet.id, reduceEffects: "on" });
+      shownTablet = { ...shownTablet, reduceEffects: "on" };
+      return shownTablet;
+    });
+    await act(async () => toggle("Reduce effects").click());
+    expect(isOn("Reduce effects")).toBe(true);
+    expect(isOn("Reduce motion")).toBe(false);
+    expect(container.textContent).toContain("Reduced effects");
+
+    vi.mocked(coreJson).mockImplementationOnce(async (_, init) => {
+      expect(init?.json).toEqual({ id: tablet.id, reduceEffects: "off" });
+      shownTablet = { ...shownTablet, reduceEffects: "off" };
+      return shownTablet;
+    });
+    await act(async () => toggle("Reduce effects").click());
+    expect(isOn("Reduce effects")).toBe(false);
+  });
+
   it("lets a press go while a save is on its way, and keeps its failure out of a reopened dialog", async () => {
     await editClient("Kitchen tablet", "Effects and motion");
     let refuseSave!: (error: Error) => void;
@@ -281,13 +321,42 @@ describe("Settings → Clients", () => {
 
   it("updates the open dialog when they are changed elsewhere", async () => {
     await editClient("Kitchen tablet", "Effects and motion");
-    shownTablet = { ...shownTablet, reduceMotion: true };
+    shownTablet = {
+      ...shownTablet,
+      drawing: { reduceEffects: false, reduceMotion: true },
+    };
     await refreshClients();
     expect(isOn("Reduce motion")).toBe(true);
     expect(isOn("Reduce effects")).toBe(false);
-    shownTablet = { ...shownTablet, reduceMotion: false };
+    shownTablet = tablet;
     await refreshClients();
     expect(isOn("Reduce motion")).toBe(false);
+  });
+
+  it("keeps newer switch values when an earlier save response arrives", async () => {
+    await editClient("Kitchen tablet", "Effects and motion");
+    let finishSave!: (client: ClientInfo) => void;
+    vi.mocked(coreJson).mockReturnValueOnce(
+      new Promise<ClientInfo>((resolve) => {
+        finishSave = resolve;
+      }),
+    );
+    await act(async () => toggle("Reduce effects").click());
+    const saved = {
+      ...tablet,
+      drawing: { reduceEffects: true, reduceMotion: false },
+    };
+    shownTablet = {
+      ...tablet,
+      drawing: { reduceEffects: true, reduceMotion: true },
+    };
+    await refreshClients();
+    expect(isOn("Reduce motion")).toBe(true);
+
+    await act(async () => finishSave(saved));
+    expect(isOn("Reduce effects")).toBe(true);
+    expect(isOn("Reduce motion")).toBe(true);
+    expect(container.textContent).toContain("Reduced effects and motion");
   });
 
   it("lists every client, marking those never seen", () => {
