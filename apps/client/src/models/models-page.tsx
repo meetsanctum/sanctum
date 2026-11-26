@@ -23,6 +23,7 @@ import {
   Trash2,
 } from "lucide-react";
 import {
+  useCallback,
   useEffect,
   useId,
   useRef,
@@ -66,7 +67,7 @@ import {
 } from "./words";
 
 // Settings → AI models: the sources of the home's AI model, the one in use
-// first, then the others with Use, each with how its last check went and a
+// first, then the others with Use, each with its check status and a
 // menu to check it again, rename it, change its model or key, or remove it;
 // then the tokens used and the apps that use it (usage.tsx). Add a source
 // adds Ollama on Sanctum, or looks at a computer's address or a provider's
@@ -78,6 +79,14 @@ type Editing = {
   source: ModelSourceInfo;
   trigger: HTMLButtonElement | null;
 };
+
+type Recheck = { previousAt: string | undefined; confirmedAt?: string };
+type SettleRecheck = (
+  id: string,
+  recheck: Recheck,
+  confirmedAt?: string,
+) => void;
+const confirmationMs = 5_000;
 
 export function ModelsPage(props: {
   live: LiveFeed;
@@ -96,6 +105,7 @@ export function ModelsPage(props: {
   const opener = useRef<HTMLButtonElement>(null);
   const [editing, setEditing] = useState<Editing>();
   const [isActing, setIsActing] = useState(false);
+  const [rechecks, setRechecks] = useState(() => new Map<string, Recheck>());
   const addButton = useRef<HTMLButtonElement>(null);
   const firstChoice = useRef<HTMLButtonElement>(null);
   const supportsSanctum = info?.usage !== undefined;
@@ -109,16 +119,43 @@ export function ModelsPage(props: {
   const focusAddSource = () =>
     (addButton.current ?? firstChoice.current)?.focus();
 
-  const act = async (path: string) => {
+  const settleRecheck = useCallback<SettleRecheck>(
+    (id, recheck, confirmedAt) => {
+      setRechecks((current) => {
+        if (current.get(id) !== recheck) return current;
+        const next = new Map(current);
+        if (confirmedAt === undefined) next.delete(id);
+        else next.set(id, { ...recheck, confirmedAt });
+        return next;
+      });
+    },
+    [],
+  );
+
+  const act = async (action: "use" | "check", source: ModelSourceInfo) => {
     if (isActing) return;
     setIsActing(true);
     try {
-      answered(
-        await coreJson<ModelsResponse>(path, {
+      const next = await coreJson<ModelsResponse>(
+        `/api/models/sources/${source.id}/${action}`,
+        {
           method: "POST",
           signal: AbortSignal.timeout(10_000),
-        }),
+        },
       );
+      if (action === "check") {
+        const started = next.sources.find((each) => each.id === source.id);
+        if (started) {
+          // While a check runs, the core still reports its previous result.
+          const previousAt = started.checking
+            ? started.check?.at
+            : source.check?.at;
+          setRechecks((current) =>
+            new Map(current).set(source.id, { previousAt }),
+          );
+        }
+      }
+      answered(next);
     } catch {
       void refresh();
     } finally {
@@ -130,8 +167,10 @@ export function ModelsPage(props: {
       key={source.id}
       source={source}
       isActing={isActing}
-      onUse={() => void act(`/api/models/sources/${source.id}/use`)}
-      onCheck={() => void act(`/api/models/sources/${source.id}/check`)}
+      recheck={rechecks.get(source.id)}
+      settleRecheck={settleRecheck}
+      onUse={() => void act("use", source)}
+      onCheck={() => void act("check", source)}
       onEdit={(action, trigger) => setEditing({ source, action, trigger })}
       onOpenOllama={
         hasOllamaPage && props.onOpenApp
@@ -247,9 +286,40 @@ export function ModelsPage(props: {
   );
 }
 
-function CheckStatus(props: { source: ModelSourceInfo }) {
+function CheckStatus({
+  source,
+  recheck,
+  settleRecheck,
+}: {
+  source: ModelSourceInfo;
+  recheck?: Recheck;
+  settleRecheck: SettleRecheck;
+}) {
   const clock = useHomeClock();
-  const line = checkLine(clock, props.source);
+  const { id, check, checking } = source;
+  const answeredAt = check?.outcome === "answered" ? check.at : undefined;
+  const confirmedAt = recheck?.confirmedAt;
+  const newAnswer = answeredAt !== recheck?.previousAt ? answeredAt : undefined;
+  useEffect(() => {
+    if (recheck && !checking && confirmedAt === undefined) {
+      settleRecheck(id, recheck, newAnswer);
+    }
+  }, [id, recheck, confirmedAt, checking, newAnswer, settleRecheck]);
+  useEffect(() => {
+    if (!recheck || confirmedAt === undefined) return;
+    const timer = setTimeout(() => settleRecheck(id, recheck), confirmationMs);
+    return () => clearTimeout(timer);
+  }, [id, recheck, confirmedAt, settleRecheck]);
+
+  const showConfirmation =
+    recheck &&
+    answeredAt !== undefined &&
+    answeredAt === (confirmedAt ?? newAnswer);
+  const line =
+    checkLine(clock, source) ??
+    (showConfirmation
+      ? { text: "Answered and used the tool", tone: "plain" }
+      : undefined);
   if (!line) return null;
   return (
     <p
@@ -272,6 +342,8 @@ function CheckStatus(props: { source: ModelSourceInfo }) {
 function SourceRow(props: {
   source: ModelSourceInfo;
   isActing: boolean;
+  recheck?: Recheck;
+  settleRecheck: SettleRecheck;
   onUse: () => void;
   onCheck: () => void;
   onEdit: (
@@ -374,7 +446,11 @@ function SourceRow(props: {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <CheckStatus source={source} />
+      <CheckStatus
+        source={source}
+        recheck={props.recheck}
+        settleRecheck={props.settleRecheck}
+      />
       {source.inUse && source.kind === "sanctum" && (
         <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
           Ollama keeps this model loaded, so the first question after a restart

@@ -45,6 +45,35 @@ async function finishCheck(id: string, tokens: number) {
 }
 
 describe("AI model source dialogs", () => {
+  it("briefly confirms a successful check started from the source menu", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await show();
+      const status = () =>
+        page.container.querySelector('#settings-models li [role="status"]')
+          ?.textContent;
+      expect(status()).toBeUndefined();
+
+      await selectMenuItem("Check again");
+      expect(page.requests).toContainEqual([
+        "POST",
+        "/api/models/sources/mac/check",
+        undefined,
+      ]);
+      expect(status()).toBe("Checking: asking it a short question");
+
+      await finishCheck(mac.id, 147);
+      expect(status()).toBe("Answered and used the tool");
+
+      await act(async () => vi.advanceTimersByTimeAsync(5_000));
+      expect(status()).toBeUndefined();
+      await act(async () => live.refresh());
+      expect(status()).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("starts Add a source at the place chosen, and gives focus back to it", async () => {
     page.sources = [];
     await show();

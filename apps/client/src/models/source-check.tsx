@@ -155,8 +155,8 @@ export function SourceCheck(props: {
           {inHome(source)
             ? "This can take a minute while the model loads."
             : "This takes a few seconds."}{" "}
-          If you close this, the check carries on, and AI Models shows how it
-          went.
+          If you close this, the check carries on. AI Models shows any problems
+          it finds.
         </p>
       </Result>
     );
