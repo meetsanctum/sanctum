@@ -111,10 +111,8 @@ pnpm lint
 pnpm test
 pnpm build
 pnpm format:check
+pnpm test:containers   # real stacks in Docker: CI runs it, see AGENTS.md
 ```
-
-See [Verification in AGENTS.md](AGENTS.md#verification) for when to run
-`pnpm test:containers` locally.
 
 Use focused runs while iterating, such as `pnpm --filter @meetsanctum/core
 test`, then the full set before you finish. After changing an app's actions,
