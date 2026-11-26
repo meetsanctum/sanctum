@@ -83,17 +83,6 @@ export function sourceDetail(source: ModelSourceInfo) {
   }
 }
 
-const minute = 60_000;
-
-function agoText(clock: HomeClock, at: string, now: Date) {
-  const ago = now.getTime() - new Date(at).getTime();
-  if (ago < 2 * minute) return "just now";
-  if (ago < 60 * minute) return `${Math.floor(ago / minute)} minutes ago`;
-  const hours = Math.floor(ago / (60 * minute));
-  if (hours < 24) return hours === 1 ? "an hour ago" : `${hours} hours ago`;
-  return `on ${clock.dayText(new Date(at))}`;
-}
-
 /** Why a source gave no answer, and what to do about it. */
 export function problemText(
   problem: ModelProblem,
@@ -137,7 +126,7 @@ export function problemText(
   }
 }
 
-export type CheckLine = { text: string; tone: "good" | "problem" | "plain" };
+export type CheckLine = { text: string; tone: "problem" | "plain" };
 
 /** An Ollama refusal during a check comes from the model request. */
 export function checkProblemText(
@@ -149,11 +138,14 @@ export function checkProblemText(
     : problemText(problem, source);
 }
 
-/** How a source's last check went, or what's happening now. */
+/**
+ * What a source's row says of its check: while one runs, or when the last
+ * one needs attention. A check that went well says nothing here; the dialog
+ * that ran it said how it went.
+ */
 export function checkLine(
   clock: HomeClock,
   source: ModelSourceInfo,
-  now = new Date(),
 ): CheckLine | undefined {
   if (source.checking) {
     return { text: "Checking: asking it a short question", tone: "plain" };
@@ -174,14 +166,10 @@ export function checkLine(
       tone: "problem",
     };
   }
-  if (!check) return undefined;
-  const checked = `checked ${agoText(clock, check.at, now)}`;
-  switch (check.outcome) {
+  switch (check?.outcome) {
+    case undefined:
     case "answered":
-      return {
-        text: `Answered in ${((check.firstWordMs ?? 0) / 1000).toFixed(1)} s and used the tool · ${checked}`,
-        tone: "good",
-      };
+      return undefined;
     case "noTool":
       return {
         text: "Answered, but may not use your home's AI tools well or act on your devices",

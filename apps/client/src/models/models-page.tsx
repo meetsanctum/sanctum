@@ -11,7 +11,6 @@ import {
   useHomeClock,
 } from "@meetsanctum/ui-sdk";
 import {
-  Check,
   CircleAlert,
   Cloud,
   Cpu,
@@ -257,12 +256,6 @@ function CheckStatus(props: { source: ModelSourceInfo }) {
       role="status"
       className="m-0 flex items-start gap-2 text-[13px] leading-[18px] font-medium"
     >
-      {line.tone === "good" && (
-        <Check
-          aria-hidden="true"
-          className="mt-px size-4 shrink-0 text-(--leaf-text)"
-        />
-      )}
       {line.tone === "problem" && (
         <CircleAlert
           aria-hidden="true"
