@@ -88,8 +88,11 @@ export function NoModel(props: {
                     <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
                       {placeDetails[place]}
                     </span>
-                    <span className="mt-0.5 flex items-center gap-1.5 text-xs leading-4 font-medium text-muted-foreground @xl:mt-auto @xl:pt-1">
-                      <Where aria-hidden="true" className="size-3.5" />
+                    <span className="mt-0.5 flex items-start gap-1.5 text-xs leading-4 font-medium text-muted-foreground @xl:mt-auto @xl:pt-1">
+                      {/* Centred on the first line, however the words wrap. */}
+                      <span className="flex h-4 shrink-0 items-center">
+                        <Where aria-hidden="true" className="size-3.5" />
+                      </span>
                       {placePrivacy[place]}
                     </span>
                   </span>

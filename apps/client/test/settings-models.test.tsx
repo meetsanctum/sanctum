@@ -460,7 +460,7 @@ describe("Settings → AI models", () => {
     ).toBe(false);
   });
 
-  it("shows a source's shape and no Add a source until the first answer", async () => {
+  it("shows only the bar until the first answer", async () => {
     sources = [];
     const answer = vi.mocked(coreJson).getMockImplementation()!;
     let release = () => {};
@@ -470,12 +470,11 @@ describe("Settings → AI models", () => {
       return answer(path, init);
     });
     await show();
-    expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(container.textContent).toBe("AI Models");
+    expect(container.querySelector("#settings-models")).toBeNull();
     expect(button("Add a source")).toBeUndefined();
-    expect(container.textContent).not.toContain("No AI model yet");
 
     await act(async () => release());
-    expect(container.querySelector('[aria-busy="true"]')).toBeNull();
     expect(container.textContent).toContain("No AI model yet");
     expect(button("Add a source")).toBeUndefined();
   });
