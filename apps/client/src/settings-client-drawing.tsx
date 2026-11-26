@@ -42,38 +42,28 @@ export function drawnText(client: ClientInfo) {
   return null;
 }
 
-// What a choice means on this client, Automatic by what it said it draws
-// with under its current choices: why it is on now, or where it would turn
-// on.
-function effectsHint(client: ClientInfo, choice: DrawingChoice) {
-  const { name, drawn } = client;
-  if (choice === "on") return `Always drawn plainly on ${name}.`;
-  if (choice === "off") return `Every effect, even where ${name} feels slow.`;
-  if (!drawn) {
-    return `On where ${name} is known to be slow or asks for reduced transparency.`;
+// Why Automatic has one on now, by what the client said it draws with under
+// its current choices: the reason in a status under its choices, after On,
+// and nothing otherwise.
+// The device's own reduced transparency or reduced motion is its
+// accessibility settings' doing.
+function onNow(
+  client: ClientInfo,
+  choice: DrawingChoice,
+  part: "effects" | "motion",
+) {
+  const { drawn } = client;
+  const saved = part === "effects" ? client.reduceEffects : client.reduceMotion;
+  if (
+    choice !== "automatic" ||
+    saved !== "automatic" ||
+    drawn?.[part] !== "reduced"
+  ) {
+    return null;
   }
-  if (drawn.effects === "regular") {
-    return `Off now. It turns on where ${name} asks for reduced transparency.`;
-  }
-  return drawn.slowDevice
-    ? `On now, since ${name} is known to be slow.`
-    : `On now, since ${name} asks for reduced transparency.`;
-}
-
-function motionHint(client: ClientInfo, choice: DrawingChoice) {
-  const { name, drawn } = client;
-  if (choice === "on") return `Nothing moves on ${name}.`;
-  if (choice === "off")
-    return `Every movement, even where ${name} asks for less.`;
-  if (!drawn) {
-    return `On where ${name} is known to be slow or asks for reduced motion.`;
-  }
-  if (drawn.motion === "regular") {
-    return `Off now. It turns on where ${name} asks for reduced motion.`;
-  }
-  return drawn.slowDevice
-    ? `On now, since ${name} is known to be slow.`
-    : `On now, since ${name} asks for reduced motion.`;
+  if (drawn.slowDevice) return "Low performance detected";
+  const whose = client.current ? "This device's" : `${client.name}'s`;
+  return `${whose} accessibility settings`;
 }
 
 type DrawingChange = Omit<SetClientDrawing, "id">;
@@ -94,16 +84,13 @@ export function ClientDrawing(props: {
   const [pending, setPending] = useState<{
     opening: object;
     change: DrawingChange;
-    linked: boolean;
   }>();
-  const [linkedRevision, setLinkedRevision] = useState<number>();
   const [problem, setProblem] = useState<string>();
   const id = useId();
 
   useLayoutEffect(() => {
     if (!openId) return;
     opening.current = {};
-    setLinkedRevision(undefined);
     setProblem(undefined);
     return () => {
       opening.current = undefined;
@@ -115,19 +102,14 @@ export function ClientDrawing(props: {
     draft?.change.reduceEffects ?? client?.reduceEffects ?? "automatic";
   const motion =
     draft?.change.reduceMotion ?? client?.reduceMotion ?? "automatic";
-  // The note belongs to the choices that turned motion on together with effects.
-  const isLinked =
-    draft?.linked ??
-    (linkedRevision !== undefined &&
-      linkedRevision === client?.drawingRevision);
 
   // One save at a time, so they reach the core in order; a pick while one
   // is on its way is let go. The choices stay enabled, so focus stays.
-  const save = async (change: DrawingChange, linked: boolean) => {
+  const save = async (change: DrawingChange) => {
     const opened = opening.current;
     if (!openId || !opened || saving.current) return;
     saving.current = true;
-    setPending({ opening: opened, change, linked });
+    setPending({ opening: opened, change });
     setProblem(undefined);
     try {
       const saved = await coreJson<ClientInfo>("/api/auth/clients/drawing", {
@@ -135,9 +117,6 @@ export function ClientDrawing(props: {
         json: { id: openId, ...change } satisfies SetClientDrawing,
       });
       props.onChanged(saved);
-      if (opening.current === opened) {
-        setLinkedRevision(linked ? saved.drawingRevision : undefined);
-      }
     } catch {
       if (opening.current === opened) {
         setProblem("That did not work. Try again.");
@@ -150,14 +129,14 @@ export function ClientDrawing(props: {
 
   const chooseEffects = (next: DrawingChoice) => {
     const turnsMotionOn = next === "on" && motion !== "on";
-    void save(
-      { reduceEffects: next, ...(turnsMotionOn && { reduceMotion: "on" }) },
-      next === "on" && (turnsMotionOn || isLinked),
-    );
+    void save({
+      reduceEffects: next,
+      ...(turnsMotionOn && { reduceMotion: "on" }),
+    });
   };
 
   const chooseMotion = (next: DrawingChoice) => {
-    void save({ reduceMotion: next }, false);
+    void save({ reduceMotion: next });
   };
 
   return (
@@ -176,14 +155,14 @@ export function ClientDrawing(props: {
           </DialogDescription>
         </DialogHeader>
         {client && (
-          <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-7">
             <Group
               id={`${id}-effects`}
               title="Reduce effects"
               about="Without blur, fades or shadows, for a device that feels slow."
               value={effects}
               onChange={chooseEffects}
-              hint={effectsHint(client, effects)}
+              status={onNow(client, effects, "effects")}
             />
             <Group
               id={`${id}-motion`}
@@ -191,11 +170,7 @@ export function ClientDrawing(props: {
               about="Things appear and change in place, without sliding, zooming or flying in."
               value={motion}
               onChange={chooseMotion}
-              hint={
-                isLinked
-                  ? "On with Reduce effects. You can turn it off on its own."
-                  : motionHint(client, motion)
-              }
+              status={onNow(client, motion, "motion")}
             />
           </div>
         )}
@@ -214,19 +189,20 @@ export function ClientDrawing(props: {
   );
 }
 
-// One setting: its name, what it does, its three choices and what the
-// chosen one means here.
+// One setting: its name, what it does, its three choices, and under them
+// why Automatic has it on now: a badge of two segments, On and the reason,
+// which a screen reader hears after a comma.
 function Group(props: {
   id: string;
   title: string;
   about: string;
   value: DrawingChoice;
   onChange: (value: DrawingChoice) => void;
-  hint: string;
+  status: string | null;
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-2">
-      <div className="flex flex-col gap-0.5">
+    <div className="flex min-w-0 flex-col">
+      <div className="mb-2 flex flex-col gap-0.5">
         <span id={`${props.id}-label`} className="text-sm font-medium">
           {props.title}
         </span>
@@ -236,15 +212,33 @@ function Group(props: {
       </div>
       <SegmentedControl
         labelledBy={`${props.id}-label`}
-        describedBy={`${props.id}-about ${props.id}-hint`}
+        describedBy={
+          props.status
+            ? `${props.id}-about ${props.id}-status`
+            : `${props.id}-about`
+        }
         options={options}
         value={props.value}
         onValueChange={props.onChange}
         className="self-start"
       />
-      <span id={`${props.id}-hint`} aria-live="polite" className={label}>
-        {props.hint}
-      </span>
+      <div
+        id={`${props.id}-status`}
+        aria-live="polite"
+        aria-atomic="true"
+        className="flex flex-col"
+      >
+        {props.status && (
+          <span className="mt-2 flex w-fit max-w-full gap-px text-[13px] leading-[18px] font-medium">
+            <span className="shrink-0 rounded-l-sm bg-foreground/5 px-2 py-1 text-green dark:bg-foreground/8">
+              On<span className="sr-only">, </span>
+            </span>
+            <span className="rounded-r-sm bg-foreground/5 px-2 py-1 text-muted-foreground dark:bg-foreground/8">
+              {props.status}
+            </span>
+          </span>
+        )}
+      </div>
     </div>
   );
 }

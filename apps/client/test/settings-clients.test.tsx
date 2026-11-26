@@ -110,18 +110,20 @@ describe("Settings → Clients", () => {
   let container: HTMLDivElement;
   let approved: unknown[];
   let drawing: unknown[];
+  let shownMacbook: ClientInfo;
   let shownTablet: ClientInfo;
 
   beforeEach(async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     approved = [];
     drawing = [];
+    shownMacbook = macbook;
     shownTablet = tablet;
     vi.mocked(coreJson).mockReset();
     vi.mocked(coreJson).mockImplementation(async (path, init = {}) => {
       switch (path) {
         case "/api/auth/clients":
-          return [macbook, shownTablet];
+          return [shownMacbook, shownTablet];
         case "/api/people":
           return [maya];
         case "/api/auth/pair/lookup":
@@ -197,15 +199,37 @@ describe("Settings → Clients", () => {
     await act(async () => item.click());
   }
 
-  // A choice in the Effects and motion dialog, by its setting's name.
-  function choice(setting: string, option: string) {
+  function settingGroup(setting: string) {
     const name = [...document.querySelectorAll("[role=dialog] span")].find(
       (span) => span.textContent === setting,
     )!;
-    const group = document.querySelector(`[aria-labelledby="${name.id}"]`)!;
-    return [...group.querySelectorAll("button")].find(
+    return document.querySelector(`[aria-labelledby="${name.id}"]`)!;
+  }
+
+  function choice(setting: string, option: string) {
+    return [...settingGroup(setting).querySelectorAll("button")].find(
       (each) => each.textContent === option,
     )!;
+  }
+
+  function statusRegion(setting: string) {
+    return settingGroup(setting).parentElement!.querySelector(
+      '[aria-live="polite"]',
+    )!;
+  }
+
+  async function refreshClients() {
+    const visibility = vi.spyOn(document, "visibilityState", "get");
+    try {
+      visibility.mockReturnValue("hidden");
+      document.dispatchEvent(new Event("visibilitychange"));
+      visibility.mockReturnValue("visible");
+      await act(async () =>
+        document.dispatchEvent(new Event("visibilitychange")),
+      );
+    } finally {
+      visibility.mockRestore();
+    }
   }
 
   it("sets a client's effects and motion, Reduce motion turning on with Reduce effects", async () => {
@@ -213,25 +237,18 @@ describe("Settings → Clients", () => {
     const dialog = document.querySelector<HTMLElement>("[role=dialog]")!;
     expect(dialog.textContent).toContain("Effects and motion");
     expect(choice("Reduce effects", "Automatic").dataset.state).toBe("on");
-    expect(dialog.textContent).toContain(
-      "On where Kitchen tablet is known to be slow or asks for reduced transparency.",
-    );
+    // Nothing under the choices until Automatic has something on now.
+    expect(dialog.textContent).not.toContain("On, ");
 
     await act(async () => choice("Reduce effects", "On").click());
     expect(drawing).toEqual([
       { id: "tablet", reduceEffects: "on", reduceMotion: "on" },
     ]);
     expect(choice("Reduce motion", "On").dataset.state).toBe("on");
-    expect(dialog.textContent).toContain(
-      "On with Reduce effects. You can turn it off on its own.",
-    );
 
     // Reduce motion keeps its own choice from then on.
     await act(async () => choice("Reduce motion", "Off").click());
     expect(drawing.at(-1)).toEqual({ id: "tablet", reduceMotion: "off" });
-    expect(dialog.textContent).toContain(
-      "Every movement, even where Kitchen tablet asks for less.",
-    );
     await act(async () => choice("Reduce effects", "Off").click());
     expect(drawing.at(-1)).toEqual({ id: "tablet", reduceEffects: "off" });
     expect(choice("Reduce motion", "Off").dataset.state).toBe("on");
@@ -271,39 +288,113 @@ describe("Settings → Clients", () => {
 
   it("updates the open dialog when choices are changed elsewhere", async () => {
     await editClient("Kitchen tablet", "Effects and motion");
-    const visibility = vi.spyOn(document, "visibilityState", "get");
-    const refresh = async () => {
-      visibility.mockReturnValue("hidden");
-      document.dispatchEvent(new Event("visibilitychange"));
-      visibility.mockReturnValue("visible");
-      await act(async () =>
-        document.dispatchEvent(new Event("visibilitychange")),
-      );
-    };
+    const effectsStatus = statusRegion("Reduce effects");
+    const motionStatus = statusRegion("Reduce motion");
+    expect(effectsStatus.textContent).toBe("");
     shownTablet = {
       ...shownTablet,
       reduceMotion: "on",
       drawingRevision: 1,
       drawn: { effects: "reduced", motion: "reduced", slowDevice: false },
     };
-    await refresh();
+    await refreshClients();
     expect(choice("Reduce motion", "On").dataset.state).toBe("on");
-    expect(document.querySelector("[role=dialog]")?.textContent).toContain(
-      "On now, since Kitchen tablet asks for reduced transparency.",
+    expect(statusRegion("Reduce effects")).toBe(effectsStatus);
+    expect(effectsStatus.textContent).toBe(
+      "On, Kitchen tablet's accessibility settings",
     );
+    expect(
+      settingGroup("Reduce effects")
+        .getAttribute("aria-describedby")
+        ?.split(" "),
+    ).toContain(effectsStatus.id);
+    expect(motionStatus.textContent).toBe("");
+    expect(
+      settingGroup("Reduce motion")
+        .getAttribute("aria-describedby")
+        ?.split(" "),
+    ).not.toContain(motionStatus.id);
     shownTablet = {
       ...shownTablet,
       reduceMotion: "off",
       drawingRevision: 2,
       drawn: null,
     };
-    await refresh();
+    await refreshClients();
     expect(choice("Reduce motion", "Off").dataset.state).toBe("on");
+    expect(statusRegion("Reduce effects")).toBe(effectsStatus);
+    expect(effectsStatus.textContent).toBe("");
 
     await act(async () => choice("Reduce effects", "On").click());
     expect(drawing).toEqual([
       { id: "tablet", reduceEffects: "on", reduceMotion: "on" },
     ]);
+  });
+
+  it.each([
+    ["Reduce effects", "reduceEffects"],
+    ["Reduce motion", "reduceMotion"],
+  ] as const)(
+    "waits for an Automatic report when changing %s from On",
+    async (setting, key) => {
+      shownTablet = {
+        ...tablet,
+        [key]: "on",
+        drawingRevision: 1,
+        drawn: { effects: "reduced", motion: "reduced", slowDevice: false },
+      };
+      await refreshClients();
+      await editClient(tablet.name, "Effects and motion");
+
+      let finishSave!: (client: ClientInfo) => void;
+      const save = new Promise<ClientInfo>((resolve) => {
+        finishSave = resolve;
+      });
+      vi.mocked(coreJson).mockReturnValueOnce(save);
+      await act(async () => choice(setting, "Automatic").click());
+
+      expect(choice(setting, "Automatic").dataset.state).toBe("on");
+      expect(statusRegion(setting).textContent).toBe("");
+      await act(async () => finishSave({ ...tablet, drawingRevision: 2 }));
+      expect(statusRegion(setting).textContent).toBe("");
+    },
+  );
+
+  it("credits low performance when Automatic reduces effects on a slow device", async () => {
+    shownTablet = {
+      ...tablet,
+      drawn: { effects: "reduced", motion: "reduced", slowDevice: true },
+    };
+    await refreshClients();
+    await editClient(tablet.name, "Effects and motion");
+
+    const status = statusRegion("Reduce effects");
+    expect(status.textContent).toBe("On, Low performance detected");
+    // Only On is green; the reason is grey.
+    const [on, reason] = [...status.firstElementChild!.children];
+    expect(on!.className).toContain("text-green");
+    expect(reason!.className).toContain("text-muted-foreground");
+    expect(reason!.className).not.toContain("text-green");
+  });
+
+  it("credits this device's accessibility settings when only Automatic motion is reduced", async () => {
+    shownMacbook = {
+      ...macbook,
+      drawn: { effects: "regular", motion: "reduced", slowDevice: false },
+    };
+    await refreshClients();
+    await editClient(macbook.name, "Effects and motion");
+
+    expect(statusRegion("Reduce effects").textContent).toBe("");
+    const motionStatus = statusRegion("Reduce motion");
+    expect(motionStatus.textContent).toBe(
+      "On, This device's accessibility settings",
+    );
+    expect(
+      settingGroup("Reduce motion")
+        .getAttribute("aria-describedby")
+        ?.split(" "),
+    ).toContain(motionStatus.id);
   });
 
   it("lists every client, marking those never seen", () => {
