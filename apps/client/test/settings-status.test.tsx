@@ -77,13 +77,9 @@ async function render(
 const section = (id: string) =>
   container.querySelector(`section[aria-labelledby="${id}"]`);
 
-// Each part's name and size, as its row reads.
-// Each part's name and size, its row's only words.
 const parts = (id: string) =>
-  [...(section(id)?.querySelectorAll("ul > li") ?? [])].map((row) =>
-    [...row.querySelectorAll(":scope > span")]
-      .slice(1)
-      .map((span) => span.textContent),
+  [...(section(id)?.querySelectorAll("ul > li") ?? [])].map(
+    (row) => row.textContent ?? "",
   );
 
 // Each reading's name and what it reads now, as its heading says.
@@ -128,16 +124,16 @@ describe("the Status page", () => {
       "Storage6.92 GB free of 15.1 GB",
     );
     expect(parts("status-storage")).toEqual([
-      ["Dev builds", "1.35 GB"],
-      ["Sanctum", "1.21 GB"],
-      ["Home's data", "28.7 MB"],
-      ["Zigbee", "330 KB"],
-      ["Moods", "180 KB"],
-      ["System", "5.57 GB"],
+      "Dev builds1.35 GB",
+      "Software1.21 GB",
+      "Home's data28.7 MB",
+      "Zigbee330 KB",
+      "Moods180 KB",
+      "System and other5.57 GB",
     ]);
     const bar = section("status-storage")!.querySelector('[role="img"]')!;
     expect(bar.getAttribute("aria-label")).toBe(
-      "Storage, 6.92 GB free of 15.1 GB: Dev builds 1.35 GB, Sanctum 1.21 GB, Home's data 28.7 MB, Zigbee 330 KB, Moods 180 KB, System 5.57 GB",
+      "Storage, 6.92 GB free of 15.1 GB: Dev builds 1.35 GB, Software 1.21 GB, Home's data 28.7 MB, Zigbee 330 KB, Moods 180 KB, System and other 5.57 GB",
     );
     // In the brand's colours, apps in their own; the free space is the track.
     expect(
@@ -162,12 +158,21 @@ describe("the Status page", () => {
       "Memory7.02 GB free of 7.64 GB",
     );
     expect(parts("status-memory")).toEqual([
-      ["Sanctum", "268 MB"],
-      ["Zigbee", "132 MB"],
-      ["Dev builds", "43.7 MB"],
-      ["Messaging", "7.82 MB"],
-      ["System", "175 MB"],
+      "Sanctum268 MB",
+      "Zigbee132 MB",
+      "Dev builds43.7 MB",
+      "Messaging7.82 MB",
+      "System175 MB",
     ]);
+  });
+
+  it("leads with the swap name and size when swap is in use", async () => {
+    const status = piStatus();
+    status.host!.memory!.swapUsed = 64 * 1024 ** 2;
+    answer = async () => status;
+    await render();
+
+    expect(parts("status-memory")[0]).toBe("Swap in use64 MB");
   });
 
   describe("with apps that have their own part", () => {
@@ -219,20 +224,38 @@ describe("the Status page", () => {
       await showMemory(everything, [moods, zigbee, apart(weather)]);
 
       expect(parts("status-memory")).toEqual([
-        ["Sanctum", "219 MB"],
-        ["Dev builds", "18 MB"],
-        ["Zigbee", "236 MB"],
-        ["Weather", "34 MB"],
-        ["System", "312 MB"],
+        "Sanctum219 MB",
+        "Dev builds18 MB",
+        "Zigbee236 MB",
+        "Weather34 MB",
+        "System312 MB",
       ]);
     });
+
+    it.each([
+      ["core", "71 MB"],
+      ["manager", "148 MB"],
+    ])(
+      "shows the available Sanctum memory without a %s reading",
+      async (missing, size) => {
+        await showMemory(
+          everything.filter((part) => part.kind !== missing),
+          [moods, zigbee, apart(weather)],
+        );
+
+        expect(
+          parts("status-memory").filter((row) => row.startsWith("Sanctum")),
+        ).toEqual([`Sanctum${size}`]);
+      },
+    );
 
     it("draws each app in its own colour, and Sanctum with its updater as one", async () => {
       await showMemory(everything, [moods, zigbee, apart(weather)]);
 
       const bar = section("status-memory")!.querySelector('[role="img"]')!;
+      const segments = [...bar.querySelectorAll("span")];
       expect(
-        [...bar.querySelectorAll("span")].map((span) =>
+        segments.map((span) =>
           span.className.split(" ").find((name) => name.startsWith("bg-")),
         ),
       ).toEqual([
@@ -243,6 +266,13 @@ describe("the Status page", () => {
         "bg-foreground/24",
         "bg-foreground/8",
       ]);
+      const total = piStatus().host!.memory!.total;
+      const width = segments[0]!.style.width;
+      expect(width).toMatch(/%$/);
+      expect(Number.parseFloat(width)).toBeCloseTo(
+        ((219 * mebibyte) / total) * 100,
+        5,
+      );
     });
 
     it("shows each app's icon, as Storage does", async () => {

@@ -287,6 +287,21 @@ describe("free up space", () => {
     );
   });
 
+  it("says when the updater doesn't answer after confirming Free up space", async () => {
+    answers["/api/system/space/free"] = async () => {
+      throw new CoreError(503, "manager_unavailable");
+    };
+    await render();
+    const storage = section("status-storage");
+
+    await press(buttonIn(storage, "Free up space"));
+    await press(buttonIn(dialog()!, "Free up space"));
+
+    expect(storage.querySelector('[role="status"]')?.textContent).toContain(
+      "Sanctum's updater isn't answering. Try again in a minute",
+    );
+  });
+
   it("says when there is nothing to free, its button dimmed", async () => {
     answers["/api/system/space"] = async () => ({
       ...plan,
