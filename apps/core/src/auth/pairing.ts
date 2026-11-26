@@ -1,7 +1,7 @@
 import {
-  newPairingLookup,
   normalisePairingCode,
   pairingAnswerMs,
+  pairingCodeAlphabet,
   pairingConfirmation,
   pairingExchangesPerRequest,
   pairingOpaque,
@@ -25,14 +25,19 @@ import {
 } from "@meetsanctum/auth-protocol";
 import * as opaque from "@serenity-kit/opaque";
 import { and, eq, gt, isNull, lte, sql } from "drizzle-orm";
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes, randomInt, randomUUID } from "node:crypto";
 
 import type { RecordActivity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
 import { changedBy } from "./callers.js";
 import { clientInfo, type Clients, type Principal } from "./clients.js";
 import { AuthError } from "./errors.js";
-import { addressKey, defaultLimits, type Limits } from "./limits.js";
+import {
+  addressKey,
+  defaultLimits,
+  type Limiter,
+  type Limits,
+} from "./limits.js";
 import { authPairingRequests } from "./schema.js";
 import { hashToken } from "./tokens.js";
 
@@ -72,6 +77,10 @@ type Exchange = {
 };
 
 const requests = authPairingRequests;
+const lookupCharacters = [...pairingCodeAlphabet];
+const lookups = lookupCharacters.flatMap((first) =>
+  lookupCharacters.map((second) => first + second),
+);
 
 // A lookup rests this long after its request expired or was used up.
 const restMs = pairingRequestMs;
@@ -83,11 +92,12 @@ export function createPairing(
     record: RecordActivity;
     // The host as a paired device must see it.
     host: () => HostView;
+    limiter: Limiter;
     limits?: Limits;
     now: () => Date;
   },
 ) {
-  const { clients, record, now } = options;
+  const { clients, limiter, record, now } = options;
   const limits = options.limits ?? defaultLimits;
   // Where a cap was reached and logged, until when: a device that keeps
   // asking leaves one entry, not one every few seconds.
@@ -256,18 +266,19 @@ export function createPairing(
             return { over: key };
           }
           // The lookup finds the request by itself, so it is unique among
-          // the requests kept, resting ones included. Far fewer are kept
-          // than there are lookups.
-          let lookup = newPairingLookup();
-          while (
+          // the requests kept, resting ones included.
+          const reserved = new Set(
             db
-              .select({ id: requests.id })
+              .select({ lookup: requests.lookup })
               .from(requests)
-              .where(eq(requests.lookup, lookup))
-              .get()
-          ) {
-            lookup = newPairingLookup();
+              .all()
+              .map(({ lookup }) => lookup),
+          );
+          const free = lookups.filter((lookup) => !reserved.has(lookup));
+          if (free.length === 0) {
+            return { over: "host" };
           }
+          const lookup = free[randomInt(free.length)]!;
           const deviceSecret = randomBytes(32).toString("base64url");
           const createdAt = now();
           const expiresAt = new Date(createdAt.getTime() + pairingRequestMs);
@@ -322,14 +333,15 @@ export function createPairing(
       if (!isOpen(request) || request.approvedAt) {
         throw new AuthError("not_found");
       }
-      // One exchange at a time: a second one would mix up the device's
-      // answers.
-      if (current?.stage === "started" || current?.stage === "answered") {
+      // Keep the active exchange through approval, including while the
+      // approver names a verified device.
+      if (current && current.stage !== "failed") {
         throw new AuthError("busy");
       }
       if (request.exchanges >= pairingExchangesPerRequest) {
         throw new AuthError("too_many_attempts");
       }
+      limiter.work();
       db.update(requests)
         .set({ exchanges: sql`${requests.exchanges} + 1` })
         .where(eq(requests.id, request.id))
@@ -492,6 +504,7 @@ export function createPairing(
       if (exchange.stage !== "started") {
         return { status: "failed" };
       }
+      limiter.work();
       let finished: opaque.client.FinishLoginResult | undefined;
       try {
         finished = opaque.client.finishLogin({
@@ -545,12 +558,16 @@ export function createPairing(
         ids,
         input.binding,
       );
-      // Another call may have ended the exchange while this one checked.
-      if (exchange.stage !== "answered") {
+      // The exchange may have expired or another bind may have verified it.
+      const current = deviceExchange(input.deviceSecret, input.exchangeId);
+      if (current.stage === "verified") {
+        return;
+      }
+      if (current.stage !== "answered") {
         throw new AuthError("expired");
       }
       if (!bound) {
-        fail(exchange, "unchecked");
+        fail(current, "unchecked");
         throw new AuthError("channel_mismatch");
       }
       const host = options.host();
@@ -559,10 +576,10 @@ export function createPairing(
         view.homeId !== host.homeId ||
         view.pin !== host.pin
       ) {
-        fail(exchange, "channel_mismatch");
+        fail(current, "channel_mismatch");
         throw new AuthError("channel_mismatch");
       }
-      exchange.stage = "verified";
+      current.stage = "verified";
     },
   };
 }

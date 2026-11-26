@@ -4,6 +4,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { authPairingRequests } from "../src/auth/schema.js";
 import { loadHomeId } from "../src/places/places.js";
 import { home } from "../src/places/schema.js";
 import { restoreMarkerFile } from "../src/system/restore.js";
@@ -81,6 +82,13 @@ describe("a restore from a backup", () => {
 
     const after = await testCore({ dataDir: before.dataDir });
 
+    expect(
+      after.db
+        .select()
+        .from(authPairingRequests)
+        .where(eq(authPairingRequests.id, shown.requestId))
+        .get(),
+    ).toBeUndefined();
     const polled = await post(after, "/api/auth/pair/poll", {
       deviceSecret: shown.deviceSecret,
     });

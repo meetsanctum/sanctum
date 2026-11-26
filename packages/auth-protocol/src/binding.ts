@@ -1,5 +1,6 @@
 // Binds an OPAQUE exchange to the host each side sees. Runs in the core and
-// in the apps' web views, on WebCrypto alone.
+// in the apps' web views. Plain HTTP development origins fall back to
+// software HKDF and HMAC where browsers don't expose WebCrypto's SubtleCrypto.
 //
 // OPAQUE leaves the device and the real host with the same session key, which
 // nobody in between can learn. Each side MACs what it sees under a key
@@ -19,7 +20,6 @@ import { pairingProtocol } from "./pairing.js";
 
 export type HostView = { hostId: string; homeId: string; pin: string | null };
 
-const subtle = globalThis.crypto.subtle;
 const text = new TextEncoder();
 
 function fromBase64url(value: string) {
@@ -27,8 +27,8 @@ function fromBase64url(value: string) {
   return Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
 }
 
-function toBase64url(bytes: ArrayBuffer) {
-  return btoa(String.fromCharCode(...new Uint8Array(bytes)))
+function toBase64url(bytes: Uint8Array) {
+  return btoa(String.fromCharCode(...bytes))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
@@ -46,7 +46,11 @@ function label(purpose: Purpose) {
       `sanctum sign-in binding v2 ${purpose}`;
 }
 
-async function macKey(sessionKey: string, purpose: Purpose) {
+async function macKey(
+  subtle: SubtleCrypto,
+  sessionKey: string,
+  purpose: Purpose,
+) {
   const ikm = await subtle.importKey(
     "raw",
     fromBase64url(sessionKey),
@@ -68,6 +72,26 @@ async function macKey(sessionKey: string, purpose: Purpose) {
   );
 }
 
+async function softwareMac(
+  sessionKey: string,
+  purpose: Purpose,
+  data: Uint8Array,
+) {
+  const [{ hkdf }, { hmac }, { sha256 }] = await Promise.all([
+    import("@noble/hashes/hkdf"),
+    import("@noble/hashes/hmac"),
+    import("@noble/hashes/sha256"),
+  ]);
+  const key = hkdf(
+    sha256,
+    fromBase64url(sessionKey),
+    undefined,
+    text.encode(label(purpose)),
+    32,
+  );
+  return hmac(sha256, key, data);
+}
+
 // Every field is a UUID, a number or base64url, so a newline cannot appear
 // inside one.
 function message(fields: string[]) {
@@ -84,10 +108,13 @@ async function sign(
   host: HostView,
   fields: string[],
 ) {
-  const key = await macKey(sessionKey, purpose);
-  return toBase64url(
-    await subtle.sign("HMAC", key, message([...hostFields(host), ...fields])),
-  );
+  const data = message([...hostFields(host), ...fields]);
+  const subtle = globalThis.crypto.subtle;
+  if (!subtle) {
+    return toBase64url(await softwareMac(sessionKey, purpose, data));
+  }
+  const key = await macKey(subtle, sessionKey, purpose);
+  return toBase64url(new Uint8Array(await subtle.sign("HMAC", key, data)));
 }
 
 async function verify(
@@ -103,13 +130,20 @@ async function verify(
   } catch {
     return false;
   }
-  const key = await macKey(sessionKey, purpose);
-  return subtle.verify(
-    "HMAC",
-    key,
-    bytes,
-    message([...hostFields(host), ...fields]),
-  );
+  const data = message([...hostFields(host), ...fields]);
+  const subtle = globalThis.crypto.subtle;
+  if (!subtle) {
+    const expected = await softwareMac(sessionKey, purpose, data);
+    if (bytes.length !== expected.length) return false;
+    // Compare every byte before deciding whether the MAC matches.
+    let difference = 0;
+    for (let i = 0; i < expected.length; i++) {
+      difference |= bytes[i]! ^ expected[i]!;
+    }
+    return difference === 0;
+  }
+  const key = await macKey(subtle, sessionKey, purpose);
+  return subtle.verify("HMAC", key, bytes, data);
 }
 
 /** The device's MAC over the host it sees, sent with `sign-in/finish`. */

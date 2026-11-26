@@ -197,6 +197,32 @@ describe("adding a shared device", () => {
     );
   });
 
+  it("aborts a pending status request at the deadline and lets the user retry", async () => {
+    const original = vi.mocked(coreJson).getMockImplementation()!;
+    let pending: AbortSignal | null | undefined;
+    vi.mocked(coreJson).mockImplementation((path, init) => {
+      if (path !== "/api/auth/pair/exchange") return original(path, init);
+      const signal = init!.signal!;
+      pending = signal;
+      return new Promise((_, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), {
+          once: true,
+        });
+      });
+    });
+    await find("K7QX-M4PD", 74_999);
+    expect(pending?.aborted).toBe(false);
+    expect(button("Finding the device…").disabled).toBe(true);
+
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+
+    expect(pending?.aborted).toBe(true);
+    expect(dialog().querySelector("[role=alert]")!.textContent).toContain(
+      "The device didn’t answer.",
+    );
+    expect(button("Find the device").disabled).toBe(false);
+  });
+
   it("says when no device shows a code, naming the code", async () => {
     await find("W3RT-9HNC");
 
@@ -252,5 +278,16 @@ describe("adding a shared device", () => {
 
     expect(dialog().textContent).toContain("Find the device");
     expect(button("Find the device").disabled).toBe(false);
+  });
+
+  it("resumes the verified exchange when the approver reopens the dialog and enters the same code", async () => {
+    await find("K7QX-M4PD");
+    await open(false);
+    await open(true);
+    await find("K7QX-M4PD");
+    await act(async () => button("Approve").click());
+
+    expect(looked).toEqual([{ code: "K7QXM4PD" }]);
+    expect(approved).toEqual([{ ...started, name: "Lenovo Tab" }]);
   });
 });

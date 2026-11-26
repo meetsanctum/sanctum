@@ -552,7 +552,7 @@ function setupEntry(clock: HomeClock, entry: ActivityInfo): Words | null {
     case "pair.approve":
       return said("Let a shared device join");
     case "pair.check":
-      // The home couldn't check a shared device that asked to join, so it
+      // The core couldn't check a shared device that asked to join, so it
       // can't join with that code.
       return {
         title:

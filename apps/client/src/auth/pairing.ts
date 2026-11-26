@@ -20,10 +20,24 @@ import { coreJson } from "../core-fetch";
 import { loadOpaque } from "./device";
 
 // Pairing a shared device. The device's side asks the host it chose for a
-// request, shows a code whose second half it drew itself, and answers the
+// request, shows a code whose last six characters it drew, and answers the
 // exchange the host starts once someone types the code: first contact, so it
 // never carries a stored token. The approving side types the code, follows
 // the exchange and approves the device from another of the home's clients.
+
+/** Waits between polls, or stops waiting once the screen is left. */
+export function waitForPairingPoll(ms: number, signal: AbortSignal) {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener("abort", done);
+  });
+}
 
 export function requestPairing(
   url: string,
@@ -111,11 +125,10 @@ export async function showCode(lookup: string) {
 export type ShownCode = Awaited<ReturnType<typeof showCode>>;
 
 /**
- * Answers the exchange the host started, then binds it to the host this
- * device sees. Returns the session key once the host accepted the binding,
- * or none when the exchange didn't finish, as with a mistyped code.
+ * Prepares one answer to the exchange. Resending after a lost reply uses
+ * the same answer or binding and keeps the key for checking the token.
  */
-export async function answerExchange(input: {
+export function prepareExchange(input: {
   url: string;
   shown: ShownCode;
   deviceSecret: string;
@@ -128,36 +141,37 @@ export async function answerExchange(input: {
   const { serverLoginState, loginResponse } = shown.respond(
     input.startLoginRequest,
   );
-  const answered = await coreJson<PairAnswered>("/api/auth/pair/answer", {
-    at: url,
-    signal,
-    method: "POST",
-    json: { deviceSecret, exchangeId: ids.exchangeId, loginResponse },
-    omitToken: true,
-  });
-  if (answered.status !== "continue") {
-    return null;
-  }
-  const sessionKey = shown.finish(
-    serverLoginState,
-    answered.finishLoginRequest,
-  );
-  if (!sessionKey) {
-    return null;
-  }
-  await coreJson<void>("/api/auth/pair/bind", {
-    at: url,
-    signal,
-    method: "POST",
-    json: {
-      deviceSecret,
-      exchangeId: ids.exchangeId,
-      ...input.host,
-      binding: await pairingBinding(sessionKey, input.host, ids),
-    },
-    omitToken: true,
-  });
-  return sessionKey;
+  let sessionKey: string | null = null;
+  let binding: string | undefined;
+  return async () => {
+    if (!sessionKey) {
+      const answered = await coreJson<PairAnswered>("/api/auth/pair/answer", {
+        at: url,
+        signal,
+        method: "POST",
+        json: { deviceSecret, exchangeId: ids.exchangeId, loginResponse },
+        omitToken: true,
+      });
+      if (answered.status !== "continue") return null;
+      sessionKey = shown.finish(serverLoginState, answered.finishLoginRequest);
+      if (!sessionKey) return null;
+    }
+    binding ??= await pairingBinding(sessionKey, input.host, ids);
+    signal?.throwIfAborted();
+    await coreJson<void>("/api/auth/pair/bind", {
+      at: url,
+      signal,
+      method: "POST",
+      json: {
+        deviceSecret,
+        exchangeId: ids.exchangeId,
+        ...input.host,
+        binding,
+      },
+      omitToken: true,
+    });
+    return sessionKey;
+  };
 }
 
 /** Whether a collected token came from the host the exchange checked. */

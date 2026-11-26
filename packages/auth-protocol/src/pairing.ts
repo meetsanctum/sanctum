@@ -1,14 +1,14 @@
 // Pairing a shared device: its display code, the QR code it shows whoever
 // approves it, and the settings of the OPAQUE exchange that checks the host.
-// The core and the device each make half of the code, and the approving
-// device reads it back, so all three share these rules.
+// The core makes the first two characters and the device makes the last
+// six. The approving device reads the whole code back.
 //
 // The code's first characters are its lookup, which the core gives the
 // device and uses to find the request. The rest is the device's secret: the
-// device draws it, shows it and never sends it. Whoever approves types both
-// halves on a device the home already trusts; the core then runs OPAQUE with
-// the shared device, the core knowing the secret and the device holding a
-// one-time record of it. Only the real host learns the secret that way, so a
+// device draws it, shows it and never sends it. Whoever approves types all
+// eight characters on a device the home already trusts. The core runs
+// OPAQUE with the shared device. The core knows the secret, and the device
+// holds a one-time record of it. Only the real host learns the secret that way, so a
 // finished exchange shows that the device reached this home, with no second
 // value for anyone to compare.
 
@@ -76,11 +76,6 @@ function randomCode(length: number) {
   return code;
 }
 
-/** A new lookup, which the core makes, uniformly drawn from the alphabet. */
-export function newPairingLookup() {
-  return randomCode(pairingLookupLength);
-}
-
 /** A device's new secret, uniformly drawn from the alphabet. */
 export function newPairingSecret() {
   return randomCode(pairingSecretLength);
@@ -100,7 +95,7 @@ export function normalisePairingCode(value: string): string | null {
     : null;
 }
 
-/** A normalised code's two halves. */
+/** The first two characters are the lookup and the last six are the secret. */
 export function splitPairingCode(code: string) {
   return {
     lookup: code.slice(0, pairingLookupLength),

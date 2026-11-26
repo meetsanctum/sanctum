@@ -14,7 +14,7 @@ import { expect } from "vitest";
 import { hostId, post, type TestCore } from "./support.js";
 
 // A shared device as the pairing tests drive it: it asks for a request,
-// draws its half of the code and holds the one-time OPAQUE record, then
+// draws the last six characters and holds the one-time OPAQUE record, then
 // answers the exchanges the host starts and checks the host's confirmation.
 
 export const tablet = {
@@ -121,10 +121,14 @@ export async function device(core: TestCore, remoteAddress = tabletAddress) {
     },
 
     // Checks the host's MAC over the token it collected.
-    confirms(token: string, confirmation: string) {
+    confirms(
+      token: string,
+      confirmation: string,
+      sees: HostView = { hostId, homeId: core.homeId, pin: null },
+    ) {
       return verifyPairingConfirmation(
         sessionKey!,
-        { hostId, homeId: core.homeId, pin: null },
+        sees,
         { requestId: requested.requestId, exchangeId: exchangeId! },
         token,
         confirmation,

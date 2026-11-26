@@ -18,11 +18,12 @@ import { ChooseAnotherHome } from "../connection-veil";
 import { checkHost, SignInError, type CheckedHost } from "./device";
 import { problemText } from "./messages";
 import {
-  answerExchange,
   confirmsPairing,
   pollPairing,
+  prepareExchange,
   requestPairing,
   showCode,
+  waitForPairingPoll,
   type ShownCode,
 } from "./pairing";
 import { rememberSignIn } from "./session";
@@ -40,21 +41,6 @@ const answersPerCode = pairingExchangesPerRequest;
 const answersInAll = 2 * pairingExchangesPerRequest;
 const answerGapMs = 5_000;
 const usedUpPauseMs = 30_000;
-
-// Waits, or stops waiting once the screen is left. A device can wait here
-// for days, so nothing is left behind on the signal.
-function wait(ms: number, signal: AbortSignal) {
-  if (signal.aborted) return Promise.resolve();
-  return new Promise<void>((resolve) => {
-    const done = () => {
-      clearTimeout(timer);
-      signal.removeEventListener("abort", done);
-      resolve();
-    };
-    const timer = setTimeout(done, ms);
-    signal.addEventListener("abort", done);
-  });
-}
 
 // "This is a shared device": nobody signs in here. The device shows a QR
 // code and its display code until someone types the code on another of the
@@ -93,6 +79,9 @@ export function PairDevice(props: {
       let code: ShownCode | undefined;
       // Set with the request, before anything is polled.
       let checked: CheckedHost | undefined;
+      let pending:
+        | { send: ReturnType<typeof prepareExchange>; ids: PairingExchangeIds }
+        | undefined;
       // The exchange that checked this device, which the token must match.
       let verified: { sessionKey: string; ids: PairingExchangeIds } | undefined;
       let paired: Extract<PairPolled, { status: "paired" }> | undefined;
@@ -103,8 +92,17 @@ export function PairDevice(props: {
       const newCode = () => {
         request = undefined;
         code = undefined;
+        pending = undefined;
         verified = undefined;
         setShown(undefined);
+      };
+      const codeUsedUp = () =>
+        answers >= answersPerCode || answeredInAll >= answersInAll;
+      const rotateUsedUpCode = async () => {
+        newCode();
+        if (answeredInAll < answersInAll) {
+          await waitForPairingPoll(usedUpPauseMs, signal);
+        }
       };
       while (!signal.aborted) {
         try {
@@ -118,6 +116,10 @@ export function PairDevice(props: {
             signal.throwIfAborted();
           }
           if (!request || !code) {
+            if (answeredInAll >= answersInAll) {
+              setStopped(true);
+              return;
+            }
             checked = await checkHost(host, signal);
             request = await requestPairing(host.url, client, signal);
             code = await showCode(request.lookup);
@@ -130,7 +132,7 @@ export function PairDevice(props: {
             homeId: checked!.homeId,
             pin: checked!.pin,
           };
-          if (!paired) {
+          if (!paired && !pending) {
             const polled = await pollPairing(
               host.url,
               request.deviceSecret,
@@ -138,9 +140,9 @@ export function PairDevice(props: {
             );
             signal.throwIfAborted();
             if (polled.status === "exchange") {
-              if (answeredInAll >= answersInAll) {
-                setStopped(true);
-                return;
+              if (codeUsedUp()) {
+                await rotateUsedUpCode();
+                continue;
               }
               if (Date.now() - answeredAt >= answerGapMs) {
                 answers += 1;
@@ -150,24 +152,18 @@ export function PairDevice(props: {
                   requestId: request.requestId,
                   exchangeId: polled.exchangeId,
                 };
-                const sessionKey = await answerExchange({
-                  url: host.url,
-                  shown: code,
-                  deviceSecret: request.deviceSecret,
+                pending = {
                   ids,
-                  startLoginRequest: polled.startLoginRequest,
-                  host: view,
-                  signal,
-                });
-                signal.throwIfAborted();
-                if (sessionKey) {
-                  verified = { sessionKey, ids };
-                } else if (answers >= answersPerCode) {
-                  // This code is used up: a new one, after a pause.
-                  newCode();
-                  await wait(usedUpPauseMs, signal);
-                  continue;
-                }
+                  send: prepareExchange({
+                    url: host.url,
+                    shown: code,
+                    deviceSecret: request.deviceSecret,
+                    ids,
+                    startLoginRequest: polled.startLoginRequest,
+                    host: view,
+                    signal,
+                  }),
+                };
               }
             } else if (polled.status === "paired") {
               // Only a token the checked host confirms, on the certificate
@@ -188,6 +184,18 @@ export function PairDevice(props: {
               paired = polled;
             }
           }
+          if (pending) {
+            const { ids, send } = pending;
+            const sessionKey = await send();
+            signal.throwIfAborted();
+            pending = undefined;
+            if (sessionKey) {
+              verified = { sessionKey, ids };
+            } else if (codeUsedUp()) {
+              await rotateUsedUpCode();
+              continue;
+            }
+          }
           setProblem(undefined);
           setIsAnotherHome(false);
           delay = pollMs;
@@ -202,9 +210,24 @@ export function PairDevice(props: {
         } catch (error) {
           if (signal.aborted) return;
           if (error instanceof CoreError && error.code === "expired") {
-            // Expired, cancelled or used up: ask for a new code at once.
-            newCode();
+            if (pending && codeUsedUp()) {
+              await rotateUsedUpCode();
+            } else {
+              newCode();
+            }
             continue;
+          }
+          if (
+            pending &&
+            error instanceof CoreError &&
+            error.status < 500 &&
+            error.code !== "busy"
+          ) {
+            pending = undefined;
+            if (codeUsedUp()) {
+              await rotateUsedUpCode();
+              continue;
+            }
           }
           if (error instanceof SignInError && error.code === "unconfirmed") {
             // Whoever answered can't show it is the home that approved this
@@ -223,7 +246,7 @@ export function PairDevice(props: {
           );
           delay = Math.min(delay * 2, retryMaxMs);
         }
-        await wait(delay, signal);
+        await waitForPairingPoll(delay, signal);
       }
     })();
     return () => controller.abort();
@@ -237,7 +260,8 @@ export function PairDevice(props: {
         <>
           <p className="muted">
             To approve this device, open Settings → Clients on a device that’s
-            signed in. Choose Add a shared device, then enter this code.
+            already connected to this home. Choose Add a shared device, then
+            enter this code.
           </p>
           <p
             className={problem || stopped ? "problem" : "notice"}

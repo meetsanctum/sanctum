@@ -29,6 +29,19 @@ vi.mock("../src/core-fetch", async (importOriginal) => ({
   coreJson: vi.fn(),
 }));
 
+vi.mock("@meetsanctum/auth-protocol", async (importOriginal) => {
+  const protocol =
+    await importOriginal<typeof import("@meetsanctum/auth-protocol")>();
+  return {
+    ...protocol,
+    pairingBinding: (...args: Parameters<typeof protocol.pairingBinding>) =>
+      trackCrypto(protocol.pairingBinding(...args)),
+    verifyPairingConfirmation: (
+      ...args: Parameters<typeof protocol.verifyPairingConfirmation>
+    ) => trackCrypto(protocol.verifyPairingConfirmation(...args)),
+  };
+});
+
 const host: FoundHost = {
   id: "6b0f6f4e-2a52-4f8e-9a51-1d1d1f6e6e73",
   homeId: "0d5c1f0a-7a43-4b6e-8f0e-2f6a0c9b1e55",
@@ -45,6 +58,7 @@ let requests: CoreFetchInit[];
 // What the device sent to the fake host's exchange routes.
 let answers: unknown[];
 let bindings: Record<string, unknown>[];
+let cryptoWork: Promise<unknown>[];
 // The fake host's side of the exchange under way.
 let exchange:
   | {
@@ -53,20 +67,17 @@ let exchange:
       password: string;
       clientLoginState: string;
       sessionKey?: string;
+      finishLoginRequest?: string;
     }
   | undefined;
 let exchangeCount: number;
 
 beforeAll(() => opaque.ready);
 
-// WebCrypto answers on real time, which fake timers don't move.
-const realTimeout = globalThis.setTimeout;
-const cryptoTicks = () =>
-  Array.from({ length: 10 }).reduce<Promise<void>>(
-    (previous) =>
-      previous.then(() => new Promise((resolve) => realTimeout(resolve, 1))),
-    Promise.resolve(),
-  );
+function trackCrypto<T>(work: Promise<T>) {
+  cryptoWork.push(work);
+  return work;
+}
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -76,6 +87,7 @@ beforeEach(() => {
   requests = [];
   answers = [];
   bindings = [];
+  cryptoWork = [];
   exchange = undefined;
   exchangeCount = 0;
   let lookups = ["K7", "W3", "P4", "M9"];
@@ -102,6 +114,12 @@ beforeEach(() => {
       }
       case "/api/auth/pair/answer": {
         answers.push(json);
+        if (exchange!.finishLoginRequest) {
+          return {
+            status: "continue",
+            finishLoginRequest: exchange!.finishLoginRequest,
+          };
+        }
         const finished = opaque.client.finishLogin({
           clientLoginState: exchange!.clientLoginState,
           loginResponse: json.loginResponse!,
@@ -111,6 +129,7 @@ beforeEach(() => {
         });
         if (!finished) return { status: "failed" };
         exchange!.sessionKey = finished.sessionKey;
+        exchange!.finishLoginRequest = finished.finishLoginRequest;
         return {
           status: "continue",
           finishLoginRequest: finished.finishLoginRequest,
@@ -150,8 +169,12 @@ async function render(
 async function settle(ms = 0) {
   await act(async () => {
     await vi.advanceTimersByTimeAsync(ms);
-    await cryptoTicks();
-    await vi.advanceTimersByTimeAsync(0);
+    // The fake clock moves the polls. Await the actual cryptographic work
+    // so each assertion sees the binding or token check it depends on.
+    while (cryptoWork.length > 0) {
+      await Promise.all(cryptoWork.splice(0));
+      await vi.advanceTimersByTimeAsync(0);
+    }
   });
 }
 
@@ -213,7 +236,7 @@ describe("a shared device's pairing screen", () => {
     ).not.toBeNull();
     expect(container.textContent).toContain("Waiting for approval");
     expect(container.textContent).toContain(
-      "open Settings → Clients on a device that’s signed in",
+      "open Settings → Clients on a device that’s already connected to this home",
     );
     expect(requests).toEqual([
       expect.objectContaining({
@@ -265,7 +288,38 @@ describe("a shared device's pairing screen", () => {
     expect(JSON.parse(localStorage.getItem("sanctum.host")!)).toEqual(stored);
   });
 
-  it("never sends the half of its code it drew itself", async () => {
+  it.each(["answer", "bind"])(
+    "resends the same %s after losing the reply and saves the confirmed token",
+    async (step) => {
+      const original = vi.mocked(coreJson).getMockImplementation()!;
+      const sent: unknown[] = [];
+      vi.mocked(coreJson).mockImplementation(async (path, init) => {
+        const result = await original(path, init);
+        if (path === `/api/auth/pair/${step}`) {
+          sent.push(init!.json);
+          if (sent.length === 1) throw new TypeError("Lost reply");
+        }
+        return result;
+      });
+      const onPaired = await render();
+      await typeCode();
+      expect(container.textContent).toContain("Can't reach Sanctum");
+
+      if (step === "bind") await approve();
+      await settle(4_000);
+      if (step === "answer") await approve();
+      await settle(2_000);
+
+      expect(sent).toHaveLength(2);
+      expect(sent[1]).toEqual(sent[0]);
+      expect(requests).toHaveLength(1);
+      expect(onPaired).toHaveBeenCalledWith(
+        expect.objectContaining({ token: "client_token" }),
+      );
+    },
+  );
+
+  it("never sends the last six characters of its code", async () => {
     await render();
     await typeCode();
     const [, first, second] = shownCode()!;
@@ -301,6 +355,9 @@ describe("a shared device's pairing screen", () => {
 
     expect(onPaired).not.toHaveBeenCalled();
     expect(localStorage.getItem("sanctum.host")).toBeNull();
+    expect(container.textContent).toContain(
+      "This home could not prove it is yours",
+    );
   });
 
   it("binds the pin of the certificate it sees, and keeps the pin out of its QR code", async () => {
@@ -355,6 +412,9 @@ describe("a shared device's pairing screen", () => {
     await settle(2_000);
 
     expect(onPaired).not.toHaveBeenCalled();
+    expect(container.textContent).toContain(
+      "This home could not prove it is yours",
+    );
   });
 
   it("shows a new code after three that didn't match, following a pause", async () => {
@@ -380,19 +440,43 @@ describe("a shared device's pairing screen", () => {
     expect(answers).toHaveLength(1);
   });
 
+  it("rotates an exhausted code when the last exchange expires during a retry", async () => {
+    await render();
+    for (let i = 0; i < 2; i += 1) {
+      await typeCode("K7AAAAAA");
+      await settle(5_000);
+    }
+    const original = vi.mocked(coreJson).getMockImplementation()!;
+    const lastAnswer: unknown[] = [];
+    vi.mocked(coreJson).mockImplementation(async (path, init) => {
+      if (path !== "/api/auth/pair/answer") return original(path, init);
+      lastAnswer.push(init!.json);
+      if (lastAnswer.length === 1) throw new TypeError("Lost reply");
+      throw new CoreError(409, "expired");
+    });
+
+    await typeCode("K7AAAAAA");
+    await settle(4_000);
+    expect(lastAnswer).toHaveLength(2);
+    expect(lastAnswer[1]).toEqual(lastAnswer[0]);
+    expect(shownCode()).toBeNull();
+
+    await settle(30_000);
+    expect(shownCode()![1]).toMatch(/^W3/);
+  });
+
   it("stops answering after six codes didn't match, until someone asks for a new code", async () => {
     await render();
     for (let i = 0; i < 6; i += 1) {
       const [, first] = shownCode()!;
       await typeCode(`${first!.slice(0, 2)}AAAAAA`);
       await settle(5_000);
-      if (!shownCode()) await settle(30_000);
+      if (i === 2) await settle(30_000);
     }
     expect(answers).toHaveLength(6);
 
-    // Even a new code from the host doesn't answer a seventh.
-    await typeCode();
-    expect(answers).toHaveLength(6);
+    expect(shownCode()).toBeNull();
+    expect(requests).toHaveLength(2);
     expect(container.textContent).toContain(
       "Several codes didn’t match, so this device stopped answering.",
     );

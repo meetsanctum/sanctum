@@ -8,7 +8,7 @@ import {
 } from "@meetsanctum/auth-protocol";
 import { Button, Input } from "@meetsanctum/ui-sdk";
 import { Globe, Monitor, Tablet } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import {
   Dialog,
@@ -20,13 +20,18 @@ import {
 } from "./components/ui/dialog";
 import { productName } from "./brand";
 import { CoreError } from "./core-fetch";
-import { approvePairing, lookupPairing, pairingExchange } from "./auth/pairing";
+import {
+  approvePairing,
+  lookupPairing,
+  pairingExchange,
+  waitForPairingPoll,
+} from "./auth/pairing";
 import { useAuthAttempt } from "./auth/use-auth-attempt";
 import { platformNames } from "./platforms";
 
 // The approval screen, on every client: type the code a shared device shows,
-// and the home checks that device through an exchange only the device
-// showing the code can finish, on a connection to this home. Once it is
+// and the core checks that device through an exchange only the device
+// showing the code can finish, on a connection to this host. Once it is
 // checked, this client sees what asked, names it and approves it. The device
 // then collects its token itself, and joins Settings → Clients.
 
@@ -40,7 +45,7 @@ type Step =
     }
   | { name: "done"; deviceName: string };
 
-// How often the exchange is asked after, and how long at most: the home
+// How often the exchange is asked after, and how long at most: the core
 // gives the device 30 seconds to answer each of its steps.
 const exchangeMs = 1_000;
 const exchangeLimitMs = 75_000;
@@ -49,20 +54,6 @@ class ExchangeFailed extends Error {
   constructor(readonly reason: PairExchangeFailure | "timeout") {
     super(reason);
   }
-}
-
-function wait(ms: number, signal: AbortSignal) {
-  return new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        reject(signal.reason);
-      },
-      { once: true },
-    );
-  });
 }
 
 function problemText(error: unknown, code?: string) {
@@ -84,7 +75,7 @@ function problemText(error: unknown, code?: string) {
       case "not_found":
         return `No device is showing ${code ? formatPairingCode(code) : "this code"}. Its code changes every 10 minutes, so check the one it shows now.`;
       case "busy":
-        return "Someone else is adding this device. Try again in a moment.";
+        return "Can’t check this device right now. Try again in a moment.";
       case "too_many_attempts":
         return "Too many codes were tried for this device. Enter the new code it shows.";
       case "invalid_request":
@@ -124,6 +115,11 @@ export function ApproveDevice(props: {
   const [name, setName] = useState("");
   const [problem, setProblem] = useState<string>();
   const [working, setWorking] = useState(false);
+  // The core keeps a verified exchange for this approver while the device
+  // is waiting, so use its IDs again if the approver goes back or reopens.
+  const verified = useRef<{ code: string; exchange: PairExchangeStarted }>(
+    undefined,
+  );
   const { start, cancel } = useAuthAttempt();
 
   useEffect(() => {
@@ -160,29 +156,51 @@ export function ApproveDevice(props: {
       return;
     }
     void run(async (signal) => {
-      const exchange = await lookupPairing(normalised, signal);
-      const until = Date.now() + exchangeLimitMs;
-      for (;;) {
-        signal.throwIfAborted();
-        const status = await pairingExchange(exchange, signal);
-        signal.throwIfAborted();
-        if (status.status === "failed") {
-          throw new ExchangeFailed(status.reason);
+      const previous = verified.current;
+      const exchange =
+        previous?.code === normalised
+          ? previous.exchange
+          : await lookupPairing(normalised, signal);
+      signal.throwIfAborted();
+      const deadline = new AbortController();
+      const checking = AbortSignal.any([signal, deadline.signal]);
+      const timer = setTimeout(
+        () => deadline.abort(new ExchangeFailed("timeout")),
+        exchangeLimitMs,
+      );
+      try {
+        for (;;) {
+          checking.throwIfAborted();
+          const status = await pairingExchange(exchange, checking);
+          checking.throwIfAborted();
+          if (status.status === "failed") {
+            throw new ExchangeFailed(status.reason);
+          }
+          if (status.status === "verified") {
+            verified.current = { code: normalised, exchange };
+            setName(suggestedName(status.request));
+            setStep({
+              name: "details",
+              code: normalised,
+              exchange,
+              request: status.request,
+            });
+            return;
+          }
+          await waitForPairingPoll(exchangeMs, checking);
         }
-        if (status.status === "verified") {
-          setName(suggestedName(status.request));
-          setStep({
-            name: "details",
-            code: normalised,
-            exchange,
-            request: status.request,
-          });
-          return;
+      } catch (error) {
+        checking.throwIfAborted();
+        if (
+          verified.current?.exchange === exchange &&
+          error instanceof CoreError &&
+          error.code === "not_found"
+        ) {
+          verified.current = undefined;
         }
-        if (Date.now() >= until) {
-          throw new ExchangeFailed("timeout");
-        }
-        await wait(exchangeMs, signal);
+        throw error;
+      } finally {
+        clearTimeout(timer);
       }
     }, normalised);
   };
@@ -194,6 +212,7 @@ export function ApproveDevice(props: {
     void run(async (signal) => {
       await approvePairing({ ...step.exchange, name: deviceName }, signal);
       signal.throwIfAborted();
+      verified.current = undefined;
       setStep({ name: "done", deviceName });
       props.onApproved();
     });

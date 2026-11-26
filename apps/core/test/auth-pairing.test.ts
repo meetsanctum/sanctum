@@ -116,7 +116,7 @@ describe("pairing a shared device", () => {
     });
   });
 
-  it("keeps neither the device's half of the code nor its secret", async () => {
+  it("keeps neither the last six characters of the code nor the device secret", async () => {
     const core = await testCore();
     const maya = await claimed(core);
     const shown = await device(core);
@@ -290,7 +290,7 @@ describe("pairing a shared device", () => {
       core.db
         .select()
         .from(authPairingRequests)
-        .where(eq(authPairingRequests.lookup, first.lookup))
+        .where(eq(authPairingRequests.id, first.requestId))
         .all(),
     ).toHaveLength(0);
   });

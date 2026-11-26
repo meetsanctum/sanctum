@@ -1,5 +1,5 @@
 import * as opaque from "@serenity-kit/opaque";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   newPairingSecret,
@@ -256,6 +256,47 @@ describe("the pairing exchange", () => {
 
   it("can't be finished with another code", () => {
     expect(pairingExchange("K7QXM4", "K7QXM5").host).toBeUndefined();
+  });
+
+  it("binds and verifies on plain HTTP with the same MACs as WebCrypto", async () => {
+    const secret = newPairingSecret();
+    const keys = pairingExchange(secret, secret);
+    const binding = await pairingBinding(keys.device!, host, ids);
+    const confirmation = await pairingConfirmation(
+      keys.host!,
+      host,
+      ids,
+      "client_token",
+    );
+    vi.stubGlobal("crypto", {
+      getRandomValues: crypto.getRandomValues.bind(crypto),
+    });
+    try {
+      expect(await pairingBinding(keys.device!, host, ids)).toBe(binding);
+      expect(await verifyPairingBinding(keys.host!, host, ids, binding)).toBe(
+        true,
+      );
+      expect(
+        await verifyPairingConfirmation(
+          keys.device!,
+          host,
+          ids,
+          "client_token",
+          confirmation,
+        ),
+      ).toBe(true);
+      expect(
+        await verifyPairingConfirmation(
+          keys.device!,
+          host,
+          ids,
+          "client_other",
+          confirmation,
+        ),
+      ).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("binds the view, the request and the exchange", async () => {

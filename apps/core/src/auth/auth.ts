@@ -81,6 +81,7 @@ export async function createAuth(
     clients,
     record,
     host: logins.host,
+    limiter,
     limits: options.limits,
     now,
   });
