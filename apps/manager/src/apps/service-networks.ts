@@ -55,7 +55,7 @@ export async function appServiceNetworks(packageDir: string) {
   for (const name of services) {
     const definition = findService(name);
     if (definition?.mqttTopics?.length) usesBroker = true;
-    if (definition?.url) httpServices.push(name);
+    if (definition?.forApps && definition.url) httpServices.push(name);
   }
   return { usesBroker, httpServices };
 }

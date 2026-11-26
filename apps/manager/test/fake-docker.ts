@@ -35,6 +35,7 @@ type FakeContainer = {
   running: boolean;
   startedAt?: Date;
   restartCount: number;
+  health?: "starting" | "healthy" | "unhealthy";
   networks: Record<string, { EndpointID?: string }>;
   // Docker keeps a container locked while its archive is being read.
   archiveBeingRead?: Readable;
@@ -389,6 +390,9 @@ export class FakeDocker implements DockerClientLike {
               container.finishedAt?.toISOString() ?? "0001-01-01T00:00:00Z",
             ExitCode: container.exitCode ?? 0,
             OOMKilled: container.oomKilled ?? false,
+            ...(container.options.Healthcheck && {
+              Health: { Status: container.health ?? "healthy" },
+            }),
           },
           Config: {
             Image: container.ref,
@@ -474,6 +478,7 @@ export class FakeDocker implements DockerClientLike {
         const container = get();
         container.running = true;
         container.startedAt = new Date();
+        if (container.options.Healthcheck) container.health = "starting";
         this.events.push(`restart ${container.name}`);
       },
       remove: async (options?: { v?: boolean }) => {
