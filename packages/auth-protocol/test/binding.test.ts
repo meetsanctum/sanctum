@@ -1,13 +1,19 @@
 import * as opaque from "@serenity-kit/opaque";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
+  newPairingSecret,
+  pairingBinding,
+  pairingConfirmation,
+  pairingOpaque,
   passwordChangeBinding,
   signInBinding,
   signInConfirmation,
   verifyPasswordChangeBinding,
   verifySignInBinding,
   verifySignInConfirmation,
+  verifyPairingBinding,
+  verifyPairingConfirmation,
 } from "../src/index.js";
 
 const fast = {
@@ -165,5 +171,163 @@ describe("the sign-in binding", () => {
 
     expect(signIn(fake, null, "correct horse").device).toBeUndefined();
     expect(signIn(fake, record, "correct horse").device).toBeUndefined();
+  });
+});
+
+// A shared device's pairing runs OPAQUE the other way round: the device
+// holds a one-time record of the secret it shows, and the host knows the
+// secret once someone types it.
+function pairingExchange(shown: string, typed: string) {
+  const { identifiers, userIdentifier, keyStretching } = pairingOpaque;
+  const serverSetup = opaque.server.createSetup();
+  const { clientRegistrationState, registrationRequest } =
+    opaque.client.startRegistration({ password: shown });
+  const { registrationResponse } = opaque.server.createRegistrationResponse({
+    serverSetup,
+    userIdentifier,
+    registrationRequest,
+  });
+  const { registrationRecord } = opaque.client.finishRegistration({
+    clientRegistrationState,
+    registrationResponse,
+    password: shown,
+    identifiers,
+    keyStretching,
+  });
+  const { clientLoginState, startLoginRequest } = opaque.client.startLogin({
+    password: typed,
+  });
+  const { serverLoginState, loginResponse } = opaque.server.startLogin({
+    serverSetup,
+    registrationRecord,
+    startLoginRequest,
+    userIdentifier,
+    identifiers,
+  });
+  const host = opaque.client.finishLogin({
+    clientLoginState,
+    loginResponse,
+    password: typed,
+    identifiers,
+    keyStretching,
+  });
+  if (!host) {
+    return {};
+  }
+  const { sessionKey } = opaque.server.finishLogin({
+    serverLoginState,
+    finishLoginRequest: host.finishLoginRequest,
+    identifiers,
+  });
+  return { device: sessionKey, host: host.sessionKey };
+}
+
+describe("the pairing exchange", () => {
+  const ids = {
+    requestId: "8f2a3a4e-1b6c-4c8e-9d7f-0a1b2c3d4e5f",
+    exchangeId: "1c2d3e4f-5a6b-4c7d-8e9f-a0b1c2d3e4f5",
+  };
+
+  it("leaves the device and the host with one key when the typed code is the shown one", async () => {
+    const secret = newPairingSecret();
+    const keys = pairingExchange(secret, secret);
+
+    expect(keys.device).toBe(keys.host);
+    const binding = await pairingBinding(keys.device!, host, ids);
+    expect(await verifyPairingBinding(keys.host!, host, ids, binding)).toBe(
+      true,
+    );
+    const confirmation = await pairingConfirmation(
+      keys.host!,
+      host,
+      ids,
+      "client_token",
+    );
+    expect(
+      await verifyPairingConfirmation(
+        keys.device!,
+        host,
+        ids,
+        "client_token",
+        confirmation,
+      ),
+    ).toBe(true);
+  });
+
+  it("can't be finished with another code", () => {
+    expect(pairingExchange("K7QXM4", "K7QXM5").host).toBeUndefined();
+  });
+
+  it("binds and verifies on plain HTTP with the same MACs as WebCrypto", async () => {
+    const secret = newPairingSecret();
+    const keys = pairingExchange(secret, secret);
+    const binding = await pairingBinding(keys.device!, host, ids);
+    const confirmation = await pairingConfirmation(
+      keys.host!,
+      host,
+      ids,
+      "client_token",
+    );
+    vi.stubGlobal("crypto", {
+      getRandomValues: crypto.getRandomValues.bind(crypto),
+    });
+    try {
+      expect(await pairingBinding(keys.device!, host, ids)).toBe(binding);
+      expect(await verifyPairingBinding(keys.host!, host, ids, binding)).toBe(
+        true,
+      );
+      expect(
+        await verifyPairingConfirmation(
+          keys.device!,
+          host,
+          ids,
+          "client_token",
+          confirmation,
+        ),
+      ).toBe(true);
+      expect(
+        await verifyPairingConfirmation(
+          keys.device!,
+          host,
+          ids,
+          "client_other",
+          confirmation,
+        ),
+      ).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("binds the view, the request and the exchange", async () => {
+    const secret = newPairingSecret();
+    const keys = pairingExchange(secret, secret);
+    const binding = await pairingBinding(keys.device!, host, ids);
+
+    for (const [view, bound] of [
+      [{ ...host, pin: "aW50ZXJjZXB0b3I" }, ids],
+      [host, { ...ids, exchangeId: "another-exchange" }],
+      [host, { ...ids, requestId: "another-request" }],
+    ] as const) {
+      expect(await verifyPairingBinding(keys.host!, view, bound, binding)).toBe(
+        false,
+      );
+    }
+  });
+
+  it("keeps its MACs apart from sign-in's and from each other", async () => {
+    const secret = newPairingSecret();
+    const keys = pairingExchange(secret, secret);
+
+    const signIn = await signInBinding(keys.device!, host);
+    expect(await verifyPairingBinding(keys.host!, host, ids, signIn)).toBe(
+      false,
+    );
+    const binding = await pairingBinding(keys.device!, host, ids);
+    expect(await verifySignInBinding(keys.host!, host, binding)).toBe(false);
+    const confirmation = await pairingConfirmation(keys.host!, host, ids, "");
+    expect(
+      await verifyPairingBinding(keys.host!, host, ids, confirmation),
+    ).toBe(false);
   });
 });

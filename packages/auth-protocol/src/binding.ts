@@ -1,11 +1,13 @@
 // Binds an OPAQUE exchange to the host each side sees. Runs in the core and
-// in the apps' web views, on WebCrypto alone.
+// in the apps' web views. Plain HTTP development origins fall back to
+// software HKDF and HMAC where browsers don't expose WebCrypto's SubtleCrypto.
 //
 // OPAQUE leaves the device and the real host with the same session key, which
 // nobody in between can learn. Each side MACs what it sees under a key
 // derived from it:
-// - the device's binding lets the host refuse a sign-in or password change
-//   that came through an interceptor, before anything is created;
+// - the device's binding lets the host refuse a sign-in, a password change
+//   or a shared device's pairing that came through an interceptor, before
+//   anything is created;
 // - the host's confirmation lets the device check that the token came from
 //   the host it is about to pin.
 //
@@ -14,9 +16,10 @@
 // so the pin is null. A host that has a pin always binds it, so a device
 // that saw none fails against it.
 
+import { pairingProtocol } from "./pairing.js";
+
 export type HostView = { hostId: string; homeId: string; pin: string | null };
 
-const subtle = globalThis.crypto.subtle;
 const text = new TextEncoder();
 
 function fromBase64url(value: string) {
@@ -24,16 +27,30 @@ function fromBase64url(value: string) {
   return Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
 }
 
-function toBase64url(bytes: ArrayBuffer) {
-  return btoa(String.fromCharCode(...new Uint8Array(bytes)))
+function toBase64url(bytes: Uint8Array) {
+  return btoa(String.fromCharCode(...bytes))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
 }
 
-type Purpose = "client" | "server" | "password";
+type Purpose =
+  "client" | "server" | "password" | "pairing device" | "pairing host";
 
-async function macKey(sessionKey: string, purpose: Purpose) {
+// Sign-in's labels keep their version; pairing's keys have labels of their
+// own, so a MAC made for one exchange never checks for another.
+function label(purpose: Purpose) {
+  return purpose.startsWith("pairing")
+    ? `sanctum ${purpose} binding v1`
+    : // v2: v1 bound the host id and pin alone, before home ids.
+      `sanctum sign-in binding v2 ${purpose}`;
+}
+
+async function macKey(
+  subtle: SubtleCrypto,
+  sessionKey: string,
+  purpose: Purpose,
+) {
   const ikm = await subtle.importKey(
     "raw",
     fromBase64url(sessionKey),
@@ -46,8 +63,7 @@ async function macKey(sessionKey: string, purpose: Purpose) {
       name: "HKDF",
       hash: "SHA-256",
       salt: new Uint8Array(0),
-      // v2: v1 bound the host id and pin alone, before home ids.
-      info: text.encode(`sanctum sign-in binding v2 ${purpose}`),
+      info: text.encode(label(purpose)),
     },
     ikm,
     { name: "HMAC", hash: "SHA-256", length: 256 },
@@ -56,7 +72,28 @@ async function macKey(sessionKey: string, purpose: Purpose) {
   );
 }
 
-// Every field is a UUID or base64url, so a newline cannot appear inside one.
+async function softwareMac(
+  sessionKey: string,
+  purpose: Purpose,
+  data: Uint8Array,
+) {
+  const [{ hkdf }, { hmac }, { sha256 }] = await Promise.all([
+    import("@noble/hashes/hkdf"),
+    import("@noble/hashes/hmac"),
+    import("@noble/hashes/sha256"),
+  ]);
+  const key = hkdf(
+    sha256,
+    fromBase64url(sessionKey),
+    undefined,
+    text.encode(label(purpose)),
+    32,
+  );
+  return hmac(sha256, key, data);
+}
+
+// Every field is a UUID, a number or base64url, so a newline cannot appear
+// inside one.
 function message(fields: string[]) {
   return text.encode(fields.join("\n"));
 }
@@ -71,10 +108,13 @@ async function sign(
   host: HostView,
   fields: string[],
 ) {
-  const key = await macKey(sessionKey, purpose);
-  return toBase64url(
-    await subtle.sign("HMAC", key, message([...hostFields(host), ...fields])),
-  );
+  const data = message([...hostFields(host), ...fields]);
+  const subtle = globalThis.crypto.subtle;
+  if (!subtle) {
+    return toBase64url(await softwareMac(sessionKey, purpose, data));
+  }
+  const key = await macKey(subtle, sessionKey, purpose);
+  return toBase64url(new Uint8Array(await subtle.sign("HMAC", key, data)));
 }
 
 async function verify(
@@ -90,13 +130,20 @@ async function verify(
   } catch {
     return false;
   }
-  const key = await macKey(sessionKey, purpose);
-  return subtle.verify(
-    "HMAC",
-    key,
-    bytes,
-    message([...hostFields(host), ...fields]),
-  );
+  const data = message([...hostFields(host), ...fields]);
+  const subtle = globalThis.crypto.subtle;
+  if (!subtle) {
+    const expected = await softwareMac(sessionKey, purpose, data);
+    if (bytes.length !== expected.length) return false;
+    // Compare every byte before deciding whether the MAC matches.
+    let difference = 0;
+    for (let i = 0; i < expected.length; i++) {
+      difference |= bytes[i]! ^ expected[i]!;
+    }
+    return difference === 0;
+  }
+  const key = await macKey(subtle, sessionKey, purpose);
+  return subtle.verify("HMAC", key, bytes, data);
 }
 
 /** The device's MAC over the host it sees, sent with `sign-in/finish`. */
@@ -149,4 +196,68 @@ export function verifyPasswordChangeBinding(
   binding: string,
 ) {
   return verify(sessionKey, "password", host, [registrationRecord], binding);
+}
+
+/** Which exchange of which pairing request a MAC belongs to. */
+export type PairingExchangeIds = { requestId: string; exchangeId: string };
+
+function exchangeFields(ids: PairingExchangeIds) {
+  return [String(pairingProtocol), ids.requestId, ids.exchangeId];
+}
+
+/**
+ * A shared device's MAC over the host it sees, sent with its view once the
+ * pairing exchange finished, so the host can tell an interceptor from a
+ * wrong code.
+ */
+export function pairingBinding(
+  sessionKey: string,
+  host: HostView,
+  ids: PairingExchangeIds,
+) {
+  return sign(sessionKey, "pairing device", host, exchangeFields(ids));
+}
+
+export function verifyPairingBinding(
+  sessionKey: string,
+  host: HostView,
+  ids: PairingExchangeIds,
+  binding: string,
+) {
+  return verify(
+    sessionKey,
+    "pairing device",
+    host,
+    exchangeFields(ids),
+    binding,
+  );
+}
+
+/** The host's MAC over itself and the token it gives a shared device. */
+export function pairingConfirmation(
+  sessionKey: string,
+  host: HostView,
+  ids: PairingExchangeIds,
+  token: string,
+) {
+  return sign(sessionKey, "pairing host", host, [
+    ...exchangeFields(ids),
+    token,
+  ]);
+}
+
+export function verifyPairingConfirmation(
+  sessionKey: string,
+  host: HostView,
+  ids: PairingExchangeIds,
+  token: string,
+  confirmation: string,
+) {
+  return verify(
+    sessionKey,
+    "pairing host",
+    host,
+    [...exchangeFields(ids), token],
+    confirmation,
+  );
 }

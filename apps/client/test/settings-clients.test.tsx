@@ -104,14 +104,12 @@ describe("a client's detail", () => {
 describe("Settings → Clients", () => {
   let root: Root;
   let container: HTMLDivElement;
-  let approved: unknown[];
   let drawing: unknown[];
   let shownMacbook: ClientInfo;
   let shownTablet: ClientInfo;
 
   beforeEach(async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    approved = [];
     drawing = [];
     shownMacbook = macbook;
     shownTablet = tablet;
@@ -122,21 +120,6 @@ describe("Settings → Clients", () => {
           return [shownMacbook, shownTablet];
         case "/api/people":
           return [maya];
-        case "/api/auth/pair/lookup":
-          if ((init.json as { code: string }).code !== "K7QXM4PD") {
-            throw new CoreError(404, "not_found");
-          }
-          return {
-            code: "K7QXM4PD",
-            platform: "web",
-            suggestedName: "Lenovo Tab",
-            address: "192.168.7.50",
-            createdAt: "2026-10-28T11:58:00Z",
-            expiresAt: "2026-10-28T12:08:00Z",
-          };
-        case "/api/auth/pair/approve":
-          approved.push(init.json);
-          return undefined;
         case "/api/auth/clients/drawing":
           drawing.push(init.json);
           shownTablet = {
@@ -379,84 +362,6 @@ describe("Settings → Clients", () => {
     );
   });
 
-  it("approves a shared device by its typed code and a name", async () => {
-    await act(async () => button("Add a shared device").click());
-    const dialog = document.querySelector<HTMLElement>("[role=dialog]")!;
-
-    await type(dialog.querySelector("input")!, "k7qx-m4pd");
-    await act(async () => button("Find the device").click());
-    expect(dialog.textContent).toContain("Approve K7QX-M4PD");
-    expect(dialog.textContent).toContain("asked from 192.168.7.50");
-    const name = dialog.querySelector<HTMLInputElement>("input")!;
-    expect(name.value).toBe("Lenovo Tab");
-
-    await type(name, "Kitchen tablet");
-    await act(async () => button("Approve").click());
-
-    expect(approved).toEqual([{ code: "K7QXM4PD", name: "Kitchen tablet" }]);
-    expect(dialog.textContent).toContain("Kitchen tablet is approved");
-  });
-
-  it("says when no device shows a code", async () => {
-    await act(async () => button("Add a shared device").click());
-    const dialog = document.querySelector<HTMLElement>("[role=dialog]")!;
-
-    await type(dialog.querySelector("input")!, "W3RT-9HNC");
-    await act(async () => button("Find the device").click());
-
-    expect(dialog.querySelector("[role=alert]")!.textContent).toContain(
-      "No device is showing this code",
-    );
-    expect(approved).toEqual([]);
-  });
-
-  it("checks a code's form before asking the host", async () => {
-    await act(async () => button("Add a shared device").click());
-    const dialog = document.querySelector<HTMLElement>("[role=dialog]")!;
-
-    await type(dialog.querySelector("input")!, "K7QX-M4P0");
-    await act(async () => button("Find the device").click());
-
-    expect(dialog.querySelector("[role=alert]")!.textContent).toContain(
-      "8 letters and digits",
-    );
-    expect(coreJson).not.toHaveBeenCalledWith(
-      "/api/auth/pair/lookup",
-      expect.anything(),
-    );
-  });
-
-  it("ignores a lookup from an approval dialog that was closed", async () => {
-    const original = vi.mocked(coreJson).getMockImplementation()!;
-    let finishLookup!: (value: unknown) => void;
-    vi.mocked(coreJson).mockImplementation((path, init) =>
-      path === "/api/auth/pair/lookup"
-        ? new Promise((resolve) => {
-            finishLookup = resolve;
-          })
-        : original(path, init),
-    );
-    await act(async () => button("Add a shared device").click());
-    await type(document.querySelector("[role=dialog] input")!, "K7QX-M4PD");
-    await act(async () => button("Find the device").click());
-    await act(async () => button("Close").click());
-    await act(async () => button("Add a shared device").click());
-
-    await act(async () =>
-      finishLookup({
-        code: "K7QXM4PD",
-        platform: "web",
-        suggestedName: "Old device",
-        address: "192.168.7.50",
-      }),
-    );
-
-    const dialog = document.querySelector("[role=dialog]")!;
-    expect(dialog.textContent).toContain("Find the device");
-    expect(dialog.textContent).not.toContain("Old device");
-    expect(dialog.textContent).not.toContain("Approve K7QX-M4PD");
-  });
-
   it("keeps a newer edit open when an earlier rename finishes", async () => {
     const original = vi.mocked(coreJson).getMockImplementation()!;
     let finishRename!: (value: unknown) => void;
@@ -478,28 +383,5 @@ describe("Settings → Clients", () => {
       "[role=dialog] input",
     );
     expect(input?.value).toBe("Maya's MacBook");
-  });
-
-  it("ignores an approval response after choosing another code", async () => {
-    const original = vi.mocked(coreJson).getMockImplementation()!;
-    let finishApproval!: (value: unknown) => void;
-    vi.mocked(coreJson).mockImplementation((path, init) =>
-      path === "/api/auth/pair/approve"
-        ? new Promise((resolve) => {
-            finishApproval = resolve;
-          })
-        : original(path, init),
-    );
-    await act(async () => button("Add a shared device").click());
-    await type(document.querySelector("[role=dialog] input")!, "K7QX-M4PD");
-    await act(async () => button("Find the device").click());
-    await act(async () => button("Approve").click());
-    await act(async () => button("Another code").click());
-    await act(async () => finishApproval(undefined));
-
-    expect(document.querySelector("[role=dialog]")!.textContent).toContain(
-      "Find the device",
-    );
-    expect(button("Find the device").disabled).toBe(false);
   });
 });

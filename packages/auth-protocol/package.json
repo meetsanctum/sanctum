@@ -24,6 +24,9 @@
     "test": "vitest run",
     "clean": "rm -rf dist .turbo"
   },
+  "dependencies": {
+    "@noble/hashes": "1.8.0"
+  },
   "devDependencies": {
     "@meetsanctum/typescript-config": "workspace:*",
     "@peculiar/x509": "2.2.0",

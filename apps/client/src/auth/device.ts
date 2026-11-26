@@ -22,8 +22,9 @@ import { getShell, type FoundHost } from "../shell";
 // itself. These are first-contact exchanges, so they never carry a stored
 // token.
 
-// OPAQUE is WebAssembly, loaded only when a password is used.
-async function loadOpaque() {
+// OPAQUE is WebAssembly, loaded only when a password is used or a shared
+// device shows its pairing code.
+export async function loadOpaque() {
   const opaque = await import("@serenity-kit/opaque");
   await opaque.ready;
   return opaque;
@@ -65,9 +66,8 @@ export async function hostStatus(
   return status;
 }
 
-// What a first contact found: the candidate's pin, which the sign-in binds
-// and a pairing QR code carries, none over plain HTTP in development; and
-// the home's id.
+// What a first contact found: the home's id and the candidate's pin, which
+// sign-in and pairing bind. The pin is null over plain HTTP in development.
 export type CheckedHost = { pin: string | null; homeId: string };
 
 // The first contact with the chosen host: the shell starts holding the CA it

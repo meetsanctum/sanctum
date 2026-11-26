@@ -66,6 +66,31 @@ describe("an entry's words", () => {
     ).toMatchObject({ title: "Didn't stop", problem: true });
   });
 
+  it.each([
+    [
+      "channel_mismatch",
+      `A shared device wasn't connected to ${productName} directly`,
+    ],
+    ["unchecked", "Couldn't check a shared device"],
+    ["too_many_attempts", "Couldn't check a shared device"],
+  ])("says the home couldn't check a shared device (%s)", (reason, title) => {
+    expect(
+      activityWords(
+        clock,
+        entry({
+          kind: "system",
+          source: "auth",
+          action: "pair.check",
+          outcome: "refused",
+          reason,
+          detail: null,
+          subject: null,
+        }),
+        "home",
+      ),
+    ).toMatchObject({ title, problem: true });
+  });
+
   it("says what the household shows a device as, by what it then is", () => {
     const device = { kind: "device" as const };
     const shown = (detail: Record<string, unknown>) =>

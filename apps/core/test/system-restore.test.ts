@@ -4,10 +4,12 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { authPairingRequests } from "../src/auth/schema.js";
 import { loadHomeId } from "../src/places/places.js";
 import { home } from "../src/places/schema.js";
 import { restoreMarkerFile } from "../src/system/restore.js";
 import { updatePendingFile } from "../src/update-pending.js";
+import { approve, checked, device } from "./pairing-support.js";
 import {
   claimed,
   get,
@@ -67,26 +69,28 @@ describe("a restore from a backup", () => {
   it("drops every pairing request, so shared devices show new codes", async () => {
     const before = await testCore();
     const admin = await claimed(before);
-    const request = await post(before, "/api/auth/pair/request", {
-      platform: "android",
-      suggestedName: "Lenovo Tab",
-    });
-    expect(request.statusCode).toBe(200);
-    const asked = request.json();
+    const shown = await device(before);
     // Approved but not yet collected, the case that would hand out a token.
-    const approved = await post(
+    const approved = await approve(
       before,
-      "/api/auth/pair/approve",
-      { code: asked.code, name: "Kitchen tablet" },
-      { token: admin.token },
+      admin.token,
+      await checked(before, admin.token, shown),
+      "Kitchen tablet",
     );
     expect(approved.statusCode).toBe(204);
     await writeFile(join(before.dataDir, restoreMarkerFile), marker);
 
     const after = await testCore({ dataDir: before.dataDir });
 
+    expect(
+      after.db
+        .select()
+        .from(authPairingRequests)
+        .where(eq(authPairingRequests.id, shown.requestId))
+        .get(),
+    ).toBeUndefined();
     const polled = await post(after, "/api/auth/pair/poll", {
-      deviceSecret: asked.deviceSecret,
+      deviceSecret: shown.deviceSecret,
     });
     expect(polled.statusCode).toBe(409);
     expect(polled.json()).toEqual({ error: "expired" });

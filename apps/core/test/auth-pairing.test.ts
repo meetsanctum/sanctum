@@ -1,12 +1,22 @@
 import {
   formatPairingCode,
-  type PairRequested,
+  type PairExchangeStarted,
 } from "@meetsanctum/auth-protocol";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import { activity } from "../src/activity/schema.js";
 import { authClients, authPairingRequests } from "../src/auth/schema.js";
+import {
+  approve,
+  checked,
+  device,
+  exchangeStatus,
+  lookUp,
+  paired,
+  tablet,
+  tabletAddress,
+} from "./pairing-support.js";
 import {
   claimed,
   get,
@@ -15,76 +25,59 @@ import {
   sharedClient,
   signIn,
   testCore,
-  type TestCore,
 } from "./support.js";
 
-// Pairing a shared device: the device asks and polls, another client looks its
-// code up and approves it, a shared one too.
-
-const tablet = { platform: "android", suggestedName: "Lenovo Tab" } as const;
-const tabletAddress = "192.168.7.50";
-
-async function ask(core: TestCore, remoteAddress = tabletAddress) {
-  const response = await post(core, "/api/auth/pair/request", tablet, {
-    remoteAddress,
-  });
-  expect(response.statusCode).toBe(200);
-  return response.json<PairRequested>();
-}
-
-function poll(core: TestCore, deviceSecret: string) {
-  return post(
-    core,
-    "/api/auth/pair/poll",
-    { deviceSecret },
-    { remoteAddress: tabletAddress },
-  );
-}
-
-function approve(core: TestCore, token: string, code: string, name: string) {
-  return post(core, "/api/auth/pair/approve", { code, name }, { token });
-}
+// Pairing a shared device: the device asks and polls, another client types
+// its code, the host checks the device through an OPAQUE exchange, and the
+// client that typed the code approves it, a shared one too. The exchange's
+// failures are in auth-pairing-exchange.test.ts.
 
 describe("pairing a shared device", () => {
-  it("gives the device a shared client once someone approves its code", async () => {
+  it("gives the device a shared client once its code is checked and approved", async () => {
     const core = await testCore();
     const maya = await claimed(core);
-    const requested = await ask(core);
+    const shown = await device(core);
 
-    expect(requested.code).toMatch(/^[2-9A-HJKMNP-TV-Z]{8}$/);
-    expect(requested.expiresAt).toBe("2026-10-26T12:10:00.000Z");
-    expect((await poll(core, requested.deviceSecret)).json()).toEqual({
-      status: "waiting",
-    });
+    expect(shown.lookup).toMatch(/^[2-9A-HJKMNP-TV-Z]{2}$/);
+    expect(shown.expiresAt).toBe("2026-10-26T12:10:00.000Z");
+    expect((await shown.poll()).json()).toEqual({ status: "waiting" });
 
-    const lookup = await post(
-      core,
-      "/api/auth/pair/lookup",
-      { code: formatPairingCode(requested.code).toLowerCase() },
-      { token: maya.token },
-    );
-    expect(lookup.statusCode).toBe(200);
-    expect(lookup.json()).toEqual({
-      code: requested.code,
-      platform: "android",
-      suggestedName: "Lenovo Tab",
-      address: tabletAddress,
-      createdAt: "2026-10-26T12:00:00.000Z",
-      expiresAt: "2026-10-26T12:10:00.000Z",
-    });
-
-    const approved = await approve(
+    const lookedUp = await lookUp(
       core,
       maya.token,
-      requested.code,
-      "Kitchen tablet",
+      formatPairingCode(shown.code).toLowerCase(),
     );
+    expect(lookedUp.statusCode).toBe(200);
+    const started = lookedUp.json<PairExchangeStarted>();
+    expect(started.requestId).toBe(shown.requestId);
+    expect(await exchangeStatus(core, maya.token, started)).toEqual({
+      status: "exchanging",
+    });
+
+    const answered = await shown.answer();
+    expect(answered.body.status).toBe("continue");
+    expect(await exchangeStatus(core, maya.token, started)).toEqual({
+      status: "exchanging",
+    });
+    expect((await shown.bind()).statusCode).toBe(204);
+    expect(await exchangeStatus(core, maya.token, started)).toEqual({
+      status: "verified",
+      request: {
+        platform: "android",
+        suggestedName: "Lenovo Tab",
+        createdAt: "2026-10-26T12:00:00.000Z",
+        expiresAt: "2026-10-26T12:10:00.000Z",
+      },
+    });
+    expect((await shown.poll()).json()).toEqual({ status: "waiting" });
+
+    const approved = await approve(core, maya.token, started, "Kitchen tablet");
     expect(approved.statusCode).toBe(204);
 
-    const collected = await poll(core, requested.deviceSecret);
+    const collected = await shown.poll();
     expect(collected.statusCode).toBe(200);
-    const paired = collected.json();
-    expect(paired).toMatchObject({
+    const body = collected.json();
+    expect(body).toMatchObject({
       status: "paired",
       token: expect.stringMatching(/^client_/),
       client: {
@@ -96,8 +89,10 @@ describe("pairing a shared device", () => {
         current: true,
       },
     });
+    expect(await shown.confirms(body.token, body.confirmation)).toBe(true);
+    expect(await shown.confirms("client_other", body.confirmation)).toBe(false);
 
-    const me = await get(core, "/api/auth/me", { token: paired.token });
+    const me = await get(core, "/api/auth/me", { token: body.token });
     expect(me.json()).toMatchObject({
       client: { kind: "shared", name: "Kitchen tablet" },
       person: null,
@@ -107,9 +102,7 @@ describe("pairing a shared device", () => {
   it("shows the new client as never seen until it uses its token", async () => {
     const core = await testCore();
     const maya = await claimed(core);
-    const requested = await ask(core);
-    await approve(core, maya.token, requested.code, "Kitchen tablet");
-    const { token, client } = (await poll(core, requested.deviceSecret)).json();
+    const { token, client } = await paired(core, maya.token);
 
     const listed = () =>
       get(core, "/api/auth/clients", { token: maya.token }).then((response) =>
@@ -123,24 +116,23 @@ describe("pairing a shared device", () => {
     });
   });
 
-  it("keeps only hashes of the code and the device secret", async () => {
+  it("keeps neither the last six characters of the code nor the device secret", async () => {
     const core = await testCore();
-    await claimed(core);
-    const requested = await ask(core);
+    const maya = await claimed(core);
+    const shown = await device(core);
+    await checked(core, maya.token, shown);
 
     const stored = JSON.stringify(
       core.db.select().from(authPairingRequests).all(),
     );
-    expect(stored).not.toContain(requested.code);
-    expect(stored).not.toContain(requested.deviceSecret);
+    expect(stored).not.toContain(shown.secret);
+    expect(stored).not.toContain(shown.deviceSecret);
   });
 
   it("records the approval and the pairing, without the code or secret", async () => {
     const core = await testCore();
     const maya = await claimed(core);
-    const requested = await ask(core);
-    await approve(core, maya.token, requested.code, "Kitchen tablet");
-    const { client } = (await poll(core, requested.deviceSecret)).json();
+    const { shown, client } = await paired(core, maya.token);
 
     const entries = core.db
       .select()
@@ -165,48 +157,42 @@ describe("pairing a shared device", () => {
       ]),
     );
     const logged = JSON.stringify(entries);
-    expect(logged).not.toContain(requested.code);
-    expect(logged).not.toContain(requested.deviceSecret);
+    expect(logged).not.toContain(shown.secret);
+    expect(logged).not.toContain(shown.deviceSecret);
   });
 
   it("hands the token only to the device holding the secret", async () => {
     const core = await testCore();
     const maya = await claimed(core);
-    const kitchen = await ask(core);
-    const hall = await ask(core, "192.168.7.51");
-    await approve(core, maya.token, kitchen.code, "Kitchen tablet");
+    const kitchen = await device(core);
+    const hall = await device(core, "192.168.7.51");
+    const started = await checked(core, maya.token, kitchen);
+    await approve(core, maya.token, started, "Kitchen tablet");
 
-    expect((await poll(core, hall.deviceSecret)).json()).toEqual({
-      status: "waiting",
+    expect((await hall.poll()).json()).toEqual({ status: "waiting" });
+    const guessed = await post(core, "/api/auth/pair/poll", {
+      deviceSecret: "not-the-secret",
     });
-    const guessed = await poll(core, "not-the-secret");
     expect(guessed.statusCode).toBe(409);
     expect(guessed.json()).toEqual({ error: "expired" });
-    expect((await poll(core, kitchen.deviceSecret)).json()).toMatchObject({
-      status: "paired",
-    });
+    expect((await kitchen.poll()).json()).toMatchObject({ status: "paired" });
   });
 
-  it("refuses a code that was already approved or used", async () => {
+  it("approves a request once and gives one token", async () => {
     const core = await testCore();
     const maya = await claimed(core);
-    const requested = await ask(core);
-    await approve(core, maya.token, requested.code, "Kitchen tablet");
+    const shown = await device(core);
+    const started = await checked(core, maya.token, shown);
+    await approve(core, maya.token, started, "Kitchen tablet");
 
-    const again = await approve(core, maya.token, requested.code, "Hall");
+    const again = await approve(core, maya.token, started, "Hall");
     expect(again.statusCode).toBe(404);
     expect(again.json()).toEqual({ error: "not_found" });
+    expect((await lookUp(core, maya.token, shown.code)).statusCode).toBe(404);
 
-    await poll(core, requested.deviceSecret);
-    const lookup = await post(
-      core,
-      "/api/auth/pair/lookup",
-      { code: requested.code },
-      { token: maya.token },
-    );
-    expect(lookup.statusCode).toBe(404);
+    await shown.poll();
     // The request is used up: collecting again gives no second token.
-    expect((await poll(core, requested.deviceSecret)).statusCode).toBe(409);
+    expect((await shown.poll()).statusCode).toBe(409);
     expect(
       core.db
         .select()
@@ -216,41 +202,110 @@ describe("pairing a shared device", () => {
     ).toHaveLength(1);
   });
 
+  it("approves only a request its exchange checked, from the client that typed the code", async () => {
+    const core = await testCore();
+    const maya = await claimed(core);
+    const kitchen = sharedClient(core);
+    const shown = await device(core);
+    const started = (
+      await lookUp(core, maya.token, shown.code)
+    ).json<PairExchangeStarted>();
+
+    // Not checked yet.
+    expect(
+      (await approve(core, maya.token, started, "Kitchen tablet")).statusCode,
+    ).toBe(404);
+    await shown.answer();
+    await shown.bind();
+
+    // Another client neither follows nor approves it.
+    const other = await post(core, "/api/auth/pair/exchange", started, {
+      token: kitchen.token,
+    });
+    expect(other.statusCode).toBe(404);
+    expect(
+      (await approve(core, kitchen.token, started, "Kitchen tablet"))
+        .statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await approve(
+          core,
+          maya.token,
+          { ...started, exchangeId: "another-exchange" },
+          "Kitchen tablet",
+        )
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (await approve(core, maya.token, started, "Kitchen tablet")).statusCode,
+    ).toBe(204);
+  });
+
   it("expires a request 10 minutes after it was made, approved or not", async () => {
     const core = await testCore();
     const maya = await claimed(core);
-    const unapproved = await ask(core);
-    const approved = await ask(core);
-    await approve(core, maya.token, approved.code, "Kitchen tablet");
+    const unapproved = await device(core);
+    const approved = await device(core);
+    const checkedFirst = await checked(core, maya.token, unapproved);
+    await approve(
+      core,
+      maya.token,
+      await checked(core, maya.token, approved),
+      "Kitchen tablet",
+    );
 
     core.advance(10 * 60_000);
 
     expect(
-      (await approve(core, maya.token, unapproved.code, "Hall")).statusCode,
+      (await approve(core, maya.token, checkedFirst, "Hall")).statusCode,
     ).toBe(404);
-    for (const { deviceSecret } of [unapproved, approved]) {
-      const polled = await poll(core, deviceSecret);
+    for (const shown of [unapproved, approved]) {
+      const polled = await shown.poll();
       expect(polled.statusCode).toBe(409);
       expect(polled.json()).toEqual({ error: "expired" });
     }
-    // Expired requests are swept when the next device asks.
-    await ask(core);
-    expect(core.db.select().from(authPairingRequests).all()).toHaveLength(1);
+  });
+
+  it("keeps a request's lookup 10 minutes after it ends, so no other device gets it", async () => {
+    const core = await testCore();
+    await claimed(core);
+    const first = await device(core);
+
+    core.advance(10 * 60_000);
+    // Expired, but resting: it no longer counts against the caps.
+    await device(core);
+    expect(core.db.select().from(authPairingRequests).all()).toHaveLength(2);
+    expect(
+      core.db
+        .select()
+        .from(authPairingRequests)
+        .where(eq(authPairingRequests.lookup, first.lookup))
+        .all(),
+    ).toHaveLength(1);
+
+    core.advance(10 * 60_000);
+    await device(core);
+    expect(
+      core.db
+        .select()
+        .from(authPairingRequests)
+        .where(eq(authPairingRequests.id, first.requestId))
+        .all(),
+    ).toHaveLength(0);
   });
 
   it("pairs a device another shared device approved, as the household", async () => {
     const core = await testCore();
     await claimed(core);
     const kitchen = sharedClient(core);
-    const hall = await ask(core);
 
-    const approved = await approve(core, kitchen.token, hall.code, "Hall");
-    const polled = await poll(core, hall.deviceSecret);
+    const { client } = await paired(core, kitchen.token, "Hall");
 
-    expect(approved.statusCode).toBe(204);
-    expect(polled.json()).toMatchObject({
-      status: "paired",
-      client: { name: "Hall", kind: "shared", personId: null },
+    expect(client).toMatchObject({
+      name: "Hall",
+      kind: "shared",
+      personId: null,
     });
     expect(
       core.db
@@ -263,13 +318,10 @@ describe("pairing a shared device", () => {
     ]);
   });
 
-  it("lets any client look up and approve codes, shared ones too", async () => {
+  it("lets any signed-in client type a code and approve it, shared ones too", async () => {
     const core = await testCore();
     const maya = await claimed(core);
-    const kim = core.people.add({
-      name: "Kim",
-      colour: "#fcd2b3",
-    });
+    const kim = core.people.add({ name: "Kim", colour: "#fcd2b3" });
     await setLogin(core, maya.token, {
       personId: kim.id,
       username: "kim",
@@ -280,34 +332,58 @@ describe("pairing a shared device", () => {
       password: "kim's password",
     });
     if (signedIn.outcome !== "signed-in") throw new Error(signedIn.outcome);
-    const shared = sharedClient(core);
-    const { code } = await ask(core);
-    const body = { code, name: "Kitchen tablet" };
+    const shown = await device(core);
+    const ids = { requestId: shown.requestId, exchangeId: "x" };
 
-    for (const route of ["/api/auth/pair/lookup", "/api/auth/pair/approve"]) {
-      expect((await post(core, route, body)).statusCode).toBe(401);
+    for (const [route, body] of [
+      ["/api/auth/pair/lookup", { code: shown.code }],
+      ["/api/auth/pair/exchange", ids],
+      ["/api/auth/pair/approve", { ...ids, name: "Kitchen tablet" }],
+    ] as const) {
+      expect((await post(core, route, body)).statusCode, route).toBe(401);
     }
-    const lookedUp = await post(core, "/api/auth/pair/lookup", body, {
-      token: signedIn.body.token,
-    });
-    const approved = await post(core, "/api/auth/pair/approve", body, {
-      token: shared.token,
-    });
+    const { client } = await paired(core, signedIn.body.token);
+    expect(client.kind).toBe("shared");
+    const shared = sharedClient(core);
+    await paired(core, shared.token, "Hall");
+  });
 
-    expect(lookedUp.json()).toMatchObject({ code });
-    expect(approved.statusCode).toBe(204);
+  it("refuses incompatible pairing versions before creating a request", async () => {
+    const core = await testCore();
+    await claimed(core);
+
+    for (const body of [
+      { ...tablet, protocol: 1 },
+      { ...tablet, protocol: tablet.protocol + 1 },
+      { platform: tablet.platform, suggestedName: tablet.suggestedName },
+    ]) {
+      const response = await post(core, "/api/auth/pair/request", body);
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toEqual({ error: "pairing_outdated" });
+    }
+    expect(core.db.select().from(authPairingRequests).all()).toEqual([]);
   });
 
   it("checks what each route is given", async () => {
     const core = await testCore();
     const maya = await claimed(core);
+    const secret = { deviceSecret: "abc" };
 
     for (const [route, body, token] of [
-      ["/api/auth/pair/request", { platform: "amiga", suggestedName: "A" }],
-      ["/api/auth/pair/request", { platform: "android", suggestedName: " " }],
+      ["/api/auth/pair/request", { ...tablet, platform: "amiga" }],
+      ["/api/auth/pair/request", { ...tablet, suggestedName: " " }],
+      ["/api/auth/pair/request", { ...tablet, protocol: "2" }],
+      ["/api/auth/pair/request", { ...tablet, protocol: 1.5 }],
       ["/api/auth/pair/poll", { deviceSecret: "not a secret!" }],
+      ["/api/auth/pair/answer", { ...secret, exchangeId: "x" }],
+      ["/api/auth/pair/bind", { ...secret, exchangeId: "x", binding: "b" }],
       ["/api/auth/pair/lookup", { code: "K7QX-M4P0" }, maya.token],
-      ["/api/auth/pair/approve", { code: "K7QXM4PD", name: "" }, maya.token],
+      ["/api/auth/pair/exchange", { requestId: "r" }, maya.token],
+      [
+        "/api/auth/pair/approve",
+        { requestId: "r", exchangeId: "x", name: "" },
+        maya.token,
+      ],
     ] as const) {
       const response = await post(core, route, body, { token });
       expect(response.statusCode, route).toBe(400);
@@ -321,15 +397,15 @@ describe("pairing a shared device", () => {
     });
     await claimed(core);
 
-    await ask(core);
-    await ask(core);
+    await device(core);
+    await device(core);
     const third = await post(core, "/api/auth/pair/request", tablet, {
       remoteAddress: tabletAddress,
     });
     expect(third.statusCode).toBe(429);
     expect(third.json()).toEqual({ error: "busy" });
 
-    await ask(core, "192.168.7.51");
+    await device(core, "192.168.7.51");
     const fourth = await post(core, "/api/auth/pair/request", tablet, {
       remoteAddress: "192.168.7.52",
     });
@@ -352,14 +428,14 @@ describe("pairing a shared device", () => {
 
     // Expired requests no longer count.
     core.advance(10 * 60_000);
-    await ask(core);
+    await device(core);
   });
 
   it("counts an IPv6 device's whole /64 as one address", async () => {
     const core = await testCore({ limits: { pairingPerAddress: 1 } });
     await claimed(core);
 
-    await ask(core, "2001:db8:1:2::10");
+    await device(core, "2001:db8:1:2::10");
     const sameNetwork = await post(core, "/api/auth/pair/request", tablet, {
       remoteAddress: "2001:db8:1:2::11",
     });
@@ -369,9 +445,7 @@ describe("pairing a shared device", () => {
   it("signs a removed shared device out", async () => {
     const core = await testCore();
     const maya = await claimed(core);
-    const requested = await ask(core);
-    await approve(core, maya.token, requested.code, "Kitchen tablet");
-    const { token, client } = (await poll(core, requested.deviceSecret)).json();
+    const { token, client } = await paired(core, maya.token);
 
     const revoked = await post(
       core,

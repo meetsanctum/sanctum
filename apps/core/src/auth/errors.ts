@@ -5,6 +5,7 @@ const statuses: Record<AuthErrorCode, number> = {
   invalid_client_token: 401,
   sign_in_failed: 401,
   expired: 409,
+  pairing_outdated: 409,
   channel_mismatch: 403,
   forbidden: 403,
   needs_personal_client: 403,
