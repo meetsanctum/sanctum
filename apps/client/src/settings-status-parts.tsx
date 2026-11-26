@@ -9,7 +9,6 @@ import {
   formatBytes,
   formatMemory,
   serviceName,
-  systemName,
   type HostInfo,
   type HostProblem,
   type MemoryPart,
@@ -33,27 +32,11 @@ const colourOf: Record<string, string> = {
   graphite: "bg-gray",
 };
 
-// The services, as Status shows them.
-const serviceLooks: Record<string, { colour: string; line: string }> = {
-  zigbee2mqtt: {
-    colour: "bg-gray",
-    line: "Talks to your Zigbee devices, for the Zigbee app",
-  },
-  mosquitto: {
-    colour: "bg-orange",
-    line: `Carries messages between Zigbee and ${productName}`,
-  },
-  ollama: {
-    colour: "bg-purple",
-    line: `Runs AI models on ${productName}`,
-  },
-};
-
-// A service in the line of the app that uses it.
-const serviceWords: Record<string, string> = {
-  zigbee2mqtt: "Zigbee2MQTT",
-  mosquitto: "messaging",
-  ollama: "Ollama",
+// The services' colours, as Status shows them.
+const serviceColours: Record<string, string> = {
+  zigbee2mqtt: "bg-gray",
+  mosquitto: "bg-orange",
+  ollama: "bg-purple",
 };
 
 const systemColour = "bg-foreground/24";
@@ -62,7 +45,6 @@ const systemColour = "bg-foreground/24";
 type Part = {
   key: string;
   name: string;
-  line?: string;
   bytes: number;
   colour: string;
   icon?: AppInfo["icon"];
@@ -112,20 +94,13 @@ function PartRow(props: {
           />
         )}
       </span>
-      <span className="flex min-w-0 flex-1 flex-col gap-px leading-tight">
-        <span
-          className={cn(
-            "truncate text-sm font-medium",
-            props.problem && "text-destructive",
-          )}
-        >
-          {part.name}
-        </span>
-        {part.line && (
-          <span className="truncate text-[13px] font-medium text-muted-foreground">
-            {part.line}
-          </span>
+      <span
+        className={cn(
+          "min-w-0 flex-1 truncate text-sm leading-6 font-medium",
+          props.problem && "text-destructive",
         )}
+      >
+        {part.name}
       </span>
       <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
         {props.size}
@@ -137,11 +112,7 @@ function PartRow(props: {
 const bySize = (a: { bytes: number }, b: { bytes: number }) =>
   b.bytes - a.bytes;
 
-function storageParts(
-  parts: StoragePart[],
-  host: HostInfo,
-  apps: readonly AppInfo[],
-): Part[] {
+function storageParts(parts: StoragePart[], apps: readonly AppInfo[]): Part[] {
   const named: Part[] = [];
   const own: Part[] = [];
   let system: Part | undefined;
@@ -151,7 +122,6 @@ function storageParts(
         named.push({
           key: "devBuilds",
           name: "Dev builds",
-          line: "Builds to update to, on the dev channel",
           bytes: part.bytes,
           colour: "bg-pink",
         });
@@ -159,8 +129,7 @@ function storageParts(
       case "software":
         named.push({
           key: "software",
-          name: "Software",
-          line: "This version and the one before, to go back to",
+          name: productName,
           bytes: part.bytes,
           colour: "bg-purple",
         });
@@ -169,7 +138,6 @@ function storageParts(
         named.push({
           key: "home",
           name: "Home's data",
-          line: `Backups ${formatBytes(part.backups)} · devices, history and activity ${formatBytes(part.data)}`,
           bytes: part.bytes,
           colour: "bg-green",
         });
@@ -188,8 +156,7 @@ function storageParts(
       case "system":
         system = {
           key: "system",
-          name: "System and other",
-          line: `${systemName(host)}, its swap space and logs`,
+          name: "System",
           bytes: part.bytes,
           colour: systemColour,
         };
@@ -202,74 +169,49 @@ function storageParts(
   ];
 }
 
-// "Moods and Zigbee run inside it", until none do.
-function insideWords(apps: readonly AppInfo[]) {
-  if (apps.length === 0) return undefined;
-  const inside = apps.filter((app) => !app.run).map((app) => app.name);
-  if (inside.length === 0) return "On its own; each app has its own part";
-  return `${listOf(inside)} ${inside.length === 1 ? "runs" : "run"} inside it`;
-}
-
-function memoryParts(
-  parts: MemoryPart[],
-  host: HostInfo,
-  apps: readonly AppInfo[],
-): Part[] {
+function memoryParts(parts: MemoryPart[], apps: readonly AppInfo[]): Part[] {
   const named: Part[] = [];
   const own: Part[] = [];
   let system: Part | undefined;
+  let sanctum: Part | undefined;
   for (const part of parts) {
     switch (part.kind) {
+      // The core and the manager that updates it are one Sanctum here.
       case "core":
-        named.push({
-          key: "core",
-          name: productName,
-          line: insideWords(apps),
-          bytes: part.bytes,
-          colour: "bg-purple",
-        });
-        break;
       case "manager":
-        named.push({
-          key: "manager",
-          name: "Updates and services",
-          line: `Keeps ${productName} running and up to date`,
-          bytes: part.bytes,
-          colour: "bg-green",
-        });
+        if (!sanctum) {
+          sanctum = {
+            key: "sanctum",
+            name: productName,
+            bytes: 0,
+            colour: "bg-purple",
+          };
+          named.push(sanctum);
+        }
+        sanctum.bytes += part.bytes;
         break;
       case "devBuilds":
         named.push({
           key: "devBuilds",
           name: "Dev builds",
-          line: "Takes the builds pushed to update to",
           bytes: part.bytes,
           colour: "bg-pink",
         });
         break;
       case "service": {
-        const look = serviceLooks[part.service];
         named.push({
           key: `service:${part.service}`,
           name: serviceName(part.service),
-          line: look?.line,
           bytes: part.bytes,
-          colour: look?.colour ?? "bg-yellow",
+          colour: serviceColours[part.service] ?? "bg-yellow",
         });
         break;
       }
       case "app": {
         const app = apps.find((each) => each.id === part.app);
-        const services = part.services.map(
-          (service) => serviceWords[service] ?? service,
-        );
         own.push({
           key: `app:${part.app}`,
           name: app?.name ?? part.app,
-          line:
-            services.length > 0
-              ? `With ${listOf(services)}, which it uses`
-              : undefined,
           bytes: part.bytes,
           colour: colourOf[app?.icon?.color ?? ""] ?? "bg-gray",
           icon: app?.icon ?? undefined,
@@ -279,8 +221,7 @@ function memoryParts(
       case "system":
         system = {
           key: "system",
-          name: "System and other",
-          line: `${systemName(host)} and what it runs`,
+          name: "System",
           bytes: part.bytes,
           colour: systemColour,
         };
@@ -291,12 +232,6 @@ function memoryParts(
     ...own.sort(bySize),
     ...(system ? [system] : []),
   ];
-}
-
-function listOf(names: readonly string[]) {
-  return names.length < 2
-    ? (names[0] ?? "")
-    : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
 
 const spokenParts = (parts: Part[], format: (bytes: number) => string) =>
@@ -310,7 +245,7 @@ export function StorageSection(props: {
 }) {
   const { storage } = props.host;
   if (!storage) return null;
-  const parts = storageParts(storage.parts, props.host, props.apps);
+  const parts = storageParts(storage.parts, props.apps);
   const hint = `${formatBytes(storage.free)} free of ${formatBytes(storage.total)}`;
   return (
     <Section
@@ -341,7 +276,7 @@ export function MemorySection(props: {
 }) {
   const { memory } = props.host;
   if (!memory) return null;
-  const parts = memoryParts(memory.parts, props.host, props.apps);
+  const parts = memoryParts(memory.parts, props.apps);
   const short = props.problems.some((each) => each.kind === "memory");
   const hint = `${formatMemory(memory.available)} free of ${formatMemory(memory.total)}`;
   return (
@@ -361,7 +296,6 @@ export function MemorySection(props: {
             part={{
               key: "swap",
               name: "Swap in use",
-              line: "Its storage stands in for memory, which is slower",
               bytes: memory.swapUsed,
               colour: "",
             }}

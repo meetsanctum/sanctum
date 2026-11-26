@@ -216,7 +216,7 @@ describe("restart and shut down", () => {
     );
     await press(buttonIn(dialog()!, "Shut down"));
     expect(sanctum.querySelector('[role="alert"]')?.textContent).toBe(
-      "Couldn't shut downUpdates and services isn't answering. Try again in a minute",
+      "Couldn't shut downSanctum's updater isn't answering. Try again in a minute",
     );
     expect(buttonIn(sanctum, "Restart").disabled).toBe(false);
   });
@@ -426,7 +426,7 @@ describe("the last 24 hours", () => {
     };
     await render();
     expect(section("status-day").textContent).toBe(
-      "Last 24 HoursProcessor3% nowTemperature58°C now · normalMemory in use627 MB nowNot known right nowShows again once Updates and services answers",
+      "Last 24 HoursProcessor3% nowTemperature58°C now · normalMemory in use627 MB nowNot known right nowShows again once Sanctum's updater answers",
     );
   });
 });

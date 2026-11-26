@@ -204,10 +204,6 @@ export function osText(host: HostInfo) {
   return host.bits ? `${name}, ${host.bits}-bit` : name;
 }
 
-// "Debian", for what the system holds.
-export const systemName = (host: HostInfo) =>
-  host.os?.split(" ")[0] ?? "The system";
-
 /** How long the host has run: "4 days, 21 hours", "2 hours, 12 minutes". */
 export function runningFor(seconds: number) {
   const plural = (count: number, word: string) =>

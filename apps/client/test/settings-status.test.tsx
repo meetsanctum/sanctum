@@ -78,14 +78,13 @@ const section = (id: string) =>
   container.querySelector(`section[aria-labelledby="${id}"]`);
 
 // Each part's name and size, as its row reads.
+// Each part's name and size, its row's only words.
 const parts = (id: string) =>
-  [...(section(id)?.querySelectorAll("ul > li") ?? [])].map((row) => {
-    const [name, line] = [
-      ...row.querySelectorAll(":scope > span:nth-child(2) > span"),
-    ].map((span) => span.textContent);
-    const size = row.querySelector(":scope > span:last-child")?.textContent;
-    return [name, line ?? null, size];
-  });
+  [...(section(id)?.querySelectorAll("ul > li") ?? [])].map((row) =>
+    [...row.querySelectorAll(":scope > span")]
+      .slice(1)
+      .map((span) => span.textContent),
+  );
 
 // Each reading's name and what it reads now, as its heading says.
 const readings = (id: string) =>
@@ -129,20 +128,16 @@ describe("the Status page", () => {
       "Storage6.92 GB free of 15.1 GB",
     );
     expect(parts("status-storage")).toEqual([
-      ["Dev builds", "Builds to update to, on the dev channel", "1.35 GB"],
-      ["Software", "This version and the one before, to go back to", "1.21 GB"],
-      [
-        "Home's data",
-        "Backups 17.4 MB · devices, history and activity 11.3 MB",
-        "28.7 MB",
-      ],
-      ["Zigbee", null, "330 KB"],
-      ["Moods", null, "180 KB"],
-      ["System and other", "Debian, its swap space and logs", "5.57 GB"],
+      ["Dev builds", "1.35 GB"],
+      ["Sanctum", "1.21 GB"],
+      ["Home's data", "28.7 MB"],
+      ["Zigbee", "330 KB"],
+      ["Moods", "180 KB"],
+      ["System", "5.57 GB"],
     ]);
     const bar = section("status-storage")!.querySelector('[role="img"]')!;
     expect(bar.getAttribute("aria-label")).toBe(
-      "Storage, 6.92 GB free of 15.1 GB: Dev builds 1.35 GB, Software 1.21 GB, Home's data 28.7 MB, Zigbee 330 KB, Moods 180 KB, System and other 5.57 GB",
+      "Storage, 6.92 GB free of 15.1 GB: Dev builds 1.35 GB, Sanctum 1.21 GB, Home's data 28.7 MB, Zigbee 330 KB, Moods 180 KB, System 5.57 GB",
     );
     // In the brand's colours, apps in their own; the free space is the track.
     expect(
@@ -167,16 +162,11 @@ describe("the Status page", () => {
       "Memory7.02 GB free of 7.64 GB",
     );
     expect(parts("status-memory")).toEqual([
-      ["Sanctum", "Moods and Zigbee run inside it", "164 MB"],
-      ["Zigbee", "Talks to your Zigbee devices, for the Zigbee app", "132 MB"],
-      [
-        "Updates and services",
-        "Keeps Sanctum running and up to date",
-        "104 MB",
-      ],
-      ["Dev builds", "Takes the builds pushed to update to", "43.7 MB"],
-      ["Messaging", "Carries messages between Zigbee and Sanctum", "7.82 MB"],
-      ["System and other", "Debian and what it runs", "175 MB"],
+      ["Sanctum", "268 MB"],
+      ["Zigbee", "132 MB"],
+      ["Dev builds", "43.7 MB"],
+      ["Messaging", "7.82 MB"],
+      ["System", "175 MB"],
     ]);
   });
 
@@ -229,20 +219,15 @@ describe("the Status page", () => {
       await showMemory(everything, [moods, zigbee, apart(weather)]);
 
       expect(parts("status-memory")).toEqual([
-        ["Sanctum", "Moods and Zigbee run inside it", "148 MB"],
-        [
-          "Updates and services",
-          "Keeps Sanctum running and up to date",
-          "71 MB",
-        ],
-        ["Dev builds", "Takes the builds pushed to update to", "18 MB"],
-        ["Zigbee", "With messaging and Zigbee2MQTT, which it uses", "236 MB"],
-        ["Weather", null, "34 MB"],
-        ["System and other", "Debian and what it runs", "312 MB"],
+        ["Sanctum", "219 MB"],
+        ["Dev builds", "18 MB"],
+        ["Zigbee", "236 MB"],
+        ["Weather", "34 MB"],
+        ["System", "312 MB"],
       ]);
     });
 
-    it("draws each app in its own colour, and Updates and services in green", async () => {
+    it("draws each app in its own colour, and Sanctum with its updater as one", async () => {
       await showMemory(everything, [moods, zigbee, apart(weather)]);
 
       const bar = section("status-memory")!.querySelector('[role="img"]')!;
@@ -252,7 +237,6 @@ describe("the Status page", () => {
         ),
       ).toEqual([
         "bg-purple",
-        "bg-green",
         "bg-pink",
         "bg-gray",
         "bg-cyan",
@@ -269,30 +253,6 @@ describe("the Status page", () => {
         row.textContent?.startsWith("Weather"),
       )!;
       expect(weatherRow.querySelector("img, svg")).not.toBeNull();
-    });
-
-    it("says it of one app still inside Sanctum", async () => {
-      await showMemory(everything, [moods, apart(zigbee), apart(weather)]);
-
-      expect(parts("status-memory")[0]).toEqual([
-        "Sanctum",
-        "Moods runs inside it",
-        "148 MB",
-      ]);
-    });
-
-    it("says it's on its own once none are", async () => {
-      await showMemory(everything, [
-        apart(moods),
-        apart(zigbee),
-        apart(weather),
-      ]);
-
-      expect(parts("status-memory")[0]).toEqual([
-        "Sanctum",
-        "On its own; each app has its own part",
-        "148 MB",
-      ]);
     });
   });
 
@@ -376,7 +336,7 @@ describe("the Status page", () => {
     await render();
 
     expect(section("status-sanctum")?.textContent).toBe(
-      "SanctumCan't check right nowUpdates and services isn't answering. It's usually back within a minute, and this fills in by itselfVersiondev-ed4f70b",
+      "SanctumCan't check right nowSanctum's updater isn't answering. It's usually back within a minute, and this fills in by itselfVersiondev-ed4f70b",
     );
     expect(section("status-storage")).toBeNull();
   });
