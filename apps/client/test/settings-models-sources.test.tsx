@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 
 import { mac, now, router } from "./settings-models-fixtures";
 import {
@@ -26,6 +26,15 @@ vi.mock("../src/core-fetch", async (importOriginal) => ({
 
 const dialog = () => document.querySelector('[role="dialog"]');
 
+// Each checking step stays on screen for two seconds: tests that finish a
+// check move the clock on past them.
+function pacedSteps() {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+}
+
 async function finishCheck(id: string, tokens: number) {
   page.sources = page.sources.map((source) =>
     source.id === id
@@ -42,10 +51,14 @@ async function finishCheck(id: string, tokens: number) {
       : source,
   );
   await act(async () => live.refresh());
+  // Asking, then seeing whether it used the tool.
+  await act(async () => vi.advanceTimersByTimeAsync(2_000));
+  await act(async () => vi.advanceTimersByTimeAsync(2_000));
 }
 
 describe("AI model source dialogs", () => {
   it("follows Check again from a source's menu to its result", async () => {
+    pacedSteps();
     await show();
     const status = () =>
       document.querySelector('#settings-models li [role="status"]')
@@ -64,7 +77,9 @@ describe("AI model source dialogs", () => {
 
     await finishCheck(mac.id, 147);
     expect(dialog()?.textContent).toContain("Qwen3 8B is ready");
-    expect(dialog()?.textContent).toContain("The check used 147 tokens");
+    expect(dialog()?.textContent).toContain(
+      "Answered in 1.2 s · used 147 tokens",
+    );
     await click(button("Done"));
     expect(dialog()).toBeNull();
     expect(status()).toBeUndefined();
@@ -121,6 +136,7 @@ describe("AI model source dialogs", () => {
   });
 
   it("can change to the sole available model when the saved model is gone", async () => {
+    pacedSteps();
     await show();
     await selectMenuItem("Change model");
     // The saved model is gone, and none is chosen for the household.
@@ -136,10 +152,13 @@ describe("AI model source dialogs", () => {
     expect(dialog()?.textContent).toContain("Model changed");
     await finishCheck("mac", 147);
     expect(dialog()?.textContent).toContain("Llama3.2 3B is ready");
-    expect(dialog()?.textContent).toContain("The check used 147 tokens");
+    expect(dialog()?.textContent).toContain(
+      "Answered in 1.2 s · used 147 tokens",
+    );
   });
 
   it("replaces the key for a saved Anthropic source", async () => {
+    pacedSteps();
     page.sources.push(anthropic);
     await show();
     await selectMenuItem("Replace key", anthropic);
@@ -159,12 +178,15 @@ describe("AI model source dialogs", () => {
     expect(dialog()?.textContent).toContain("Key replaced");
     await finishCheck(anthropic.id, 213);
     expect(dialog()?.textContent).toContain("Claude Sonnet 5.5 is ready");
-    expect(dialog()?.textContent).toContain("The check used 213 tokens");
+    expect(dialog()?.textContent).toContain(
+      "Answered in 1.2 s · used 213 tokens",
+    );
     await click(button("Done"));
     expect(dialog()).toBeNull();
   });
 
   it("adds a computer once Sanctum has found Ollama there", async () => {
+    pacedSteps();
     await show();
     await click(button("Add a source"));
     await click(
@@ -209,8 +231,10 @@ describe("AI model source dialogs", () => {
     expect(dialog()?.textContent).toContain(
       "Your home still uses Qwen3 8B on Office Mac.",
     );
-    expect(dialog()?.textContent).toContain("The check used 312 tokens");
-    expect(button("Use it now")).toBeDefined();
+    expect(dialog()?.textContent).toContain(
+      "Answered in 1.2 s · used 312 tokens",
+    );
+    expect(button("Switch to Llama3.2 3B")).toBeDefined();
     await click(button("Done"));
     expect(document.querySelector("[role=dialog]")).toBeNull();
   });

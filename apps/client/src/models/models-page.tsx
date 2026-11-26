@@ -197,13 +197,15 @@ export function ModelsPage(props: {
         )}
       </Section>
       {others.length > 0 && (
-        <Section id="settings-models-other" title="Other Sources">
+        <Section
+          id="settings-models-other"
+          title="Other Sources"
+          // About all of them, so beside their title, not under the last.
+          hint={`${productName} never switches on its own`}
+        >
           <ul className="m-0 flex list-none flex-col gap-4 p-0">
             {others.map(row)}
           </ul>
-          <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
-            {productName} never switches to another source on its own.
-          </p>
         </Section>
       )}
       {info && sources.length > 0 && (

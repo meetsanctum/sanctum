@@ -43,6 +43,8 @@ import { modelSources, modelTokens } from "./schema.js";
 
 /** How often the source in use is asked whether it answers. */
 const watchEveryMs = 60_000;
+/** How long a check that answered spares switching to it another. */
+const freshCheckMs = 5 * 60_000;
 /** How long Ollama on Sanctum may take to load a model, from its disk. */
 const warmWithinMs = 5 * 60_000;
 
@@ -508,7 +510,16 @@ export function createModels(
     cancelWatch();
     downSince = undefined;
     if (before) left(before.id);
-    startCheck({ ...row, inUse: true });
+    // Reuse a recent provider answer to avoid another billed question. An
+    // Ollama check also verifies that the selected model is still local.
+    const check = row.check;
+    const isFresh =
+      row.kind !== "computer" &&
+      row.kind !== "sanctum" &&
+      check?.outcome === "answered" &&
+      now().getTime() - Date.parse(check.at) < freshCheckMs;
+    if (isFresh) void watchInUse();
+    else startCheck({ ...row, inUse: true });
     return info();
   }
 

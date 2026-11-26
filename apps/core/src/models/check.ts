@@ -46,7 +46,6 @@ export async function checkSource(options: {
   signal?: AbortSignal;
 }): Promise<CheckResult> {
   const started = performance.now();
-  const at = options.now().toISOString();
   let firstWordMs: number | undefined;
   let answered = false;
   let usedTool = false;
@@ -89,13 +88,18 @@ export async function checkSource(options: {
   } catch (error) {
     const problem = error instanceof ModelError ? error.problem : "answer";
     return {
-      check: { at, outcome: "failed", problem, tokens: reported },
+      check: {
+        at: options.now().toISOString(),
+        outcome: "failed",
+        problem,
+        tokens: reported,
+      },
       tokens,
     };
   }
   return {
     check: {
-      at,
+      at: options.now().toISOString(),
       outcome: usedTool ? "answered" : "noTool",
       ...(firstWordMs === undefined ? {} : { firstWordMs }),
       tokens: reported,

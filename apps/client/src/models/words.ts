@@ -71,6 +71,51 @@ export function sourceName(source: ModelSourceInfo) {
   }
 }
 
+/**
+ * A provider's name for a model can lead with its maker, such as
+ * "Anthropic: Claude Sonnet 5.5": the maker and the model's own name.
+ */
+const makerAndName = /^([^:]{1,40}):\s+(.+)$/;
+
+export function makerOf(modelName: string) {
+  const named = makerAndName.exec(modelName);
+  return named
+    ? { maker: named[1]!.trim(), name: named[2]!.trim() }
+    : { name: modelName };
+}
+
+function samePlace(a: ModelSourceInfo, b: ModelSourceInfo) {
+  return (
+    a.kind === b.kind && (a.kind !== "computer" || a.address === b.address)
+  );
+}
+
+/** A model by its own name, with its maker if it shares that name. */
+export function ownName(source: ModelSourceInfo, beside?: ModelSourceInfo) {
+  const name = makerOf(source.modelName).name;
+  if (
+    beside &&
+    samePlace(source, beside) &&
+    source.model !== beside.model &&
+    name === makerOf(beside.modelName).name
+  ) {
+    return source.modelName === beside.modelName
+      ? `${source.modelName} (${source.model})`
+      : source.modelName;
+  }
+  return name;
+}
+
+/**
+ * Another source beside one being talked about: by its own name, with where
+ * it runs only when that differs, such as "Qwen3 8B on Office Mac" beside a
+ * provider's model.
+ */
+export function otherName(other: ModelSourceInfo, beside: ModelSourceInfo) {
+  if (samePlace(other, beside)) return ownName(other, beside);
+  return sourceName({ ...other, modelName: ownName(other) });
+}
+
 /** What runs it or reaches it, under its name: its name says where. */
 export function sourceDetail(source: ModelSourceInfo) {
   switch (source.kind) {
