@@ -64,7 +64,7 @@ describe("a page's stylesheet", () => {
     const fill = (alpha: number) =>
       `{.bg-foreground\\/${alpha}{background-color:color-mix(in oklab, var(--ink) ${alpha}%, transparent)}}`;
     const kitCss = [
-      "@layer utilities{.bg-foreground,.bg-foreground\\/8{background-color:var(--ink)}",
+      "@layer utilities{.bg-foreground,.bg-foreground\\/8,:is(.a,.c){background-color:var(--ink)}",
       `${supports}${fill(8)}}`,
     ].join("");
     const page = [
@@ -78,6 +78,18 @@ describe("a page's stylesheet", () => {
         "@layer utilities{.bg-foreground\\/5,:is(.a,.b){background-color:var(--ink)}",
         `${supports}${fill(5)}}`,
       ].join(""),
+    );
+  });
+
+  it("keeps whitespace that is part of a selector", () => {
+    const kitCss = "@layer utilities{.flex{display:flex}}";
+    const standalone = "@layer utilities{.flex\u00a0{display:flex}}";
+    expect(withoutKitRules(standalone, kitCss)).toBe(standalone);
+
+    const page =
+      "@layer utilities{.flex, .flex\u00a0 , .flex\\ , .flex\\20  {display:flex}}";
+    expect(withoutKitRules(page, kitCss)).toBe(
+      "@layer utilities{.flex\u00a0,.flex\\ ,.flex\\20 {display:flex}}",
     );
   });
 

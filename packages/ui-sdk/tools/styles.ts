@@ -45,9 +45,12 @@ function itemsOf(block: string): Item[] {
     } else if (character === "}") {
       depth--;
       if (depth === 0) {
+        const prelude = block.slice(start, open);
         items.push({
           text: block.slice(start, at + 1),
-          prelude: block.slice(start, open).trim(),
+          prelude: /^[\t\n\f\r ]*@/.test(prelude)
+            ? prelude.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, "")
+            : prelude,
           body: block.slice(open + 1, at),
         });
         start = at + 1;
@@ -78,13 +81,21 @@ const utilities = (css: string) =>
 // brackets, parentheses, strings or escapes, as in `:is(.a,.b)`.
 function selectorsOf(prelude: string): string[] {
   const selectors: string[] = [];
+  const cssWhitespace = /[\t\n\f\r ]/;
+  const hexEscape = /[\da-f]{1,6}(?:\r\n|[\t\n\f\r ])?/iy;
   let start = 0;
+  let end = 0;
   let depth = 0;
   let quote: string | undefined;
   for (let at = 0; at < prelude.length; at++) {
     const character = prelude[at]!;
+    if (at === start && cssWhitespace.test(character)) {
+      start++;
+      continue;
+    }
     if (character === "\\") {
-      at++;
+      hexEscape.lastIndex = at + 1;
+      at += hexEscape.exec(prelude)?.[0].length ?? 1;
     } else if (quote) {
       if (character === quote) quote = undefined;
     } else if (character === '"' || character === "'") {
@@ -94,11 +105,14 @@ function selectorsOf(prelude: string): string[] {
     } else if (character === ")" || character === "]") {
       depth--;
     } else if (character === "," && depth === 0) {
-      selectors.push(prelude.slice(start, at).trim());
+      selectors.push(prelude.slice(start, end));
       start = at + 1;
+      continue;
     }
+    // Escaped whitespace and nonbreaking spaces belong to the selector.
+    if (character === "\\" || !cssWhitespace.test(character)) end = at + 1;
   }
-  selectors.push(prelude.slice(start).trim());
+  selectors.push(prelude.slice(start, end));
   return selectors;
 }
 
