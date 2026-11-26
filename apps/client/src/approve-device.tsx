@@ -65,6 +65,10 @@ const codeSlots = Array.from(
 );
 const codeMidpoint = pairingCodeLength / 2;
 const lookAlikeCharacter = /[01ILOU]/;
+const lookAlikeNote =
+  "Codes don’t use 0, 1, I, L, O or U. Check the code on the device.";
+const invalidPasteNote =
+  "That isn’t a code. Codes have 8 letters and digits, such as K7QX-M4PD.";
 
 class ExchangeFailed extends Error {
   constructor(readonly reason: PairExchangeFailure | "timeout") {
@@ -132,6 +136,7 @@ export function ApproveDevice(props: {
   const [problem, setProblem] = useState<string>();
   // A character the code never uses was typed, and left out.
   const [lookAlike, setLookAlike] = useState(false);
+  const [pasteNote, setPasteNote] = useState<string>();
   const [working, setWorking] = useState(false);
   // The core keeps a verified exchange for this approver while the device
   // is waiting, so use its IDs again if the approver goes back or reopens.
@@ -147,6 +152,7 @@ export function ApproveDevice(props: {
       setCode("");
       setProblem(undefined);
       setLookAlike(false);
+      setPasteNote(undefined);
       setWorking(false);
     }
   }, [props.open, cancel]);
@@ -174,6 +180,7 @@ export function ApproveDevice(props: {
     if (!normalised || working) {
       return;
     }
+    setPasteNote(undefined);
     void run(async (signal) => {
       const previous = verified.current;
       const exchange =
@@ -238,6 +245,8 @@ export function ApproveDevice(props: {
   };
 
   const named = step.name === "details" && suggestedName(step.request);
+  const codeNote =
+    pasteNote ?? (lookAlike && !problem ? lookAlikeNote : undefined);
 
   return (
     <Dialog
@@ -271,6 +280,7 @@ export function ApproveDevice(props: {
               readOnly={working}
               filter={(typed) => {
                 const upper = typed.toUpperCase();
+                setPasteNote(undefined);
                 setLookAlike(lookAlikeCharacter.test(upper));
                 return [...upper]
                   .filter((char) => pairingCodeAlphabet.includes(char))
@@ -278,23 +288,37 @@ export function ApproveDevice(props: {
               }}
               onPaste={(event) => {
                 if (working) return;
-                const input = event.currentTarget;
-                const pasted = event.clipboardData
-                  .getData("text/plain")
-                  .toUpperCase()
-                  .replace(/[\s-]/g, "");
-                const next =
-                  input.value.slice(0, input.selectionStart ?? 0) +
-                  pasted +
-                  input.value.slice(input.selectionEnd ?? input.value.length);
-                if (
-                  next.length > pairingCodeLength ||
-                  [...pasted].some(
-                    (char) => !pairingCodeAlphabet.includes(char),
-                  )
-                ) {
+                const text = event.clipboardData.getData("text/plain");
+                const completeCode = normalisePairingCode(text);
+                if (completeCode) {
                   event.preventDefault();
-                  setLookAlike(lookAlikeCharacter.test(pasted));
+                  setCode(completeCode);
+                  setLookAlike(false);
+                  find(completeCode);
+                  return;
+                }
+                const input = event.currentTarget;
+                const pasted = text.toUpperCase().replace(/[\s-]/g, "");
+                const selectionStart = input.selectionStart ?? 0;
+                const selectionEnd = input.selectionEnd ?? input.value.length;
+                const nextLength =
+                  input.value.length -
+                  (selectionEnd - selectionStart) +
+                  pasted.length;
+                const fits = nextLength <= pairingCodeLength;
+                const invalidCharacters = [...pasted].filter(
+                  (char) => !pairingCodeAlphabet.includes(char),
+                );
+                if (!fits || invalidCharacters.length > 0) {
+                  event.preventDefault();
+                  setPasteNote(
+                    fits &&
+                      invalidCharacters.every((char) =>
+                        lookAlikeCharacter.test(char),
+                      )
+                      ? lookAlikeNote
+                      : invalidPasteNote,
+                  );
                 }
               }}
               onChange={(next) => {
@@ -317,10 +341,9 @@ export function ApproveDevice(props: {
                 ))}
               </InputOTPGroup>
             </InputOTP>
-            {lookAlike && !problem && (
+            {codeNote && (
               <p role="status" className="m-0 text-sm text-muted-foreground">
-                Codes don’t use 0, 1, I, L, O or U. Check the code on the
-                device.
+                {codeNote}
               </p>
             )}
             <Problem text={problem} />

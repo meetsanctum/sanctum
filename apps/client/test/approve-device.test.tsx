@@ -282,15 +282,57 @@ describe("adding a shared device", () => {
   it("rejects malformed pastes before looking up a formatted code", async () => {
     const input = dialog().querySelector<HTMLInputElement>("input")!;
     await paste(input, "K7QX-M4PDF");
-    await paste(input, "K7QX!M4PD");
+    expect(dialog().querySelector("[role=status]")?.textContent).toBe(
+      "That isn’t a code. Codes have 8 letters and digits, such as K7QX-M4PD.",
+    );
+    await paste(input, "K7QX!M40");
+    expect(dialog().querySelector("[role=status]")?.textContent).toBe(
+      "That isn’t a code. Codes have 8 letters and digits, such as K7QX-M4PD.",
+    );
     await paste(input, "K7QX-M4P0");
 
     expect(input.value).toBe("");
     expect(looked).toEqual([]);
-    expect(dialog().querySelector("[role=status]")).not.toBeNull();
+    expect(dialog().querySelector("[role=status]")?.textContent).toBe(
+      "Codes don’t use 0, 1, I, L, O or U. Check the code on the device.",
+    );
 
     await paste(input, "k7qx - m4pd");
     expect(looked).toEqual([{ code: "K7QXM4PD" }]);
+  });
+
+  it("replaces a filled code on paste and looks up the new code", async () => {
+    statuses = [{ status: "failed", reason: "no_answer" }];
+    await find("K7QX-M4PD");
+    const input = dialog().querySelector<HTMLInputElement>("input")!;
+    input.setSelectionRange(input.value.length, input.value.length);
+
+    await paste(input, "w3rt-9hnc");
+
+    expect(input.value).toBe("W3RT9HNC");
+    expect(looked).toEqual([{ code: "K7QXM4PD" }, { code: "W3RT9HNC" }]);
+    expect(dialog().querySelector("[role=alert]")?.textContent).toContain(
+      "No device is showing W3RT-9HNC.",
+    );
+  });
+
+  it("shows refused paste feedback after a lookup error and clears it on edit", async () => {
+    await find("W3RT-9HNC");
+    const input = dialog().querySelector<HTMLInputElement>("input")!;
+
+    await paste(input, "Code: K7QX-M4PD");
+
+    expect(input.value).toBe("W3RT9HNC");
+    expect(looked).toEqual([{ code: "W3RT9HNC" }]);
+    expect(dialog().querySelector("[role=status]")?.textContent).toBe(
+      "That isn’t a code. Codes have 8 letters and digits, such as K7QX-M4PD.",
+    );
+    expect(dialog().querySelector("[role=alert]")?.textContent).toContain(
+      "No device is showing W3RT-9HNC.",
+    );
+
+    await type(input, "W3RT9HN");
+    expect(dialog().querySelector("[role=status]")).toBeNull();
   });
 
   it("looks a code up again when Find the device is pressed after a problem", async () => {
