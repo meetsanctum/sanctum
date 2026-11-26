@@ -4,6 +4,7 @@ import type { NewActivityEntry } from "../activity/activity.js";
 import type { AppHost } from "../app-host/host.js";
 import type { Devices } from "../devices/devices.js";
 import type { PlacesModule } from "../places/places.js";
+import type { NotHearing } from "./learning.js";
 import { createListening } from "./listening.js";
 import type { Speech } from "./speech.js";
 import { createSpokenRequests, type Transcriber } from "./spoken.js";
@@ -24,6 +25,8 @@ export function assembleHearing(options: {
   speech: () => Speech | undefined;
   // The core declines runs when no transcriber is available.
   transcriber?: () => Transcriber | null;
+  // Why nothing hears runs, when nothing does.
+  notHearing?: () => NotHearing;
   language?: () => RequestLanguage;
   record: (entry: NewActivityEntry) => void;
   now?: () => number;
@@ -32,6 +35,7 @@ export function assembleHearing(options: {
   const { devices, places, apps, log } = options;
   const spoken = createSpokenRequests({
     transcriber: options.transcriber ?? (() => null),
+    notHearing: options.notHearing ?? (() => "no_speech_to_text"),
     language: options.language ?? (() => "en"),
     speaker(id) {
       const device = devices.get(id);

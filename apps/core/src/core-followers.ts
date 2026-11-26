@@ -9,6 +9,7 @@ import type { EventBus } from "./event-bus.js";
 import type { History } from "./history/history.js";
 import type { createLiveUpdates } from "./live-updates.js";
 import type { Speech } from "./speech/speech.js";
+import type { Learning } from "./speech/learning.js";
 import type { Listening } from "./speech/listening.js";
 import type { Workflows } from "./workflows/workflows.js";
 
@@ -23,6 +24,7 @@ export function setCoreFollowers(
     devices,
     history,
     holds,
+    learning,
     listening,
     live,
     motion,
@@ -36,6 +38,7 @@ export function setCoreFollowers(
     devices: Pick<Devices, "renameAll">;
     history: Pick<History, "deviceChanged">;
     holds: Pick<Holds, "pressed">;
+    learning?: Pick<Learning, "changed">;
     listening: Pick<Listening, "deviceGone">;
     live: Pick<
       ReturnType<typeof createLiveUpdates>,
@@ -75,6 +78,20 @@ export function setCoreFollowers(
         },
       },
     ],
+    // Names, places, moods and speakers change what speech recognition
+    // learns, and whether the home needs it.
+    ...(learning
+      ? ([
+          [
+            "speech recognition",
+            {
+              "device.changed": () => learning.changed(),
+              "places.changed": () => learning.changed(),
+              "entity.changed": () => learning.changed(),
+            },
+          ],
+        ] as const)
+      : []),
     // Speaker registrations change whether the home needs speech.
     ...(speech
       ? ([

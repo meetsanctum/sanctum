@@ -1,4 +1,5 @@
 import {
+  assistantAppId,
   answersTo,
   modelsUsePermission,
   shownQuestions,
@@ -463,14 +464,21 @@ export async function createModules(
   });
   // Pictures drivers hand over, in memory only (blobs/blobs.ts).
   const blobs = createBlobs({ now, log });
-  const { speech, startSpeech, stopSpeech, listening, spoken, isSpeaker } =
-    assembleSpeakerAudio(options, {
-      canUse: agentsCanUse,
-      devices,
-      places,
-      apps: () => apps,
-      record: activity.for("devices"),
-    });
+  const {
+    speech,
+    startSpeech,
+    stopSpeech,
+    listening,
+    spoken,
+    isSpeaker,
+    learning,
+  } = assembleSpeakerAudio(options, {
+    canUse: agentsCanUse,
+    devices,
+    places,
+    apps: () => apps,
+    record: activity.for("devices"),
+  });
   // The home's AI models, which the household adds in Settings, and the
   // turns in which apps ask the one in use.
   const models = createModels(db, {
@@ -538,6 +546,8 @@ export async function createModules(
       // Its first successful start also restores workflows after a restart
       // interrupted adding it back.
       if (app.state === "running") workflows.forApps.added(app.id);
+      // The Assistant brings what speech recognition learns.
+      if (app.id === assistantAppId) learning?.changed();
       // A driver that starts or stops lets devices join, or lists what it
       // found, or no longer does.
       pairing.refresh();
@@ -684,6 +694,7 @@ export async function createModules(
     devices,
     history,
     holds,
+    learning,
     listening,
     live,
     motion,

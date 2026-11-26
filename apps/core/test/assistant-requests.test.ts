@@ -201,6 +201,28 @@ describe("who answers requests", () => {
     expect(() => contractOf(toStaticManifest(assistant(echo)))).not.toThrow();
   });
 
+  it("takes sentences for smart speakers from the Assistant alone, within what can be learned", () => {
+    const manifest = {
+      ...toStaticManifest(assistant(echo)),
+      sentences: { en: ["turn (on|off) the {room} lights"] },
+    };
+    expect(() => contractOf(manifest)).not.toThrow();
+    expect(() =>
+      contractOf({ ...manifest, id: "sanctum.example", requests: undefined }),
+    ).toThrow("Only Sanctum's Assistant brings sentences");
+    expect(() =>
+      contractOf({ ...manifest, sentences: { en: ["dim the {zone}"] } }),
+    ).toThrow("{zone}");
+    expect(() =>
+      contractOf({
+        ...manifest,
+        sentences: {
+          en: Array(40).fill("turn on [the] {light} and [the] {light}"),
+        },
+      }),
+    ).toThrow("steps to learn in a large home");
+  });
+
   it("requires the Assistant to declare the grant for answering requests", () => {
     const manifest = toStaticManifest(assistant(echo));
     expect(() => contractOf({ ...manifest, permissions: [] })).toThrow(

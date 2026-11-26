@@ -48,6 +48,22 @@ export function createManagerServices(options: {
       return answer.service.url ?? null;
     },
 
+    // Where a service answers while it runs and the token it takes from the
+    // core, or null while it doesn't run.
+    async serviceConnection(service: string) {
+      const answer = parseBody(
+        serviceStatus,
+        await once(
+          "GET",
+          `/api/services/${encodeURIComponent(service)}`,
+          undefined,
+          5_000,
+        ),
+      );
+      const { url, token } = answer.service;
+      return url ? { url, token: token ?? null } : null;
+    },
+
     // The core wants a service for itself, as Piper for the speech it makes:
     // the manager runs it from now on, and serviceUrl gives where it answers
     // once it runs. Asking again changes nothing.

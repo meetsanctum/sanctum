@@ -62,7 +62,8 @@ export type Speaker = {
 };
 
 // Why a run was refused, as Activity says it.
-type Declined = "assistant_off" | "no_speech_to_text" | ListenRefusal;
+type Declined =
+  "assistant_off" | "no_sentences" | "no_speech_to_text" | ListenRefusal;
 
 type Asking = { run: HeardRun; cancel: AbortController };
 
@@ -97,6 +98,9 @@ function sinceHeard(moments: Readonly<RunMoments>) {
 export function createSpokenRequests(options: {
   // What hears words in a run's sound, while it runs.
   transcriber: () => Transcriber | null;
+  // Why nothing hears words now: the Assistant has no sentences in the
+  // home's language, or speech recognition isn't ready.
+  notHearing?: () => "no_sentences" | "no_speech_to_text";
   // The home's one language for speech.
   language: () => RequestLanguage;
   speaker: (device: string) => Speaker | null;
@@ -479,7 +483,7 @@ export function createSpokenRequests(options: {
       }
       const transcriber = options.transcriber();
       if (!transcriber) {
-        declined(device, "no_speech_to_text");
+        declined(device, options.notHearing?.() ?? "no_speech_to_text");
         return "off";
       }
       if (!options.requests.hasRoom(device)) {

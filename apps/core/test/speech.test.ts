@@ -55,6 +55,7 @@ function setup(options: {
   cidr?: string;
   want?: (signal: AbortSignal) => Promise<void>;
   chime?: { rate: number; samples: Int16Array }[];
+  hears?: () => boolean;
   log?: (message: string) => void;
 }) {
   const calls: string[] = [];
@@ -94,6 +95,7 @@ function setup(options: {
       },
     },
     areaOn: () => areaOn,
+    ...(options.hears ? { hears: options.hears } : {}),
     publishedPort: 4180,
     ...(options.chime ? { chime: options.chime } : {}),
     log: options.log ?? (() => {}),
@@ -146,6 +148,53 @@ describe("createSpeech", () => {
     await settle();
     // The speaker goes: nothing left to say things on.
     speech.deviceChanged({ id: "a", before: speaker("a", true), after: null });
+    await settle();
+    expect(calls).toEqual([
+      "want piper",
+      "release piper",
+      "want piper",
+      "release piper",
+    ]);
+    speech.stop();
+  });
+
+  it("keeps Piper for announcements when speech recognition stops, and for replies while it runs", async () => {
+    let hears = true;
+    const both = {
+      ...speaker("a", true),
+      capabilities: [
+        {
+          id: "audio",
+          kind: "audio",
+          features: { announces: true, listens: true },
+        },
+      ],
+    } as unknown as DeviceInfo;
+    const { speech, calls, setArea } = setup({
+      devices: [both],
+      hears: () => hears,
+    });
+    announcements!.port = () => 4180;
+    speech.start();
+    await settle();
+    expect(calls).toEqual(["want piper"]);
+
+    // The Assistant goes: announcements still need Piper.
+    hears = false;
+    speech.hearingChanged();
+    await settle();
+    expect(calls).toEqual(["want piper"]);
+
+    // With agents' speech off, Piper runs only for the Assistant's replies.
+    setArea(false);
+    await settle();
+    expect(calls).toEqual(["want piper", "release piper"]);
+    hears = true;
+    speech.hearingChanged();
+    await settle();
+    expect(calls).toEqual(["want piper", "release piper", "want piper"]);
+    hears = false;
+    speech.hearingChanged();
     await settle();
     expect(calls).toEqual([
       "want piper",

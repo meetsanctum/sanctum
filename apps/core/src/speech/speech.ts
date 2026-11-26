@@ -420,6 +420,14 @@ export function createSpeech(options: {
       };
     },
 
+    /**
+     * Whether speech recognition runs changed: Piper runs for its replies
+     * while it does, beside what announcements need.
+     */
+    hearingChanged() {
+      reconcile();
+    },
+
     areaChanged() {
       reconcile();
       // What hasn't reached a speaker yet isn't said once agents may not speak.
