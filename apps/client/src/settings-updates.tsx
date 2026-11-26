@@ -1,17 +1,16 @@
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
-import {
-  Button,
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-  useHomeClock,
-} from "@meetsanctum/ui-sdk";
+import { Button, useHomeClock } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { Check, ChevronDown, Circle, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { productName } from "./brand";
 import { Section } from "./components";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "./components/ui/collapsible";
 import {
   Dialog,
   DialogClose,
