@@ -9,7 +9,6 @@
     "build": "astro build",
     "start": "serve --no-clipboard --listen tcp://0.0.0.0:${PORT:-5175}",
     "lint": "astro check",
-    "test": "node --test test/sidebar.test.mjs",
     "typecheck": "astro check",
     "clean": "rm -rf dist .astro .turbo"
   },

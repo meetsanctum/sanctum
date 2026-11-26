@@ -18,9 +18,6 @@
     "lint": {
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/client/src/brand.ts"]
     },
-    "test": {
-      "dependsOn": ["build"]
-    },
     "typecheck": {
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/client/src/brand.ts"]
     }

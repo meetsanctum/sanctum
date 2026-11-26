@@ -34,7 +34,7 @@ rather see less movement, and it also helps a slow device.
 With Reduce motion on:
 
 - Tabs change the page in place.
-- The colour swatches appear without flying in.
+- The colour picker's circles appear in place, without flying out.
 - Sanctum's loader breathes instead of drawing its line.
 
 Pages you swipe with your finger or drag with the mouse still slide the
