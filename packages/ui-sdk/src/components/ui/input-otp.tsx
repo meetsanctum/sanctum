@@ -113,9 +113,14 @@ function InputOTPDisplay({
   className,
   children,
   ...props
-}: React.ComponentProps<"div"> & { value: string; maxLength: number }) {
+}: Omit<React.ComponentProps<"div">, "tabIndex"> & {
+  value: string;
+  maxLength: number;
+}) {
   return (
-    <InputOTPContext.Provider value={{ value, maxLength, focused: false }}>
+    <InputOTPContext.Provider
+      value={{ value: value.slice(0, maxLength), maxLength, focused: false }}
+    >
       <div
         data-slot="input-otp-display"
         aria-hidden="true"
@@ -124,6 +129,7 @@ function InputOTPDisplay({
           className,
         )}
         {...props}
+        tabIndex={undefined}
       >
         {children}
       </div>

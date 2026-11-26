@@ -255,10 +255,17 @@ describe("a shared device's pairing screen", () => {
     expect(boxes.getAttribute("aria-hidden")).toBe("true");
     expect(boxes.querySelector("input")).toBeNull();
     expect(
-      [...boxes.querySelectorAll('[data-slot="input-otp-slot"]')].map(
-        (box) => box.textContent,
-      ),
-    ).toEqual([...first!, ...second!]);
+      [...boxes.children].map((part) => [
+        part.getAttribute("data-slot"),
+        [...part.querySelectorAll('[data-slot="input-otp-slot"]')].map(
+          (slot) => slot.textContent,
+        ),
+      ]),
+    ).toEqual([
+      ["input-otp-group", [...first!]],
+      ["input-otp-separator", []],
+      ["input-otp-group", [...second!]],
+    ]);
     expect(
       container.querySelector("svg[aria-label='Pairing QR code']"),
     ).not.toBeNull();
@@ -602,6 +609,13 @@ describe("a shared device's pairing screen", () => {
     });
     await settle(2_000);
     expect(shownCode()).toBeNull();
+    expect(
+      [
+        ...container.querySelectorAll(
+          '[data-slot="pairing-code"] [data-slot="input-otp-slot"]',
+        ),
+      ].map((slot) => slot.textContent),
+    ).toEqual(Array.from({ length: 8 }, () => ""));
     expect(
       container.querySelector("svg[aria-label='Pairing QR code']"),
     ).toBeNull();

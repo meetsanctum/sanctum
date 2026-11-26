@@ -2627,7 +2627,7 @@
       "    filter?: (typed: string) => string;",
       "    containerClassName?: string;",
       "}): React.JSX.Element;",
-      "declare function InputOTPDisplay({ value, maxLength, className, children, ...props }: React.ComponentProps<\"div\"> & {",
+      "declare function InputOTPDisplay({ value, maxLength, className, children, ...props }: Omit<React.ComponentProps<\"div\">, \"tabIndex\"> & {",
       "    value: string;",
       "    maxLength: number;",
       "}): React.JSX.Element;",

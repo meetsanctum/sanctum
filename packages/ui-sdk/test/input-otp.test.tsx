@@ -187,10 +187,10 @@ describe("a code in boxes", () => {
 });
 
 describe("a code shown in the boxes", () => {
-  const show = (value: string) =>
+  const show = (value: string, maxLength = 4) =>
     act(async () =>
       root.render(
-        <InputOTPDisplay value={value} maxLength={4}>
+        <InputOTPDisplay value={value} maxLength={maxLength}>
           <InputOTPGroup>
             <InputOTPSlot index={0} />
             <InputOTPSlot index={1} />
@@ -229,5 +229,24 @@ describe("a code shown in the boxes", () => {
 
     expect(slots().map((slot) => slot.textContent)).toEqual(["", "", "", ""]);
     expect(container.querySelector("[data-active]")).toBeNull();
+  });
+
+  it("shows characters only up to the display length", async () => {
+    await show("K7QX", 3);
+
+    expect(slots().map((slot) => slot.textContent)).toEqual([
+      "K",
+      "7",
+      "Q",
+      "",
+    ]);
+  });
+
+  it("ignores a tab index passed through extra props", async () => {
+    const props = { value: "K", maxLength: 1, tabIndex: 0 };
+    await act(async () => root.render(<InputOTPDisplay {...props} />));
+
+    const display = container.querySelector('[data-slot="input-otp-display"]')!;
+    expect(display.hasAttribute("tabindex")).toBe(false);
   });
 });
