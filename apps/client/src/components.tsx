@@ -6,7 +6,7 @@ import { knotPath } from "./knot";
 import { AvatarFallback, Avatar as AvatarRoot } from "./components/ui/avatar";
 import { getShell } from "./shell";
 import { Button, PageBar, usePhone } from "@meetsanctum/ui-sdk";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, User } from "lucide-react";
 
 // Small pieces the screens share.
 
@@ -25,7 +25,8 @@ export function WindowDragArea() {
   );
 }
 
-// A person by their identity colour and initials.
+// A person by their identity colour and initials, or a person's outline
+// while there is no name yet, as when someone is still typing theirs.
 export function Avatar(props: {
   name: string;
   colour: string;
@@ -43,7 +44,7 @@ export function Avatar(props: {
         className="font-medium text-(--carbon)"
         style={{ background: props.colour }}
       >
-        {initials}
+        {initials || <User aria-hidden="true" className="size-[55%]" />}
       </AvatarFallback>
     </AvatarRoot>
   );

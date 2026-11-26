@@ -327,7 +327,7 @@ function EditClient(props: {
               {editing?.action === "rename"
                 ? "The name shows here and in the activity log."
                 : shared
-                  ? "It is signed out at once. To add it again, choose your home on it, select “Everyone at home”, and approve its new code."
+                  ? "It is signed out at once. To add it again, choose your home on it, then “Everyone at home”, and approve its new code."
                   : "It is signed out at once, and its person signs in again to use it."}
             </DialogDescription>
           </DialogHeader>

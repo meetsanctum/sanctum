@@ -28,7 +28,7 @@ export function CertificateChanged(props: {
       title={`Check that this is ${props.host.name}`}
       subtitle={`${props.host.name}’s security certificate changed, so this device stopped before sending anything.`}
     >
-      <div className="flex flex-col gap-2 text-center text-sm leading-5 text-balance text-muted-foreground">
+      <div className="flex flex-col gap-2 text-center text-sm leading-5 text-muted-foreground">
         <p className="m-0">
           That’s expected after {productName} moves to new hardware. It can also
           mean another device is pretending to be your home.

@@ -175,6 +175,18 @@ describe("choosing a home", () => {
 });
 
 describe("setting up a new home", () => {
+  it("shows a person's outline in the avatar until a name is typed", async () => {
+    await act(async () => publish([unclaimed]));
+    await click("New home");
+    const avatar = () => container.querySelector('[data-slot="avatar"]')!;
+    expect(avatar().querySelector("svg")).not.toBeNull();
+
+    await fill("Your name", "Taylor Reed");
+
+    expect(avatar().querySelector("svg")).toBeNull();
+    expect(avatar().textContent).toBe("TR");
+  });
+
   it("marks only Repeat password when the passwords differ", async () => {
     await act(async () => publish([unclaimed]));
     await click("New home");

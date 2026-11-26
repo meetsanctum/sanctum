@@ -234,8 +234,8 @@ export function ApproveDevice(props: {
             <DialogHeader>
               <DialogTitle>Add a shared device</DialogTitle>
               <DialogDescription>
-                On the wall display or tablet, choose your home, then select
-                “Everyone at home”. Enter the code it shows.
+                On the wall display or tablet, choose your home, then “Everyone
+                at home”. Enter the code it shows.
               </DialogDescription>
             </DialogHeader>
             <Input

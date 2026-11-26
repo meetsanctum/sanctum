@@ -119,7 +119,7 @@ export function ClaimHost(props: {
       <form className="flex flex-col gap-4" onSubmit={submit}>
         <div className="flex items-end gap-4">
           <span className="mb-0.5">
-            <Avatar name={name || " "} colour={colour} size="lg" />
+            <Avatar name={name} colour={colour} size="lg" />
           </span>
           <div className="flex-1">
             <SheetField
