@@ -30,9 +30,10 @@ import { AddSanctum, ollamaAppId } from "./add-sanctum";
 import type { ModelsResponse } from "./data";
 import {
   availablePlaces,
+  placeDetails,
   placeNames,
+  placePrivacy,
   problemText,
-  providerList,
   providerNames,
   sizeText,
   type Place,
@@ -50,11 +51,6 @@ const help = "m-0 text-[13px] leading-[18px] text-muted-foreground";
 const fieldLabel = "text-[13px] font-medium";
 const choice =
   "flex cursor-pointer items-start gap-3 rounded-md border-2 border-transparent bg-card px-4 py-3 has-checked:border-primary has-checked:bg-background has-focus-visible:ring-3 has-focus-visible:ring-ring/50";
-const choiceDetails: Record<Place, string> = {
-  sanctum: "With the Ollama app. Your data never leaves your home.",
-  computer: "A Mac or PC that runs a local model with Ollama.",
-  provider: `${providerList}, with your own API key. Faster, but what's asked leaves your home.`,
-};
 const providerOptions = modelProviders.map((value) => ({
   value,
   label: providerNames[value],
@@ -261,8 +257,8 @@ export function AddSource(props: {
             <DialogHeader>
               <DialogTitle>Add a source</DialogTitle>
               <DialogDescription>
-                Where your home's AI model runs. You can add more than one and
-                choose which is in use.
+                Choose where your home's AI model runs. If you add more than
+                one, you choose which one is in use.
               </DialogDescription>
             </DialogHeader>
             <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
@@ -281,7 +277,7 @@ export function AddSource(props: {
                       {placeNames[place]}
                     </span>
                     <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
-                      {choiceDetails[place]}
+                      {placeDetails[place]} {placePrivacy[place]}.
                     </span>
                   </span>
                 </label>

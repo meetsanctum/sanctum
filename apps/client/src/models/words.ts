@@ -34,6 +34,24 @@ export const placeNames = {
 
 export type Place = keyof typeof placeNames;
 
+/** What each place needs, under its name. */
+export const placeDetails: Record<Place, string> = {
+  sanctum: "With the Ollama app.",
+  computer: "A Mac or PC that runs Ollama.",
+  provider: `${providerList}, with your own API key.`,
+};
+
+/**
+ * Whether what's asked stays in the home. Sanctum lists only a computer's
+ * local models, never Ollama's cloud ones, so what's asked stays on that
+ * computer.
+ */
+export const placePrivacy: Record<Place, string> = {
+  sanctum: "What you ask stays in your home",
+  computer: "What you ask stays in your home",
+  provider: "What you ask leaves your home",
+};
+
 const placesWithoutSanctum = ["computer", "provider"] as const;
 const places = ["sanctum", ...placesWithoutSanctum] as const;
 
