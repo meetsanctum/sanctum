@@ -229,13 +229,12 @@ export function checkLine(
 }
 
 /**
- * What a check costs at a provider, said as a ceiling: the question is a
+ * What a check uses at a provider, said as a ceiling: the question is a
  * hundred or so tokens, and the answer stops at 1,024, which a model that
- * thinks first can reach. In the household's words, not input and output.
+ * thinks first can reach. Who charges for it goes unsaid: it's the
+ * provider, and some models there are free.
  */
-export function checkCostText(provider: ModelProvider, subject = "It") {
-  return `${subject} uses up to about 1,000 tokens, which ${providerNames[provider]} charges for.`;
-}
+export const checkCostText = "The check uses up to about 1,000 tokens.";
 
 /** A model's download, such as 5.2 GB. */
 export function sizeText(bytes: number) {

@@ -270,9 +270,7 @@ export function AddSource(props: {
         {productName} asks the model one short question to see that it answers
         and can use your home's tools.
       </p>
-      {step === "provider" && (
-        <p className={cardLine}>{checkCostText(provider)}</p>
-      )}
+      {step === "provider" && <p className={cardLine}>{checkCostText}</p>}
       {step === "provider" && provider === "openrouter" && (
         <p className={cardLine}>
           OpenRouter passes the question to the company behind the model.
