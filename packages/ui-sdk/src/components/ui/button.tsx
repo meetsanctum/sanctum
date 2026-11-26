@@ -20,6 +20,9 @@ const pressed =
 const checked =
   "aria-checked:bg-foreground aria-checked:text-background aria-checked:hover:bg-foreground/90 aria-checked:hover:text-background";
 
+const cardSize =
+  "h-auto w-full justify-start rounded-md p-3.5 text-start font-normal whitespace-normal";
+
 const buttonVariants = cva(
   "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
@@ -138,7 +141,8 @@ const buttonVariants = cva(
         field: "h-9 w-full justify-between gap-2 px-2.5 text-start font-normal",
         // A small card among others, its icon with its words, which lay
         // themselves out, such as a place in Settings to start from.
-        card: "h-auto w-full justify-start rounded-md p-3.5 text-start font-normal whitespace-normal",
+        card: cardSize,
+        "sheet-row": `${cardSize} min-h-16 gap-3.5`,
         // A card of its own, its words centred over what it leads to.
         choice:
           "h-auto min-h-77 w-full flex-col justify-start gap-0 rounded-lg px-5.5 pt-8 pb-5.5 text-center font-normal whitespace-normal",

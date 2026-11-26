@@ -1,13 +1,12 @@
 import { cn } from "cn";
-import type { CSSProperties, InputHTMLAttributes, ReactNode } from "react";
+import type { ReactNode } from "react";
 
-import { backdropOn } from "./backdrop";
 import { productName } from "./brand";
 import { knotPath } from "./knot";
 import { AvatarFallback, Avatar as AvatarRoot } from "./components/ui/avatar";
 import { getShell } from "./shell";
 import { Button, PageBar, usePhone } from "@meetsanctum/ui-sdk";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, User } from "lucide-react";
 
 // Small pieces the screens share.
 
@@ -26,7 +25,8 @@ export function WindowDragArea() {
   );
 }
 
-// A person by their identity colour and initials.
+// A person by their identity colour and initials, or a person's outline
+// while there is no name yet, as when someone is still typing theirs.
 export function Avatar(props: {
   name: string;
   colour: string;
@@ -44,25 +44,9 @@ export function Avatar(props: {
         className="font-medium text-(--carbon)"
         style={{ background: props.colour }}
       >
-        {initials}
+        {initials || <User aria-hidden="true" className="size-[55%]" />}
       </AvatarFallback>
     </AvatarRoot>
-  );
-}
-
-export function Field(
-  props: {
-    label: string;
-    hint?: string;
-  } & InputHTMLAttributes<HTMLInputElement>,
-) {
-  const { label, hint, ...input } = props;
-  return (
-    <label className="field">
-      <span className="field-label">{label}</span>
-      <input {...input} />
-      {hint && <span className="field-hint">{hint}</span>}
-    </label>
   );
 }
 
@@ -77,54 +61,6 @@ export function Logo(props: { className?: string }) {
       </svg>
       <span>{productName}</span>
     </div>
-  );
-}
-
-const backdrop = backdropOn(new Date());
-
-// A centred card for the screens before the dashboard, under the logo. Where
-// there is room, its title and what it explains (`intro`) sit beside what it
-// asks for (`children`); elsewhere they stack.
-export function Sheet(props: {
-  title: string;
-  intro?: ReactNode;
-  children: ReactNode;
-  onBack?: () => void;
-}) {
-  return (
-    <main
-      data-mode="evening"
-      className="sheet-screen"
-      style={
-        {
-          "--backdrop": `url("${backdrop.url}")`,
-          "--backdrop-colour": backdrop.colour,
-        } as CSSProperties
-      }
-    >
-      <WindowDragArea />
-      <Logo className="sheet-logo" />
-      <section className="card sheet" aria-labelledby="sheet-title">
-        <div className="sheet-column">
-          {props.onBack && (
-            <Button
-              variant="link"
-              size="inline"
-              type="button"
-              className="back self-start"
-              onClick={props.onBack}
-            >
-              Back
-            </Button>
-          )}
-          <h1 id="sheet-title" className="sheet-title">
-            {props.title}
-          </h1>
-          {props.intro}
-        </div>
-        <div className="sheet-column">{props.children}</div>
-      </section>
-    </main>
   );
 }
 
@@ -208,20 +144,20 @@ export function Section(props: {
 /**
  * A page's way back to the one it was opened from, before its title, named
  * for that page: on a phone its chevron alone, as the bar's other buttons
- * are there.
+ * are there. A page whose title is too long to name it says Back.
  */
-export function BackButton(props: { to: string; onBack: () => void }) {
+export function BackButton(props: { to?: string; onBack: () => void }) {
   const isPhone = usePhone();
   return (
     <Button
       variant={isPhone ? "ghost" : "outline"}
       size={isPhone ? "bar" : "default"}
-      aria-label={`Back to ${props.to}`}
+      aria-label={props.to ? `Back to ${props.to}` : "Back"}
       onClick={props.onBack}
       className="me-2"
     >
       <ChevronLeft data-icon="inline-start" aria-hidden="true" />
-      {!isPhone && props.to}
+      {!isPhone && (props.to ?? "Back")}
     </Button>
   );
 }

@@ -74,7 +74,7 @@ Shelly's accepts an address in its Home Assistant slot only when it answers
 Home Assistant's first sign-in step. The dev server answers that step and
 serves the Sanctum client. The core allows the network addresses as origins
 so apps' pages can open in frames. Give the display a Network address from
-Vite's output, choose the home, then "This is a shared device". Approve its
+Vite's output, choose the home, then "Everyone at home". Approve its
 code with `pnpm dev:approve <code> [name]` after setting up the home with
 `pnpm dev:seed`. Anyone on the network can reach the stack over this port
 and use the seed's login.

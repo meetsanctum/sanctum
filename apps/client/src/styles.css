@@ -335,50 +335,10 @@ body {
   }
 }
 
-/* Cards share the colour behind them, set apart by a hairline. */
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 20px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-lg);
-  background: var(--background);
-}
-
-.rows {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-}
-
-.row-main {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.row-main strong {
-  font-weight: 500;
-}
-
-.row-detail {
-  color: var(--secondary);
-  font-size: 13px;
-}
-
-.row-action {
-  color: var(--action);
-  font-weight: 500;
-}
-
-/* The logo at the top, and the sheet in the middle of the screen as long as
-   there is room for both. The screen scrolls itself: at a fixed height the
-   empty row under a tall sheet shrinks away, where at a minimum height it
-   would keep the logo's height. */
+/* The screens before the dashboard: the logo at the top, and the sheet in
+   the middle of the screen as long as there is room for both. The screen
+   scrolls itself: at a fixed height the empty row under a tall sheet shrinks
+   away, where at a minimum height it would keep the logo's height. */
 .sheet-screen {
   position: relative;
   isolation: isolate;
@@ -390,22 +350,68 @@ body {
   padding: max(40px, env(safe-area-inset-top)) 24px 40px;
 }
 
+/* Keep the fixed height on older web views. The build's minifier drops
+   the fallback when both heights are in the same rule. */
+@supports (height: 100dvh) {
+  .sheet-screen {
+    height: 100dvh;
+  }
+}
+
+/* A phone keeps its width for the sheet, which has its own padding. */
+@media (max-width: 639px) {
+  .sheet-screen {
+    padding-inline: 16px;
+  }
+}
+
 .sheet-logo {
   align-self: start;
   margin-bottom: 32px;
   color: var(--white);
 }
 
-/* The screens before the dashboard show their sheet over a moody landscape
-   (src/backdrop.ts), blurred and darkened ahead of time, so it needs no live
-   blur, and it stays put while a tall sheet scrolls. Its average colour
-   stands in until it has loaded. */
+/* Behind the sheet is Sanctum's own backdrop, Graphite: a cool grey light
+   from the top left and a warm glow from the bottom right on near-black. It
+   is drawn, not a photo, so there is nothing to load, license or blur, and
+   it stays put while a tall sheet scrolls. Each glow fades along an eased
+   curve, its stops on a smoothstep, over a wide ellipse, so no ring shows
+   where a straight fade would leave one. */
 .sheet-screen::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
-  background: var(--backdrop) center / cover no-repeat var(--backdrop-colour);
+  background-color: #17181a;
+  background-image:
+    radial-gradient(
+      95% 85% at 6% -12%,
+      rgb(152 152 157 / 30%) 0%,
+      rgb(152 152 157 / 28.5%) 10%,
+      rgb(152 152 157 / 25%) 20%,
+      rgb(152 152 157 / 20%) 30%,
+      rgb(152 152 157 / 15%) 40%,
+      rgb(152 152 157 / 10.5%) 50%,
+      rgb(152 152 157 / 6.5%) 60%,
+      rgb(152 152 157 / 3.3%) 70%,
+      rgb(152 152 157 / 1.3%) 80%,
+      rgb(152 152 157 / 0.3%) 90%,
+      rgb(152 152 157 / 0%) 100%
+    ),
+    radial-gradient(
+      85% 80% at 98% 112%,
+      rgb(255 204 0 / 17%) 0%,
+      rgb(255 204 0 / 16%) 10%,
+      rgb(255 204 0 / 14%) 20%,
+      rgb(255 204 0 / 11.5%) 30%,
+      rgb(255 204 0 / 8.7%) 40%,
+      rgb(255 204 0 / 6%) 50%,
+      rgb(255 204 0 / 3.7%) 60%,
+      rgb(255 204 0 / 1.9%) 70%,
+      rgb(255 204 0 / 0.7%) 80%,
+      rgb(255 204 0 / 0.15%) 90%,
+      rgb(255 204 0 / 0%) 100%
+    );
 }
 
 /* The logo sets the name in lower case, the knot 1.27 times the cap height
@@ -426,165 +432,6 @@ body {
 .logo svg {
   width: 28px;
   height: 28px;
-}
-
-/* On the backdrop the sheet is frosted Carbon glass, as what floats over a
-   dashboard is, and the screen is in Evening (src/components.tsx). The photo
-   is blurred already, so the glass needs no live blur of its own. */
-.sheet {
-  width: min(420px, 100%);
-  gap: 18px;
-  padding: 28px;
-  border: none;
-  background: var(--glass);
-  box-shadow: inset 0 0 0 1px var(--glass-line);
-}
-
-/* Fields on the glass are filled with the ink at 8%, as the theme's
-   secondary surfaces are, so they read as part of it, not holes in it. */
-.sheet .field input {
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-}
-
-.sheet-column {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  min-width: 0;
-}
-
-/* Where there is room, the title and what the sheet explains sit beside what
-   it asks for, so the tallest sheet fits a laptop's window without
-   scrolling. */
-@media (min-width: 820px) {
-  .sheet {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: start;
-    gap: 48px;
-    width: 760px;
-    padding: 36px;
-  }
-}
-
-.sheet-title {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 400;
-  line-height: 32px;
-}
-
-.sheet .back {
-  margin-bottom: -4px;
-}
-
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  border: none;
-}
-
-.field-label {
-  padding: 0;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 18px;
-  color: var(--secondary);
-}
-
-.field input {
-  padding: 11px 14px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-md);
-  background: var(--background);
-  color: var(--ink);
-  font: inherit;
-}
-
-.field input:focus {
-  outline: 2px solid var(--action);
-  outline-offset: -1px;
-}
-
-.field-hint {
-  font-size: 13px;
-  color: var(--secondary);
-}
-
-.swatches {
-  display: flex;
-  gap: 10px;
-}
-
-.swatch {
-  position: relative;
-  cursor: pointer;
-}
-
-.swatch input {
-  position: absolute;
-  opacity: 0;
-}
-
-.swatch > span:not(.visually-hidden) {
-  display: block;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-}
-
-.swatch input:checked + span {
-  box-shadow:
-    0 0 0 2px var(--background),
-    0 0 0 4px var(--action);
-}
-
-.swatch input:focus-visible + span {
-  outline: 2px solid var(--action);
-  outline-offset: 4px;
-}
-
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.muted {
-  margin: 0;
-  color: var(--secondary);
-  line-height: 1.45;
-}
-
-.notice,
-.problem {
-  margin: 0;
-  line-height: 1.4;
-  font-size: 15px;
-}
-
-.notice {
-  color: var(--secondary);
-}
-
-.problem {
-  color: var(--danger);
-}
-
-.empty p {
-  margin: 0 0 8px;
 }
 
 /* Add devices' wait (src/add-devices-joining.tsx): a soft warm glow the

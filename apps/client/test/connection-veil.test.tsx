@@ -134,8 +134,11 @@ describe("a home restored onto another host", () => {
     // The old address answers with another CA before discovery lists the
     // restored host.
     await act(async () => certificateFailed(host.url, "changed"));
+    expect(container.querySelector("h1")?.textContent).toBe(
+      "Check that this is Maya's home",
+    );
     expect(container.textContent).toContain(
-      "This home's security certificate changed",
+      "This home’s security certificate changed, so this device stopped before sending anything.",
     );
     await act(async () =>
       publish([

@@ -155,8 +155,7 @@ The person does this in the app. Tell them what to expect:
 
 1. Open Sanctum. When macOS asks whether Sanctum may find devices on the
    local network, allow it: that is how the app finds the home.
-2. Under **Choose your home** the app lists **New home, ready to set up**.
-   Choose **Set up**.
+2. Under **Choose your home**, choose **New home**.
 3. Enter a name, a colour, a username and a password, and choose **Set
    up**.
 4. The dashboard opens on **Set up your home**: set where the home is, add

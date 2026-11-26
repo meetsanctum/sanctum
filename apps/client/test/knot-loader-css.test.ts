@@ -2,12 +2,11 @@ import { fileURLToPath } from "node:url";
 import { build } from "vite";
 import { beforeAll, describe, expect, it } from "vitest";
 
-// The knot loader's motion, the top bar's fade and the frame's backing under
-// the glass (src/styles.css), read from the stylesheet the production build
-// emits. The dev server serves the CSS as written, but the build's minifier
-// rewrites it: it once turned the paths' `animation` shorthand, which had no
-// name, into `none`, and built apps showed no knot. It also reorders
-// declarations, which the fade's animation timeline depends on.
+// The client's styles (src/styles.css), read from the stylesheet the
+// production build emits. The dev server serves the CSS as written, but the
+// build's minifier rewrites it: it once turned the paths' `animation`
+// shorthand, which had no name, into `none`, and built apps showed no knot.
+// It also reorders declarations, which the fade's animation timeline depends on.
 
 type Rule = {
   media: string;
@@ -59,6 +58,15 @@ beforeAll(async () => {
   css = stylesheet?.type === "asset" ? String(stylesheet.source) : "";
   rules = stylesheetRules(css);
 }, 30_000);
+
+it("gives the sign-in screen a fixed height on old and new web views", () => {
+  const heights = (supports?: string) =>
+    declarationsOf(".sheet-screen", supports).filter(
+      ([property]) => property === "height",
+    );
+  expect(heights()).toEqual([["height", "100vh"]]);
+  expect(heights("@supports(height:100dvh)")).toEqual([["height", "100dvh"]]);
+});
 
 describe("the knot loader's built CSS", () => {
   it.each(["upright", "lying"])(

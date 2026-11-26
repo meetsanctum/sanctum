@@ -228,15 +228,39 @@ async function approve(
 
 describe("a shared device's pairing screen", () => {
   it("shows its code and QR code, asking the chosen host without a token", async () => {
+    let finishRequest!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      finishRequest = resolve;
+    });
+    const original = vi.mocked(coreJson).getMockImplementation()!;
+    vi.mocked(coreJson).mockImplementation(async (path, init) => {
+      if (path === "/api/auth/pair/request") await ready;
+      return original(path, init);
+    });
     await render();
 
-    expect(shownCode()![1]).toMatch(/^K7/);
+    const liveRegion = container.querySelector(
+      '[aria-live="polite"][aria-atomic="true"]',
+    )!;
+    expect(liveRegion.textContent).toBe("");
+    finishRequest();
+    await settle();
+
+    const [formatted, first, second] = shownCode()!;
+    expect(first).toMatch(/^K7/);
+    expect(liveRegion.textContent).toBe(formatted);
+    const boxes = container.querySelector('[data-slot="pairing-code"]')!;
+    expect([...boxes.children].map((box) => box.textContent)).toEqual([
+      ...first!,
+      "",
+      ...second!,
+    ]);
     expect(
       container.querySelector("svg[aria-label='Pairing QR code']"),
     ).not.toBeNull();
     expect(container.textContent).toContain("Waiting for approval");
     expect(container.textContent).toContain(
-      "open Settings → Clients on a device that’s already connected to this home",
+      "On a device that’s already connected to Maya's home, open Settings → Clients.",
     );
     expect(requests).toEqual([
       expect.objectContaining({
@@ -497,7 +521,7 @@ describe("a shared device's pairing screen", () => {
     expect(shownCode()).toBeNull();
     expect(requests).toHaveLength(2);
     expect(container.textContent).toContain(
-      "Several codes didn’t match, so this device stopped answering.",
+      "A wrong code was entered too many times, so this device stopped showing one.",
     );
 
     const button = [...container.querySelectorAll("button")].find(
@@ -512,6 +536,9 @@ describe("a shared device's pairing screen", () => {
 
   it("shows a new code once its request expired", async () => {
     await render();
+    const liveRegion = container.querySelector(
+      '[aria-live="polite"][aria-atomic="true"]',
+    )!;
     polls.push(() => {
       throw new CoreError(409, "expired");
     });
@@ -519,6 +546,7 @@ describe("a shared device's pairing screen", () => {
     await settle(2_000);
 
     expect(shownCode()![1]).toMatch(/^W3/);
+    expect(liveRegion.textContent).toBe(shownCode()![0]);
   });
 
   it("retries saving a collected token without collecting it again", async () => {

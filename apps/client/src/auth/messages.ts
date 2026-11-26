@@ -9,7 +9,7 @@ export function problemText(error: unknown): string {
   if (error instanceof SignInError) {
     switch (error.code) {
       case "wrong_username_or_password":
-        return "Wrong username or password.";
+        return "That username and password don’t match. Check both and try again.";
       case "unconfirmed":
         return "This home could not prove it is yours. Nothing was saved.";
       case "another_host":

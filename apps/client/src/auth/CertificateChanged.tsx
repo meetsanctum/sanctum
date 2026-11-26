@@ -1,9 +1,10 @@
 import { Button } from "@meetsanctum/ui-sdk";
+import { ShieldAlert } from "lucide-react";
 
 import { productName } from "../brand";
-import { Sheet } from "../components";
 import { ChooseAnotherHome } from "../connection-veil";
 import type { StoredHost } from "../shell";
+import { Sheet, SheetActions } from "./sheet";
 
 // The host answered with a certificate from another CA. The shell refused
 // the connection before anything was sent, and this device cannot tell a
@@ -22,45 +23,48 @@ export function CertificateChanged(props: {
   const personal = props.host.kind === "personal";
   return (
     <Sheet
-      title="This home's security certificate changed"
-      intro={
-        <p className="muted">
-          {props.host.name} answered with a certificate this device doesn't
-          know, so nothing was sent to it. That happens after {productName} is
-          restored onto new hardware, or when another device on the network
-          pretends to be your home.
-        </p>
-      }
+      glyph={ShieldAlert}
+      warning
+      title={`Check that this is ${props.host.name}`}
+      subtitle="This home’s security certificate changed, so this device stopped before sending anything."
     >
-      <p className="muted">
-        {personal
-          ? "Sign in again: your password checks that it is your home, and never leaves this device."
-          : "Show a new pairing code, and someone checks it from another of the home's devices."}
-      </p>
-      <Button
-        variant="default"
-        size="lg"
-        type="button"
-        className="mt-1"
-        onClick={props.onCheck}
-      >
-        {personal ? "Sign in again" : "Show a pairing code"}
-      </Button>
-      <div className="flex flex-wrap gap-x-6 gap-y-2">
-        <Button
-          type="button"
-          variant="link"
-          size="inline"
-          onClick={props.onRetry}
-        >
-          Try again
-        </Button>
-        <ChooseAnotherHome
-          host={props.host}
-          onForgotten={props.onForgotten}
-          variant="link"
-        />
+      <div className="flex flex-col gap-2 text-center text-sm leading-5 text-muted-foreground">
+        <p className="m-0">
+          That’s expected after {productName} moves to new hardware. It can also
+          mean another device is pretending to be your home.
+        </p>
+        <p className="m-0">
+          {personal
+            ? "Signing in again checks that it’s your home. Your password never leaves this device."
+            : "Approving a new code from another device checks that it’s your home."}
+        </p>
       </div>
+      <SheetActions>
+        <Button
+          variant="default"
+          size="lg"
+          type="button"
+          className="w-full"
+          onClick={props.onCheck}
+        >
+          {personal ? "Sign in again" : "Show a new code"}
+        </Button>
+        <div className="flex flex-wrap justify-center gap-x-6 gap-y-2">
+          <Button
+            type="button"
+            variant="link"
+            size="inline"
+            onClick={props.onRetry}
+          >
+            Check again
+          </Button>
+          <ChooseAnotherHome
+            host={props.host}
+            onForgotten={props.onForgotten}
+            variant="link"
+          />
+        </div>
+      </SheetActions>
     </Sheet>
   );
 }
