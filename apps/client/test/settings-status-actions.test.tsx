@@ -378,27 +378,24 @@ describe("the last 24 hours", () => {
     };
     await act(async () => vi.advanceTimersByTimeAsync(6 * 60_000));
     const day = section("status-day");
-    expect(day.textContent).not.toContain("no readings");
     expect(day.querySelectorAll("polyline")).toHaveLength(4);
 
     // A successful refresh can establish a real gap, including one at the end.
     answers["/api/system/history"] = async () => ({ points });
     await act(async () => vi.advanceTimersByTimeAsync(5 * 60_000));
-    expect(day.textContent).toContain("no readings");
     expect(day.querySelectorAll("polyline")).toHaveLength(0);
   });
 
-  it("heads each chart with what it reads now, then what its day came to", async () => {
+  it("heads each chart with its name and what it reads now, and nothing more", async () => {
     await render();
     const day = section("status-day");
     expect(
       [...day.querySelectorAll("h3")].map((heading) => heading.textContent),
     ).toEqual(["Processor", "Temperature", "Memory in use"]);
-    // A day of three readings so far.
     expect(day.textContent).toMatch(
-      /Processor3% now4% on average since \d\d:\d\d · busiest at \d\d:\d\d, 5%/,
+      /^Last 24 HoursProcessor3% now.*Temperature58°C now · normal.*Memory in use627 MB now/,
     );
-    expect(day.textContent).toContain("Temperature58°C now · normal");
+    expect(day.textContent).not.toMatch(/on average|busiest|no readings/);
     expect(
       [...day.querySelectorAll('[role="group"]')].map((chart) =>
         chart.getAttribute("aria-label"),
