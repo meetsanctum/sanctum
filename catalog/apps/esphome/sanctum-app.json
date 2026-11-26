@@ -79,13 +79,6 @@
       "startsOn": false
     },
     {
-      "id": "devices.listen",
-      "reason": "To send requests from your ESPHome speakers to the Assistant.",
-      "needed": false,
-      "asked": null,
-      "startsOn": false
-    },
-    {
       "id": "discover:mdns:_esphomelib._tcp",
       "reason": "To find your ESPHome devices.",
       "needed": true,

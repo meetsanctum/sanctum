@@ -417,7 +417,7 @@ export interface AppContext {
     put(blob: AppBlob): Promise<PutBlob>;
   };
   /**
-   * A smart speaker's request, for a driver holding devices.register and devices.listen: when
+   * A smart speaker's request, for a driver holding devices.register: when
    * one of its speakers whose `audio` part `listens` hears its wake word,
    * the driver opens a run before the speaker streams. The core takes it or
    * refuses it, and a refused run is declined on the speaker (listening.ts).

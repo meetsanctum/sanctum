@@ -4,7 +4,6 @@ import {
   assistantAppId,
   defineApp,
   registerPermission,
-  spokenRequestsPermission,
   type AppContext,
   type AssistantRequestCall,
   type ListenStep,
@@ -56,7 +55,6 @@ it("answers a smart speaker's request through the Assistant, for the speaker, in
     id: "sanctum.example",
     permissions: [
       { id: registerPermission, reason: "To register the test devices." },
-      { id: spokenRequestsPermission, reason: "To send voice requests." },
     ],
     actions: [],
     start: async (ctx) => {
@@ -161,18 +159,6 @@ it("answers a smart speaker's request through the Assistant, for the speaker, in
       driverCtx!.audio.listen("speaker", {
         wakeWord: "Okay Nabu",
       });
-    expect(await wake()).toEqual({ accepted: false, refusal: "off" });
-    const grant = await post(
-      core,
-      "/api/apps/sanctum.example/permissions/update",
-      {
-        permission: spokenRequestsPermission,
-        granted: true,
-      },
-      maya,
-    );
-    expect(grant.statusCode).toBeLessThan(300);
-
     const run = (await wake()) as VoiceRun;
     expect(run.accepted).toBe(true);
     run.send(new Uint8Array(3_200));

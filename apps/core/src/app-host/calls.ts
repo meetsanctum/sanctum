@@ -15,7 +15,6 @@ import {
   placesReadPermission,
   readPermission,
   registerPermission,
-  spokenRequestsPermission,
   roomSectionTile,
   standardEntityTypes,
   workflowsManagePermission,
@@ -660,9 +659,6 @@ export function createCoreCalls(options: {
     async openListen(open) {
       need(registerPermission);
       notForAgents();
-      if (!permissions().includes(spokenRequestsPermission)) {
-        return { accepted: false, refusal: "off" };
-      }
       if (!options.listening)
         return { accepted: false, refusal: "unavailable" };
       return options.listening.open(appId, open);
@@ -670,7 +666,6 @@ export function createCoreCalls(options: {
 
     async sendListen(send) {
       need(registerPermission);
-      need(spokenRequestsPermission);
       notForAgents();
       if (!options.listening) throw new ActionError("not_found");
       options.listening.send(appId, send);

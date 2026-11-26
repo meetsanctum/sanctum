@@ -1,7 +1,4 @@
-import {
-  spokenRequestsPermission,
-  type RequestLanguage,
-} from "@meetsanctum/app-sdk";
+import type { RequestLanguage } from "@meetsanctum/app-sdk";
 
 import type { NewActivityEntry } from "../activity/activity.js";
 import type { AppHost } from "../app-host/host.js";
@@ -51,10 +48,7 @@ export function assembleHearing(options: {
       };
     },
     drives: (driver, id) =>
-      devices.get(id)?.driver === driver &&
-      apps().isRunning(driver) &&
-      (apps().holds(driver)?.granted.includes(spokenRequestsPermission) ??
-        false),
+      devices.get(id)?.driver === driver && apps().isRunning(driver),
     requests: {
       answers: () => apps().answersRequests(),
       hasRoom: (key) => apps().hasRequestRoom(key),

@@ -165,14 +165,22 @@ async function checkTakeover(protocol: number) {
     params: [{ text: "Here." }],
   });
   expect((await second).json()).toEqual({ reply: "Here." });
-  await vi.waitFor(() =>
-    expect(heard).toContainEqual({
-      type: "reply",
-      id: 1,
-      outcome: { ok: false, message: "turn_ended" },
-    }),
-  );
-  expect(heard.some((message) => message.type === "end")).toBe(protocol === 25);
+  // A runner from 22 is told its older call ended; one before runs it out,
+  // its later calls refused.
+  if (protocol === 25) {
+    expect(heard).toContainEqual(
+      expect.objectContaining({ type: "end", call: older.id }),
+    );
+  } else {
+    await vi.waitFor(() =>
+      expect(heard).toContainEqual({
+        type: "reply",
+        id: 1,
+        outcome: { ok: false, message: "turn_ended" },
+      }),
+    );
+    expect(heard.some((message) => message.type === "end")).toBe(false);
+  }
   expect(socket.destroyed).toBe(false);
   say({ type: "answer", call: older.id, outcome: { ok: true } });
   say({ type: "answer", call: newer.id, outcome: { ok: true } });
