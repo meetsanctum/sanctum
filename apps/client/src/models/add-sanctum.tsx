@@ -3,7 +3,6 @@ import type {
   AvailableApp,
   ModelChoice,
   ModelSourceLook,
-  ModelsInfo,
 } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
 import { Check } from "lucide-react";
@@ -19,6 +18,7 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { coreJson } from "../core-fetch";
+import type { AddSourceResponse } from "./data";
 import { problemText, sizeText } from "./words";
 
 // Adding Ollama on Sanctum as a source, in the Add sheet: the Ollama app
@@ -42,7 +42,7 @@ const choice =
 export function AddSanctum(props: {
   apps: readonly AppInfo[];
   onBack: () => void;
-  onAdded: (info: ModelsInfo) => void;
+  onAdded: (info: AddSourceResponse) => void;
   onAppAdded: (app: AppInfo) => void;
   // Closes the sheet and opens Ollama's page.
   onOpenOllama?: () => void;
@@ -130,7 +130,7 @@ export function AddSanctum(props: {
     setProblem(undefined);
     try {
       props.onAdded(
-        await coreJson<ModelsInfo>("/api/models/sources", {
+        await coreJson<AddSourceResponse>("/api/models/sources", {
           method: "POST",
           json: { kind: "sanctum", model },
         }),

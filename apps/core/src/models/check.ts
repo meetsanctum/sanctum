@@ -35,7 +35,7 @@ const question = {
   ],
 };
 
-type CheckResult = { check: ModelCheck; tokens: ModelTokens };
+type CheckResult = { check: ModelCheck; tokens?: ModelTokens };
 
 export async function checkSource(options: {
   endpoint: ModelEndpoint;
@@ -50,7 +50,8 @@ export async function checkSource(options: {
   let firstWordMs: number | undefined;
   let answered = false;
   let usedTool = false;
-  let tokens: ModelTokens = { read: 0, written: 0 };
+  let tokens: ModelTokens | undefined;
+  let reported: number | undefined;
   try {
     for await (const piece of ask(
       options.endpoint,
@@ -63,6 +64,9 @@ export async function checkSource(options: {
         wholeMs: checkLimits.wholeMs,
         onFirstPiece: () => {
           firstWordMs = Math.round(performance.now() - started);
+        },
+        onUsage: (usage) => {
+          reported = usage.read + usage.written;
         },
       },
     )) {
@@ -84,13 +88,17 @@ export async function checkSource(options: {
     if (!answered) throw new ModelError("answer", "the source gave no answer");
   } catch (error) {
     const problem = error instanceof ModelError ? error.problem : "answer";
-    return { check: { at, outcome: "failed", problem }, tokens };
+    return {
+      check: { at, outcome: "failed", problem, tokens: reported },
+      tokens,
+    };
   }
   return {
     check: {
       at,
       outcome: usedTool ? "answered" : "noTool",
       ...(firstWordMs === undefined ? {} : { firstWordMs }),
+      tokens: reported,
     },
     tokens,
   };

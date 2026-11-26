@@ -241,7 +241,7 @@ describe("AI models", () => {
   it("uses one source at a time and none once it's removed", async () => {
     const { core, token, sources } = await home();
     await addOfficeMac(core, token);
-    await post(
+    const addedRouter = await post(
       core,
       "/api/models/sources",
       {
@@ -252,6 +252,10 @@ describe("AI models", () => {
       { token },
     );
     let [mac, router] = (await checked(core)).sources;
+    expect(addedRouter.json()).toMatchObject({
+      addedSourceId: router!.id,
+      sources: [{ id: mac!.id }, { id: router!.id }],
+    });
     expect([mac!.inUse, router!.inUse]).toEqual([true, false]);
 
     await post(core, `/api/models/sources/${router!.id}/use`, {}, { token });

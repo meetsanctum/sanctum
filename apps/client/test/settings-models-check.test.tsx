@@ -114,12 +114,12 @@ describe("A source's check in the dialog", () => {
     expect(text()).toContain("This can take a minute while the model loads.");
   });
 
-  it("is ready as the home's AI model once it used the tool", async () => {
+  it("is ready as the home's AI model once it requested the test tool", async () => {
     await showCheck({ ...added, inUse: true }, undefined);
     expect(text()).toContain("OpenAI: GPT-5 Mini is ready");
     expect(text()).toContain("It's now your home's AI model.");
     expect(text()).toContain(
-      "It answered in 1.2 s and used your home's tools.",
+      "It answered in 1.2 s and requested the test tool.",
     );
     expect(text()).toContain("The check used 312 tokens");
     expect(button("Use it now")).toBeUndefined();
@@ -129,6 +129,9 @@ describe("A source's check in the dialog", () => {
     vi.mocked(coreJson).mockResolvedValue({ sources: [], apps: [] });
     const { onChanged } = await showCheck(added);
     expect(text()).toContain("Your home still uses Qwen3 8B on Office Mac.");
+    expect(text()).toContain(
+      "Switching to this source runs another check and may incur token charges.",
+    );
     await click(button("Use it now"));
     expect(coreJson).toHaveBeenCalledWith(
       "/api/models/sources/added/use",
@@ -151,6 +154,9 @@ describe("A source's check in the dialog", () => {
     expect(text()).toContain("OpenAI: GPT-5 Mini didn't answer");
     expect(text()).toContain("OpenRouter took too long to answer.");
     expect(text()).toContain("The check used no tokens");
+    expect(text()).toContain(
+      "Checking again sends a new question and may incur token charges.",
+    );
     await click(button("Check again"));
     expect(coreJson).toHaveBeenCalledWith(
       "/api/models/sources/added/check",
@@ -158,7 +164,53 @@ describe("A source's check in the dialog", () => {
     );
   });
 
-  it("leaves out what a check used before checks kept it", async () => {
+  it("offers to retry when no check is running and no result was saved", async () => {
+    vi.mocked(coreJson).mockResolvedValue({ sources: [], apps: [] });
+    await showCheck({ ...added, check: undefined });
+    expect(text()).toContain("The check didn't finish");
+    expect(text()).not.toContain("Asking it one short question");
+    await click(button("Check again"));
+    expect(coreJson).toHaveBeenCalledWith(
+      "/api/models/sources/added/check",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it.each([
+    [
+      "Check again",
+      { ...added, check: undefined },
+      "Couldn't start the check.",
+    ],
+    ["Use it now", added, "Couldn't switch to this source."],
+  ] as const)(
+    "shows an error and allows another try after %s fails",
+    async (label, source, message) => {
+      vi.mocked(coreJson).mockRejectedValueOnce(new Error("disconnected"));
+      vi.mocked(coreJson).mockResolvedValueOnce({ sources: [], apps: [] });
+      const { onChanged } = await showCheck(source);
+      await click(button(label));
+      expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+        message,
+      );
+      expect((button(label) as HTMLButtonElement).disabled).toBe(false);
+      await click(button(label));
+      expect(document.querySelector('[role="alert"]')).toBeNull();
+      expect(onChanged).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("identifies an Ollama model refusal during a check", async () => {
+    await showCheck({
+      ...mac,
+      check: { at: added.check!.at, outcome: "failed", problem: "refused" },
+    });
+    expect(text()).toContain(
+      "Ollama refused the check. The model may not support tools.",
+    );
+  });
+
+  it("leaves out the token count when usage is unavailable", async () => {
     await showCheck({
       ...added,
       check: { ...added.check!, tokens: undefined },
@@ -195,7 +247,9 @@ describe("A source's check in the dialog", () => {
     );
     expect(button("Change and check").disabled).toBe(true);
     await click(
-      document.querySelector<HTMLButtonElement>('button[role="combobox"]')!,
+      document.querySelector<HTMLButtonElement>(
+        'button[data-slot="popover-trigger"]',
+      )!,
     );
     // The model in use isn't offered again.
     const items = [...document.querySelectorAll<HTMLElement>("[cmdk-item]")];
@@ -212,6 +266,20 @@ describe("A source's check in the dialog", () => {
       }),
     );
     expect(onChanged).toHaveBeenCalledOnce();
+  });
+
+  it("explains how to get another model when Ollama only lists the current one", async () => {
+    vi.mocked(coreJson).mockResolvedValue({
+      found: true,
+      models: [{ id: mac.model, name: mac.modelName }],
+    });
+    await showCheck({ ...mac, check: { ...added.check!, outcome: "noTool" } });
+    await click(button("Choose another model"));
+    expect(text()).toContain("This source has no other models to choose from.");
+    expect(text()).toContain("run ollama pull on that computer");
+    expect(document.querySelector('[data-slot="popover-trigger"]')).toBeNull();
+    await click(button("Back"));
+    expect(text()).toContain("may not work well");
   });
 });
 
@@ -238,7 +306,9 @@ describe("Choosing a model", () => {
     return onChange;
   }
   const trigger = () =>
-    document.querySelector<HTMLButtonElement>('button[role="combobox"]')!;
+    document.querySelector<HTMLButtonElement>(
+      'button[data-slot="popover-trigger"]',
+    )!;
   const search = () =>
     document.querySelector<HTMLInputElement>(
       'input[aria-label="Search models"]',
@@ -271,6 +341,11 @@ describe("Choosing a model", () => {
   it("groups a provider's models by maker, each by its own name", async () => {
     await showPicker();
     await click(trigger());
+    const popup = document.getElementById(
+      trigger().getAttribute("aria-controls")!,
+    );
+    expect(popup?.getAttribute("role")).toBe("dialog");
+    expect(popup?.contains(search())).toBe(true);
     expect(search().placeholder).toBe("Search 4 models");
     expect(headings()).toEqual(["Anthropic", "OpenAI"]);
     expect(rows()).toEqual([
@@ -279,6 +354,23 @@ describe("Choosing a model", () => {
       "GPT-5 Mini",
       "Auto Router",
     ]);
+  });
+
+  it("limits visible rows while searching the full catalog", async () => {
+    const list = Array.from({ length: 130 }, (_, i) => ({
+      id: `model-${i}`,
+      name: `Maker: Model ${i}`,
+    }));
+    const onChange = await showPicker("", list);
+    await click(trigger());
+    expect(rows()).toHaveLength(100);
+    expect(text()).toContain("Showing 100 of 130 models.");
+    await type(search(), "model");
+    expect(rows()).toHaveLength(100);
+    await type(search(), "129");
+    expect(rows()).toEqual(["Model 129"]);
+    await click(document.querySelector<HTMLElement>("[cmdk-item]")!);
+    expect(onChange).toHaveBeenCalledWith("model-129");
   });
 
   it("filters as you type, counts what it hides and says when nothing matches", async () => {

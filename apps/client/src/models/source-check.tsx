@@ -24,7 +24,12 @@ import { coreJson } from "../core-fetch";
 import { KnotLoader } from "../knot-loader";
 import type { ModelsResponse } from "./data";
 import { ModelPicker } from "./model-picker";
-import { problemText, providerNames, sourceName } from "./words";
+import {
+  checkProblemText,
+  problemText,
+  providerNames,
+  sourceName,
+} from "./words";
 
 // A source's check, followed in the dialog that started it: adding a source
 // or changing its model or key asks the model a short question, which the
@@ -34,6 +39,7 @@ import { problemText, providerNames, sourceName } from "./words";
 // without the tool.
 
 type Shown = { kind: "check" } | { kind: "choose" };
+type CheckAction = "check" | "use";
 
 const help = "m-0 text-[13px] leading-[18px] font-medium text-muted-foreground";
 
@@ -60,21 +66,26 @@ export function SourceCheck(props: {
   const { source } = props;
   const [shown, setShown] = useState<Shown>({ kind: "check" });
   const [acting, setActing] = useState(false);
+  const [failedAction, setFailedAction] = useState<CheckAction>();
 
   // Use it now and Check again answer with the whole list, as the page's
   // own buttons do.
-  const act = async (path: string) => {
-    if (acting) return;
+  const act = async (action: CheckAction) => {
+    if (acting || !source) return;
     setActing(true);
+    setFailedAction(undefined);
     try {
       props.onChanged(
-        await coreJson<ModelsResponse>(path, {
-          method: "POST",
-          signal: AbortSignal.timeout(10_000),
-        }),
+        await coreJson<ModelsResponse>(
+          `/api/models/sources/${source.id}/${action}`,
+          {
+            method: "POST",
+            signal: AbortSignal.timeout(10_000),
+          },
+        ),
       );
     } catch {
-      // The page asks again by itself and shows how it is.
+      setFailedAction(action);
     } finally {
       setActing(false);
     }
@@ -103,7 +114,7 @@ export function SourceCheck(props: {
   }
 
   const check = source.check;
-  if (source.checking || !check) {
+  if (source.checking) {
     return (
       <Result
         badge={<KnotLoader className="size-7 text-(--secondary)" />}
@@ -135,7 +146,7 @@ export function SourceCheck(props: {
               aria-hidden="true"
               className="mx-0.5 size-3 rounded-full border-[1.5px] border-current opacity-70"
             />
-            Seeing whether it uses the tool
+            Seeing whether it requests the test tool
           </li>
         </ol>
         <p className={help}>
@@ -149,7 +160,7 @@ export function SourceCheck(props: {
     );
   }
 
-  const used = tokensText(check.tokens);
+  const used = tokensText(check?.tokens);
   const tokens = used && (
     <span className="inline-flex items-center gap-1.5 rounded-sm bg-foreground/8 px-2.5 py-1 text-[13px] leading-[18px] font-medium text-muted-foreground">
       <Coins aria-hidden="true" className="size-3.5" />
@@ -157,25 +168,39 @@ export function SourceCheck(props: {
     </span>
   );
 
-  if (check.outcome === "failed") {
+  if (!check || check.outcome === "failed") {
+    const lines = [
+      check
+        ? checkProblemText(check.problem ?? "answer", source)
+        : "You can start a new check.",
+      "It stays in your sources.",
+    ];
+    if (!inHome(source)) {
+      lines.push(
+        "Checking again sends a new question and may incur token charges.",
+      );
+    }
     return (
       <Result
         badge={<CircleAlert className="size-6.5 text-destructive" />}
-        title={`${source.modelName} didn't answer`}
-        lines={[
-          problemText(check.problem ?? "answer", source),
-          "It stays in your sources.",
-        ]}
+        title={
+          check
+            ? `${source.modelName} didn't answer`
+            : "The check didn't finish"
+        }
+        lines={lines}
         tokens={tokens}
+        problem={
+          failedAction === "check"
+            ? "Couldn't start the check. Try again."
+            : undefined
+        }
         footer={
           <>
             <Button variant="outline" onClick={props.onClose}>
               Done
             </Button>
-            <Button
-              disabled={acting}
-              onClick={() => void act(`/api/models/sources/${source.id}/check`)}
-            >
+            <Button disabled={acting} onClick={() => void act("check")}>
               Check again
             </Button>
           </>
@@ -190,7 +215,7 @@ export function SourceCheck(props: {
         badge={<TriangleAlert className="size-6 text-(--sun-text)" />}
         title={`${source.modelName} may not work well`}
         lines={[
-          "It answered, but didn't use your home's tools, so it may not act on your devices.",
+          "It answered without requesting the test tool, so it may have trouble acting on your devices.",
           "A model that supports tools works better.",
         ]}
         tokens={tokens}
@@ -209,26 +234,39 @@ export function SourceCheck(props: {
   }
 
   const seconds = ((check.firstWordMs ?? 0) / 1000).toFixed(1);
+  const lines = [
+    source.inUse
+      ? "It's now your home's AI model."
+      : props.inUse
+        ? `Your home still uses ${sourceName(props.inUse)}.`
+        : "No source is in use.",
+    `It answered in ${seconds} s and requested the test tool.`,
+  ];
+  if (!source.inUse) {
+    lines.push(
+      inHome(source)
+        ? "Switching to this source runs another check."
+        : "Switching to this source runs another check and may incur token charges.",
+    );
+  }
   return (
     <Result
       badge={<CircleCheck className="size-6.5 text-(--leaf-text)" />}
       title={`${source.modelName} is ready`}
-      lines={[
-        source.inUse
-          ? "It's now your home's AI model."
-          : props.inUse
-            ? `Your home still uses ${sourceName(props.inUse)}.`
-            : "No source is in use.",
-        `It answered in ${seconds} s and used your home's tools.`,
-      ]}
+      lines={lines}
       tokens={tokens}
+      problem={
+        !source.inUse && failedAction === "use"
+          ? "Couldn't switch to this source. Try again."
+          : undefined
+      }
       footer={
         <>
           {!source.inUse && (
             <Button
               variant="outline"
               disabled={acting}
-              onClick={() => void act(`/api/models/sources/${source.id}/use`)}
+              onClick={() => void act("use")}
             >
               Use it now
             </Button>
@@ -246,6 +284,7 @@ function Result(props: {
   lines?: string[];
   tokens?: ReactNode;
   children?: ReactNode;
+  problem?: string;
   footer: ReactNode;
 }) {
   const [first, ...rest] = props.lines ?? [];
@@ -281,6 +320,11 @@ function Result(props: {
         {props.tokens}
         {props.children}
       </div>
+      {props.problem && (
+        <p role="alert" className="m-0 text-sm text-destructive">
+          {props.problem}
+        </p>
+      )}
       <DialogFooter>{props.footer}</DialogFooter>
     </div>
   );
@@ -311,7 +355,7 @@ function ChooseModel(props: {
       .then((look) => {
         if (signal.aborted) return;
         if (!look.found) setProblem(problemText(look.problem, source));
-        else setModels(look.models);
+        else setModels(look.models.filter((each) => each.id !== source.model));
       })
       .catch(() => {
         if (!signal.aborted) setProblem("That did not work. Try again.");
@@ -346,7 +390,6 @@ function ChooseModel(props: {
     }
   };
 
-  const others = models?.filter((each) => each.id !== source.model);
   return (
     <form onSubmit={submit} className="flex flex-col gap-5">
       <DialogHeader>
@@ -357,14 +400,24 @@ function ChooseModel(props: {
             : `Choose one that can use tools, so it can act on your devices. Checking it uses tokens again, and ${providerNames[source.kind]} charges for them.`}
         </DialogDescription>
       </DialogHeader>
-      {others && (
+      {models && models.length > 0 && (
         <ModelPicker
           aria-label="Model"
-          models={others}
+          models={models}
           value={model}
           onChange={setModel}
           disabled={working}
         />
+      )}
+      {models?.length === 0 && (
+        <p className={help}>
+          This source has no other models to choose from.{" "}
+          {source.kind === "computer"
+            ? "For another, run ollama pull on that computer."
+            : source.kind === "sanctum"
+              ? "For another, download it on Ollama's page."
+              : null}
+        </p>
       )}
       {problem && (
         <p role="alert" className="m-0 text-sm text-destructive">

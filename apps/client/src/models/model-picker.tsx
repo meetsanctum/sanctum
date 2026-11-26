@@ -1,7 +1,7 @@
 import type { ModelChoice } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
 import { Check, ChevronsUpDown } from "lucide-react";
-import { useId, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import {
   Command,
@@ -28,14 +28,13 @@ import { sizeText } from "./words";
 type Entry = { choice: ModelChoice; maker?: string; name: string };
 
 const makerOf = /^([^:]{1,40}):\s+(.+)$/;
+const maxRows = 100;
 
-function entriesOf(models: readonly ModelChoice[]): Entry[] {
-  return models.map((choice) => {
-    const named = makerOf.exec(choice.name);
-    return named
-      ? { choice, maker: named[1]!.trim(), name: named[2]!.trim() }
-      : { choice, name: choice.name };
-  });
+function entryOf(choice: ModelChoice): Entry {
+  const named = makerOf.exec(choice.name);
+  return named
+    ? { choice, maker: named[1]!.trim(), name: named[2]!.trim() }
+    : { choice, name: choice.name };
 }
 
 function shownName(entry: Entry) {
@@ -73,24 +72,44 @@ export function ModelPicker(props: {
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const listId = useId();
-  const entries = useMemo(() => entriesOf(props.models), [props.models]);
-  const chosen = entries.find((entry) => entry.choice.id === props.value);
+  const chosen = useMemo(() => {
+    const choice = props.value
+      ? props.models.find((choice) => choice.id === props.value)
+      : undefined;
+    return choice && entryOf(choice);
+  }, [props.models, props.value]);
   const typed = query.trim().toLowerCase();
-  const matches = typed
-    ? entries.filter(
-        (entry) =>
-          entry.choice.name.toLowerCase().includes(typed) ||
-          entry.choice.id.toLowerCase().includes(typed),
-      )
-    : entries;
-  const hasMakers = entries.some((entry) => entry.maker);
   // In the list's order, each maker once, where its first model is.
   const groups = new Map<string, Entry[]>();
-  for (const entry of matches) {
-    const key = entry.maker ?? "";
-    groups.set(key, [...(groups.get(key) ?? []), entry]);
+  let matches = typed ? 0 : props.models.length;
+  if (open) {
+    let shown = 0;
+    for (const choice of props.models) {
+      if (typed) {
+        if (
+          !choice.name.toLowerCase().includes(typed) &&
+          !choice.id.toLowerCase().includes(typed)
+        ) {
+          continue;
+        }
+        matches++;
+      }
+      if (shown === maxRows) {
+        if (!typed) break;
+        continue;
+      }
+      const entry = entryOf(choice);
+      const key = entry.maker ?? "";
+      const group = groups.get(key);
+      if (group) group.push(entry);
+      else groups.set(key, [entry]);
+      shown++;
+    }
   }
+  const suggestMaker =
+    open &&
+    matches === 0 &&
+    props.models.some((choice) => makerOf.test(choice.name));
 
   return (
     <Popover
@@ -108,9 +127,6 @@ export function ModelPicker(props: {
           type="button"
           variant="outline"
           size="field"
-          role="combobox"
-          aria-expanded={open}
-          aria-controls={listId}
           aria-label={props["aria-label"]}
           aria-describedby={props["aria-describedby"]}
           disabled={props.disabled}
@@ -127,20 +143,21 @@ export function ModelPicker(props: {
       </PopoverTrigger>
       <PopoverContent
         align="start"
+        aria-label="Choose a model"
         className="w-(--radix-popover-trigger-width) gap-0 overflow-hidden p-0"
       >
         <Command shouldFilter={false} loop>
           <CommandInput
             value={query}
             onValueChange={setQuery}
-            placeholder={`Search ${count(entries.length)}`}
+            placeholder={`Search ${count(props.models.length)}`}
             aria-label="Search models"
           />
-          <CommandList id={listId}>
+          <CommandList>
             <CommandEmpty className="px-3 text-[13px] leading-[18px] font-medium text-muted-foreground">
               No models match “{query.trim()}”.
               <br />
-              {hasMakers
+              {suggestMaker
                 ? "Check the spelling, or search for the maker."
                 : "Check the spelling."}
             </CommandEmpty>
@@ -177,9 +194,11 @@ export function ModelPicker(props: {
               </CommandGroup>
             ))}
           </CommandList>
-          {typed && matches.length > 0 && (
+          {(matches > maxRows || (typed && matches > 0)) && (
             <p className="m-0 px-3 pt-1 pb-2 text-xs font-medium text-muted-foreground">
-              {matches.length} of {count(entries.length)}
+              {matches > maxRows
+                ? `Showing ${maxRows} of ${count(matches)}. Narrow your search to see more.`
+                : `${matches} of ${count(props.models.length)}`}
             </p>
           )}
         </Command>

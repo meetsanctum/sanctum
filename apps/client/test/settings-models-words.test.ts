@@ -20,11 +20,11 @@ describe("the words for AI models", () => {
 
   it("says how the last check went", () => {
     expect(checkLine(clock, mac, now)).toEqual({
-      text: "Answered in 2.1 s and used the tool · checked 5 minutes ago",
+      text: "Answered in 2.1 s and requested the test tool · checked 5 minutes ago",
       tone: "good",
     });
     expect(checkLine(clock, router, now)?.text).toBe(
-      "Answered, but may not use your home's AI tools well or act on your devices",
+      "Answered without requesting the test tool and may have trouble acting on your devices",
     );
     expect(
       checkLine(

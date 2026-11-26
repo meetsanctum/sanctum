@@ -10,6 +10,9 @@ export type ModelsResponse = Omit<ModelsInfo, "usage"> & {
   usage?: ModelsInfo["usage"];
 };
 
+// Older cores return the list without identifying the addition.
+export type AddSourceResponse = ModelsResponse & { addedSourceId?: string };
+
 // What Settings reads of the home's AI models: asked again often while a
 // check runs, so its answer shows as soon as it's there, and every half
 // minute otherwise, so a source that stops answering says so.

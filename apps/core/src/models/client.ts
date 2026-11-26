@@ -217,6 +217,8 @@ export type AskOptions = {
   /** How long the whole answer may take. */
   wholeMs?: number;
   onFirstPiece?: () => void;
+  /** Receives the usage when the source reports both counts. */
+  onUsage?: (tokens: ModelTokens) => void;
   /** Answers of this turn that called a tool, to give back as they came. */
   kept?: KeptAnswers;
 };
@@ -364,13 +366,23 @@ export async function* ask(
           throw part.error;
         case "abort":
           throw new DOMException("timed out", "TimeoutError");
-        case "finish":
+        case "finish": {
+          const usage = part.totalUsage;
+          const stop = stopOf(part.finishReason, calls.length > 0);
+          const tokens = tokensOf(usage, endpoint.api);
+          if (
+            usage.inputTokens !== undefined &&
+            usage.outputTokens !== undefined
+          ) {
+            options.onUsage?.(tokens);
+          }
           end = {
             type: "end",
-            stop: stopOf(part.finishReason, calls.length > 0),
-            tokens: tokensOf(part.totalUsage, endpoint.api),
+            stop,
+            tokens,
           };
           break;
+        }
       }
     }
     clearTimeout(firstTimer);

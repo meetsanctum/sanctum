@@ -402,23 +402,22 @@ export function createModels(
       } catch (error) {
         const problem = error instanceof ModelError ? error.problem : "answer";
         result = {
-          check: { at: now().toISOString(), outcome: "failed", problem },
-          tokens: { read: 0, written: 0 },
+          check: {
+            at: now().toISOString(),
+            outcome: "failed",
+            problem,
+            tokens: 0,
+          },
         };
       }
       if (signal.aborted) return;
       const current = rowOf(id);
       durably(db, () => {
         db.update(modelSources)
-          .set({
-            check: {
-              ...result.check,
-              tokens: result.tokens.read + result.tokens.written,
-            },
-          })
+          .set({ check: result.check })
           .where(eq(modelSources.id, id))
           .run();
-        count(id, "check", result.tokens);
+        if (result.tokens) count(id, "check", result.tokens);
       });
       if (current.inUse) {
         if (result.check.outcome !== "failed") downSince = undefined;
@@ -485,7 +484,7 @@ export function createModels(
       });
     });
     startCheck(row);
-    return info();
+    return { ...info(), addedSourceId: id };
   }
 
   function use(id: string, by: ChangedBy) {

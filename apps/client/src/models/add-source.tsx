@@ -21,7 +21,7 @@ import {
 } from "../components/ui/dialog";
 import { coreJson } from "../core-fetch";
 import { AddSanctum, ollamaAppId } from "./add-sanctum";
-import type { ModelsResponse } from "./data";
+import type { AddSourceResponse, ModelsResponse } from "./data";
 import { ModelPicker } from "./model-picker";
 import { SourceCheck } from "./source-check";
 import {
@@ -88,6 +88,9 @@ export function AddSource(props: {
   // The source just added, whose check the dialog follows.
   const [added, setAdded] = useState<string>();
   const { start, cancel } = useAuthAttempt();
+  const canAdd =
+    model !== "" &&
+    found?.models.some((choice) => choice.id === model) === true;
   const ids = {
     address: useId(),
     computer: useId(),
@@ -138,6 +141,13 @@ export function AddSource(props: {
             : { kind, key: key.trim() },
       });
       if (signal.aborted) return;
+      setModel((selected) =>
+        selected &&
+        answer.found &&
+        answer.models.some((choice) => choice.id === selected)
+          ? selected
+          : "",
+      );
       if (!answer.found) {
         setProblem(
           problemText(answer.problem, {
@@ -163,8 +173,14 @@ export function AddSource(props: {
 
   // The dialog stays open on the new source's check, which its id finds in
   // the page's answers.
-  const showCheck = (info: ModelsResponse, before: ReadonlySet<string>) => {
-    const id = info.sources.find((source) => !before.has(source.id))?.id;
+  const showCheck = (info: AddSourceResponse, before: ReadonlySet<string>) => {
+    let id = info.addedSourceId;
+    if (id === undefined) {
+      const unfamiliar = info.sources.filter(
+        (source) => !before.has(source.id),
+      );
+      if (unfamiliar.length === 1) id = unfamiliar[0]?.id;
+    }
     props.onAdded(info);
     setAdding(false);
     if (id) setAdded(id);
@@ -173,14 +189,14 @@ export function AddSource(props: {
 
   const add = async (event: FormEvent) => {
     event.preventDefault();
-    if (!found || !model || adding) return;
+    if (!found || !canAdd || adding) return;
     if (step === "computer" && !computer.trim()) return;
     const before = new Set(props.info.sources.map((source) => source.id));
     const signal = start();
     setAdding(true);
     setProblem(undefined);
     try {
-      const info = await coreJson<ModelsResponse>("/api/models/sources", {
+      const info = await coreJson<AddSourceResponse>("/api/models/sources", {
         method: "POST",
         signal,
         json:
@@ -248,8 +264,8 @@ export function AddSource(props: {
     <div className="flex flex-col gap-1 rounded-md bg-card px-4 py-3">
       <span className="text-sm font-medium">Adding it runs a check</span>
       <p className={cardLine}>
-        {productName} asks the model one short question to see that it answers
-        and can use your home's tools.
+        {productName} asks the model one short question to see whether it
+        answers and requests a test tool.
       </p>
       {step === "provider" && (
         <p className={cardLine}>
@@ -458,7 +474,7 @@ export function AddSource(props: {
               </Button>
               <Button
                 type="submit"
-                disabled={!found || !model || !computer.trim() || adding}
+                disabled={!canAdd || !computer.trim() || adding}
               >
                 Add and check
               </Button>
@@ -547,7 +563,7 @@ export function AddSource(props: {
               >
                 Back
               </Button>
-              <Button type="submit" disabled={!found || !model || adding}>
+              <Button type="submit" disabled={!canAdd || adding}>
                 Add and check
               </Button>
             </DialogFooter>

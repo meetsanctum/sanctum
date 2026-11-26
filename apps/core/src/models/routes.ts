@@ -19,7 +19,7 @@ import type { Models } from "./models.js";
 //
 //   GET    /api/models                     ModelsInfo
 //   POST   /api/models/look                LookAtModelSource → ModelSourceLook
-//   POST   /api/models/sources             AddModelSource → ModelsInfo
+//   POST   /api/models/sources             AddModelSource → ModelsInfo with addedSourceId
 //   PATCH  /api/models/sources/:id         ChangeModelSource → ModelsInfo
 //   GET    /api/models/sources/:id/models  ModelSourceLook
 //   POST   /api/models/sources/:id/use     → ModelsInfo
@@ -82,7 +82,7 @@ export function registerModelRoutes(
     return models.look(parseRequest(schemas.look, request.body));
   });
 
-  app.post("/api/models/sources", async (request): Promise<ModelsInfo> => {
+  app.post("/api/models/sources", async (request) => {
     admit(request, changeRule);
     return models.add(
       parseRequest(schemas.add, request.body),
