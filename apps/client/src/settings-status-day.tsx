@@ -1,11 +1,12 @@
 import type { TemperatureUnit } from "@meetsanctum/app-sdk";
+import { useHomeClock } from "@meetsanctum/ui-sdk";
 import { LineChart } from "@meetsanctum/ui-sdk/charts";
 import { cn } from "cn";
 import { CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Row, Section } from "./components";
-import type { HostInfo, HostProblem } from "./system-status";
+import { hotCelsius, type HostInfo, type HostProblem } from "./system-status";
 import {
   memoryChart,
   memoryNow,
@@ -66,6 +67,7 @@ export function LastDaySection(props: {
   checkedAt: string;
 }) {
   const { host, unit } = props;
+  const clock = useHomeClock();
   const now = Date.parse(props.checkedAt);
   const { day, failed } = useHostDay(now);
   const heading = {
@@ -120,6 +122,16 @@ export function LastDaySection(props: {
   );
   const showsTemperature = celsius.max !== null;
   const temperature = temperatureChart(unit);
+  // The hourly averages a screen reader gets can hide a hot five minutes.
+  const hotReading =
+    celsius.max !== null && celsius.max >= hotCelsius
+      ? celsius.runs
+          .flat()
+          .find((point) => point.at < now && point.value >= hotCelsius)
+      : undefined;
+  const temperatureLabel = hotReading
+    ? `Temperature over the last 24 hours. Too hot at ${clock.timeText(hotReading.at)}.`
+    : undefined;
   const total = host.memory?.total;
   const memoryScale = total ? memoryChart(total) : null;
   // The hours show once, under the last chart.
@@ -133,15 +145,21 @@ export function LastDaySection(props: {
     <Section id="status-day" title={lastDayTitle}>
       <div className="flex flex-col gap-6">
         <Reading {...heading.processor}>
-          <LineChart
-            runs={usage.runs}
-            now={now}
-            name="Processor in use"
-            height={chartHeight}
-            tone="page"
-            hours={last === "processor"}
-            {...processorChart}
-          />
+          {usage.runs.length === 0 ? (
+            <p className="m-0 text-sm text-muted-foreground">
+              Nothing read yet
+            </p>
+          ) : (
+            <LineChart
+              runs={usage.runs}
+              now={now}
+              name="Processor in use"
+              height={chartHeight}
+              tone="page"
+              hours={last === "processor"}
+              {...processorChart}
+            />
+          )}
         </Reading>
         {showsTemperature && (
           <Reading {...heading.temperature}>
@@ -149,6 +167,7 @@ export function LastDaySection(props: {
               runs={celsius.runs}
               now={now}
               name="Temperature"
+              label={temperatureLabel}
               height={chartHeight}
               tone="page"
               hours={last === "temperature"}

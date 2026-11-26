@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import type { ClientInfo, PersonInfo } from "@meetsanctum/auth-protocol";
-import { createLiveFeed, TemperatureUnitProvider } from "@meetsanctum/ui-sdk";
+import {
+  createLiveFeed,
+  HomeTimeZoneProvider,
+  TemperatureUnitProvider,
+} from "@meetsanctum/ui-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -133,12 +137,14 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function render() {
+async function render(timeZone?: string) {
   await act(async () => {
     root.render(
-      <TemperatureUnitProvider unit="celsius">
-        <StatusPage apps={statusApps} onDone={() => {}} />
-      </TemperatureUnitProvider>,
+      <HomeTimeZoneProvider timeZone={timeZone}>
+        <TemperatureUnitProvider unit="celsius">
+          <StatusPage apps={statusApps} onDone={() => {}} />
+        </TemperatureUnitProvider>
+      </HomeTimeZoneProvider>,
     );
   });
   // The page's own requests settle.
@@ -387,25 +393,83 @@ describe("the last 24 hours", () => {
   });
 
   it("heads each chart with its name and what it reads now, and nothing more", async () => {
-    await render();
+    status.checkedAt = "2026-11-03T18:27:00Z";
+    answers["/api/system/history"] = async () => ({
+      points: [56, 84, 58].map((celsius, index): HostPoint => ({
+        at: `2026-11-03T18:${10 + 5 * index}:00Z`,
+        usage: 0.03 + index / 100,
+        celsius,
+        memoryUsed: 640 * 1024 ** 2,
+      })),
+    });
+    await render("Europe/Zurich");
     const day = section("status-day");
     expect(
-      [...day.querySelectorAll("h3")].map((heading) => heading.textContent),
-    ).toEqual(["Processor", "Temperature", "Memory in use"]);
-    expect(day.textContent).toMatch(
-      /^Last 24 HoursProcessor3% now.*Temperature58°C now · normal.*Memory in use627 MB now/,
+      [...day.querySelectorAll("h3")].map((heading) => {
+        const header = heading.parentElement!;
+        expect(header.classList).toContain("flex");
+        expect(header.classList).toContain("flex-col");
+        expect([...header.children].map((child) => child.tagName)).toEqual([
+          "H3",
+          "P",
+        ]);
+        return [...header.children].map((child) => child.textContent);
+      }),
+    ).toEqual([
+      ["Processor", "3% now"],
+      ["Temperature", "58°C now · normal"],
+      ["Memory in use", "627 MB now"],
+    ]);
+    expect(day.textContent).not.toMatch(
+      /on average|busiest|no readings|Too hot from/,
     );
-    expect(day.textContent).not.toMatch(/on average|busiest|no readings/);
     expect(
       [...day.querySelectorAll('[role="group"]')].map((chart) =>
         chart.getAttribute("aria-label"),
       ),
     ).toEqual([
       "Processor in use over the last 24 hours",
-      "Temperature over the last 24 hours",
+      "Temperature over the last 24 hours. Too hot at 19:17.",
       "Memory in use over the last 24 hours",
     ]);
   });
+
+  it("explains when there are no processor readings", async () => {
+    status.host!.processor.usage = null;
+    answers["/api/system/history"] = async () => ({ points: [] });
+    await render();
+    const day = section("status-day");
+    expect(day.textContent).toContain("ProcessorNothing read yet");
+    expect(
+      day.querySelector(
+        '[aria-label="Processor in use over the last 24 hours"]',
+      ),
+    ).toBeNull();
+  });
+
+  it.each([
+    { live: null, past: 56, shown: true },
+    { live: 58, past: null, shown: true },
+    { live: null, past: null, shown: false },
+  ])(
+    "shows the temperature chart for live $live and past $past only when there is a reading",
+    async ({ live, past, shown }) => {
+      status.checkedAt = "2026-11-03T18:27:00Z";
+      status.host!.processor.celsius = live;
+      const point: HostPoint = {
+        at: "2026-11-03T18:15:00Z",
+        usage: 0.04,
+        celsius: past,
+        memoryUsed: 640 * 1024 ** 2,
+      };
+      answers["/api/system/history"] = async () => ({ points: [point] });
+      await render();
+      const chart = section("status-day").querySelector(
+        '[role="group"][aria-label="Temperature over the last 24 hours"]',
+      );
+      expect(chart !== null).toBe(shown);
+    },
+  );
 
   it("says what each reads now while its day is on its way", async () => {
     answers["/api/system/history"] = () => new Promise(() => {});
