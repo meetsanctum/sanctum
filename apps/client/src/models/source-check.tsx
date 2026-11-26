@@ -5,7 +5,14 @@ import type {
   ModelSourceLook,
 } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
-import { Check, CircleAlert, CircleCheck, TriangleAlert } from "lucide-react";
+import {
+  Check,
+  Circle,
+  CircleAlert,
+  CircleCheck,
+  LoaderCircle,
+  TriangleAlert,
+} from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import { useAuthAttempt } from "../auth/use-auth-attempt";
@@ -187,10 +194,7 @@ export function SourceCheck(props: {
             <CurrentStep>Seeing whether it uses the tool</CurrentStep>
           ) : (
             <li className="flex items-center gap-2.5 text-muted-foreground">
-              <span
-                aria-hidden="true"
-                className="mx-0.5 size-3 rounded-full border-[1.5px] border-current opacity-70"
-              />
+              <Circle aria-hidden="true" className="size-4 opacity-70" />
               Seeing whether it uses the tool
             </li>
           )}
@@ -310,10 +314,11 @@ function DoneStep(props: { children: ReactNode }) {
 function CurrentStep(props: { children: ReactNode }) {
   return (
     <li className="flex items-center gap-2.5" aria-current="step">
-      {/* The knot above shows it's under way; one loader at a time. */}
-      <span
+      {/* The step under way turns, as the knot above does; still under
+          Reduce motion. */}
+      <LoaderCircle
         aria-hidden="true"
-        className="mx-0.5 size-3 rounded-full border-[1.5px] border-current"
+        className="size-4 animate-spin text-muted-foreground motion-reduce:animate-none"
       />
       {props.children}
     </li>
