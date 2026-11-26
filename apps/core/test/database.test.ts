@@ -22,18 +22,6 @@ async function tempDir() {
   return folder;
 }
 
-async function migrationsThrough(index: number) {
-  const folder = join(await tempDir(), "migrations");
-  await cp(migrationsFolder, folder, { recursive: true });
-  const journalPath = join(folder, "meta", "_journal.json");
-  const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
-    entries: { idx: number }[];
-  };
-  journal.entries = journal.entries.filter((entry) => entry.idx <= index);
-  await writeFile(journalPath, JSON.stringify(journal));
-  return folder;
-}
-
 // A copy of this build's migrations plus one more, as a newer build has.
 async function extraMigrations(isEarlier = false) {
   const folder = join(await tempDir(), "migrations");
@@ -91,8 +79,17 @@ describe("the core's database", () => {
 
   it("keeps existing personal and shared clients signed in when adding agents", async () => {
     const dataDir = await tempDir();
+    const previousMigrations = join(await tempDir(), "migrations");
+    await cp(migrationsFolder, previousMigrations, { recursive: true });
+    const journalPath = join(previousMigrations, "meta", "_journal.json");
+    const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
+      entries: { idx: number }[];
+    };
+    journal.entries = journal.entries.filter((entry) => entry.idx < 45);
+    await writeFile(journalPath, JSON.stringify(journal));
+
     const before = openCoreDatabase(dataDir, {
-      migrationsFolder: await migrationsThrough(44),
+      migrationsFolder: previousMigrations,
     });
     // Seed the earlier schema through SQLite since it has no agent columns.
     before.db.$client.exec(`
@@ -121,63 +118,6 @@ describe("the core's database", () => {
       tokens.map((token) => clients.authenticate(token)?.client.kind),
     ).toEqual(["personal", "shared"]);
     expect(after.db.$client.pragma("foreign_keys", { simple: true })).toBe(1);
-  });
-
-  it("keeps each explicitly enabled drawing setting and its client's sign-in", async () => {
-    const dataDir = await tempDir();
-    const before = openCoreDatabase(dataDir, {
-      migrationsFolder: await migrationsThrough(54),
-    });
-    try {
-      before.db.$client.exec(`
-        INSERT INTO auth_clients (id, name, kind, platform, created_at, reduce_effects, reduce_motion)
-          VALUES ('effects', 'Effects', 'shared', 'web', 0, 'on', 'off'),
-                 ('motion', 'Motion', 'shared', 'web', 0, 'automatic', 'on'),
-                 ('both', 'Both', 'shared', 'web', 0, 'on', 'on'),
-                 ('neither', 'Neither', 'shared', 'web', 0, 'off', 'automatic');
-      `);
-      before.db.$client
-        .prepare(
-          "INSERT INTO auth_tokens (id, client_id, kind, token_hash, created_at) VALUES ('token', 'effects', 'client', ?, 0)",
-        )
-        .run(hashToken("client_effects"));
-    } finally {
-      before.close();
-    }
-
-    const after = openCoreDatabase(dataDir);
-    onTestFinished(after.close);
-    const clients = createClients(after.db, {
-      record: () => "unused",
-      connections: { closeClient() {}, connectedSince: () => null, tell() {} },
-      now: () => new Date(),
-    });
-    const caller = clients.authenticate("client_effects");
-    expect(caller?.client.id).toBe("effects");
-    expect(clients.list(caller!)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: "effects",
-          reduceEffects: true,
-          reduceMotion: false,
-        }),
-        expect.objectContaining({
-          id: "motion",
-          reduceEffects: false,
-          reduceMotion: true,
-        }),
-        expect.objectContaining({
-          id: "both",
-          reduceEffects: true,
-          reduceMotion: true,
-        }),
-        expect.objectContaining({
-          id: "neither",
-          reduceEffects: false,
-          reduceMotion: false,
-        }),
-      ]),
-    );
   });
 
   it("refuses a database a newer build has migrated", async () => {

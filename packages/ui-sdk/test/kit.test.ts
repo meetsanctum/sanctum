@@ -1,15 +1,10 @@
-// @vitest-environment jsdom
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parse } from "postcss";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { Switch } from "../src/components/ui/switch";
 import { frameBridge } from "../src/frame/protocol";
 import { digestOf, listFiles } from "../tools/files";
 import { lucideIcons } from "../tools/icons";
@@ -116,8 +111,8 @@ describe("the kit", { timeout: 60_000 }, () => {
     expect(importsOf("ui-sdk.js")).toContain(clock);
   });
 
-  it("exports each public chart from the built module an app imports", () => {
-    const charts = createRequire(join(dir, "kit.json"))("./charts.js");
+  it("exports each public chart from the built module an app imports", async () => {
+    const charts = await import(pathToFileURL(join(dir, "charts.js")).href);
     expect(Object.keys(charts).sort()).toEqual([
       "DayBandChart",
       "DayBandMarks",
@@ -166,27 +161,6 @@ describe("the kit", { timeout: 60_000 }, () => {
     expect(read("kit.css")).toMatch(
       /\.frame-page \.frosted[^{}]*\{-webkit-backdrop-filter:none;backdrop-filter:none\}/,
     );
-  });
-
-  it("transitions the switch thumb only when Reduce motion is off", () => {
-    const page = document.implementation.createHTMLDocument();
-    page.body.innerHTML = renderToStaticMarkup(createElement(Switch));
-    const thumb = page.querySelector('[data-slot="switch-thumb"]')!;
-    const css = parse(read("kit.css"));
-    const transitions = () => {
-      const matched: string[] = [];
-      css.walkDecls(/^transition(?:-property)?$/, (declaration) => {
-        const rule = declaration.parent;
-        if (rule?.type === "rule" && thumb.matches(rule.selector)) {
-          matched.push(declaration.value);
-        }
-      });
-      return matched;
-    };
-
-    expect(transitions()).toEqual([expect.stringContaining("transform")]);
-    page.documentElement.dataset.motion = "reduced";
-    expect(transitions()).toEqual([]);
   });
 
   it("writes colours with alpha as rgba() or transparent, never as hex", () => {

@@ -39,7 +39,6 @@ const macbook: ClientInfo = {
   current: true,
   reduceEffects: false,
   reduceMotion: false,
-  drawingRevision: 0,
 };
 const tablet: ClientInfo = {
   id: "tablet",
@@ -53,7 +52,6 @@ const tablet: ClientInfo = {
   current: false,
   reduceEffects: false,
   reduceMotion: false,
-  drawingRevision: 0,
 };
 
 describe("a client's detail", () => {
@@ -88,12 +86,12 @@ describe("a client's detail", () => {
   });
 
   it.each([
-    [true, true, " · Reduce effects and Reduce motion enabled"],
-    [true, false, " · Reduce effects enabled"],
-    [false, true, " · Reduce motion enabled"],
+    [true, true, " · Reduced effects and motion"],
+    [true, false, " · Reduced effects"],
+    [false, true, " · Reduced motion"],
     [false, false, ""],
   ] as const)(
-    "names the enabled settings, Reduce effects %s and Reduce motion %s",
+    "says what it draws with, Reduce effects %s and Reduce motion %s",
     (reduceEffects, reduceMotion, said) => {
       const client = { ...tablet, reduceEffects, reduceMotion };
       expect(clientDetail(clock, client, undefined, now)).toBe(
@@ -144,7 +142,6 @@ describe("Settings → Clients", () => {
           shownTablet = {
             ...shownTablet,
             ...(init.json as SetClientDrawing),
-            drawingRevision: (shownTablet.drawingRevision ?? 0) + 1,
           };
           return shownTablet;
         default:
@@ -246,7 +243,7 @@ describe("Settings → Clients", () => {
     expect(isOn("Reduce effects")).toBe(false);
     expect(isOn("Reduce motion")).toBe(true);
     expect(container.textContent).toContain(
-      "Shared · Web browser · Never seen · Reduce motion enabled",
+      "Shared · Web browser · Never seen · Reduced motion",
     );
 
     await act(async () => button("Done").click());
@@ -277,7 +274,7 @@ describe("Settings → Clients", () => {
     expect(drawing).toEqual([{ id: "tablet", reduceEffects: true }]);
     expect(isOn("Reduce effects")).toBe(true);
     expect(isOn("Reduce motion")).toBe(false);
-    expect(container.textContent).toContain("Reduce effects enabled");
+    expect(container.textContent).toContain("Reduced effects");
     expect(document.querySelector("[role=dialog] [role=alert]")).toBeNull();
   });
 
@@ -311,25 +308,6 @@ describe("Settings → Clients", () => {
     expect(isOn("Reduce motion")).toBe(false);
   });
 
-  it("leaves drawing settings unavailable when the core returns three-way choices", async () => {
-    const olderTablet = {
-      ...tablet,
-      reduceEffects: "off",
-      reduceMotion: "off",
-    };
-    vi.mocked(coreJson).mockResolvedValueOnce([macbook, olderTablet]);
-    await refreshClients();
-    expect(container.textContent).not.toContain("enabled");
-    expect(container.textContent).not.toContain("Reduced");
-    await editClient("Kitchen tablet", "Effects and motion");
-    const dialog = document.querySelector("[role=dialog]")!;
-    expect(dialog.textContent).toContain(
-      "in your home to change these settings.",
-    );
-    expect(dialog.querySelector("[role=switch]")).toBeNull();
-    expect(drawing).toEqual([]);
-  });
-
   it.each([false, true])(
     "keeps newer switch values when an earlier save's answer arrives (refresh fails: %s)",
     async (refreshFails) => {
@@ -341,7 +319,7 @@ describe("Settings → Clients", () => {
         }),
       );
       await act(async () => toggle("Reduce effects").click());
-      shownTablet = { ...tablet, reduceMotion: true, drawingRevision: 3 };
+      shownTablet = { ...tablet, reduceEffects: true, reduceMotion: true };
       await refreshClients();
       expect(isOn("Reduce motion")).toBe(true);
 
@@ -351,66 +329,46 @@ describe("Settings → Clients", () => {
         );
       }
       await act(async () =>
-        finishSave({ ...tablet, reduceEffects: true, drawingRevision: 1 }),
+        finishSave({ ...tablet, reduceEffects: true, reduceMotion: false }),
       );
-      expect(isOn("Reduce effects")).toBe(false);
+      expect(isOn("Reduce effects")).toBe(true);
       expect(isOn("Reduce motion")).toBe(true);
-      expect(container.textContent).toContain("Reduce motion enabled");
+      expect(container.textContent).toContain("Reduced effects and motion");
     },
   );
 
-  it("accepts a second change while the first saved change refreshes", async () => {
+  it("shows no switches for a core from before them, and says to update", async () => {
+    const old = { reduceEffects: "automatic", reduceMotion: "on" };
+    shownTablet = { ...tablet, ...(old as unknown as Partial<ClientInfo>) };
+    await refreshClients();
+    expect(container.textContent).toContain(
+      "Shared · Web browser · Never seen",
+    );
+    expect(container.textContent).not.toContain("Reduced");
     await editClient("Kitchen tablet", "Effects and motion");
-    const original = vi.mocked(coreJson).getMockImplementation()!;
-    let finishFirstRefresh!: (clients: ClientInfo[]) => void;
-    const firstRefresh = new Promise<ClientInfo[]>((resolve) => {
-      finishFirstRefresh = resolve;
-    });
-    let finishSecondSave!: (client: ClientInfo) => void;
-    const secondSave = new Promise<ClientInfo>((resolve) => {
-      finishSecondSave = resolve;
-    });
-    vi.mocked(coreJson).mockImplementation((path, init) => {
-      if (path === "/api/auth/clients" && drawing.length === 1) {
-        return firstRefresh;
-      }
-      if (path === "/api/auth/clients/drawing" && drawing.length === 1) {
-        drawing.push(init?.json);
-        return secondSave;
-      }
-      return original(path, init);
-    });
-    await act(async () => toggle("Reduce effects").click());
-    await act(async () => toggle("Reduce motion").click());
-    expect(drawing).toEqual([
-      { id: "tablet", reduceEffects: true },
-      { id: "tablet", reduceMotion: true },
-    ]);
-    expect(isOn("Reduce motion")).toBe(true);
-
-    await act(async () => finishFirstRefresh([macbook, shownTablet]));
-    expect(isOn("Reduce motion")).toBe(true);
-    shownTablet = { ...shownTablet, reduceMotion: true, drawingRevision: 2 };
-    await act(async () => finishSecondSave(shownTablet));
-    expect(isOn("Reduce effects")).toBe(true);
-    expect(isOn("Reduce motion")).toBe(true);
+    const dialog = document.querySelector<HTMLElement>("[role=dialog]")!;
+    expect(dialog.textContent).toContain(
+      "Update Sanctum in your home to change these settings.",
+    );
+    expect(dialog.querySelector("[role=switch]")).toBeNull();
   });
 
-  it("shows a newer value for a saved switch even when the people lookup fails", async () => {
+  it("takes the next press while Clients are still being read after a save", async () => {
     await editClient("Kitchen tablet", "Effects and motion");
     await act(async () => toggle("Reduce effects").click());
+    const reading = new Promise<never>(() => {});
+    vi.mocked(coreJson).mockImplementation(async (path, init) => {
+      if (path === "/api/auth/clients" || path === "/api/people") {
+        return reading;
+      }
+      drawing.push(init?.json);
+      shownTablet = { ...shownTablet, ...(init?.json as SetClientDrawing) };
+      return shownTablet;
+    });
+    await act(async () => toggle("Reduce motion").click());
+    expect(drawing.at(-1)).toEqual({ id: "tablet", reduceMotion: true });
     expect(isOn("Reduce effects")).toBe(true);
-
-    shownTablet = { ...shownTablet, reduceEffects: false, drawingRevision: 2 };
-    const original = vi.mocked(coreJson).getMockImplementation()!;
-    vi.mocked(coreJson).mockImplementation((path, init) =>
-      path === "/api/people"
-        ? Promise.reject(new CoreError(500, "unknown"))
-        : original(path, init),
-    );
-    await refreshClients();
-    expect(isOn("Reduce effects")).toBe(false);
-    expect(container.textContent).toContain("Maya · macOS · This device");
+    expect(isOn("Reduce motion")).toBe(true);
   });
 
   it("lists every client, marking those never seen", () => {

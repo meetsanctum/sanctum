@@ -72,7 +72,6 @@ export function clientInfo(
     current: client.id === currentId,
     reduceEffects: client.reduceEffects,
     reduceMotion: client.reduceMotion,
-    drawingRevision: client.drawingRevision,
   };
 }
 
@@ -401,11 +400,7 @@ export function createClients(
         }
         const saved = db
           .update(authClients)
-          .set({
-            reduceEffects,
-            reduceMotion,
-            drawingRevision: client.drawingRevision + 1,
-          })
+          .set({ reduceEffects, reduceMotion })
           .where(eq(authClients.id, input.id))
           .returning()
           .get()!;

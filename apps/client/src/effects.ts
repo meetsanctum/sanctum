@@ -12,6 +12,7 @@
 /** Whether this client draws with Reduce effects and with Reduce motion. */
 export type DrawingChoices = { reduceEffects: boolean; reduceMotion: boolean };
 
+/** Whether these are the two switches, as a core from before them doesn't say. */
 export function isDrawingChoices(value: unknown): value is DrawingChoices {
   return (
     typeof value === "object" &&

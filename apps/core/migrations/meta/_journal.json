@@ -400,13 +400,6 @@
       "when": 1795710671490,
       "tag": "0056_client-drawing-on-off",
       "breakpoints": true
-    },
-    {
-      "idx": 57,
-      "version": "6",
-      "when": 1795714413478,
-      "tag": "0057_client-drawing-revision",
-      "breakpoints": true
     }
   ]
 }

@@ -106,12 +106,10 @@ export type ClientInfo = {
   connectedSince: string | null;
   /** The client the request came from. */
   current: boolean;
-  /** Saved Reduce effects setting, editable from any client (Settings → Clients). */
+  /** Whether it draws with Reduce effects: set on any client (Settings → Clients). */
   reduceEffects: boolean;
-  /** Saved Reduce motion setting, independent of Reduce effects. */
+  /** Whether it draws with Reduce motion, set on its own as Reduce effects is. */
   reduceMotion: boolean;
-  /** Increases when either drawing setting changes. */
-  drawingRevision?: number;
 };
 
 /** Turns a client's Reduce effects or Reduce motion on or off; one left out stays as it is. */

@@ -18,7 +18,12 @@ export async function followStoredDrawing() {
     const stored = await getShell().preferences.get(preferenceKey);
     if (drawingFromMe) return;
     const choices: unknown = stored && JSON.parse(stored);
-    if (isDrawingChoices(choices)) chooseDrawing(choices);
+    if (isDrawingChoices(choices)) {
+      chooseDrawing({
+        reduceEffects: choices.reduceEffects,
+        reduceMotion: choices.reduceMotion,
+      });
+    }
   } catch {
     // A copy it can't read is left to Me.
   }

@@ -20,14 +20,14 @@ import { isDrawingChoices } from "./effects";
 
 const label = "text-[13px] leading-[18px] font-medium text-muted-foreground";
 
-/** Which saved drawing settings are enabled. */
-export function drawingSettingsText(client: ClientInfo) {
+/** What a client's row says it draws with, where something is reduced. */
+export function drawnText(client: ClientInfo) {
   if (!isDrawingChoices(client)) return null;
   if (client.reduceEffects && client.reduceMotion) {
-    return "Reduce effects and Reduce motion enabled";
+    return "Reduced effects and motion";
   }
-  if (client.reduceEffects) return "Reduce effects enabled";
-  if (client.reduceMotion) return "Reduce motion enabled";
+  if (client.reduceEffects) return "Reduced effects";
+  if (client.reduceMotion) return "Reduced motion";
   return null;
 }
 
@@ -37,7 +37,8 @@ export function ClientDrawing(props: {
   /** The client whose drawing is open, as Clients last read it. */
   client?: ClientInfo;
   onClose: () => void;
-  onChanged: (saved: ClientInfo) => void;
+  /** The switch that was saved, as the core says it now is. */
+  onChanged: (saved: SetClientDrawing) => void;
 }) {
   // What the dialog showed stays while it closes.
   const last = useRef<ClientInfo>(undefined);
@@ -62,8 +63,11 @@ export function ClientDrawing(props: {
     };
   }, [openId]);
 
+  // A core from before the two were switches can't take them.
   const supported = isDrawingChoices(client);
   const draft = pending?.opening === opening.current ? pending : undefined;
+  const effects = draft?.change.reduceEffects ?? client?.reduceEffects ?? false;
+  const motion = draft?.change.reduceMotion ?? client?.reduceMotion ?? false;
 
   // One save at a time, so they reach the core in order; a press while one
   // is on its way is let go. The switches stay enabled, so focus stays.
@@ -78,7 +82,13 @@ export function ClientDrawing(props: {
         method: "POST",
         json: { id: openId, ...change } satisfies SetClientDrawing,
       });
-      props.onChanged(saved);
+      props.onChanged({
+        id: saved.id,
+        ...("reduceEffects" in change && {
+          reduceEffects: saved.reduceEffects,
+        }),
+        ...("reduceMotion" in change && { reduceMotion: saved.reduceMotion }),
+      });
     } catch {
       if (opening.current === opened) {
         setProblem("That did not work. Try again.");
@@ -116,14 +126,14 @@ export function ClientDrawing(props: {
               id={`${id}-effects`}
               title="Reduce effects"
               about="Without blur, fades or shadows, for a device that feels slow."
-              on={draft?.change.reduceEffects ?? client.reduceEffects}
+              on={effects}
               onChange={(on) => void save({ reduceEffects: on })}
             />
             <Setting
               id={`${id}-motion`}
               title="Reduce motion"
               about="Things appear and change in place, without sliding, zooming or flying in."
-              on={draft?.change.reduceMotion ?? client.reduceMotion}
+              on={motion}
               onChange={(on) => void save({ reduceMotion: on })}
             />
           </div>

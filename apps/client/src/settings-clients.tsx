@@ -1,5 +1,9 @@
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
-import type { ClientInfo, PersonInfo } from "@meetsanctum/auth-protocol";
+import type {
+  ClientInfo,
+  PersonInfo,
+  SetClientDrawing,
+} from "@meetsanctum/auth-protocol";
 import { Button, Input, useHomeClock } from "@meetsanctum/ui-sdk";
 import { EllipsisVertical, Gauge, House, Pencil, Trash2 } from "lucide-react";
 import {
@@ -29,9 +33,8 @@ import {
   DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 import { coreJson } from "./core-fetch";
-import { isDrawingChoices } from "./effects";
 import { platformNames } from "./platforms";
-import { ClientDrawing, drawingSettingsText } from "./settings-client-drawing";
+import { ClientDrawing, drawnText } from "./settings-client-drawing";
 import { everyWhileShown } from "./while-shown";
 
 // Settings → Clients: every client with its kind, person, platform and
@@ -80,7 +83,7 @@ export function clientDetail(
       : client.connectedSince
         ? "Connected now"
         : seenText(clock, client.lastSeenAt, now),
-    drawingSettingsText(client),
+    drawnText(client),
   ]
     .filter(Boolean)
     .join(" · ");
@@ -92,26 +95,6 @@ type EditNameOrRemove = {
 };
 type Editing = EditNameOrRemove | { action: "drawing"; client: ClientInfo };
 
-function hasNewerDrawing(candidate: ClientInfo, client: ClientInfo) {
-  return (
-    isDrawingChoices(candidate) &&
-    isDrawingChoices(client) &&
-    candidate.drawingRevision !== undefined &&
-    client.drawingRevision !== undefined &&
-    candidate.drawingRevision > client.drawingRevision
-  );
-}
-
-// The two settings and their revision come from the same core snapshot.
-function withDrawing(client: ClientInfo, drawing: ClientInfo): ClientInfo {
-  return {
-    ...client,
-    reduceEffects: drawing.reduceEffects,
-    reduceMotion: drawing.reduceMotion,
-    drawingRevision: drawing.drawingRevision,
-  };
-}
-
 export function ClientsSection(props: {
   // The way back of Settings' Clients page, which it is the whole of.
   page?: ReactNode;
@@ -121,54 +104,48 @@ export function ClientsSection(props: {
   const [people, setPeople] = useState<PersonInfo[]>([]);
   const [editing, setEditing] = useState<Editing>();
   const [adding, setAdding] = useState(false);
-  const clientRequest = useRef(0);
-  const appliedClients = useRef(0);
-  const peopleRequest = useRef(0);
-  const appliedPeople = useRef(0);
+  const refreshId = useRef(0);
+  const lastAppliedRefresh = useRef(0);
 
-  const refreshClients = useCallback(async () => {
-    const id = ++clientRequest.current;
-    const next = await coreJson<ClientInfo[]>("/api/auth/clients");
-    if (id < appliedClients.current) return;
-    appliedClients.current = id;
-    setClients((current) =>
-      next.map((client) => {
-        const previous = current?.find(({ id }) => id === client.id);
-        return previous && hasNewerDrawing(previous, client)
-          ? withDrawing(client, previous)
-          : client;
-      }),
-    );
+  const refresh = useCallback(async () => {
+    const id = ++refreshId.current;
+    const [nextClients, nextPeople] = await Promise.all([
+      coreJson<ClientInfo[]>("/api/auth/clients"),
+      coreJson<PersonInfo[]>("/api/people"),
+    ]);
+    if (id < lastAppliedRefresh.current) return;
+    lastAppliedRefresh.current = id;
+    setClients(nextClients);
+    setPeople(nextPeople);
   }, []);
 
-  const refresh = useCallback(() => {
-    void refreshClients().catch(() => undefined);
-    const id = ++peopleRequest.current;
-    void coreJson<PersonInfo[]>("/api/people")
-      .then((next) => {
-        if (id < appliedPeople.current) return;
-        appliedPeople.current = id;
-        setPeople(next);
-      })
-      .catch(() => undefined);
-  }, [refreshClients]);
-
-  function drawingSaved(saved: ClientInfo) {
+  // A saved switch shows at once, a read already on its way is let go,
+  // since it can hold the old value, and Clients read afresh, in case
+  // another client changed something meanwhile. Only the switch pressed is
+  // taken from the save's answer: the other may have changed since.
+  const drawingChanged = (saved: SetClientDrawing) => {
+    lastAppliedRefresh.current = ++refreshId.current;
     setClients((current) =>
       current?.map((client) =>
-        client.id === saved.id && !hasNewerDrawing(client, saved)
-          ? withDrawing(client, saved)
+        client.id === saved.id
+          ? {
+              ...client,
+              reduceEffects: saved.reduceEffects ?? client.reduceEffects,
+              reduceMotion: saved.reduceMotion ?? client.reduceMotion,
+            }
           : client,
       ),
     );
-    void refreshClients().catch(() => undefined);
-  }
+    void refresh().catch(() => undefined);
+  };
 
   // A device approved here shows up once it collects its token, and
   // last-seen times move on.
   useEffect(() => {
-    refresh();
-    return everyWhileShown(5_000, refresh);
+    const update = () => void refresh().catch(() => undefined);
+    update();
+    const stopPolling = everyWhileShown(5_000, update);
+    return () => stopPolling();
   }, [refresh]);
 
   return (
@@ -217,17 +194,17 @@ export function ClientsSection(props: {
             : undefined
         }
         onClose={() => setEditing(undefined)}
-        onChanged={drawingSaved}
+        onChanged={drawingChanged}
       />
       <EditClient
         editing={editing?.action === "drawing" ? undefined : editing}
         onClose={() => setEditing(undefined)}
-        onDone={refresh}
+        onDone={() => void refresh().catch(() => undefined)}
       />
       <ApproveDevice
         open={adding}
         onOpenChange={setAdding}
-        onApproved={refresh}
+        onApproved={() => void refresh().catch(() => undefined)}
       />
     </Section>
   );
