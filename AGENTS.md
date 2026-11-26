@@ -251,9 +251,11 @@ pnpm build
 pnpm format:check
 ```
 
-`pnpm test:containers` runs real stacks and images in Docker and takes minutes:
-run it when changing the manager, `deploy/` or how apps are packaged, where CI
-runs it too.
+`pnpm test:containers` runs real stacks and images in Docker and takes minutes.
+CI runs it on arm64 for every pull request that changes the manager, `deploy/`
+or how apps are packaged, so leave it to CI there. Run it locally only to
+debug a failure CI found, or when CI can't run, before a merge it would have
+covered.
 
 Use focused `pnpm --filter <package> <task>` runs while iterating, then the
 full set before finishing.
