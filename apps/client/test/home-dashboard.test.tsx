@@ -208,7 +208,9 @@ const sections = () =>
   [...container.querySelectorAll("section")].map((section) => ({
     heading: section.querySelector("h2")?.textContent,
     groups: [...section.querySelectorAll("[role=group]")].map((group) => [
-      group.getAttribute("aria-label"),
+      group.getAttribute("aria-label") ??
+        document.getElementById(group.getAttribute("aria-labelledby")!)
+          ?.textContent,
       // Buttons say their accessible names, tiles their names.
       ...[...group.children]
         .flatMap(parts)
@@ -305,11 +307,16 @@ describe("Home", () => {
         heading: "Office",
         groups: [
           ["Lights in Office", "Turn off lights in Office", "Relax", "Work"],
-          ["On Home", "Desk strip", "Lamp"],
+          ["Devices", "Desk strip", "Lamp"],
         ],
       },
       { heading: "No room", groups: [["On Home", "Loose lamp"]] },
     ]);
+    // Only the office has a row above its devices, so only it heads them,
+    // a level under the room's name.
+    expect(
+      [...container.querySelectorAll("h3")].map((each) => each.textContent),
+    ).toEqual(["Devices"]);
     expect(
       container.querySelector("[data-slot=readings]")?.textContent,
     ).toContain("21.5°");
