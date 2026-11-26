@@ -66,6 +66,15 @@ const render = (element: ReactElement) =>
     ),
   );
 const group = () => container.querySelector<HTMLElement>('[role="group"]')!;
+const expectFoot = () => {
+  const svg = container.querySelector("svg")!;
+  const foot = svg.querySelector('rect[x="0"][class="fill-white/14"]');
+  expect(foot?.getAttribute("width")).toBe(svg.getAttribute("width"));
+  expect(foot?.getAttribute("height")).toBe("1");
+  expect(foot?.getAttribute("y")).toBe(
+    String(Number(svg.getAttribute("height")) - 1),
+  );
+};
 const readout = () =>
   container.querySelector(".pointer-events-none")?.textContent ?? null;
 const listed = () =>
@@ -228,7 +237,9 @@ describe("a day's strip", () => {
       "Brightness over the last 24 hours",
     );
     expect(group().style.width).toBe("480px");
-    const fills = [...container.querySelectorAll("path")].map((path) => [
+    const paths = [...container.querySelectorAll("path")];
+    expect(paths[0]?.getAttribute("class")).toBe("fill-white/30");
+    const fills = paths.map((path) => [
       path.getAttribute("fill"),
       path.getAttribute("d"),
     ]);
@@ -290,6 +301,45 @@ describe("a day's line", () => {
     text: (value: number) => `${value}°`,
     grid: (value: number) => `${value}°`,
   };
+
+  it("uses the axis for a gridline at the bottom of a fixed scale", async () => {
+    await render(
+      <LineChart
+        runs={runs}
+        now={now}
+        format={format}
+        name="Temperature"
+        height={100}
+        scale={{ min: 0, max: 40, lines: [0, 20, 40] }}
+      />,
+    );
+    expectFoot();
+    const gridlines = container.querySelectorAll(
+      'svg rect[class="fill-white/12"]',
+    );
+    expect([...gridlines].map((line) => line.getAttribute("y"))).toEqual([
+      "50",
+      "0",
+    ]);
+    const zero = [...container.querySelectorAll("span")].find(
+      (span) => span.textContent === "0°",
+    );
+    expect(zero?.style.top).toBe("99.5px");
+  });
+
+  it("draws the axis without gridlines when there are no readings", async () => {
+    await render(
+      <LineChart
+        runs={[]}
+        now={now}
+        format={format}
+        name="Temperature"
+        height={100}
+      />,
+    );
+    expectFoot();
+    expect(container.querySelectorAll("svg rect")).toHaveLength(1);
+  });
 
   it("is broken where nothing was known, and turns the danger colour past a limit", async () => {
     await render(
@@ -377,6 +427,7 @@ describe("a week's columns", () => {
         spoken={(day) => `on for ${day.value} h`}
       />,
     );
+    expectFoot();
     expect(container.querySelectorAll("path")).toHaveLength(5);
     expect(container.textContent).toMatch(/^6 h/);
     expect(listed()).toEqual([
@@ -509,21 +560,12 @@ describe("a week's ranges", () => {
 });
 
 describe("every chart's foot", () => {
-  // The hairline along a plot's whole foot, whatever its marks show.
-  const foot = () =>
-    [...container.querySelectorAll("svg rect")].find(
-      (rect) =>
-        rect.getAttribute("x") === "0" &&
-        rect.getAttribute("width") === "480" &&
-        rect.getAttribute("class") === "fill-white/14",
-    );
-
   it("runs under a strip and a band where nothing was known", async () => {
     const unknown = [{ from, to: now, mark: "unknown" as const }];
     await render(
       <DayStripChart spans={unknown} from={from} to={now} width={480} />,
     );
-    expect(foot()?.getAttribute("y")).toBe("39");
+    expectFoot();
     expect(container.querySelectorAll("path")).toHaveLength(0);
     await render(
       <DayBandChart
@@ -535,7 +577,7 @@ describe("every chart's foot", () => {
         width={480}
       />,
     );
-    expect(foot()?.getAttribute("y")).toBe("39");
+    expectFoot();
   });
 
   it("runs under a line and a week's ranges, apart from their gridlines", async () => {
@@ -555,7 +597,7 @@ describe("every chart's foot", () => {
         width={520}
       />,
     );
-    expect(foot()?.getAttribute("y")).toBe("99");
+    expectFoot();
     await render(
       <WeekRangeChart
         days={week().map((start) => ({ start, min: 18, max: 21 }))}
@@ -565,7 +607,7 @@ describe("every chart's foot", () => {
         width={520}
       />,
     );
-    expect(foot()).toBeTruthy();
+    expectFoot();
   });
 
   it("is left to what holds a band's marks alone", async () => {

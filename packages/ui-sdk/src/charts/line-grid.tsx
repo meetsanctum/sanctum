@@ -14,16 +14,20 @@ export function LineGridMarks({
   return (
     <>
       <ChartFoot plot={plot} height={height} page={page} />
-      {scale?.lines.map((value) => (
-        <rect
-          key={value}
-          x={0}
-          y={gridYOn(scale, height, value) - 0.5}
-          width={plot}
-          height={1}
-          className={page ? "fill-foreground/12" : "fill-white/12"}
-        />
-      ))}
+      {scale?.lines.map((value) => {
+        const y = gridYOn(scale, height, value);
+        if (y === height - 0.5) return null;
+        return (
+          <rect
+            key={value}
+            x={0}
+            y={y - 0.5}
+            width={plot}
+            height={1}
+            className={page ? "fill-foreground/12" : "fill-white/12"}
+          />
+        );
+      })}
     </>
   );
 }
