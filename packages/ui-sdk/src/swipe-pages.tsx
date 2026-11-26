@@ -29,8 +29,10 @@ import { isMotionReduced } from "./reduce-motion";
 // turn the page, in px.
 const swipeAfter = 10;
 const turnAfter = 60;
-// How long the pages slide to their places, in ms, as their duration-300.
+// How long the pages slide to their places, in ms, and how: their
+// duration-300 and ease-[cubic-bezier(0.22,1,0.36,1)].
 const slide = 300;
+const slideEase = "cubic-bezier(0.22,1,0.36,1)";
 // How far the tabs fade out at the sides, and the room kept for it either
 // side of them, in px.
 const tabsFade = 24;
@@ -107,10 +109,8 @@ export function SwipePages(props: {
   const [settled, setSettled] = useState(page);
   useEffect(() => {
     if (settled === page) return;
-    const later = setTimeout(
-      () => setSettled(page),
-      isMotionReduced() ? 0 : slide,
-    );
+    const slides = !isMotionReduced() || glide.current !== undefined;
+    const later = setTimeout(() => setSettled(page), slides ? slide : 0);
     return () => clearTimeout(later);
   }, [page, settled]);
   const reachable = settled < pages.length ? settled : page;
@@ -124,7 +124,21 @@ export function SwipePages(props: {
   const cell = useRef<HTMLDivElement>(null);
   const sections = useRef<(HTMLElement | null)[]>([]);
   const dragOffset = useRef<number | null>(null);
+  // Under Reduce motion the pages change in place, but those a finger
+  // swiped slide on to their places when it lets go, as its own movement
+  // carried on: stopping them where the finger left them would have the
+  // page jump.
+  const glide = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const endGlide = () => {
+    clearTimeout(glide.current);
+    glide.current = undefined;
+    for (const section of sections.current) {
+      if (section) section.style.transition = "";
+    }
+  };
+  useEffect(() => () => clearTimeout(glide.current), []);
   const follow = (dx: number | null) => {
+    if (glide.current !== undefined) endGlide();
     dragOffset.current = dx;
     const element = cell.current;
     if (!element) return;
@@ -251,6 +265,15 @@ export function SwipePages(props: {
   const finish = (across: number) => {
     swipe.current = null;
     follow(null);
+    if (isMotionReduced()) {
+      for (const section of sections.current) {
+        if (!section) continue;
+        section.style.transition = ["transform", "translate"]
+          .map((property) => `${property} ${slide}ms ${slideEase}`)
+          .join(", ");
+      }
+      glide.current = setTimeout(endGlide, slide);
+    }
     if (across < -turnAfter) setPage(Math.min(pages.length - 1, page + 1));
     else if (across > turnAfter) setPage(Math.max(0, page - 1));
   };

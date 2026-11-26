@@ -197,7 +197,7 @@ it("shows the selected page while its parent update is pending", async () => {
   expect(currentPage()).toBe("Second");
   expect(
     container.querySelector(
-      "[role=tabpanel]:not([inert]) [data-slot=swipe-page-content]",
+      '[role=tabpanel][id$="-second"] [data-slot=swipe-page-content]',
     )?.textContent,
   ).toBe("Second");
   expect(container.querySelector("[data-parent-page=first]")).not.toBeNull();
@@ -369,7 +369,7 @@ it("measures no tabs while they fit", async () => {
     get: offsetLeft,
   });
   try {
-    await renderTwoPages();
+    await renderPages();
     const tabs = [...container.querySelectorAll<HTMLElement>('[role="tab"]')];
     await act(async () => tabs[1]!.click());
     expect(currentPage()).toBe("Second");
@@ -384,7 +384,7 @@ it("measures no tabs while they fit", async () => {
 it("makes the page it left unreachable once the pages have slid", async () => {
   vi.useFakeTimers();
   try {
-    await renderTwoPages();
+    await renderPages();
     const [first, second] = [
       ...container.querySelectorAll<HTMLElement>("[role=tabpanel]"),
     ];
@@ -399,6 +399,46 @@ it("makes the page it left unreachable once the pages have slid", async () => {
     expect(first!.hasAttribute("inert")).toBe(true);
     expect(second!.hasAttribute("inert")).toBe(false);
   } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("slides swiped pages on to their places under Reduce motion, and changes tabs in place", async () => {
+  vi.useFakeTimers();
+  document.documentElement.dataset.motion = "reduced";
+  try {
+    const touched = await renderPages();
+    const panels = () => [
+      ...container.querySelectorAll<HTMLElement>("[role=tabpanel]"),
+    ];
+    await act(async () => {
+      pointer(touched, "pointerdown", 300);
+      pointer(touched, "pointermove", 200);
+    });
+    await act(async () => pointer(touched, "pointerup", 200));
+    expect(currentPage()).toBe("Second");
+    // Carried on from the finger, the pages slide, and the page left stays
+    // as it was until they have.
+    for (const panel of panels()) {
+      expect(panel.style.transition).toMatch(/^transform 300ms/);
+      expect(panel.style.translate).toBe("");
+    }
+    expect(panels()[0]!.hasAttribute("inert")).toBe(false);
+
+    await act(async () => vi.advanceTimersByTime(300));
+    for (const panel of panels()) expect(panel.style.transition).toBe("");
+    expect(panels()[0]!.hasAttribute("inert")).toBe(true);
+
+    // A tab changes the page in place, at once.
+    const first = container.querySelector<HTMLElement>(
+      '[role="tab"][aria-label="First"]',
+    )!;
+    await act(async () => first.click());
+    for (const panel of panels()) expect(panel.style.transition).toBe("");
+    await act(async () => vi.advanceTimersByTime(0));
+    expect(panels()[0]!.hasAttribute("inert")).toBe(false);
+  } finally {
+    delete document.documentElement.dataset.motion;
     vi.useRealTimers();
   }
 });

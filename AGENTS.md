@@ -203,7 +203,9 @@ What is under which licence, and what neither covers, is in
   by the same file from the system's reduced motion): `motion-reduce:` and
   `motion-safe:` follow it, and so do CSS under `[data-motion="reduced"]` and
   scripts through `useReducedMotion` or `isMotionReduced`, never the media
-  query (`apps/client/test/reduce-motion-source.test.ts`).
+  query (`apps/client/test/reduce-motion-source.test.ts`). What a finger
+  drags is the exception: pages it swipes slide on to their places when it
+  lets go, its own movement carried on, while a tab changes them in place.
 - Destructive operations must be explicit, gated and unsurprising.
 - Never hard-code the product name in UI text; import `productName` from
   `apps/client/src/brand.ts`.
