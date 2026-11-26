@@ -366,17 +366,24 @@ describe("a room's lights on Lights' page", () => {
     await click(button("Turn on lights in Hall"));
     expect(button("Turn off lights in Hall")!.dataset.on).toBe("");
 
+    // The off press's answer comes while the light still shows on, then
+    // its off state: neither is the turn-on press's light.
     await act(async () => off.resolve({ on: false, switched: 1, failed: [] }));
+    await act(async () => live.refresh());
+    expect(button("Turn off lights in Hall")!.dataset.on).toBe("");
     devices = [lamp, plug, hallLight];
     await act(async () => live.refresh());
     expect(button("Turn off lights in Hall")!.dataset.on).toBe("");
 
+    // Once the core has answered it and the light shows on, the light's
+    // own state carries the button.
+    await act(async () => on.resolve({ on: true, switched: 1, failed: [] }));
     devices = [lamp, plug, litHall];
     await act(async () => live.refresh());
+    expect(button("Turn off lights in Hall")!.dataset.on).toBe("");
     devices = [lamp, plug, hallLight];
     await act(async () => live.refresh());
     expect(button("Turn on lights in Hall")!.dataset.on).toBeUndefined();
-    await act(async () => on.resolve({ on: true, switched: 1, failed: [] }));
   });
 
   it("go back to off when the core switched none, and show a press that failed", async () => {
