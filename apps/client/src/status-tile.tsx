@@ -15,9 +15,11 @@ import { sameData } from "./same-data";
 /**
  * A status tile's outer frame, shared by whole and segmented tiles. It
  * grows with its words and has room for at least two cells or half a phone's line.
+ * Its hairline edge is drawn over what it holds, so a segmented tile's
+ * halves, which fill it, don't hide it.
  */
 export const statusTileFrame =
-  "min-w-[calc(var(--cell)*2+var(--cell-gap))] max-sm:min-w-[calc(50%-var(--cell-gap)/2)] flex h-(--cell) w-max shrink-0 rounded-lg frosted";
+  "min-w-[calc(var(--cell)*2+var(--cell-gap))] max-sm:min-w-[calc(50%-var(--cell-gap)/2)] flex h-(--cell) w-max shrink-0 rounded-lg frosted relative after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-[inset_0_0_0_1px_var(--glass-line)]";
 
 /** A whole status tile's box, on what holds its icon and words. */
 export const statusTile = `${statusTileFrame} items-center gap-2.5 bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink)`;
