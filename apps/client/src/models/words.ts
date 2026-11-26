@@ -228,9 +228,13 @@ export function checkLine(
   }
 }
 
-/** The check requests a limit of 1,024 output tokens. */
-export function checkCostText(provider: ModelProvider) {
-  return `${providerNames[provider]} charges for the check's input tokens and up to about 1,000 output tokens.`;
+/**
+ * What a check costs at a provider, said as a ceiling: the question is a
+ * hundred or so tokens, and the answer stops at 1,024, which a model that
+ * thinks first can reach. In the household's words, not input and output.
+ */
+export function checkCostText(provider: ModelProvider, subject = "It") {
+  return `${subject} uses up to about 1,000 tokens, which ${providerNames[provider]} charges for.`;
 }
 
 /** A model's download, such as 5.2 GB. */

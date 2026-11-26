@@ -460,7 +460,7 @@ function ChooseModel(props: {
         <DialogDescription>
           {source.kind === "computer" || source.kind === "sanctum"
             ? "Choose one that can use tools, so it can act on your devices."
-            : checkCostText(source.kind)}
+            : checkCostText(source.kind, "Checking it")}
         </DialogDescription>
       </DialogHeader>
       {models && models.length > 0 && (

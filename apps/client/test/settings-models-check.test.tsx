@@ -402,7 +402,7 @@ describe("A source's check in the dialog", () => {
       document.querySelector('[role="dialog"] [data-slot="dialog-description"]')
         ?.textContent,
     ).toBe(
-      "OpenRouter charges for the check's input tokens and up to about 1,000 output tokens.",
+      "Checking it uses up to about 1,000 tokens, which OpenRouter charges for.",
     );
     expect(button("Change and check").disabled).toBe(true);
     await click(

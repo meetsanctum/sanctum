@@ -296,7 +296,7 @@ describe("AI model source dialogs", () => {
       "The key works. It can use 1 model.",
     );
     expect(document.body.textContent).toContain(
-      "OpenRouter charges for the check's input tokens and up to about 1,000 output tokens.",
+      "It uses up to about 1,000 tokens, which OpenRouter charges for.",
     );
     // A provider lists only models that can use the tool: no help to give.
     expect(document.body.textContent).not.toContain("can use tools");
