@@ -255,8 +255,9 @@ pnpm format:check
 The [Containers workflow](.github/workflows/containers.yml) runs it on arm64
 for every pull request that changes `apps/manager/`, `deploy/`,
 `catalog/apps/` or `packages/app-sdk/`, so leave it to CI there. Run it
-locally only to debug a failure CI found, or before merging such a change
-when CI skipped it or can't run.
+locally to debug a failure CI found, when CI can't run, and before merging a
+change elsewhere that changes how apps are packaged, such as the page builder
+in `packages/ui-sdk/tools/`, which CI doesn't run it for.
 
 Use focused `pnpm --filter <package> <task>` runs while iterating, then the
 full set before finishing.
