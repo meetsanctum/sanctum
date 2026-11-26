@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { cp, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parse } from "postcss";
 import {
   afterAll,
   afterEach,
@@ -37,6 +38,24 @@ afterAll(() => rm(kitDir, { recursive: true, force: true }));
 
 const buildPages = (dir: string) =>
   buildPagesWith(dir, { kitStylesheet: join(kitDir, "kit.css") });
+
+function colourMixSelectors(css: string) {
+  const plain = new Set<string>();
+  const overrides = new Set<string>();
+  parse(css).walkRules(({ parent, selectors }) => {
+    if (parent?.type !== "atrule") return;
+    if (parent.name === "layer" && parent.params === "utilities") {
+      for (const selector of selectors) plain.add(selector);
+    }
+    if (
+      parent.name === "supports" &&
+      /^\(\s*color\s*:\s*color-mix\(/i.test(parent.params)
+    ) {
+      for (const selector of selectors) overrides.add(selector);
+    }
+  });
+  return { plain, overrides };
+}
 
 afterEach(async () => {
   vi.mocked(cp).mockReset();
@@ -193,6 +212,34 @@ export default defineAppUi({ id: "sanctum.example", version: "1.0.0", pages: { m
       expect(css).not.toContain(rule);
     }
     expect(css).toContain("font-size:15.5px");
+  }, 60_000);
+
+  it("keep colour fallbacks with their overrides when sharing utilities with the kit", async () => {
+    const dir = await app(`
+import { defineAppUi } from "@meetsanctum/ui-sdk";
+function MainPage() {
+  return <p className="bg-foreground/8 bg-foreground/5">Example</p>;
+}
+export default defineAppUi({ id: "sanctum.example", version: "1.0.0", pages: { main: MainPage } });
+`);
+    await buildPages(dir);
+    const kit = colourMixSelectors(
+      readFileSync(join(kitDir, "kit.css"), "utf8"),
+    );
+    const css = colourMixSelectors(
+      readFileSync(join(dir, "pages/pages.css"), "utf8"),
+    );
+    expect(kit.plain).toContain(String.raw`.bg-foreground\/8`);
+    expect(kit.overrides).toContain(String.raw`.bg-foreground\/8`);
+    // A page's fallback would come after the kit's override and win.
+    expect(
+      [...css.plain].filter(
+        (selector) =>
+          kit.overrides.has(selector) && !css.overrides.has(selector),
+      ),
+    ).toEqual([]);
+    expect(css.plain).toContain(String.raw`.bg-foreground\/5`);
+    expect(css.overrides).toContain(String.raw`.bg-foreground\/5`);
   }, 60_000);
 
   it("don't build without the kit's stylesheet", async () => {
