@@ -342,12 +342,20 @@ body {
 .sheet-screen {
   position: relative;
   isolation: isolate;
-  height: 100dvh;
+  height: 100vh;
   overflow-y: auto;
   display: grid;
   grid-template-rows: 1fr auto 1fr;
   justify-items: center;
   padding: max(40px, env(safe-area-inset-top)) 24px 40px;
+}
+
+/* Keep the fixed height on older web views. The build's minifier drops
+   the fallback when both heights are in the same rule. */
+@supports (height: 100dvh) {
+  .sheet-screen {
+    height: 100dvh;
+  }
 }
 
 /* A phone keeps its width for the sheet, which has its own padding. */

@@ -26,7 +26,7 @@ export function CertificateChanged(props: {
       glyph={ShieldAlert}
       warning
       title={`Check that this is ${props.host.name}`}
-      subtitle={`${props.host.name}’s security certificate changed, so this device stopped before sending anything.`}
+      subtitle="This home’s security certificate changed, so this device stopped before sending anything."
     >
       <div className="flex flex-col gap-2 text-center text-sm leading-5 text-muted-foreground">
         <p className="m-0">
