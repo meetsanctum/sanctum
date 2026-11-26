@@ -8,14 +8,7 @@ import {
   type PairingRequestInfo,
   type Platform,
 } from "@meetsanctum/auth-protocol";
-import {
-  Button,
-  Input,
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSeparator,
-  InputOTPSlot,
-} from "@meetsanctum/ui-sdk";
+import { Button, Input } from "@meetsanctum/ui-sdk";
 import { Globe, Monitor, Tablet } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
@@ -27,6 +20,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./components/ui/dialog";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSeparator,
+  InputOTPSlot,
+} from "./components/ui/input-otp";
 import { productName } from "./brand";
 import { CoreError } from "./core-fetch";
 import {
@@ -58,6 +57,13 @@ type Step =
 // gives the device 30 seconds to answer each of its steps.
 const exchangeMs = 1_000;
 const exchangeLimitMs = 75_000;
+
+const codeSlots = Array.from(
+  { length: pairingCodeLength },
+  (_, index) => index,
+);
+const codeMidpoint = pairingCodeLength / 2;
+const lookAlikeCharacter = /[01ILOU]/;
 
 class ExchangeFailed extends Error {
   constructor(readonly reason: PairExchangeFailure | "timeout") {
@@ -217,10 +223,9 @@ export function ApproveDevice(props: {
     }, normalised);
   };
 
-  const approve = (event: FormEvent) => {
-    event.preventDefault();
-    if (step.name !== "details") return;
+  const approve = () => {
     const deviceName = name.trim();
+    if (step.name !== "details" || working || !deviceName) return;
     void run(async (signal) => {
       await approvePairing({ ...step.exchange, name: deviceName }, signal);
       signal.throwIfAborted();
@@ -261,12 +266,34 @@ export function ApproveDevice(props: {
               aria-invalid={problem ? true : undefined}
               maxLength={pairingCodeLength}
               value={code}
+              readOnly={working}
               filter={(typed) => {
                 const upper = typed.toUpperCase();
-                setLookAlike(/[01ILOU]/.test(upper));
+                setLookAlike(lookAlikeCharacter.test(upper));
                 return [...upper]
                   .filter((char) => pairingCodeAlphabet.includes(char))
                   .join("");
+              }}
+              onPaste={(event) => {
+                if (working) return;
+                const input = event.currentTarget;
+                const pasted = event.clipboardData
+                  .getData("text/plain")
+                  .toUpperCase()
+                  .replace(/[\s-]/g, "");
+                const next =
+                  input.value.slice(0, input.selectionStart ?? 0) +
+                  pasted +
+                  input.value.slice(input.selectionEnd ?? input.value.length);
+                if (
+                  next.length > pairingCodeLength ||
+                  [...pasted].some(
+                    (char) => !pairingCodeAlphabet.includes(char),
+                  )
+                ) {
+                  event.preventDefault();
+                  setLookAlike(lookAlikeCharacter.test(pasted));
+                }
               }}
               onChange={(next) => {
                 setCode(next);
@@ -277,13 +304,13 @@ export function ApproveDevice(props: {
               autoFocus
             >
               <InputOTPGroup>
-                {[0, 1, 2, 3].map((index) => (
+                {codeSlots.slice(0, codeMidpoint).map((index) => (
                   <InputOTPSlot key={index} index={index} />
                 ))}
               </InputOTPGroup>
               <InputOTPSeparator />
               <InputOTPGroup>
-                {[4, 5, 6, 7].map((index) => (
+                {codeSlots.slice(codeMidpoint).map((index) => (
                   <InputOTPSlot key={index} index={index} />
                 ))}
               </InputOTPGroup>
@@ -306,7 +333,7 @@ export function ApproveDevice(props: {
           </form>
         )}
         {step.name === "details" && (
-          <form onSubmit={approve} className="flex flex-col gap-5">
+          <div className="flex flex-col gap-5">
             <DialogHeader>
               <DialogTitle>Approve this device?</DialogTitle>
               <DialogDescription>
@@ -355,11 +382,15 @@ export function ApproveDevice(props: {
               >
                 Back
               </Button>
-              <Button type="submit" disabled={working || !name.trim()}>
+              <Button
+                type="button"
+                onClick={approve}
+                disabled={working || !name.trim()}
+              >
                 {working ? "Approving…" : "Approve"}
               </Button>
             </DialogFooter>
-          </form>
+          </div>
         )}
         {step.name === "done" && (
           <div className="flex flex-col gap-5">

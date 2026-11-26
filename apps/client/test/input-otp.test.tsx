@@ -8,7 +8,7 @@ import {
   InputOTPGroup,
   InputOTPSeparator,
   InputOTPSlot,
-} from "../src/kit";
+} from "../src/components/ui/input-otp";
 
 // A code typed into boxes: one real input under them, which keeps what the
 // filter allows up to the length, fills the boxes in order and says once
@@ -111,6 +111,7 @@ describe("a code in boxes", () => {
 
     await type(input, "ab3-de f9z");
 
+    expect(input.hasAttribute("maxlength")).toBe(false);
     expect(input.value).toBe("AB3DEF");
   });
 
@@ -136,7 +137,15 @@ describe("a code in boxes", () => {
     expect(container.querySelector("[data-active]")).toBeNull();
 
     await act(async () => input.focus());
+    await act(async () => {
+      input.setSelectionRange(1, 1);
+      input.dispatchEvent(
+        new KeyboardEvent("keyup", { key: "ArrowLeft", bubbles: true }),
+      );
+    });
 
+    expect(input.selectionStart).toBe(2);
+    expect(input.selectionEnd).toBe(2);
     const active = container.querySelector("[data-active]")!;
     expect(slots().indexOf(active)).toBe(2);
     expect(active.querySelector("span")).not.toBeNull();
@@ -145,6 +154,21 @@ describe("a code in boxes", () => {
     await type(input, "ABCDEF");
     expect(slots().indexOf(container.querySelector("[data-active]")!)).toBe(5);
     expect(container.querySelector("[data-active] span")).toBeNull();
+  });
+
+  it("keeps Select All so the full code can be replaced", async () => {
+    const input = await render();
+    await type(input, "ABC123");
+    await act(async () => input.focus());
+    await act(async () => {
+      input.select();
+      input.dispatchEvent(
+        new KeyboardEvent("keyup", { key: "a", bubbles: true }),
+      );
+    });
+
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(6);
   });
 
   it("draws every box as a problem when the field is invalid", async () => {

@@ -4,8 +4,8 @@ import { cn } from "cn";
 // A short code typed into boxes, one character each: a pairing code, a
 // one-time code. Under the boxes lies one real input, so typing, pasting,
 // deleting and screen readers work as in any field; the boxes only draw
-// what it holds. It edits at the end only, as such codes are typed, and
-// keeps its caret still, so nothing runs while a screen waits for a code.
+// what it holds. The caret stays at the end and stays still while the
+// screen waits for a code. Select All can still replace the whole code.
 
 type InputOTPContext = { value: string; maxLength: number; focused: boolean };
 
@@ -27,7 +27,10 @@ function InputOTP({
   onFocus,
   onBlur,
   ...props
-}: Omit<React.ComponentProps<"input">, "value" | "onChange" | "maxLength"> & {
+}: Omit<
+  React.ComponentProps<"input">,
+  "value" | "onChange" | "maxLength" | "type" | "onSelect"
+> & {
   value: string;
   maxLength: number;
   onChange: (value: string) => void;
@@ -43,6 +46,7 @@ function InputOTP({
   // The caret stays at the end, where the next character goes.
   const toEnd = (input: HTMLInputElement) => {
     const end = input.value.length;
+    if (input.selectionStart === 0 && input.selectionEnd === end) return;
     if (input.selectionStart !== end || input.selectionEnd !== end) {
       input.setSelectionRange(end, end);
     }
@@ -65,12 +69,14 @@ function InputOTP({
           autoCorrect="off"
           spellCheck={false}
           {...props}
+          type="text"
           value={value}
           onChange={(event) => {
             const typed = event.target.value;
             const next = (filter ? filter(typed) : typed).slice(0, maxLength);
+            if (next === value) return;
             onChange(next);
-            if (next.length === maxLength && next !== value) {
+            if (next.length === maxLength) {
               onComplete?.(next);
             }
           }}

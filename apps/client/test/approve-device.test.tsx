@@ -105,6 +105,24 @@ async function type(input: HTMLInputElement, value: string) {
   });
 }
 
+async function paste(input: HTMLInputElement, text: string) {
+  const event = new Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", {
+    value: { getData: () => text },
+  });
+  await act(async () => {
+    input.dispatchEvent(event);
+  });
+  if (!event.defaultPrevented) {
+    await type(
+      input,
+      input.value.slice(0, input.selectionStart ?? 0) +
+        text +
+        input.value.slice(input.selectionEnd ?? input.value.length),
+    );
+  }
+}
+
 // Typing the last character looks the code up.
 async function find(code: string, waitMs = 0) {
   await type(dialog().querySelector("input")!, code);
@@ -120,9 +138,11 @@ describe("adding a shared device", () => {
       { status: "exchanging" },
       { status: "verified", request: lenovo },
     ];
-    await type(dialog().querySelector("input")!, "k7qx-m4pd");
+    const code = dialog().querySelector<HTMLInputElement>("input")!;
+    await type(code, "k7qx-m4pd");
 
     expect(looked).toEqual([{ code: "K7QXM4PD" }]);
+    expect(code.readOnly).toBe(true);
     expect(button("Finding the device…")).toBeDefined();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);
@@ -137,6 +157,9 @@ describe("adding a shared device", () => {
     expect(dialog().textContent).not.toContain("certificate");
     const name = dialog().querySelector<HTMLInputElement>("input")!;
     expect(name.value).toBe("Lenovo Tab");
+    expect(name.form).toBeNull();
+    expect(button("Approve").type).toBe("button");
+    expect(approved).toEqual([]);
 
     await type(name, "Kitchen Tablet");
     await act(async () => button("Approve").click());
@@ -219,6 +242,7 @@ describe("adding a shared device", () => {
     expect(dialog().querySelector("[role=alert]")!.textContent).toContain(
       "The device didn’t answer.",
     );
+    expect(dialog().querySelector("input")!.readOnly).toBe(false);
     expect(button("Find the device").disabled).toBe(false);
   });
 
@@ -231,28 +255,47 @@ describe("adding a shared device", () => {
   });
 
   it("keeps only the characters a code uses, in capitals, and says which it never uses", async () => {
-    await find("k7qx-m4p0");
+    await find("k7qx-m40");
 
     const input = dialog().querySelector<HTMLInputElement>("input")!;
-    expect(input.value).toBe("K7QXM4P");
+    expect(input.value).toBe("K7QXM4");
     const slots = [
       ...dialog().querySelectorAll("[data-slot=input-otp-slot]"),
     ].map((slot) => slot.textContent);
-    expect(slots).toEqual(["K", "7", "Q", "X", "M", "4", "P", ""]);
+    expect(slots).toEqual(["K", "7", "Q", "X", "M", "4", "", ""]);
     expect(dialog().querySelector("[role=status]")!.textContent).toBe(
       "Codes don’t use 0, 1, I, L, O or U. Check the code on the device.",
     );
     expect(button("Find the device").disabled).toBe(true);
     expect(looked).toEqual([]);
 
-    await find("K7QXM4PD");
+    await type(input, "K7QXM4P");
     expect(dialog().querySelector("[role=status]")).toBeNull();
+    expect(dialog().querySelector("input")).toBe(input);
+    expect(looked).toEqual([]);
+
+    await find("K7QXM4PD");
+    expect(looked).toEqual([{ code: "K7QXM4PD" }]);
+  });
+
+  it("rejects malformed pastes before looking up a formatted code", async () => {
+    const input = dialog().querySelector<HTMLInputElement>("input")!;
+    await paste(input, "K7QX-M4PDF");
+    await paste(input, "K7QX!M4PD");
+    await paste(input, "K7QX-M4P0");
+
+    expect(input.value).toBe("");
+    expect(looked).toEqual([]);
+    expect(dialog().querySelector("[role=status]")).not.toBeNull();
+
+    await paste(input, "k7qx - m4pd");
     expect(looked).toEqual([{ code: "K7QXM4PD" }]);
   });
 
   it("looks a code up again when Find the device is pressed after a problem", async () => {
     statuses = [{ status: "failed", reason: "no_answer" }];
     await find("K7QX-M4PD");
+    await type(dialog().querySelector("input")!, "K7QXM4PD#");
     expect(dialog().querySelector("[role=alert]")).not.toBeNull();
     expect(
       dialog()
