@@ -252,10 +252,9 @@ pnpm format:check
 ```
 
 `pnpm test:containers` runs real stacks and images in Docker and takes minutes.
-CI runs it on arm64 for every pull request that changes the manager, `deploy/`
-or how apps are packaged, so leave it to CI there. Run it locally only to
-debug a failure CI found, or when CI can't run, before a merge it would have
-covered.
+The [Containers workflow](.github/workflows/containers.yml) runs the suite on
+arm64 for the changes it covers. Run it locally only to debug a CI failure or
+before merging a change the suite covers if CI skips it or can't run.
 
 Use focused `pnpm --filter <package> <task>` runs while iterating, then the
 full set before finishing.
