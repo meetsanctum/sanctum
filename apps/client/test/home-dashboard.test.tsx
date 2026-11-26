@@ -296,16 +296,13 @@ describe("Home", () => {
 
     // The attic has nothing, and devices with no room come last.
     expect(sections()).toEqual([
-      // The hall's light is off Home, but its room's switch is there.
-      {
-        heading: "Hall",
-        groups: [["Lights in Hall", "Turn on lights in Hall"]],
-      },
+      // The hall's light is off Home, but its room's Lights tile is there.
+      { heading: "Hall", groups: [["On Home", "Lights"]] },
       {
         heading: "Office",
         groups: [
-          ["Lights in Office", "Turn off lights in Office", "Relax", "Work"],
-          ["On Home", "Desk strip", "Lamp"],
+          ["Looks in Office", "Relax", "Work"],
+          ["On Home", "Lights", "Desk strip", "Lamp"],
         ],
       },
       { heading: "No room", groups: [["On Home", "Loose lamp"]] },

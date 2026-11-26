@@ -141,7 +141,7 @@ an agent can:
 - **Change your lights:** turn them on or off, make them brighter or dimmer,
   or set their brightness, colour temperature or both. It can do this for
   a room, a floor, a zone, the whole home or chosen lights. Turning lights
-  on goes by the room's own rule, as its lights button does.
+  on goes by the room's own rule, as its Lights tile does.
 - **Use your apps:** run a mood, or have lights follow natural light, for
   example.
 - **Put its own change back:** a light it changed goes back to how it was,

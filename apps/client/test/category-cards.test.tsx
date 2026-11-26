@@ -270,23 +270,17 @@ describe("Lights' card", () => {
 });
 
 describe("a room's lights on Lights' page", () => {
-  it("have the room's lights button over them, which says what it does", async () => {
+  it("start with the room's Lights tile, which switches them all", async () => {
     await show("lights");
 
-    const office = button("Turn off lights in Office")!;
-    expect(office.textContent).toBe("Turn off lights");
+    const office = button("Lights in Office")!;
     expect(office.querySelector("svg.lucide-power")).not.toBeNull();
-    expect(office.dataset.on).toBe("");
-    expect(office.dataset.size).toBe("chip");
-    expect(office.classList.contains("self-start")).toBe(true);
-    expect(office.hasAttribute("aria-pressed")).toBe(false);
-    // Between the room's heading and its lights' tiles.
-    const section = office.closest("section")!;
-    expect(section.querySelector("h2, h3")?.nextElementSibling).toBe(office);
-    expect(office.nextElementSibling?.matches(".tile-grid")).toBe(true);
-    const hall = button("Turn on lights in Hall")!;
-    expect(hall.textContent).toBe("Turn on lights");
-    expect(hall.dataset.on).toBeUndefined();
+    expect(office.getAttribute("aria-pressed")).toBe("true");
+    // The first tile of the room's lights.
+    const grid = office.closest(".tile-grid")!;
+    expect(grid.firstElementChild?.contains(office)).toBe(true);
+    const hall = button("Lights in Hall")!;
+    expect(hall.getAttribute("aria-pressed")).toBe("false");
 
     await click(office);
     await click(hall);
@@ -301,18 +295,13 @@ describe("a room's lights on Lights' page", () => {
     expect(
       [...container.querySelectorAll("button")]
         .map((each) => each.getAttribute("aria-label"))
-        .filter((label) => label?.startsWith("Turn")),
-    ).toEqual([
-      // The home's, on Lights' card.
-      "Turn off 1 light",
-      "Turn off lights in Office",
-      "Turn on lights in Hall",
-    ]);
+        .filter((label) => label?.match(/^Lights in [^,]*$/)),
+    ).toEqual(["Lights in Office", "Lights in Hall"]);
   });
 
   it("are on no other category's page", async () => {
     await show("switches");
-    expect(button("Turn off lights in Office")).toBeUndefined();
+    expect(button("Lights in Office")).toBeUndefined();
   });
 });
 

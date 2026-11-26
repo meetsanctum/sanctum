@@ -250,6 +250,71 @@ describe("POST /api/devices/lights", () => {
   });
 });
 
+describe("POST /api/devices/lights with a set", () => {
+  it("sets the brightness of the lights that are on, leaving those off alone", async () => {
+    const { core, token, living } = await home();
+    const response = await lights(core, token, {
+      place: { kind: "room", id: living },
+      set: { brightness: 40 },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ on: true, switched: 1, failed: [] });
+    // A brightness above 0 comes with on, as any light's does.
+    expect(asked()).toEqual({ "lamp-1": { on: true, brightness: 40 } });
+  });
+
+  it("brings a room with none on up at the brightness asked", async () => {
+    const { core, token, kitchen } = await home();
+    const response = await lights(core, token, {
+      place: { kind: "room", id: kitchen },
+      set: { brightness: 30 },
+    });
+    expect(response.json()).toEqual({ on: true, switched: 1, failed: [] });
+    expect(asked()).toEqual({ "counter-1": { on: true, brightness: 30 } });
+  });
+
+  it("turns them off at a brightness of 0", async () => {
+    const { core, token, living } = await home();
+    const response = await lights(core, token, {
+      place: { kind: "room", id: living },
+      set: { brightness: 0 },
+    });
+    expect(response.json()).toEqual({ on: false, switched: 1, failed: [] });
+    expect(switched()).toEqual([["lamp-1", { on: false }]]);
+  });
+
+  it("keeps a colour temperature within each light's range, and sets a colour", async () => {
+    const { core, token, living } = await home();
+    await lights(core, token, {
+      place: { kind: "room", id: living },
+      set: { colorTemperature: 600 },
+    });
+    expect(asked()).toEqual({ "lamp-1": { colorTemperature: 500 } });
+
+    radio.received.length = 0;
+    await lights(core, token, {
+      place: { kind: "room", id: living },
+      set: { hue: 200, saturation: 80 },
+    });
+    expect(asked()).toEqual({ "lamp-1": { hue: 200, saturation: 80 } });
+  });
+
+  it("refuses a set it cannot read", async () => {
+    const { core, token, living } = await home();
+    const place = { kind: "room", id: living };
+    for (const body of [
+      { place, set: { brightness: 101 } },
+      { place, set: {} },
+      { place, set: { hue: 120 } },
+      { place, set: { brightness: 50, colorTemperature: 300 } },
+      { place, to: "on", set: { brightness: 50 } },
+    ]) {
+      expect((await lights(core, token, body)).statusCode).toBe(400);
+    }
+    expect(radio.received).toEqual([]);
+  });
+});
+
 describe("the lights pieces", () => {
   it("are among the core's pieces", async () => {
     const { core, token } = await home();

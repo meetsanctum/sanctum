@@ -42,16 +42,19 @@ import {
 } from "./device-tiles";
 import { useEdgeFade } from "./edge-fade";
 import { byFloor, FloorSection } from "./floor-groups";
-import {
-  floorLightsButton,
-  LightsButton,
-  roomLightsButton,
-} from "./lights-button";
+import { floorLightsButton } from "./lights-button";
 import { LightsCard, lightsStatus } from "./lights-card";
 import { batteriesTile } from "./maintenance";
 import { mediaSummary } from "./media";
 import { homeMotion, motionWhere, placeMotionText } from "./motion";
 import { PresenceOverview } from "./presence-overview";
+import {
+  roomLightsKey,
+  roomLightsTile,
+  RoomLightsTile,
+  useRoomLights,
+  type RoomLights,
+} from "./room-lights";
 import {
   isRowEmpty,
   RoomRow,
@@ -69,9 +72,9 @@ import { useKeyedHandlers } from "./keyed-handlers";
 // Room and category pages: the shell's, drawn from Places and Devices,
 // complete and fixed. A room's page opens with its name, what its sensors
 // read, whether its contact sensors are open and its motion, then its
-// row: its lights button, Natural Light and its moods (room-sections.tsx),
-// then its devices in a section for each category, and last the devices Sanctum
-// cannot use. A category's page shows its tiles in a section
+// row: Natural Light and its moods (room-sections.tsx), then its devices in
+// a section for each category, its Lights tile first among its lights
+// (room-lights.tsx), and last the devices Sanctum cannot use. A category's page shows its tiles in a section
 // for each room, devices with no room last. Some open with summary cards
 // (summary-cards.tsx), Environment's with the range of each reading across
 // the home, Security's with how many contact sensors are open, Switches'
@@ -459,6 +462,7 @@ export function RoomPage(props: {
 }) {
   const { roomId, devices, entities, back } = props;
   const clock = useHomeClock();
+  const roomLights = useRoomLights(devices);
   const room = devices.places?.rooms.find((each) => each.id === roomId);
   // A room removed meanwhile leaves its page.
   const gone = devices.places !== undefined && !room;
@@ -467,16 +471,8 @@ export function RoomPage(props: {
   }, [gone, back]);
   if (!room) return null;
   const own = devices.tiles.filter((tile) => tile.roomId === room.id);
-  const row = roomRowOf(
-    props.apps,
-    entities,
-    room.id,
-    roomLightsButton(
-      own.filter((tile) => tile.kind === "light"),
-      room,
-      devices,
-    ),
-  );
+  const lights = own.filter((tile) => tile.kind === "light");
+  const row = roomRowOf(props.apps, entities, room.id, lights);
   return (
     <>
       <PlaceHeader
@@ -492,9 +488,45 @@ export function RoomPage(props: {
         sections={sectionsOfRoom(own, devices.devices)}
         devices={devices}
         onOpen={props.openDevice}
+        lead={(section) =>
+          section.id === "lights" ? (
+            <LightsTileOf
+              lights={lights}
+              room={room}
+              devices={devices}
+              roomLights={roomLights}
+              onOpen={props.openDevice}
+            />
+          ) : null
+        }
       />
     </>
   );
+}
+
+// A room's Lights tile, as its lights stand.
+function LightsTileOf(props: {
+  lights: readonly Tile[];
+  room: { id: string; name: string };
+  devices: Devices;
+  roomLights: RoomLights;
+  onOpen: (tile: Tile) => void;
+}) {
+  const { room } = props;
+  const tile = roomLightsTile(
+    props.lights,
+    room.id,
+    props.devices.failures.get(roomLightsKey(room.id)),
+  );
+  return tile ? (
+    <RoomLightsTile
+      key={tile.key}
+      tile={tile}
+      roomName={room.name}
+      lights={props.roomLights}
+      onOpen={props.onOpen}
+    />
+  ) : null;
 }
 
 const inNoRoom = (devices: Devices) =>
@@ -673,8 +705,8 @@ export function CategoryPage(props: {
 
 // A category's rooms, under their floors once the home has floors
 // (floor-groups.tsx), so a room is where it is on Home. On Lights' page each
-// room has its lights button over its lights, as its row has on Home, and
-// each floor its button that turns them off (lights-button.tsx).
+// room's Lights tile comes first among its lights (room-lights.tsx), and
+// each floor has its button that turns them off (lights-button.tsx).
 function CategorySections(props: {
   sections: TileSection[];
   devices: Devices;
@@ -682,17 +714,19 @@ function CategorySections(props: {
   isLights: boolean;
 }) {
   const { devices, isLights } = props;
+  const roomLights = useRoomLights(devices);
   const lead = isLights
-    ? (section: TileSection) => {
-        // The lights in no room are not together, so have no button.
-        if (section.id === noRoomSection) return null;
-        const lights = roomLightsButton(
-          section.tiles,
-          { id: section.id, name: section.title },
-          devices,
-        );
-        return lights ? <LightsButton lights={lights} /> : null;
-      }
+    ? (section: TileSection) =>
+        // The lights in no room are not together, so have no Lights tile.
+        section.id === noRoomSection ? null : (
+          <LightsTileOf
+            lights={section.tiles}
+            room={{ id: section.id, name: section.title }}
+            devices={devices}
+            roomLights={roomLights}
+            onOpen={props.onOpen}
+          />
+        )
     : undefined;
   const groups = byFloor(devices.places, props.sections, (section) =>
     section.id === noRoomSection ? null : section.id,

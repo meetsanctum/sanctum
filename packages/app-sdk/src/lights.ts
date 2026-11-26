@@ -34,8 +34,23 @@ export type LightsChange =
   | "dimWhileHeld"
   | "brightenOrDimWhileHeld";
 
-/** What POST /api/devices/lights takes. */
-export type LightsRequest = { place: LightsPlace; to: LightsSwitch };
+/**
+ * What a place's lights are set to together, as a room's Lights tile and its
+ * detail set them: a brightness, 0 for off; a colour temperature in mireds;
+ * or a colour by its hue and saturation. Each light takes what it can.
+ */
+export type LightsSet =
+  | { brightness: number }
+  | { colorTemperature: number }
+  | { hue: number; saturation: number };
+
+/**
+ * What POST /api/devices/lights takes: the place's lights switched, or set
+ * together.
+ */
+export type LightsRequest =
+  | { place: LightsPlace; to: LightsSwitch }
+  | { place: LightsPlace; set: LightsSet };
 
 /** What switching a place's lights did. */
 export type LightsResult = {

@@ -1,5 +1,5 @@
 {
-  "version": "0.1.35",
+  "version": "0.1.36",
   "react": "19.3.1",
   "exports": {
     "@meetsanctum/ui-sdk": [
@@ -2702,12 +2702,15 @@
       "export declare function contactIcon(shownAs: ContactShownAs | null | undefined, open: boolean): LucideIcon;"
     ],
     "device-tile.d.ts": [
+      "import { type LucideIcon } from \"lucide-react\";",
       "import type { Tile } from \"./tiles\";",
       "export declare const DeviceTile: import(\"react\").MemoExoticComponent<(props: {",
       "    tile: Tile;",
       "    onToggle: (tile: Tile) => void;",
       "    onDim: (tile: Tile, brightness: number) => void;",
       "    onOpen?: (tile: Tile) => void;",
+      "    icon?: LucideIcon;",
+      "    label?: string;",
       "}) => import(\"react\").JSX.Element>;"
     ],
     "frame/protocol.d.ts": [

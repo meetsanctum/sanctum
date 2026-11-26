@@ -38,7 +38,7 @@ import type { Presses } from "./presses.js";
 //
 //   GET  /api/devices                DeviceInfo[] the caller may see
 //   POST /api/devices/command        { device, capability, command } → CapabilityInfo
-//   POST /api/devices/lights         { place, to } → LightsResult
+//   POST /api/devices/lights         { place, to } or { place, set } → LightsResult
 //   POST /api/devices/update         { id, name?, roomId? } → DeviceInfo
 //   POST /api/devices/remove         { id, force? } → { id }
 //   GET  /api/devices/pairing        PairingInfo

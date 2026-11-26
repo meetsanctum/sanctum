@@ -119,7 +119,7 @@ const button = (text: string) =>
 const row = () =>
   [
     ...(container
-      .querySelector("[role=group][aria-label^='Lights in']")
+      .querySelector("[role=group][aria-label^='Looks in']")
       ?.querySelectorAll("button") ?? []),
   ].map((each) => each.getAttribute("aria-label") ?? each.textContent);
 // A tile, by the name it starts with.
@@ -226,16 +226,19 @@ describe("all the lights of a room", () => {
     ).toBe("Buttons");
   });
 
-  it("of a room, from its row, through the core", async () => {
+  it("of a room, by its Lights tile first among its lights, through the core", async () => {
     await show("room", "office");
-    const all = button("Turn off lights in Office")!;
-    // A chip with the power symbol and what it does, White while any is on.
-    expect(all.textContent).toBe("Turn off lights");
-    expect(all.querySelector("svg.lucide-power")).not.toBeNull();
-    // Its words say what it does, so it is no pressed switch.
-    expect(all.hasAttribute("aria-pressed")).toBe(false);
-    expect(all.dataset.on).toBe("");
-    await click(all);
+    const lights = button("Lights in Office, 40%")!;
+    // A light's tile with the power symbol, lit at its lights' level.
+    expect(lights.textContent).toBe("Lights40%");
+    expect(lights.dataset.look).toBe("lit");
+    expect(lights.parentElement?.parentElement?.firstElementChild).toBe(
+      lights.parentElement,
+    );
+    const icon = button("Lights in Office")!;
+    expect(icon.querySelector("svg.lucide-power")).not.toBeNull();
+    expect(icon.getAttribute("aria-pressed")).toBe("true");
+    await click(icon);
     expect(posted("/api/devices/lights")).toEqual([
       { place: { kind: "room", id: "office" }, to: "off" },
     ]);
@@ -244,9 +247,8 @@ describe("all the lights of a room", () => {
   it("cannot be switched while they are all offline", async () => {
     devices = [{ ...lamp, availability: "offline" }];
     await show("room", "office");
-    const all = button("Turn on lights in Office")!;
-    expect(all.dataset.on).toBeUndefined();
-    expect(all.disabled).toBe(true);
+    expect(button("Lights in Office, Offline")).toBeDefined();
+    expect(button("Lights in Office")?.disabled).toBe(true);
     // Nothing a mood sets could answer either.
     expect(tile("Relax")?.disabled).toBe(true);
   });
@@ -454,7 +456,7 @@ describe("a room's page", () => {
     );
   });
 
-  it("has its switch, then apps' tiles by weight and app id, and no headings but its devices'", async () => {
+  it("has apps' tiles by weight and app id, and no headings but its devices'", async () => {
     entities = [
       relax,
       entity("test.spots", "spots.spot", "desk", {
@@ -472,7 +474,6 @@ describe("a room's page", () => {
     ];
     await show("room", "office", [awnings, spots, moods, alarms]);
     expect(row()).toEqual([
-      "Turn off lights in Office",
       "Relax in Office",
       "Desk in Office",
       "Door in Office",
@@ -485,11 +486,7 @@ describe("a room's page", () => {
 
   it("shows a room's moods in their order, the active one pressed, and runs one on a tap", async () => {
     await show("room", "office");
-    expect(row()).toEqual([
-      "Turn off lights in Office",
-      "Relax in Office",
-      "Work in Office",
-    ]);
+    expect(row()).toEqual(["Relax in Office", "Work in Office"]);
     expect(tile("Relax")?.getAttribute("aria-pressed")).toBe("true");
     expect(tile("Work")?.getAttribute("aria-pressed")).toBe("false");
 
@@ -535,10 +532,11 @@ describe("a room's page", () => {
     expect(tile("Work")?.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("has its switch alone in a room with lights but no moods", async () => {
+  it("has no row but its Lights tile in a room with lights but no moods", async () => {
     entities = [];
     await show("room", "hall");
-    expect(row()).toEqual(["Turn on lights in Hall"]);
+    expect(row()).toEqual([]);
+    expect(button("Lights in Hall, Off")).toBeDefined();
     expect(headings()).toEqual(["Lights"]);
   });
 

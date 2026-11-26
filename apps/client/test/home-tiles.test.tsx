@@ -28,7 +28,8 @@ it("redraws only the tile whose device changes on Home", async () => {
   // DeviceTile passes a failure callback when it renders.
   const tileRenders = () =>
     renders.mock.calls.filter(([, callback]) => callback);
-  expect(tileRenders()).toHaveLength(2);
+  // The two lights, and the kitchen's Lights tile.
+  expect(tileRenders()).toHaveLength(3);
   expect(
     container.querySelector('main [aria-label="Lamp, Off"]'),
   ).not.toBeNull();

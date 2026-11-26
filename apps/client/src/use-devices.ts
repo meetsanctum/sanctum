@@ -8,6 +8,7 @@ import {
   type LightsPlace,
   type LightsRequest,
   type LightsResult,
+  type LightsSet,
   type LightsSwitch,
   type LiveMessage,
   type Places,
@@ -466,6 +467,56 @@ export function useDevices(live: LiveFeed) {
     [send, forget, failOnce, ask],
   );
 
+  // Every light in a room or another place set together, as a room's Lights
+  // tile and its detail set them: a brightness, a white or a colour. While
+  // any is on the core changes only those, so a brightness shows on them
+  // as pending at once, as a light's own drag does; while none is on the
+  // place comes on by its rooms' rules, which only the core knows, so they
+  // wait for its live state. A brightness of 0 switches them off. The core
+  // names the lights it could not set; when the whole call fails, each that
+  // it would have set failed.
+  const setLights = useCallback(
+    async (place: LightsPlace, lights: Tile[], set: LightsSet) => {
+      if ("brightness" in set && set.brightness === 0) {
+        return switchLights(place, lights, "off");
+      }
+      const reachable = lights.filter((tile) => !tile.disabled);
+      const lit = reachable.filter((tile) => tile.on);
+      const setting = lit.length > 0 ? lit : reachable;
+      const commands = send(setting.map((tile) => tile.key));
+      const answered =
+        "brightness" in set && lit.length > 0
+          ? ask(
+              lit.filter((tile) => tile.dims).map((tile) => tile.key),
+              { on: true, brightness: set.brightness },
+            )
+          : ask(
+              setting.map((tile) => tile.key),
+              null,
+            );
+      try {
+        const result = await coreJson<LightsResult>("/api/devices/lights", {
+          method: "POST",
+          json: { place, set } satisfies LightsRequest,
+        });
+        const failed = new Set(
+          result.failed.map((each) => tileKey(each.device, each.capability)),
+        );
+        const failedCommands = commands.filter(([key]) => failed.has(key));
+        forget(failedCommands);
+        failOnce(failedCommands);
+        return result;
+      } catch (error) {
+        forget(commands);
+        failOnce(commands);
+        throw error;
+      } finally {
+        answered();
+      }
+    },
+    [send, forget, failOnce, ask, switchLights],
+  );
+
   // Read whenever the shell refreshes its live feed, which it first does
   // once the host has answered as itself, and followed over it in between.
   useEffect(
@@ -526,6 +577,7 @@ export function useDevices(live: LiveFeed) {
       toggle,
       dim,
       switchLights,
+      setLights,
       fail,
     }),
     [
@@ -540,6 +592,7 @@ export function useDevices(live: LiveFeed) {
       toggle,
       dim,
       switchLights,
+      setLights,
       fail,
     ],
   );

@@ -21,9 +21,9 @@ export function SectionHeading(props: {
 
 // Tiles on the grid, in their sections, each tile a row three cells wide.
 // Given `onOpen`, each tile opens its device's detail and its icon switches
-// it. Given `lead`, a section has what it returns between its heading and
-// its tiles, such as a button for the whole section. Given `level`, their
-// headings are at that level.
+// it. Given `lead`, a section's grid starts with what it returns, such as
+// a tile for the whole section's lights. Given `level`, their headings are
+// at that level.
 export function DeviceSections(props: {
   sections: TileSection[];
   level?: 2 | 3;
@@ -41,8 +41,8 @@ export function DeviceSections(props: {
       <SectionHeading id={`room-${section.id}`} level={props.level}>
         {section.title}
       </SectionHeading>
-      {props.lead?.(section)}
       <div className="tile-grid auto-rows-(--cell)">
+        {props.lead?.(section)}
         {section.tiles.map((tile) => (
           <DeviceTile
             key={tile.key}

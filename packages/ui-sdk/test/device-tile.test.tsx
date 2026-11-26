@@ -3,6 +3,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { Power } from "lucide-react";
+
 import { DeviceTile } from "../src/device-tile";
 import type { Tile } from "../src/tiles";
 
@@ -778,5 +780,36 @@ describe("an unknown device's tile", () => {
     });
     expect(onOpen).toHaveBeenCalledWith(purifier);
     expect(onToggle).not.toHaveBeenCalled();
+  });
+});
+
+describe("a tile for several lights", () => {
+  it("takes the icon and the name it is given for screen readers", async () => {
+    await act(async () => {
+      root.render(
+        <DeviceTile
+          tile={{ ...lamp, name: "Lights" }}
+          icon={Power}
+          label="Lights in Kitchen"
+          onToggle={onToggle}
+          onDim={onDim}
+          onOpen={() => {}}
+        />,
+      );
+    });
+    const labels = [...container.querySelectorAll("[aria-label]")].map((each) =>
+      each.getAttribute("aria-label"),
+    );
+    expect(labels).toEqual([
+      "Lights in Kitchen, 40%",
+      "Lights in Kitchen",
+      "Lights in Kitchen brightness",
+    ]);
+    expect(container.querySelector("svg.lucide-power")).not.toBeNull();
+    expect(container.querySelector("svg.lucide-lightbulb")).toBeNull();
+    // What it shows is its own name.
+    expect(container.querySelector(".truncate.text-sm")?.textContent).toBe(
+      "Lights",
+    );
   });
 });

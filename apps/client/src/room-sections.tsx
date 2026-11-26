@@ -18,12 +18,10 @@ import { entityKey, shownType, useAppEntities } from "./app-entities";
 import { isShown, looksRunning, stateShort } from "./app-state";
 import { coreJson } from "./core-fetch";
 import { tileKey } from "./device-tiles";
-import { LightsButton, type LightsButtonState } from "./lights-button";
-import { sameData } from "./same-data";
 
 // Apps' room sections: the shell draws each from the app's entities of the
 // section's type in the room, in the room's row (RoomRow): buttons as chips
-// beside its lights button and tiles with their names under them. No app
+// and tiles with their names under them. No app
 // code runs to draw one. A tap calls the section's action through the
 // gate; the lights and switches it could not reach fail on their tiles, and
 // a tap that fails as a whole fails on the section's own tile. While the
@@ -161,9 +159,10 @@ type RowEntry = AppSection & {
   failures: number | undefined;
 };
 
-/** A room's row: its lights button, then apps' buttons, then apps' tiles. */
+/** A room's row: apps' buttons, then apps' tiles. */
 type RoomRowParts = {
-  lights?: LightsButtonState;
+  /** Whether the room has lights and every one is offline. */
+  isDark: boolean;
   buttons: RowEntry[];
   tiles: RowEntry[];
 };
@@ -184,22 +183,23 @@ function entriesIn(
   );
 }
 
-/** A room's row as its lights and apps' sections stand, maybe empty. */
+/** A room's row as apps' sections stand, maybe empty. */
 export function roomRowOf(
   apps: readonly AppInfo[],
   entities: SectionEntities,
   roomId: string,
-  lights: LightsButtonState | undefined,
+  /** The room's lights' tiles, which say whether all are offline. */
+  lights: readonly { disabled: boolean }[],
 ): RoomRowParts {
   return {
-    lights,
+    isDark: lights.length > 0 && lights.every((tile) => tile.disabled),
     buttons: entriesIn(sectionsInOrder(apps, "buttons"), entities, roomId),
     tiles: entriesIn(sectionsInOrder(apps, "tiles"), entities, roomId),
   };
 }
 
 export const isRowEmpty = (row: RoomRowParts) =>
-  !row.lights && row.buttons.length === 0 && row.tiles.length === 0;
+  row.buttons.length === 0 && row.tiles.length === 0;
 
 function sameEntries(before: readonly RowEntry[], after: readonly RowEntry[]) {
   return (
@@ -224,21 +224,21 @@ export function sameRoomRow(
   return (
     before !== null &&
     after !== null &&
-    sameData(before.lights, after.lights, { functionsAlike: true }) &&
+    before.isDark === after.isDark &&
     sameEntries(before.buttons, after.buttons) &&
     sameEntries(before.tiles, after.tiles)
   );
 }
 
 /**
- * A room's row, under its name on its page and on Home: on its first line
- * its lights button, a chip that says what it does ("Turn off lights") and
- * is White while any light is on (lights-button.tsx), and apps' buttons,
- * chips with their icon and name; then apps' tiles with their names,
- * Natural Light first and the room's moods after it. The lights button says
- * whether the lights are on, the rest which look they have. At most one
- * look is lit: Natural Light before a mood that matches the curve, and a
- * running app's look before the last one a paused app said.
+ * A room's row of looks, under its name on its page and on Home: apps'
+ * buttons, chips with their icon and name, on a line of their own; then
+ * apps' tiles with their names, Natural Light first and the room's moods
+ * after it. The room's lights are switched and dimmed together by its Lights
+ * tile, first among its lights (room-lights.tsx); the row says which look
+ * they have. At most one look is lit: Natural Light before a mood that
+ * matches the curve, and a running app's look before the last one a paused
+ * app said.
  * Each is named with the room, since several rooms' are in reach on Home.
  * While every light is offline the core can reach none, so the whole row
  * dims; while an app isn't running its own buttons and tiles dim and say so.
@@ -249,7 +249,7 @@ export function RoomRow(props: {
   press: SectionEntities["press"];
 }) {
   const { row, roomName, press } = props;
-  const dark = row.lights?.isDisabled === true;
+  const dark = row.isDark;
   const active = [...row.buttons, ...row.tiles].filter(
     ({ entity }) => entity.tile.active,
   );
@@ -267,25 +267,21 @@ export function RoomRow(props: {
       onClick: () => void press(app.id, section, entity),
     };
     const key = entityKey(entity.app, entity.key);
-    // Buttons are chips beside the lights button, tiles tiles under them.
+    // Buttons are chips, tiles tiles under them.
     return section.kind === "buttons" ? (
       <SectionButton key={key} {...shared} />
     ) : (
       <SectionTile key={key} {...shared} status={notRunning ?? undefined} />
     );
   };
-  const hasChips = row.lights !== undefined || row.buttons.length > 0;
   return (
     <div
       role="group"
-      aria-label={`Lights in ${roomName}`}
+      aria-label={`Looks in ${roomName}`}
       className="flex flex-col gap-3"
     >
-      {hasChips && (
-        <div className="flex flex-wrap gap-2">
-          {row.lights && <LightsButton lights={row.lights} />}
-          {row.buttons.map(entryOf)}
-        </div>
+      {row.buttons.length > 0 && (
+        <div className="flex flex-wrap gap-2">{row.buttons.map(entryOf)}</div>
       )}
       {row.tiles.length > 0 && (
         <div className="tile-grid auto-rows-(--cell)">

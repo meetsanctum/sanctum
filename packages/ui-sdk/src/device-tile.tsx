@@ -9,6 +9,7 @@ import {
   Radio,
   Sun,
   Thermometer,
+  type LucideIcon,
 } from "lucide-react";
 import {
   type CSSProperties,
@@ -61,16 +62,23 @@ const levelAt = (at: Drag, clientX: number) =>
 // does a sensor's, which shows its readings, a motion sensor's, white while
 // it sees motion, and a contact sensor's, white while it is open; its icon
 // is dashed while nothing is known of it, since a closed one would say more.
-// It draws again only when its tile or handlers change: a home's change
-// otherwise drew every tile again.
+// A tile for several lights together, such as a room's Lights tile, gives
+// its own icon and a name that says whose lights they are, which screen
+// readers hear in place of the tile's. It draws again only when its tile or
+// handlers change: a home's change otherwise drew every tile again.
 export const DeviceTile = memo(function DeviceTile(props: {
   tile: Tile;
   onToggle: (tile: Tile) => void;
   onDim: (tile: Tile, brightness: number) => void;
   /** Opens the device's detail, which its icon then leaves to switching. */
   onOpen?: (tile: Tile) => void;
+  /** An icon in place of its kind's, such as a room's Lights tile's power. */
+  icon?: LucideIcon;
+  /** What screen readers call it in place of its name: "Lights in Kitchen". */
+  label?: string;
 }) {
   const { tile, onOpen } = props;
+  const label = props.label ?? tile.name;
   const [preview, setPreview] = useState<number | null>(null);
   const [dragging, setDragging] = useState(false);
   const drag = useRef<Drag | null>(null);
@@ -226,12 +234,13 @@ export const DeviceTile = memo(function DeviceTile(props: {
     !tile.disabled &&
     (switches || (plays && tile.media?.canPlayPause === true));
   const playbackLabel = plays
-    ? `${tile.media?.playing ? "Pause" : "Play"} ${tile.name}`
+    ? `${tile.media?.playing ? "Pause" : "Play"} ${label}`
     : undefined;
   // The round icon switches it only where the rest opens the detail.
   const iconSwitches = onOpen !== undefined && (switches || plays);
   const Icon =
-    tile.kind === "unknown"
+    props.icon ??
+    (tile.kind === "unknown"
       ? // The general icon, as an unknown device has in Settings.
         Radio
       : tile.kind === "button"
@@ -254,7 +263,7 @@ export const DeviceTile = memo(function DeviceTile(props: {
                   ? Plug
                   : on
                     ? Lightbulb
-                    : LightbulbOff;
+                    : LightbulbOff);
   const dashed = tile.kind === "contact" && !tile.contact ? "3 3" : undefined;
   const iconLook =
     "grid size-10 shrink-0 place-items-center rounded-full bg-(--tile-chip) data-[look=lit]:bg-white/55 data-[look=on]:bg-(--tile-on-ink)/8";
@@ -266,7 +275,7 @@ export const DeviceTile = memo(function DeviceTile(props: {
         type="button"
         aria-pressed={onOpen || !switches ? undefined : on}
         aria-haspopup={onOpen ? "dialog" : undefined}
-        aria-label={onOpen ? `${tile.name}, ${status}` : playbackLabel}
+        aria-label={onOpen ? `${label}, ${status}` : playbackLabel}
         disabled={!onOpen && !canToggle}
         data-look={look}
         data-dragging={dragging ? "" : undefined}
@@ -318,7 +327,7 @@ export const DeviceTile = memo(function DeviceTile(props: {
       {iconSwitches && (
         <button
           type="button"
-          aria-label={playbackLabel ?? tile.name}
+          aria-label={playbackLabel ?? label}
           aria-pressed={plays ? undefined : on}
           disabled={!canToggle}
           data-look={look}
@@ -343,7 +352,7 @@ export const DeviceTile = memo(function DeviceTile(props: {
           max={100}
           step={1}
           value={level ?? 0}
-          aria-label={`${tile.name} brightness`}
+          aria-label={`${label} brightness`}
           aria-valuetext={on ? `${level ?? 0}%` : "Off"}
           onChange={(event) => {
             const brightness = Number(event.target.value);
