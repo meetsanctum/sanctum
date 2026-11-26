@@ -4,7 +4,7 @@ import { TimedOut, withTimeout } from "../app-host/errors.js";
 import { announcementCapability } from "../devices/announce.js";
 import type { DeviceChange } from "../devices/devices.js";
 import { speakerNetwork, type Announcements } from "./announcements.js";
-import { synthesize } from "./wyoming.js";
+import { synthesize, type SpeechAudio } from "./wyoming.js";
 
 // What Sanctum says out loud, in the home's one voice per language. Piper,
 // a service the manager runs, turns the words into speech; the core encodes
@@ -91,6 +91,12 @@ export function createSpeech(options: {
   areaOn: () => boolean;
   // The port speakers fetch announcements on, as the host publishes it.
   publishedPort: number;
+  // The success chime a confirmation plays on a smart speaker, kept ready;
+  // without one, a confirmation's words are said.
+  chime?: readonly SpeechAudio[];
+  // Words said the same each time, such as "One moment": said as each voice
+  // loads, and kept.
+  keptPhrases?: readonly { language: SpeechLanguage; text: string }[];
   log: (message: string) => void;
   now?: () => number;
 }) {
@@ -104,6 +110,14 @@ export function createSpeech(options: {
     at: number;
   } | null = null;
   let running = false;
+  // Phrases said the same each time, once Piper has said them.
+  const keptPhrases = options.keptPhrases ?? [];
+  const keptSpeech = new Map<string, SpeechAudio[]>();
+  const keyOf = (language: SpeechLanguage, text: string) =>
+    `${language}\n${text}`;
+  const kept = new Set(
+    keptPhrases.map(({ language, text }) => keyOf(language, text)),
+  );
 
   async function hostNetwork() {
     if (address && now() - address.at < addressKeptMs) return address.value;
@@ -151,6 +165,12 @@ export function createSpeech(options: {
             // Only the voice's loading counts, not what it says.
             while (!(await spoken.next()).done);
             failed.delete(language);
+            for (const phrase of keptPhrases) {
+              if (phrase.language !== language || signal.aborted) continue;
+              // Saying it keeps it.
+              const saying = said(at, phrase.text, language, signal);
+              while (!(await saying.next()).done);
+            }
           } catch (error) {
             if (signal.aborted) return;
             failed.set(language, error);
@@ -223,6 +243,124 @@ export function createSpeech(options: {
     else void applyServiceState();
   }
 
+  // An announcement of `text` for a speaker, once it's playable and its
+  // turn has come and `tell` has handed its address on. It is withdrawn if
+  // that fails or takes too long.
+  async function prepare(
+    input: {
+      device: string;
+      text: string;
+      language: SpeechLanguage;
+      beforeTelling?: () => void;
+      onSynthesisStarted?: () => void;
+    },
+    how: {
+      finishing: boolean;
+      // A sound kept ready to play in place of the words, needing no Piper.
+      sound?: readonly SpeechAudio[];
+      tell: (url: string) => Promise<void>;
+      onFetched?: (url: string) => Promise<void>;
+    },
+  ) {
+    const dispatchBy = now() + dispatchWithinMs;
+    const waitExpired = () =>
+      new SpeechUnavailable(
+        "The speaker didn't take the announcement in time.",
+      );
+    const unavailable = () =>
+      new SpeechUnavailable("Speech isn't running on Sanctum right now");
+    if (!running || options.announcements.port() === null) throw unavailable();
+    const { sound } = how;
+    const [at, network] = await Promise.all([
+      sound ? null : endpoint(),
+      hostNetwork(),
+    ]);
+    const listenerPort = options.announcements.port();
+    if (!running || listenerPort === null || (!at && !sound) || !network) {
+      throw unavailable();
+    }
+    if (now() >= dispatchBy) throw waitExpired();
+    const announcement = options.announcements.create(
+      input.device,
+      network,
+      options.publishedPort || listenerPort,
+      (signal) => {
+        if (sound || !at) return played(sound ?? []);
+        input.onSynthesisStarted?.();
+        return said(at, input.text, input.language, signal);
+      },
+      () => {
+        // An unfetched URL can mean the host has moved to another address.
+        if (address?.value === network) address = null;
+      },
+      how.onFetched,
+      { finishing: how.finishing },
+    );
+    const tell = async () => {
+      // The speaker needs a playable frame, and those ahead of it must have
+      // finished, before the driver gets the address.
+      const playable = (await announcement.ready) && (await announcement.turn);
+      if (!how.finishing && !options.areaOn()) throw new SpeechSwitchedOff();
+      if (playable) {
+        if (now() >= dispatchBy) throw waitExpired();
+        input.beforeTelling?.();
+        const url = announcement.dispatchUrl();
+        if (url) {
+          await how.tell(url);
+          return;
+        }
+      }
+      throw running
+        ? new SpeechUnavailable("The announcement audio couldn't be generated.")
+        : unavailable();
+    };
+    try {
+      await withTimeout(tell(), Math.max(0, dispatchBy - now()));
+    } catch (error) {
+      announcement.withdraw();
+      throw error instanceof TimedOut ? waitExpired() : error;
+    }
+    return announcement;
+  }
+
+  async function* played(sound: readonly SpeechAudio[]) {
+    yield* sound;
+  }
+
+  // What Piper says for `text`, or what it said before for a phrase kept
+  // ready, such as "One moment", so a reply that's always the same needs no
+  // wait for Piper.
+  function said(
+    at: NonNullable<Awaited<ReturnType<typeof endpoint>>>,
+    text: string,
+    language: SpeechLanguage,
+    signal: AbortSignal,
+  ): AsyncIterable<SpeechAudio> & AsyncIterator<SpeechAudio> {
+    const spoken = () =>
+      synthesize({
+        ...at,
+        text,
+        voice: voices[language],
+        idleMs: speechIdleMs,
+        signal,
+      });
+    const key = keyOf(language, text);
+    if (!kept.has(key)) return spoken();
+    return (async function* () {
+      const ready = keptSpeech.get(key);
+      if (ready) {
+        yield* ready;
+        return;
+      }
+      const chunks: SpeechAudio[] = [];
+      for await (const audio of spoken()) {
+        chunks.push(audio);
+        yield audio;
+      }
+      if (!signal.aborted && chunks.length > 0) keptSpeech.set(key, chunks);
+    })();
+  }
+
   return {
     start() {
       if (running) return;
@@ -258,54 +396,26 @@ export function createSpeech(options: {
      * SpeechUnavailable while the speech service or the host's address isn't
      * there or the speech fails before any sound, SpeechSwitchedOff once AI
      * agents may no longer speak before the speaker is told, and the
-     * announcement's own refusal while too many wait.
+     * announcement's own refusal while too many wait. A request's reply
+     * that follows its "One moment" is `finishing`: it's said whether or
+     * not AI agents may speak.
      */
     async speak(input: {
       device: string;
       text: string;
       language: SpeechLanguage;
       actor: Actor;
+      finishing?: true;
+      // A request's reply that only confirms what worked: the success
+      // chime, or the words where it can't play.
+      confirmation?: boolean;
       beforeTelling?: () => void;
       onSynthesisStarted?: () => void;
       onDelivery?: (fetched: boolean) => void;
     }) {
-      const dispatchBy = now() + dispatchWithinMs;
-      const waitExpired = () =>
-        new SpeechUnavailable(
-          "The speaker didn't take the announcement in time.",
-        );
-      if (!running || options.announcements.port() === null) {
-        throw new SpeechUnavailable(
-          "Speech isn't running on Sanctum right now",
-        );
-      }
-      const [at, network] = await Promise.all([endpoint(), hostNetwork()]);
-      const listenerPort = options.announcements.port();
-      if (!running || listenerPort === null || !at || !network) {
-        throw new SpeechUnavailable(
-          "Speech isn't running on Sanctum right now",
-        );
-      }
-      if (now() >= dispatchBy) throw waitExpired();
-      const announcement = options.announcements.create(
-        input.device,
-        network,
-        options.publishedPort || listenerPort,
-        (signal) => {
-          input.onSynthesisStarted?.();
-          return synthesize({
-            ...at,
-            text: input.text,
-            voice: voices[input.language],
-            idleMs: speechIdleMs,
-            signal,
-          });
-        },
-        () => {
-          // An unfetched URL can mean the host has moved to another address.
-          if (address?.value === network) address = null;
-        },
-        async (url) => {
+      const how = {
+        finishing: input.finishing === true,
+        onFetched: async (url: string) => {
           try {
             await options.devices.announce(
               input.device,
@@ -319,34 +429,15 @@ export function createSpeech(options: {
             );
           }
         },
-      );
-      const tell = async () => {
-        // The speaker needs a playable frame, and those ahead of it
-        // must have finished, before the driver gets the address.
-        const playable =
-          (await announcement.ready) && (await announcement.turn);
-        if (!options.areaOn()) throw new SpeechSwitchedOff();
-        if (playable) {
-          if (now() >= dispatchBy) throw waitExpired();
-          input.beforeTelling?.();
-          const url = announcement.dispatchUrl();
-          if (url) {
-            await options.devices.announce(input.device, url, input.actor);
-            return;
-          }
-        }
-        throw new SpeechUnavailable(
-          running
-            ? "The announcement audio couldn't be generated."
-            : "Speech isn't running on Sanctum right now",
-        );
+        tell: (url: string) =>
+          options.devices.announce(input.device, url, input.actor),
       };
-      try {
-        await withTimeout(tell(), Math.max(0, dispatchBy - now()));
-      } catch (error) {
-        announcement.withdraw();
-        throw error instanceof TimedOut ? waitExpired() : error;
-      }
+      const chime = input.confirmation ? options.chime : undefined;
+      const announcement = chime
+        ? await prepare(input, { ...how, sound: chime }).catch(() =>
+            prepare(input, how),
+          )
+        : await prepare(input, how);
       const onDelivery = input.onDelivery;
       if (onDelivery) {
         void announcement.delivery
@@ -360,6 +451,42 @@ export function createSpeech(options: {
           });
       }
       return { encoded: announcement.encoded };
+    },
+
+    /**
+     * Makes `text` ready as a request's reply on the smart speaker that
+     * heard it, after what the speaker has still to say, whether or not AI
+     * agents may speak, since it finishes someone's request: resolves with
+     * its address once there is sound to play and its turn has come, for the
+     * speaker's run to hand on. Throws as `speak` does.
+     */
+    async reply(input: {
+      device: string;
+      text: string;
+      language: SpeechLanguage;
+      // Words that only confirm an action that worked: the success chime
+      // plays in their place, or they're said where it can't.
+      confirmation?: boolean;
+      signal?: AbortSignal;
+    }): Promise<string> {
+      let told = "";
+      const tell = async (url: string) => {
+        input.signal?.throwIfAborted();
+        told = url;
+      };
+      const chime = input.confirmation ? options.chime : undefined;
+      const announcement = chime
+        ? await prepare(input, { finishing: true, sound: chime, tell }).catch(
+            (error: unknown) => {
+              if (input.signal?.aborted) throw error;
+              return prepare(input, { finishing: true, tell });
+            },
+          )
+        : await prepare(input, { finishing: true, tell });
+      input.signal?.addEventListener("abort", () => announcement.withdraw(), {
+        once: true,
+      });
+      return told;
     },
 
     stop() {

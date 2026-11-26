@@ -268,6 +268,44 @@ function failedWords(entry: ActivityInfo, verb: string) {
       : `Didn't ${verb}`;
 }
 
+const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
+
+// How long a smart speaker's request took, each step from the one before.
+function requestMomentWords(detail: ActivityInfo["detail"]) {
+  const at = (key: string) =>
+    typeof detail?.[key] === "number" ? (detail[key] as number) : null;
+  const firstSound = at("firstSoundMs");
+  const stopped = at("stoppedListeningMs");
+  const ready = at("replyReadyMs");
+  const played = at("finishedPlayingMs");
+  const late = at("lateReplyMs");
+  const parts: string[] = [];
+  if (stopped !== null) {
+    parts.push(`Listened ${seconds(stopped - (firstSound ?? 0))}`);
+  }
+  if (late !== null) parts.push(`answered after ${seconds(late)}`);
+  else if (ready !== null && stopped !== null) {
+    parts.push(`answered in ${seconds(ready - stopped)}`);
+  }
+  if (played !== null && ready !== null) {
+    parts.push(`played ${seconds(played - ready)}`);
+  }
+  return parts.join(", ");
+}
+
+function declinedWords(reason: string | null) {
+  switch (reason) {
+    case "assistant_off":
+      return "the Assistant is off";
+    case "no_speech_to_text":
+      return "speech recognition isn't running";
+    case "limited":
+      return "it had too many requests in the last minute";
+    default:
+      return "it couldn't listen just then";
+  }
+}
+
 function deviceEntry(
   clock: HomeClock,
   entry: ActivityInfo,
@@ -301,6 +339,22 @@ function deviceEntry(
       return said(
         `${entry.outcome === "ok" ? "Said" : "Couldn't say"} “${String(entry.detail?.text ?? "")}”`,
       );
+    // What someone asked a smart speaker, never the words: its moments.
+    case "device.request":
+      return said(
+        entry.outcome === "ok"
+          ? "Answered a request"
+          : entry.reason === "turn_ended"
+            ? "Stopped a request for a newer one"
+            : "Couldn't answer a request",
+        requestMomentWords(entry.detail),
+      );
+    // Nothing went wrong: the speaker was told no, and why.
+    case "device.declined":
+      return {
+        ...said(`Heard its wake word, but ${declinedWords(entry.reason)}`, ""),
+        problem: false,
+      };
     case "device.offline":
       return said("Went offline", "It stopped answering");
     case "device.online":

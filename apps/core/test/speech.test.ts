@@ -54,6 +54,7 @@ function setup(options: {
   address?: string | null;
   cidr?: string;
   want?: (signal: AbortSignal) => Promise<void>;
+  chime?: { rate: number; samples: Int16Array }[];
   log?: (message: string) => void;
 }) {
   const calls: string[] = [];
@@ -94,6 +95,7 @@ function setup(options: {
     },
     areaOn: () => areaOn,
     publishedPort: 4180,
+    ...(options.chime ? { chime: options.chime } : {}),
     log: options.log ?? (() => {}),
   });
   return {
@@ -336,6 +338,67 @@ describe("createSpeech", () => {
       expect(told).toHaveLength(1);
     } finally {
       finishing.resolve();
+      speech.stop();
+      synthesize.mockRestore();
+    }
+  });
+
+  it("hands a request its reply's address, a confirmation's as the chime", async () => {
+    const synthesize = vi
+      .spyOn(wyoming, "synthesize")
+      .mockImplementation(async function* () {
+        yield { rate: 22_050, samples: new Int16Array(4096) };
+      });
+    const chime = [{ rate: 22_050, samples: new Int16Array(2048) }];
+    // No Piper: only the chime plays.
+    const { speech, told } = setup({ devices: [], serviceUrl: null, chime });
+    announcements!.port = () => 4180;
+    speech.start();
+    try {
+      const url = await speech.reply({
+        device: "a",
+        text: "Turned off the Office lights",
+        language: "en",
+        confirmation: true,
+      });
+      expect(url).toMatch(/^http:\/\/192\.168\.1\.20:4180\/a\/.+\.flac$/);
+      expect(synthesize).not.toHaveBeenCalled();
+      // The run hands it on: the speaker isn't told as for an announcement.
+      expect(told).toEqual([]);
+      await expect(
+        speech.reply({ device: "a", text: "Hi", language: "en" }),
+      ).rejects.toThrow(SpeechUnavailable);
+    } finally {
+      speech.stop();
+      synthesize.mockRestore();
+    }
+  });
+
+  it("says a confirmation's words where there is no chime", async () => {
+    const synthesize = vi
+      .spyOn(wyoming, "synthesize")
+      .mockImplementation(async function* () {
+        yield { rate: 22_050, samples: new Int16Array(4096) };
+      });
+    const { speech } = setup({
+      devices: [],
+      serviceUrl: "tcp://127.0.0.1:1",
+      areaOn: false,
+    });
+    announcements!.port = () => 4180;
+    speech.start();
+    try {
+      // Whether or not AI agents may speak: it finishes someone's request.
+      await speech.reply({
+        device: "a",
+        text: "Turned off the Office lights",
+        language: "en",
+        confirmation: true,
+      });
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({ text: "Turned off the Office lights" }),
+      );
+    } finally {
       speech.stop();
       synthesize.mockRestore();
     }

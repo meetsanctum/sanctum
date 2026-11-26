@@ -114,6 +114,11 @@ export function createAgentLimiter(
       }
     },
 
+    /** Whether a request would be counted now, without counting it. */
+    hasRoom(agentId: string): boolean {
+      return take(agentId, false) === undefined;
+    },
+
     /** Holds a slot while a request is being handled. */
     begin(agentId: string): { done: () => void } | LimitRefusal {
       const running = underWay.get(agentId) ?? 0;

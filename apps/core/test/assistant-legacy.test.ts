@@ -94,7 +94,11 @@ it("keeps a protocol 21 Assistant connected across a takeover", async () => {
     heard
       .filter((message) => message.type === "call")
       .filter((message) => message.body.kind === "request");
-  const legacyRequestSchema = assistantRequestSchema.omit({ earlier: true });
+  // What a protocol 21 runner takes: the client's name, no room, no
+  // earlier exchanges.
+  const legacyRequestSchema = assistantRequestSchema
+    .omit({ earlier: true, room: true, from: true })
+    .extend({ clientName: assistantRequestSchema.shape.from.shape.name });
 
   const first = ask("First");
   await vi.waitFor(() => expect(requests()).toHaveLength(1));
@@ -115,6 +119,21 @@ it("keeps a protocol 21 Assistant connected across a takeover", async () => {
     method: "aiTools",
     params: [],
   });
+  // A confirmation is an app's from protocol 26 on.
+  say({
+    type: "request",
+    id: 3,
+    call: newer.id,
+    method: "replyRequest",
+    params: [{ text: "Here.", confirmation: true }],
+  });
+  await vi.waitFor(() =>
+    expect(heard).toContainEqual({
+      type: "reply",
+      id: 3,
+      outcome: expect.objectContaining({ ok: false }),
+    }),
+  );
   say({
     type: "request",
     id: 2,

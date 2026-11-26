@@ -254,13 +254,15 @@ export function registerAppRoutes(
     const token = bearerToken(request.headers.authorization);
     const reply = await host.ask({
       actor,
+      key: principal.client.id,
       who: { personId: principal.person?.id, clientId: principal.client.id },
       asked: {
         text: parsed.data.text,
         language: parsed.data.language ?? "en",
-        clientName: principal.client.name,
+        room: null,
+        from: { kind: "client", name: principal.client.name },
       },
-      checkClient() {
+      check() {
         if (
           !token ||
           options.authenticate(token)?.client.id !== principal.client.id

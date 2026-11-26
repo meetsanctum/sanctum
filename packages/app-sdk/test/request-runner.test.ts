@@ -56,7 +56,8 @@ it("runs the Assistant's method and sends its reply without opening app storage"
       request: {
         text: "Hello",
         language: "en",
-        clientName: "Tablet",
+        room: null,
+        from: { kind: "client", name: "Tablet" },
         earlier: [],
       },
     }),
@@ -112,7 +113,8 @@ function startableRunner(
     request: {
       text: "Hello",
       language: "en",
-      clientName: "Tablet",
+      room: null,
+      from: { kind: "client", name: "Tablet" },
       earlier: [],
     },
   } satisfies CallBody;

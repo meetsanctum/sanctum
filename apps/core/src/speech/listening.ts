@@ -14,6 +14,7 @@ import {
   type ListenEnd,
   type ListenError,
   type ListenOpened,
+  type ListenRefusal,
   type ListenStep,
 } from "@meetsanctum/app-sdk";
 
@@ -55,6 +56,8 @@ export type RunMoments = {
 export type HeardRun = {
   id: string;
   device: string;
+  /** The driver that opened it. */
+  driver: string;
   wakeWord: string | null;
   /** The sound as it comes, ending once listening stops. */
   sound: AsyncIterable<Buffer>;
@@ -79,7 +82,6 @@ export type Hearer = (run: HeardRun) => void | Promise<void>;
 
 type Run = Omit<HeardRun, "moments"> & {
   moments: RunMoments;
-  driver: string;
   steps: ListenStep[];
   finished: boolean;
   readers: Set<() => void>;
@@ -123,7 +125,10 @@ export function createListening(options: {
   idFor: (driver: string, key: string) => string | null;
   // Whether a device's `audio` part says it listens.
   listens: (device: string) => boolean;
-  hearer: () => Hearer | null;
+  // What hears a device's run, or why it's refused; none is `off`.
+  hearer: (device: string) => Hearer | ListenRefusal | null;
+  // A run the core refused on its own account, not the hearer's.
+  refused?: (device: string, refusal: ListenRefusal) => void;
   now?: () => number;
   log: (message: string) => void;
 }) {
@@ -197,18 +202,20 @@ export function createListening(options: {
       }
       const device = options.idFor(driver, parsed.data.key);
       if (!device) throw new ActionError("not_found");
+      if (closed) return { accepted: false, refusal: "unavailable" };
+      const refuse = (refusal: ListenRefusal): ListenOpened => {
+        options.refused?.(device, refusal);
+        return { accepted: false, refusal };
+      };
       // A request can arrive before an updated device registration does.
-      if (closed || !options.listens(device)) {
-        return { accepted: false, refusal: "unavailable" };
-      }
-      const hearer = options.hearer();
-      if (!hearer) return { accepted: false, refusal: "off" };
+      if (!options.listens(device)) return refuse("unavailable");
+      const hearer = options.hearer(device) ?? "off";
+      if (typeof hearer === "string")
+        return { accepted: false, refusal: hearer };
       // A speaker runs one request at a time: a newer one ends the older.
       const older = bySpeaker.get(device);
       if (older) fail(older, "failed");
-      if (bySpeaker.size >= runsAtOnce) {
-        return { accepted: false, refusal: "limited" };
-      }
+      if (bySpeaker.size >= runsAtOnce) return refuse("limited");
 
       const id = randomBytes(12).toString("base64url");
       const sound = soundQueue();

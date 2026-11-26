@@ -60,7 +60,7 @@ const echo: Handler = async (ctx, request) => {
   const overview = await ctx.ai.call("home_overview");
   const rooms = (JSON.parse(overview.text) as { rooms: unknown[] }).rooms;
   await request.reply({
-    text: `"${request.text}" from ${request.clientName} (${request.language}), ${tools.length > 0 ? "with tools" : "without"}, ${rooms.length} rooms`,
+    text: `"${request.text}" from ${request.from.kind} ${request.from.name} in ${request.room?.name ?? "no room"} (${request.language}), ${tools.length > 0 ? "with tools" : "without"}, ${rooms.length} rooms`,
   });
 };
 
@@ -84,7 +84,8 @@ describe("a typed request", () => {
 
     expect(asked.statusCode).toBe(200);
     expect(asked.json()).toEqual({
-      reply: '"Is it raining?" from Maya\'s MacBook (en), with tools, 0 rooms',
+      reply:
+        '"Is it raining?" from client Maya\'s MacBook in no room (en), with tools, 0 rooms',
     });
   });
 
@@ -216,7 +217,8 @@ describe("who answers requests", () => {
 
     expect(asked.statusCode).toBe(200);
     expect(asked.json()).toEqual({
-      reply: '"Lights?" from Maya\'s MacBook (en), with tools, 0 rooms',
+      reply:
+        '"Lights?" from client Maya\'s MacBook in no room (en), with tools, 0 rooms',
     });
   });
 

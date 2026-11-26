@@ -61,12 +61,18 @@ function setUp(
     log,
     ...overrides,
   });
-  const ask = (clientId = "tablet", checkClient = () => {}) =>
+  const ask = (clientId = "tablet", check = () => {}) =>
     requests.ask({
       actor: { kind: "client", id: clientId },
+      key: clientId,
       who: { clientId },
-      asked: { text: "Hello", language: "en", clientName: "Tablet" },
-      checkClient,
+      asked: {
+        text: "Hello",
+        language: "en",
+        room: null,
+        from: { kind: "client", name: "Tablet" },
+      },
+      check,
     });
   return {
     ask,

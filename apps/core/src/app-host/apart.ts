@@ -35,6 +35,8 @@ export const uninstallLimitMs = 30_000;
 const uninstallFrom = 9;
 // The protocol whose runners take a request's earlier exchanges.
 const earlierFrom = 22;
+// The protocol whose runners take where a request was asked, and its room.
+const roomFrom = 26;
 
 /** The core's calls behind a context, so a call's id can be tied to them. */
 export type CoreOf = (ctx: RequestContext) => CoreCalls;
@@ -102,21 +104,30 @@ export function apartApp(
             {
               text,
               language,
-              clientName,
+              room,
+              from,
               earlier,
               signal,
             }: AssistantRequestCall,
           ) => {
-            const asked = { text, language, clientName };
-            // An older runner's schema takes no more than those.
-            const request =
-              manifest.protocol < earlierFrom ? asked : { ...asked, earlier };
-            await call(
-              ctx,
-              { kind: "request", request },
-              timeoutOf(ctx),
-              signal,
-            );
+            // An older runner's schema takes no more than it knows: the
+            // client's name, by which a speaker is named too, and no earlier
+            // exchanges before 22.
+            const asked = { text, language, clientName: from.name };
+            const body: OutboundCallBody =
+              manifest.protocol >= roomFrom
+                ? {
+                    kind: "request",
+                    request: { text, language, room, from, earlier },
+                  }
+                : {
+                    kind: "request",
+                    request:
+                      manifest.protocol < earlierFrom
+                        ? asked
+                        : { ...asked, earlier },
+                  };
+            await call(ctx, body, timeoutOf(ctx), signal);
           },
         }
       : {}),

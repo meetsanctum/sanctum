@@ -3,7 +3,7 @@
   "name": "Fake lights",
   "version": "0.1.0",
   "core": "^2.0.0",
-  "protocol": 25,
+  "protocol": 26,
   "summary": null,
   "runtime": {
     "memory": 128,

@@ -131,6 +131,7 @@ export async function testCore(
     holdLimitMs?: number;
     holdSettleMs?: number;
     agentCommandLimits?: ModuleOptions["agentCommandLimits"];
+    transcriber?: ModuleOptions["transcriber"];
     // Starts the core on another core's data, as after a restart.
     dataDir?: string;
     // Certificates from a test's CA: the core serves their chain over HTTPS
@@ -250,6 +251,7 @@ export async function testCore(
           // Tests wait for a stopped light only when they ask to.
           holdSettleMs: options.holdSettleMs ?? 0,
           agentCommandLimits: options.agentCommandLimits,
+          transcriber: options.transcriber,
           timeZone:
             options.timeZone === null
               ? undefined

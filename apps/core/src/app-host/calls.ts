@@ -53,7 +53,12 @@ import type { Blobs } from "../blobs/blobs.js";
 import type { Listening } from "../speech/listening.js";
 import { secretName, secretValue, type AppSecrets } from "./secrets.js";
 
-const isTurnOpener = (actor: Actor): actor is TurnOpener =>
+// The protocol whose apps may say a reply is a confirmation.
+const confirmationFrom = 26;
+
+const isTurnOpener = (
+  actor: Actor,
+): actor is Extract<TurnOpener, { kind: "user" | "client" }> =>
   actor.kind === "user" || actor.kind === "client";
 
 // The calls an app makes into the core, for one app and one actor. Two
@@ -207,6 +212,9 @@ export function createCoreCalls(options: {
   models: { source: () => ModelSourceShown | null; turn?: Turn };
   // The tools an assistant app calls, within the turn this call opened.
   assistant: AssistantCalls;
+  // Who opened a request's turn, when that isn't the actor: a smart
+  // speaker, which is never one.
+  opener?: TurnOpener;
   requestClientId?: string;
   // How a request's reply reaches whoever asked, for the call that runs it.
   reply?: (reply: RequestReply) => void;
@@ -221,6 +229,8 @@ export function createCoreCalls(options: {
   log: (message: string) => void;
 }): CoreCalls {
   const { appId, actor, devices, agents } = options;
+  // Whom an assistant app's tools act for within its turn.
+  const opener = options.opener ?? (isTurnOpener(actor) ? actor : null);
   const permissions = options.permissions;
   const forAgent = actor.kind === "assistant-run";
   // An AI agent's call sees the kinds both the app and AI agents may read,
@@ -680,7 +690,12 @@ export function createCoreCalls(options: {
       if (!options.reply) {
         throw new Error(`This call to ${appId} answers no request`);
       }
-      const parsed = requestReplySchema.safeParse(reply);
+      // A confirmation is an app's from protocol 26, as it knows the field.
+      const schema =
+        (options.protocol ?? confirmationFrom) >= confirmationFrom
+          ? requestReplySchema
+          : requestReplySchema.omit({ confirmation: true });
+      const parsed = schema.safeParse(reply);
       if (!parsed.success) {
         throw new Error("A reply is its words, up to 4,000 characters");
       }
@@ -691,15 +706,15 @@ export function createCoreCalls(options: {
     // the turn: a person or a shared device, the only callers that open one.
     async aiTools() {
       need(aiAssistantPermission);
-      if (!options.models.turn || !isTurnOpener(actor)) {
+      if (!options.models.turn || !opener) {
         throw new ActionError("no_turn");
       }
-      return options.assistant.list(appId, actor);
+      return options.assistant.list(appId, opener);
     },
 
     async callAiTool(call) {
       need(aiAssistantPermission);
-      if (!options.models.turn || !isTurnOpener(actor)) {
+      if (!options.models.turn || !opener) {
         throw new ActionError("no_turn");
       }
       const parsed = aiToolCallSchema.safeParse(call);
@@ -714,7 +729,7 @@ export function createCoreCalls(options: {
       try {
         answer = await options.assistant.call(
           appId,
-          actor,
+          opener,
           parsed.data.name,
           parsed.data.input,
           options.ended,

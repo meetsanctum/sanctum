@@ -1,6 +1,7 @@
 import type { ManagerClient } from "../manager.js";
 import { createAnnouncements } from "./announcements.js";
-import { createSpeech, speechService } from "./speech.js";
+import { createSpeech, speechLanguages, speechService } from "./speech.js";
+import { spokenPhrases } from "./spoken.js";
 
 export function assembleSpeech(options: {
   speaker?: { host: string; port: number; publishedPort: number };
@@ -33,6 +34,12 @@ export function assembleSpeech(options: {
           devices,
           areaOn,
           publishedPort: speaker.publishedPort,
+          keptPhrases: Object.values(spokenPhrases).flatMap((phrase) =>
+            speechLanguages.map((language) => ({
+              language,
+              text: phrase[language],
+            })),
+          ),
           log,
         })
       : undefined;

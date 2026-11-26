@@ -79,6 +79,8 @@ type Announcement = {
   delivery: (outcome: Delivery) => void;
   onUnfetched?: () => void;
   onFetched?: () => Promise<void>;
+  // A request's reply, said whether or not AI agents may speak.
+  finishing: boolean;
 };
 
 export class AnnouncementRefused extends Error {
@@ -274,6 +276,7 @@ export function createAnnouncements(options: {
       speech: (signal: AbortSignal) => AsyncIterable<SpeechAudio>,
       onUnfetched?: () => void,
       onFetched?: (url: string) => Promise<void>,
+      { finishing = false }: { finishing?: boolean } = {},
     ) {
       const queue = byDevice.get(device) ?? [];
       if (queue.length >= maxPerSpeaker) throw new AnnouncementRefused("busy");
@@ -308,6 +311,7 @@ export function createAnnouncements(options: {
         delivery: delivered,
         onUnfetched,
         onFetched: onFetched && (() => onFetched(url)),
+        finishing,
       };
       byPath.set(path, announcement);
       queue.push(announcement);
@@ -382,13 +386,16 @@ export function createAnnouncements(options: {
     /**
      * Withdraws every announcement no speaker has fetched yet, those waiting
      * their turn too, as when AI agents may no longer speak: what a speaker
-     * already plays goes on.
+     * already plays goes on, and so do requests' replies, which finish what
+     * someone asked.
      */
     withdrawUnfetched() {
       for (const queue of [...byDevice.values()]) {
         // The last first, so none takes its turn on the way out.
         for (const announcement of [...queue].reverse()) {
-          if (!announcement.fetched) end(announcement, "failed");
+          if (!announcement.fetched && !announcement.finishing) {
+            end(announcement, "failed");
+          }
         }
       }
     },

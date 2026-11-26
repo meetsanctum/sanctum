@@ -47,6 +47,12 @@ describe("Activity for AI agents and models", () => {
       expected: "asked from Kitchen Tablet",
     },
     { kind: "client", name: null, expected: "asked from a shared device" },
+    {
+      kind: "speaker",
+      name: "Office Speaker",
+      expected: "asked from Office Speaker",
+    },
+    { kind: "speaker", name: null, expected: "asked from a smart speaker" },
   ] as const)(
     "names who asked the assistant ($expected)",
     ({ kind, name, expected }) => {

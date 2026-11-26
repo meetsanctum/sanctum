@@ -12,14 +12,23 @@ import type { AgentLimiter, LimitedLog } from "./limits.js";
 import type { AgentTools } from "./tools.js";
 
 // An app the household lets act as its AI assistant (`ai.assistant`) is an
-// AI agent for the turn someone opened by calling it: it lists and calls the
-// tools MCP agents get, never its own, for whoever that is. Each app is a
-// separate agent for each person or shared device it acts for, so their
-// limits and changes stay apart, and all assistant apps share a home pool of
-// their own beside MCP agents', so neither crowds out the other.
+// AI agent for the turn someone opened by calling it or asking a smart
+// speaker: it lists and calls the tools MCP agents get, never its own, for
+// whoever that is. Each app is a separate agent for each person, shared
+// device or smart speaker it acts for, so their limits and changes stay
+// apart, and all assistant apps share a home pool of their own beside MCP
+// agents', so neither crowds out the other.
 
-/** Who opens a turn: a person, or a shared device acting as the household. */
-export type TurnOpener = Extract<Actor, { kind: "user" | "client" }>;
+/**
+ * Who opens a turn: a person, a shared device acting as the household, or a
+ * smart speaker someone asked, by the core's id for it. Only the core opens a
+ * speaker's, from the speaker's run (speech/spoken.ts), so a speaker is never
+ * an actor of a call.
+ */
+export type TurnOpener =
+  Extract<Actor, { kind: "user" | "client" }> | { kind: "device"; id: string };
+
+const openerKinds = new Set<string>(["user", "client", "device"]);
 
 // An MCP client's id is a UUID, so an assistant's id, its app's and its
 // opener's, never looks like one.
@@ -39,8 +48,11 @@ export function assistantOf(
   const colon = opener.indexOf(":");
   const kind = opener.slice(0, colon);
   const id = opener.slice(colon + 1);
-  if (colon < 0 || !id || (kind !== "user" && kind !== "client")) return null;
-  return { appId: agentId.slice(0, at), who: { kind, id } };
+  if (colon < 0 || !id || !openerKinds.has(kind)) return null;
+  return {
+    appId: agentId.slice(0, at),
+    who: { kind: kind as TurnOpener["kind"], id },
+  };
 }
 
 export function assistantAgent(

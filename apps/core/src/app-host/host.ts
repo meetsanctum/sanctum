@@ -644,6 +644,9 @@ export function createAppHost(options: {
 
     /** Someone's request, for Sanctum's Assistant (requests.ts). */
     ask: requests.ask,
+    answersRequests: requests.answers,
+    hasRequestRoom: requests.hasRoom,
+    forgetRequests: requests.forget,
     stopRequests: requests.close,
     clearRequestWindows: requests.clearWindows,
 

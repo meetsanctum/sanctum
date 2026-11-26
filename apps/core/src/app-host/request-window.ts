@@ -192,6 +192,9 @@ export function createRequestWindows(options: { now?: () => Date } = {}) {
       }
     },
 
+    /** Drops one device's window, as when the smart speaker it's of goes. */
+    drop,
+
     /** Drops every window: the Assistant stopped, or the core is stopping. */
     clear() {
       for (const device of [...windows.keys()]) drop(device);

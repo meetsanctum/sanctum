@@ -4,7 +4,10 @@ import type { CoreCalls } from "./context.js";
 import type { CoreEvent } from "./core-events.js";
 import { actionErrorCodes } from "./action-errors.js";
 import { actorSchema, startReasons, stopReasons } from "./index.js";
-import { assistantRequestSchema, type AssistantRequest } from "./requests.js";
+import {
+  assistantRequestSchema,
+  type EarlierAssistantRequest,
+} from "./requests.js";
 
 // What an app's runner and the core say to each other over the Unix socket
 // between them: one JSON message a line. Both ends parse what arrives with
@@ -193,9 +196,9 @@ export const callBodySchema = z.discriminatedUnion("kind", [
 ]);
 export type CallBody = z.infer<typeof callBodySchema>;
 
-/** A call sent by the core, which also supports protocol 21 requests. */
+/** A call sent by the core, which also speaks to runners before 26. */
 export type OutboundCallBody =
-  CallBody | { kind: "request"; request: Omit<AssistantRequest, "earlier"> };
+  CallBody | { kind: "request"; request: EarlierAssistantRequest };
 
 const callMessage = z.object({
   type: z.literal("call"),

@@ -127,7 +127,8 @@ word. It never carries what the microphones hear.
   command.
 - **Listens:** whether its wake word or button starts a request whose sound
   its driver can hand Sanctum. Sanctum declines each request before any of
-  its sound leaves the device.
+  its sound leaves the device, and the speaker's Activity says why, such as
+  "Heard its wake word, but the Assistant is off".
 
 Muting and unmuting wait for the device to say it did them. History keeps
 nothing of its microphones. Where Sanctum can mute its microphones, a smart

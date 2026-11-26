@@ -39,6 +39,15 @@ export function createAgentAccess(
     commandLimits?: AgentCommandLimits;
     // One of the core's areas was switched on or off.
     onAreaChanged?: () => void;
+    // Smart speakers someone asks: an assistant acts for one only while
+    // its request lasts (speech/spoken.ts).
+    speakers?: {
+      actsFor(device: string): boolean;
+      // Whether it's still a smart speaker of the home's, whose "put it
+      // back" stays for its next request.
+      isSpeaker(device: string): boolean;
+      name(device: string): string | null;
+    };
     now?: () => Date;
   },
 ) {
@@ -65,19 +74,28 @@ export function createAgentAccess(
   });
 
   function canActFor(who: TurnOpener) {
+    if (who.kind === "device") {
+      return options.speakers?.actsFor(who.id) ?? false;
+    }
     return auth.clients.canAddAgent({
       kind: who.kind === "user" ? "person" : "client",
       id: who.id,
     });
   }
 
+  // A speaker's assistant acts only while its request lasts, but its
+  // changes stay for the speaker's next one.
   function canUseAssistant(
     assistant: NonNullable<ReturnType<typeof assistantOf>>,
+    { retained = false } = {},
   ) {
+    const { who } = assistant;
     return (
       (apps().holds(assistant.appId)?.granted.includes(aiAssistantPermission) ??
         false) &&
-      canActFor(assistant.who)
+      (retained && who.kind === "device"
+        ? (options.speakers?.isSpeaker(who.id) ?? false)
+        : canActFor(who))
     );
   }
 
@@ -92,6 +110,13 @@ export function createAgentAccess(
       const assistant = assistantOf(id);
       if (!assistant) return auth.agentAdder(id);
       const { who } = assistant;
+      if (who.kind === "device") {
+        return {
+          kind: "speaker",
+          id: who.id,
+          name: options.speakers?.name(who.id) ?? null,
+        };
+      }
       return auth.named({
         kind: who.kind === "user" ? "person" : "client",
         id: who.id,
@@ -106,7 +131,7 @@ export function createAgentAccess(
     isRetained(id: string) {
       const assistant = assistantOf(id);
       return assistant
-        ? canUseAssistant(assistant)
+        ? canUseAssistant(assistant, { retained: true })
         : auth.clients.isActiveAgent(id);
     },
     isActive(id: string) {

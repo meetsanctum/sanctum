@@ -3,6 +3,7 @@ import {
   assistantAppId,
   isActionError,
   turnLimits,
+  type Actor,
   type AssistantRequest,
   type RequestContext,
   type RequestReply,
@@ -17,20 +18,24 @@ import { ActionCallError, TimedOut, withTimeout } from "./errors.js";
 import type { InstalledApp } from "./installed.js";
 import { createRequestWindows, type Exchange } from "./request-window.js";
 
-// A typed request runs the Assistant's handler within a turn for whoever
-// asked. The reply goes back as soon as the handler gives it. The turn and
-// its admission slot stay open until the handler finishes or its time is up.
+// A request, typed on a client or said to a smart speaker, runs the
+// Assistant's handler within a turn for whoever asked. The reply goes back as
+// soon as the handler gives it. The turn and its admission slot stay open
+// until the handler finishes or its time is up.
 //
-// Each device is a conversation of its own. A newer request from it takes
-// over from one still running: that one's turn ends, its signal aborts and
-// its later calls are refused `turn_ended`. Its tool calls under way can't be
-// pulled back, so the newer one waits up to 2 s for them to settle, and gets
-// it in `earlier` with the device's other recent exchanges (request-window.ts).
+// Each client and each smart speaker is a conversation of its own, by its
+// key: the client's id, or the speaker's device id. A newer request from it
+// takes over from one still running: that one's turn ends, its signal aborts
+// and its later calls are refused `turn_ended`. Its tool calls under way
+// can't be pulled back, so the newer one waits up to 2 s for them to settle,
+// and gets it in `earlier` with the other recent exchanges there
+// (request-window.ts). Limits count by the same key.
 
 /** How long a newer request waits for the tool calls of the one it ends. */
 export const settleWithinMs = 2_000;
 
 type Run = {
+  // Its client's id, or its smart speaker's device id.
   device: string;
   // Aborts when a newer request takes over, the deadline expires, or the
   // Assistant stops.
@@ -61,13 +66,14 @@ export function createRequests(options: {
   arrives: (entry: InstalledApp, signal: AbortSignal) => Promise<boolean>;
   contextFor: (
     entry: InstalledApp,
-    actor: TurnOpener,
+    actor: Actor,
     scope: { readonly ended: boolean },
     within: {
       withinMs: number;
       turn: Turn;
       reply: (reply: RequestReply) => void;
       recordTool: ToolRecorder;
+      opener: TurnOpener;
       requestClientId: string;
     },
   ) => RequestContext;
@@ -80,7 +86,8 @@ export function createRequests(options: {
 }) {
   const { installed, accepts } = options;
   let closed = false;
-  // Leave room for other clients when one client has a request under way.
+  // Leave room for other clients and speakers when one has a request under
+  // way.
   const limiter = createAgentLimiter({
     agentPerMinute: 12,
     homePerMinute: 60,
@@ -161,9 +168,12 @@ export function createRequests(options: {
       });
     });
     let answered = false;
+    // A speaker is no actor, so the Assistant's other calls are its own;
+    // its tools act for the speaker.
+    const opener = request.actor;
     const ctx = options.contextFor(
       entry,
-      request.actor,
+      opener.kind === "device" ? { kind: "app", id: assistantAppId } : opener,
       {
         get ended() {
           return run.ended;
@@ -172,6 +182,7 @@ export function createRequests(options: {
       {
         withinMs: turnLimits.turnMs,
         turn,
+        opener,
         requestClientId: run.device,
         reply(answer) {
           if (answered) throw new Error("A request is answered once");
@@ -269,22 +280,46 @@ export function createRequests(options: {
     clearWindows,
 
     /**
+     * A smart speaker went: its request under way ends, and its window
+     * goes.
+     */
+    forget(key: string) {
+      const run = runs.get(key);
+      if (run) endRun(run, new ActionCallError("turn_ended"));
+      windows.drop(key);
+    },
+
+    /** Whether the Assistant is there to answer requests now. */
+    answers() {
+      const entry = installed.get(assistantAppId);
+      return !closed && entry !== undefined && canAnswer(entry);
+    },
+
+    /** Whether a request from a client or speaker is within its limits now. */
+    hasRoom(key: string) {
+      return limiter.hasRoom(key);
+    },
+
+    /**
      * Runs a request for whoever asked, and resolves with the Assistant's
      * reply, or null when it gave none or a newer request from the same
-     * device took over; `unavailable` when it's off.
+     * client or speaker took over; `unavailable` when it's off.
      */
     async ask(request: {
       actor: TurnOpener;
-      who: ActivityAuthor & { clientId: string };
+      // Its client's id, or its smart speaker's device id.
+      key: string;
+      who: ActivityAuthor;
       asked: Omit<AssistantRequest, "earlier">;
-      checkClient: () => void;
+      // Checks, just before it runs, that whoever asked may still.
+      check?: () => void;
     }): Promise<RequestReply | null> {
       if (closed) throw new ActionCallError("unavailable");
       const entry = installed.get(assistantAppId);
       if (!entry || !canAnswer(entry)) {
         throw new ActionCallError("unavailable");
       }
-      const device = request.who.clientId;
+      const device = request.key;
       if (limiter.takeRequest(device)) throw new ActionCallError("limited");
       const generation = historyGeneration;
 
@@ -345,7 +380,7 @@ export function createRequests(options: {
         ) {
           throw new ActionCallError("unavailable");
         }
-        request.checkClient();
+        request.check?.();
         const { exchange, earlier } = windows.begin(
           device,
           entry.runId,

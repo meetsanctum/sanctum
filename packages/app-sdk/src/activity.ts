@@ -24,15 +24,15 @@ export type DeviceActionActivity = z.infer<typeof deviceActionActivitySchema>;
 export type ActivityOutcome = "ok" | "refused" | "failed";
 
 type AgentAttribution = {
-  kind: "person" | "client";
+  kind: "person" | "client" | "speaker";
   id: string;
   name: string | null;
 };
 
 /**
- * Who did it, as people see them: a person, a shared client by its name,
- * a workflow, an app, a remote's press, a change at the device outside
- * Sanctum, or Sanctum itself. Names are as they are now, or as they were
+ * Who did it, as people see them: a person, a shared client by its name, a
+ * smart speaker someone asked, a workflow, an app, a remote's press, a change
+ * at the device outside Sanctum, or Sanctum itself. Names are as they are now, or as they were
  * once the thing is gone; null when nothing knows them.
  */
 export type ActivityWho =
@@ -44,6 +44,7 @@ export type ActivityWho =
       avatar: string | null;
     }
   | { kind: "client"; id: string; name: string | null }
+  | { kind: "speaker"; id: string; name: string | null }
   | { kind: "workflow"; id: string; name: string | null }
   | { kind: "app"; id: string; name: string | null }
   | { kind: "press"; device: string; name: string | null; action: string }
@@ -59,7 +60,10 @@ export type ActivityWho =
         }
       | {
           addedBy: null;
-          /** The person or shared device the assistant acted for. */
+          /**
+           * The person, shared device or smart speaker the assistant acted
+           * for.
+           */
           askedBy: AgentAttribution;
         }
     ))
