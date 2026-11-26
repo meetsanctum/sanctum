@@ -1,5 +1,5 @@
 {
-  "version": "0.1.32",
+  "version": "0.1.33",
   "react": "19.3.1",
   "exports": {
     "@meetsanctum/ui-sdk": [
@@ -99,6 +99,7 @@
       "useReducedEffects",
       "useReducedMotion",
       "useShowFailed",
+      "useSwipePageSelected",
       "useTemperatureUnit",
       "whiteOf",
       "widgetIconOf"
@@ -3081,6 +3082,7 @@
       "    content: ReactNode;",
       "    muted?: boolean;",
       "};",
+      "export declare function useSwipePageSelected(): boolean;",
       "export declare function SwipePages(props: {",
       "    label: string;",
       "    pages: SwipePage[];",

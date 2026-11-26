@@ -558,13 +558,11 @@ describe("a light with a button and a temperature sensor", () => {
         .spyOn(document, "visibilityState", "get")
         .mockReturnValue("visible");
       const select = (label: string) =>
-        act(async () =>
-          dialog()
-            .querySelector<HTMLButtonElement>(
-              `[role="tab"][aria-label="${label}"]`,
-            )!
-            .click(),
-        );
+        dialog()
+          .querySelector<HTMLButtonElement>(
+            `[role="tab"][aria-label="${label}"]`,
+          )!
+          .click();
       const showWindow = (state: DocumentVisibilityState) =>
         act(async () => {
           visibility.mockReturnValue(state);
@@ -586,7 +584,7 @@ describe("a light with a button and a temperature sensor", () => {
           : answer;
       });
       await open("panel/light");
-      await select(page);
+      await act(async () => select(page));
       const initial = tick();
       await advance();
       const beforeLeaving = tick();
@@ -598,7 +596,7 @@ describe("a light with a button and a temperature sensor", () => {
           ? new Promise(() => {})
           : request(path, init),
       );
-      await select("Brightness");
+      await act(async () => select("Brightness"));
       await showWindow("hidden");
       await advance();
       await showWindow("visible");
@@ -606,7 +604,16 @@ describe("a light with a button and a temperature sensor", () => {
       await advance();
       expect(tick()).toBe(beforeLeaving);
 
-      await select(page);
+      // The clock starts with the tab, before the deferred tint update.
+      const startInterval = vi.spyOn(globalThis, "setInterval");
+      await act(async () => {
+        flushSync(() => select(page));
+        expect(tabs()).toContainEqual([page, "true"]);
+        expect(startInterval).toHaveBeenCalledWith(
+          expect.any(Function),
+          60_000,
+        );
+      });
       const beforeHiding = tick();
       expect(beforeHiding).not.toBe(beforeLeaving);
       await showWindow("hidden");

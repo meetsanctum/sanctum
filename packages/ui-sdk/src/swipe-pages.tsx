@@ -1,7 +1,9 @@
 import { cn } from "cn";
 import type { LucideIcon } from "lucide-react";
 import {
+  createContext,
   startTransition,
+  useContext,
   useEffect,
   useEffectEvent,
   useId,
@@ -39,6 +41,13 @@ export type SwipePage = {
   muted?: boolean;
 };
 
+const SwipePageSelected = createContext(true);
+
+/** Whether this content is on a selected swipe page, or outside SwipePages. */
+export function useSwipePageSelected(): boolean {
+  return useContext(SwipePageSelected);
+}
+
 // Each page scrolls on its own, its thumb showing only while it scrolls.
 // Radix sizes the box inside the viewport to its content; it fills the
 // viewport at least, so a short page sits in the middle. What scrolls past
@@ -71,10 +80,11 @@ export function SwipePages(props: {
   pages: SwipePage[];
   /** The page it opens on, by its id: the first unless said. */
   initial?: string;
-  /** The page on show, including when it first opens. */
+  /** Called in a transition after the page selection commits, including on open. */
   onPageChange?: (id: string) => void;
 }) {
   const { pages } = props;
+  const parentPageSelected = useSwipePageSelected();
   const [chosen, setChosen] = useState(() => {
     const index = Math.max(
       0,
@@ -321,7 +331,11 @@ export function SwipePages(props: {
                       data-muted={each.muted ? "" : undefined}
                       className="flex max-w-full flex-col items-center p-4 data-muted:opacity-50"
                     >
-                      {each.content}
+                      <SwipePageSelected.Provider
+                        value={parentPageSelected && index === page}
+                      >
+                        {each.content}
+                      </SwipePageSelected.Provider>
                     </div>
                   </div>
                 </ScrollArea>
