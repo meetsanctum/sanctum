@@ -22,9 +22,9 @@ import {
 // System's last 24 hours: the processor, its temperature and the memory in
 // use, stacked on one time axis as iOS's Battery page stacks its own, so a
 // spike reads across all three at once. Each is headed by its name, with
-// what it reads now under it, as Status read it last; the chart is a sensor's
-// day, drawn in the page's ink. While the day is on its way or can't be
-// read, what each reads now still heads it.
+// the latest reading under it; the chart is a sensor's day, drawn in the
+// page's ink. While the day is on its way or can't be read, what each
+// reads now still heads it.
 
 const chartHeight = 72;
 // Half of the 5 minutes each kept reading stands for.
@@ -66,7 +66,7 @@ export function LastDaySection(props: {
   host: HostInfo;
   problems: HostProblem[];
   unit: TemperatureUnit;
-  // When Status read the host last, which the lines are carried on to.
+  // When the host was last read, which the lines are carried on to.
   checkedAt: string;
 }) {
   const { host, unit } = props;

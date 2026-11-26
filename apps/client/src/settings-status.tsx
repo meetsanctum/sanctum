@@ -10,7 +10,7 @@ import {
   Unplug,
   type LucideIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import { productName } from "./brand";
 import { Section, SettingsPageBar } from "./components";
@@ -43,7 +43,11 @@ import {
   useSpace,
   type Space,
 } from "./settings-status-space";
-import { RestoreNotice, UpdatesSection } from "./settings-updates";
+import {
+  RestoreNotice,
+  UpdatesSection,
+  useSystemUpdate,
+} from "./settings-updates";
 
 // Settings → System: what's going on with the machine Sanctum runs on and
 // the version it runs, the same on every client. Its row on Settings' first
@@ -331,17 +335,15 @@ const shape = "block h-3 rounded-xs bg-foreground/8";
 
 function SanctumLoading() {
   return (
-    <Section id="status-sanctum" title={productName}>
-      <div aria-busy="true" className="flex flex-col gap-3">
-        <span className="flex items-center gap-3">
-          <span className="size-6 shrink-0 rounded-full bg-foreground/8" />
-          <span className={cn(shape, "w-2/5")} />
-        </span>
-        {["w-1/3", "w-1/4", "w-2/5", "w-1/5", "w-1/2"].map((width) => (
-          <span key={width} className={cn(shape, width)} />
-        ))}
-      </div>
-    </Section>
+    <div aria-busy="true" className="flex flex-col gap-3">
+      <span className="flex items-center gap-3">
+        <span className="size-6 shrink-0 rounded-full bg-foreground/8" />
+        <span className={cn(shape, "w-2/5")} />
+      </span>
+      {["w-1/3", "w-1/4", "w-2/5", "w-1/5", "w-1/2"].map((width) => (
+        <span key={width} className={cn(shape, width)} />
+      ))}
+    </div>
   );
 }
 
@@ -369,11 +371,18 @@ export function SystemPage(props: {
   backTo?: string;
   onPowerAccepted?: (action: PowerAction) => void;
 }) {
+  const { core, onUpdating } = props;
+  const online = core.state === "online";
   const { status, failed } = useSystemStatus({ enabled: true, everyMs: 5_000 });
-  const space = useSpace();
+  const update = useSystemUpdate(online);
+  const space = useSpace(update.running, update.ended);
   const unit = useTemperatureUnit() ?? "celsius";
   const host = failed ? null : status?.host;
   const isLoading = !status && !failed;
+
+  useEffect(() => onUpdating(update.running), [onUpdating, update.running]);
+  useEffect(() => () => onUpdating(false), [onUpdating]);
+
   return (
     <>
       <SettingsPageBar
@@ -381,38 +390,52 @@ export function SystemPage(props: {
         backTo={props.backTo}
         onBack={props.onDone}
       />
-      {isLoading ? (
-        <SanctumLoading />
-      ) : (
-        <Section id="status-sanctum" title={productName}>
-          <RestoreNotice online={props.core.state === "online"} />
-          <Verdict
-            status={failed ? undefined : status}
-            unit={unit}
-            apps={props.apps}
-            space={space}
-          />
-          {host && (
-            <Facts>
-              {modelText(host) && <Fact label="Model">{modelText(host)}</Fact>}
-              <Fact label="Processor">{processorText(host.processor)}</Fact>
-              {host.power && (
-                <PowerFact power={host.power} problems={status!.problems} />
-              )}
-              {osText(host) && (
-                <Fact label="Operating system">{osText(host)}</Fact>
-              )}
-              {host.uptimeSeconds != null && (
-                <Fact label="Running for">
-                  {runningFor(host.uptimeSeconds)}
-                </Fact>
-              )}
-            </Facts>
-          )}
-          {host && <PowerButtons onPowerAccepted={props.onPowerAccepted} />}
-        </Section>
-      )}
-      <UpdatesSection core={props.core} onUpdating={props.onUpdating} />
+      <Section id="status-sanctum" title={productName}>
+        <RestoreNotice online={online} />
+        {isLoading ? (
+          <SanctumLoading />
+        ) : (
+          <>
+            <Verdict
+              status={failed ? undefined : status}
+              unit={unit}
+              apps={props.apps}
+              space={space}
+            />
+            {host && (
+              <Facts>
+                {modelText(host) && (
+                  <Fact label="Model">{modelText(host)}</Fact>
+                )}
+                <Fact label="Processor">{processorText(host.processor)}</Fact>
+                {host.power && (
+                  <PowerFact power={host.power} problems={status!.problems} />
+                )}
+                {osText(host) && (
+                  <Fact label="Operating system">{osText(host)}</Fact>
+                )}
+                {host.uptimeSeconds != null && (
+                  <Fact label="Running for">
+                    {runningFor(host.uptimeSeconds)}
+                  </Fact>
+                )}
+              </Facts>
+            )}
+            {host && (
+              <PowerButtons
+                updating={update.running}
+                onPowerAccepted={props.onPowerAccepted}
+              />
+            )}
+          </>
+        )}
+      </Section>
+      <UpdatesSection
+        core={core}
+        system={update}
+        freeing={space.state.at === "freeing"}
+        cleanupRevision={space.cleanupRevision}
+      />
       {isLoading ? (
         <StorageLoading />
       ) : (

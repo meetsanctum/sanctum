@@ -15,7 +15,7 @@ import {
 
 // Settings → System's last 24 hours: how busy the processor was, how warm it
 // ran and how much memory was in use, each 5 minutes' mean as the manager
-// keeps them, carried on to now by what Status reads every 5 seconds, as a
+// keeps them, carried on to now by what System reads every 5 seconds, as a
 // sensor's day is by what it reads now.
 
 /** Each 5 minutes of the day, as GET /api/system/history answers. */
@@ -89,7 +89,7 @@ export function readingDay(
   points: readonly HostPoint[],
   key: "usage" | "celsius" | "memoryUsed",
   now: number,
-  // What Status read last, which carries the line to now.
+  // The latest reading, which carries the line to now.
   reading: number | null = null,
   // Only periods covered by a successful history read can be missing.
   through = now,
@@ -116,7 +116,7 @@ export function readingDay(
   // A missing reading can continue through the present. Only completed
   // periods count; the current five minutes have not been reported yet,
   // nor the last for the few seconds until the manager's next sample.
-  // A later Status reading does not extend an older history snapshot.
+  // A later reading does not extend an older history snapshot.
   const completedThrough =
     Math.floor((Math.min(now, through) - closesWithinMs) / fiveMinutes) *
     fiveMinutes;

@@ -1,17 +1,16 @@
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
-import {
-  Button,
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-  useHomeClock,
-} from "@meetsanctum/ui-sdk";
+import { Button, useHomeClock } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { Check, ChevronDown, Circle, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { productName } from "./brand";
 import { Section } from "./components";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "./components/ui/collapsible";
 import {
   Dialog,
   DialogClose,
@@ -34,9 +33,10 @@ import {
   type UpdateStatus,
   type UpdateStep,
 } from "./system-update";
+import { isShown } from "./while-shown";
 
-// System's Updates, for every client (settings-status.tsx): the version the
-// home runs, the last update, and the versions the host can update to; on
+// System's Updates, for every client (settings-status.tsx): the core's
+// running version, the last update, and the versions the host can update to; on
 // the dev channel its builds, folded under a row that names the one chosen,
 // then a confirmed Update, the update's progress as the manager reports it
 // and how it ended. The core restarts during an update; meanwhile the
@@ -49,7 +49,9 @@ const dayAndTime = (clock: HomeClock, at: Date) =>
 
 export function UpdatesSection(props: {
   core: CoreStatus;
-  onUpdating: (updating: boolean) => void;
+  system: ReturnType<typeof useSystemUpdate>;
+  freeing: boolean;
+  cleanupRevision: number;
 }) {
   const { core } = props;
   const version =
@@ -58,7 +60,13 @@ export function UpdatesSection(props: {
       : undefined;
   return (
     <Section id="status-updates" title="Updates">
-      <Updates core={core} version={version} onUpdating={props.onUpdating} />
+      <Updates
+        online={core.state === "online"}
+        version={version}
+        system={props.system}
+        freeing={props.freeing}
+        cleanupRevision={props.cleanupRevision}
+      />
     </Section>
   );
 }
@@ -105,19 +113,8 @@ export function RestoreNotice(props: { online: boolean }) {
   );
 }
 
-function Updates(props: {
-  core: CoreStatus;
-  // The version the core's health check reports, while it answers.
-  version?: string;
-  onUpdating: (updating: boolean) => void;
-}) {
-  const { core, onUpdating } = props;
+export function useSystemUpdate(online: boolean) {
   const [status, setStatus] = useState<UpdateStatus>();
-  const [versions, setVersions] = useState<AvailableVersion[]>();
-  const [selected, setSelected] = useState<string>();
-  const [confirming, setConfirming] = useState(false);
-  const [starting, setStarting] = useState(false);
-  const [problem, setProblem] = useState<string>();
   // The last answer was that the core or the manager is restarting.
   const [isWaiting, setIsWaiting] = useState(false);
   // An update this screen has seen running, whose ending it shows in full.
@@ -126,11 +123,6 @@ function Updates(props: {
 
   const update = status?.update ?? null;
   const running = !!update && update.step !== "done";
-  const online = core.state === "online";
-  const coreVersion = props.version ?? status?.version;
-
-  useEffect(() => onUpdating(running), [running, onUpdating]);
-  useEffect(() => () => onUpdating(false), [onUpdating]);
 
   // The update's status, often while one runs. While the core is away the
   // veil covers this page; it asks again as soon as the core is back.
@@ -139,7 +131,7 @@ function Updates(props: {
     let isStopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
-      let next = 30_000;
+      let next = isShown() ? 10_000 : 30_000;
       const revision = statusRevision.current;
       try {
         const answer = await systemUpdate.status();
@@ -168,17 +160,52 @@ function Updates(props: {
     };
   }, [online, running]);
 
-  // What the host can update to, again once an update has ended.
   const ended = update?.step === "done" ? update.id : undefined;
+  const followStart = (started: UpdateInfo) => {
+    statusRevision.current += 1;
+    setStatus((current) => current && { ...current, update: started });
+    setFollowed(started.id);
+  };
+  return { status, update, running, ended, followed, isWaiting, followStart };
+}
+
+function Updates(props: {
+  online: boolean;
+  // The version the core's health check reports, while it answers.
+  version?: string;
+  system: ReturnType<typeof useSystemUpdate>;
+  freeing: boolean;
+  cleanupRevision: number;
+}) {
+  const { online, freeing, cleanupRevision } = props;
+  const { status, update, running, ended, followed, isWaiting, followStart } =
+    props.system;
+  const coreVersion = props.version ?? status?.version;
+  const [builds, setBuilds] = useState<{
+    versions: AvailableVersion[];
+    cleanupRevision: number;
+    ended: string | undefined;
+  }>();
+  const [selected, setSelected] = useState<string>();
+  const [confirming, setConfirming] = useState<string>();
+  const [starting, setStarting] = useState(false);
+  const [problem, setProblem] = useState<string>();
+
+  // What the host can update to. Cleanup can remove builds from the registry.
   useEffect(() => {
-    if (!online) return;
+    if (!online || freeing) return;
     let isCurrent = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const load = async () => {
       try {
         const answer = await systemUpdate.versions();
         if (!isCurrent) return;
-        setVersions(answer.versions);
+        setBuilds({ versions: answer.versions, cleanupRevision, ended });
+        setSelected((current) =>
+          answer.versions.some(({ version }) => version === current)
+            ? current
+            : undefined,
+        );
         setProblem(undefined);
       } catch (error) {
         if (!isCurrent) return;
@@ -191,11 +218,11 @@ function Updates(props: {
       isCurrent = false;
       clearTimeout(timer);
     };
-  }, [online, ended]);
+  }, [online, ended, freeing, cleanupRevision]);
 
   // The newest build, when it is newer than the one the host runs and is not
   // the one that just failed, until someone chooses.
-  const choices = versions ?? [];
+  const choices = builds?.versions ?? [];
   const isDev = status?.channel === "dev";
   const newest = choices[0]?.version;
   const failed =
@@ -206,22 +233,30 @@ function Updates(props: {
     ? (selected ??
       (newest !== coreVersion && newest !== failed ? newest : undefined))
     : status?.channel;
+  const canUpdate =
+    online &&
+    !freeing &&
+    !running &&
+    !starting &&
+    !!choice &&
+    (!isDev ||
+      (choice !== coreVersion &&
+        builds?.cleanupRevision === cleanupRevision &&
+        builds.ended === ended));
 
   const start = async () => {
-    if (!choice) return;
+    if (!canUpdate || !confirming || confirming !== choice) return;
     setStarting(true);
     setProblem(undefined);
     try {
-      const { update: started } = await systemUpdate.start(choice);
-      statusRevision.current += 1;
-      setStatus((current) => current && { ...current, update: started });
-      setFollowed(started.id);
+      const { update: started } = await systemUpdate.start(confirming);
+      followStart(started);
       setSelected(undefined);
     } catch (error) {
       setProblem(problemText(error));
     } finally {
       setStarting(false);
-      setConfirming(false);
+      setConfirming(undefined);
     }
   };
 
@@ -246,7 +281,7 @@ function Updates(props: {
   const lastUpdate =
     update && !running && update.id !== followed ? update : undefined;
   const step: UpdateStep =
-    running && isWaiting && coreVersion === update.version
+    update && running && isWaiting && coreVersion === update.version
       ? "finish"
       : (update?.step ?? "done");
 
@@ -278,8 +313,8 @@ function Updates(props: {
           )}
           <Button
             className="self-start"
-            disabled={!choice || (isDev && choice === coreVersion) || starting}
-            onClick={() => setConfirming(true)}
+            disabled={!canUpdate}
+            onClick={() => setConfirming(choice)}
           >
             {status.channel === "dev" && choice
               ? `Update to ${choice}`
@@ -292,12 +327,17 @@ function Updates(props: {
           {problem}
         </p>
       )}
-      <Dialog open={confirming} onOpenChange={setConfirming}>
+      <Dialog
+        open={confirming !== undefined}
+        onOpenChange={(open) => {
+          if (!open) setConfirming(undefined);
+        }}
+      >
         <DialogContent showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>
               {status.channel === "dev"
-                ? `Update to ${choice}?`
+                ? `Update to ${confirming}?`
                 : `Update to the newest ${status.channel} release?`}
             </DialogTitle>
             <DialogDescription>
@@ -311,7 +351,10 @@ function Updates(props: {
             <DialogClose asChild>
               <Button variant="outline">Cancel</Button>
             </DialogClose>
-            <Button disabled={starting} onClick={() => void start()}>
+            <Button
+              disabled={!canUpdate || confirming !== choice}
+              onClick={() => void start()}
+            >
               Update
             </Button>
           </DialogFooter>

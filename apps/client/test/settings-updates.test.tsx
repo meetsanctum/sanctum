@@ -382,6 +382,9 @@ describe("Settings → System", () => {
       ["dev-1", false, true],
     ]);
     await act(async () => radios[1]!.click());
+    await act(async () => buildsRow()!.click());
+    expect(buildsRow()?.getAttribute("aria-expanded")).toBe("false");
+    expect(buildsRow()?.textContent).toBe("Buildsdev-2 chosen · 3 builds");
 
     await act(async () => button("Update to dev-2", system())!.click());
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
@@ -398,6 +401,11 @@ describe("Settings → System", () => {
     expect(system().textContent).toContain("Updating to dev-3");
     expect(system().textContent).toContain("Downloading dev-3");
     expect(button("Update to dev-2", system())).toBeUndefined();
+    const sanctum = container.querySelector(
+      '[aria-labelledby="status-sanctum"]',
+    )!;
+    expect(button("Restart", sanctum)?.disabled).toBe(true);
+    expect(button("Shut down", sanctum)?.disabled).toBe(true);
   });
 
   it("says when an update rolled back, and why", async () => {

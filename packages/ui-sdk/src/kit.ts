@@ -29,11 +29,6 @@ export * from "./use-app-settings";
 export * from "./widget-card";
 export * from "./widget-icons";
 export { Button, buttonVariants } from "./components/ui/button";
-export {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "./components/ui/collapsible";
 export { Input } from "./components/ui/input";
 export {
   NativeSelect,
