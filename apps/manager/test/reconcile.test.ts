@@ -337,27 +337,6 @@ describe("reconcileCore and the core's init process", () => {
   });
 });
 
-it("adds the read-only speech socket mount to an existing core once", async () => {
-  const { docker, reconcile } = setup();
-  const options = coreContainerOptions(coreImage);
-  const bind = "sanctum-speech-socket:/run/sanctum-speech:ro";
-  options.HostConfig!.Binds = (options.HostConfig!.Binds as string[]).filter(
-    (entry) => entry !== bind,
-  );
-  const older = docker.run(options);
-
-  await reconcile();
-
-  const core = docker.container(coreContainerName)!;
-  expect(core.id).not.toBe(older.id);
-  expect(core.imageId).toBe(older.imageId);
-  expect(core.options.HostConfig?.Binds).toContain(bind);
-  expect(docker.volumes.has("sanctum-speech-socket")).toBe(true);
-
-  await reconcile();
-  expect(docker.container(coreContainerName)?.id).toBe(core.id);
-});
-
 describe("reconcileCore", () => {
   it("creates the network, volume and core when the host is new", async () => {
     const { docker, reconcile } = setup();
@@ -368,17 +347,12 @@ describe("reconcileCore", () => {
     });
     expect(docker.volumes.has(coreVolumeName)).toBe(true);
     expect(docker.volumes.has(socketVolumeName)).toBe(true);
-    expect(docker.volumes.has("sanctum-speech-socket")).toBe(true);
     const core = docker.container(coreContainerName);
     expect(core).toMatchObject({ ref: coreImage, running: true });
     expect(core?.options.HostConfig).toMatchObject({
       // The core reaches the manager through its socket's volume, as a
       // member of the socket's group.
-      Binds: [
-        `${coreVolumeName}:/data`,
-        `${socketVolumeName}:/run/sanctum`,
-        "sanctum-speech-socket:/run/sanctum-speech:ro",
-      ],
+      Binds: [`${coreVolumeName}:/data`, `${socketVolumeName}:/run/sanctum`],
       GroupAdd: [String(socketGroupId)],
       // Speakers fetch announcements on IPv4 only.
       PortBindings: {

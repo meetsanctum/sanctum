@@ -21,7 +21,7 @@ import { hostDev } from "./host-dev.js";
 
 const name = "speech-to-phrase";
 const containerName = "sanctum-speech-to-phrase";
-const url = "unix:///run/sanctum-speech/wyoming.sock";
+const url = "tcp://sanctum-speech-to-phrase:10300";
 const totalMemory = () => 4096 * 1024 * 1024;
 
 const servers: ReturnType<typeof createServer>[] = [];
@@ -110,14 +110,14 @@ describe("Speech-to-Phrase", () => {
     expect(container.running).toBe(true);
     expect(container.networks[sanctumNetworkName]).toBeDefined();
     expect(container.options.HostConfig?.PortBindings).toBeUndefined();
-    expect(container.options.Cmd?.slice(-2)).toEqual(["--uri", url]);
-    expect(container.options.Healthcheck).toMatchObject({
-      Test: expect.arrayContaining(["/run/sanctum-speech/wyoming.sock"]),
-    });
+    // The image's own command, which listens on every address at its port.
+    expect(container.options.Cmd).toBeUndefined();
+    expect(String(container.options.Healthcheck?.Test)).toContain(
+      "nc -w 1 localhost 10300",
+    );
     expect(container.options.Env).toContain(`SANCTUM_TRAIN_TOKEN=${token}`);
     expect(container.options.HostConfig?.Binds).toEqual([
       "sanctum-speech-to-phrase-data:/data",
-      "sanctum-speech-socket:/run/sanctum-speech",
     ]);
     expect(await services.endpoint(name)).toMatchObject({
       core: true,

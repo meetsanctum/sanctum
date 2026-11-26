@@ -39,9 +39,6 @@ export const speakerPort = 4180;
 // into the manager; the core is the only other container that mounts it.
 export const socketVolumeName = stacked("sanctum-manager-socket");
 export const socketDirectory = "/run/sanctum";
-// Speech-to-Phrase and the core share only this socket volume.
-export const speechSocketVolumeName = stacked("sanctum-speech-socket");
-export const speechSocketDirectory = "/run/sanctum-speech";
 // Compose names it (deploy/compose.yml), so an update can't change it. It holds
 // apps' sockets and staged packages, which the core's container and apps' mount
 // by subpath.
@@ -61,7 +58,6 @@ function publishedSpeakerPort() {
 }
 
 const speakerPortFallback = "sanctum.core.speaker-port-unavailable";
-const speechSocketBind = `${speechSocketVolumeName}:${speechSocketDirectory}:ro`;
 
 export function coreContainerOptions(
   image: string,
@@ -122,7 +118,6 @@ export function coreContainerOptions(
       Binds: [
         `${coreVolumeName}:/data`,
         `${socketVolumeName}:${socketDirectory}`,
-        speechSocketBind,
         ...(stackCore?.binds ?? []),
       ],
       Mounts: [
@@ -203,7 +198,6 @@ export async function startCoreContainer(options: {
   withoutSpeakers?: boolean;
 }) {
   const { docker, image, log, withoutSpeakers = false } = options;
-  await ensureVolume(docker, speechSocketVolumeName);
   const container = docker.getContainer(coreContainerName);
   await docker.createContainer(coreContainerOptions(image, withoutSpeakers));
   try {
@@ -299,16 +293,13 @@ export async function reconcileCore(options: {
         withoutSpeakers = true;
       }
     }
-    const binds = existing.HostConfig.Binds as string[] | null | undefined;
     const lacks = !hasAppFolders(existing)
       ? "the folders apps need"
       : !hasInit(existing)
         ? "an init process"
         : !withoutSpeakers && !hasSpeakerPort(existing)
           ? "the port speakers fetch sound from"
-          : !binds?.includes(speechSocketBind)
-            ? "the speech socket"
-            : null;
+          : null;
     if (!lacks) {
       try {
         const started = await startExistingContainer({
@@ -328,7 +319,6 @@ export async function reconcileCore(options: {
       }
     } else {
       // Once, and with the image it has. Its data is in its volume.
-      await ensureVolume(docker, speechSocketVolumeName);
       log(`Recreating ${coreContainerName} with ${lacks}`);
       const container = docker.getContainer(existing.Id);
       await container.stop({ t: 30 }).catch(() => undefined);
