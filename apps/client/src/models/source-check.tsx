@@ -1,16 +1,11 @@
 import type {
+  ModelCheck,
   ModelChoice,
   ModelSourceInfo,
   ModelSourceLook,
 } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
-import {
-  Check,
-  CircleAlert,
-  CircleCheck,
-  Coins,
-  TriangleAlert,
-} from "lucide-react";
+import { Check, CircleAlert, CircleCheck, TriangleAlert } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import { useAuthAttempt } from "../auth/use-auth-attempt";
@@ -26,33 +21,69 @@ import type { ModelsResponse } from "./data";
 import { ModelPicker } from "./model-picker";
 import {
   checkProblemText,
+  otherName,
+  ownName,
   problemText,
   providerNames,
-  sourceName,
 } from "./words";
 
-// A source's check, followed in the dialog that started it: adding a source
-// or changing its model or key asks the model a short question, which the
-// page's answers follow until it ends. It ends on how it went, what it used
-// and what's left to do: Done, Use it now while another source is in use,
-// Check again when it didn't answer, or another model when it answered
-// without the tool.
+// A source's check, followed in the dialog that started it: adding a source,
+// changing its model or key, switching to it or checking it again asks the
+// model a short question, which the page's answers follow until it ends.
+// Each step stays on screen for at least two seconds, so the household sees
+// that it's checked, however fast the answer. It ends on how it went, in one
+// line of facts, and what's left to do: Done, a switch while another source
+// is in use, Check again when it didn't answer, or another model when it
+// answered without the tool.
 
 type Shown = { kind: "check" } | { kind: "choose" };
 type CheckAction = "check" | "use";
+// The steps shown while a check runs, and after it until each has had its
+// time on screen.
+type Step = "idle" | "asking" | "seeing" | "done";
+
+const stepMs = 2_000;
 
 const help = "m-0 text-[13px] leading-[18px] font-medium text-muted-foreground";
 
-/** What the check used, as the result says it. */
-export function tokensText(tokens: number | undefined) {
-  if (tokens === undefined) return undefined;
-  if (tokens === 0) return "The check used no tokens";
-  return `The check used ${tokens.toLocaleString()} ${tokens === 1 ? "token" : "tokens"}`;
+/** What a check found, in one line: "Answered in 1.0 s · used 169 tokens". */
+export function factsText(check: ModelCheck) {
+  const answered =
+    check.outcome !== "failed" && check.firstWordMs !== undefined
+      ? `Answered in ${(check.firstWordMs / 1000).toFixed(1)} s`
+      : undefined;
+  const tokens = check.tokens
+    ? `${answered ? "used" : "Used"} ${check.tokens.toLocaleString()} ${check.tokens === 1 ? "token" : "tokens"}`
+    : undefined;
+  return [answered, tokens].filter(Boolean).join(" · ") || undefined;
 }
 
 /** Whether the source runs in the home, where a first answer can wait for the model to load. */
 const inHome = (source: ModelSourceInfo) =>
   source.kind === "sanctum" || source.kind === "computer";
+
+// Paces the steps: asking for as long as the check runs and at least two
+// seconds, then seeing for two more, then the result.
+function useSteps(running: boolean) {
+  const [step, setStep] = useState<Step>(running ? "asking" : "idle");
+  const [hasAsked, setHasAsked] = useState(false);
+  if (running && (step === "idle" || step === "done")) {
+    setStep("asking");
+    setHasAsked(false);
+  }
+  if (step === "asking" && hasAsked && !running) setStep("seeing");
+  useEffect(() => {
+    if (step !== "asking" || hasAsked) return;
+    const timer = setTimeout(() => setHasAsked(true), stepMs);
+    return () => clearTimeout(timer);
+  }, [step, hasAsked]);
+  useEffect(() => {
+    if (step !== "seeing") return;
+    const timer = setTimeout(() => setStep("done"), stepMs);
+    return () => clearTimeout(timer);
+  }, [step]);
+  return step;
+}
 
 export function SourceCheck(props: {
   source: ModelSourceInfo | undefined;
@@ -69,10 +100,11 @@ export function SourceCheck(props: {
   const [acting, setActing] = useState(false);
   const [failedAction, setFailedAction] = useState<CheckAction>();
   // What was done before the check that's under way: the dialog's own
-  // change, or Use it now; Check again has nothing before it.
+  // change, or a switch; Check again has nothing before it.
   const [done, setDone] = useState<string | undefined>(props.done);
+  const step = useSteps(!!source?.checking);
 
-  // Use it now and Check again answer with the whole list, as the page's
+  // The switch and Check again answer with the whole list, as the page's
   // own buttons do.
   const act = async (action: CheckAction) => {
     if (acting || !source) return;
@@ -114,12 +146,14 @@ export function SourceCheck(props: {
     );
   }
 
+  const name = ownName(source);
   const check = source.check;
-  if (source.checking) {
+  if (source.checking || step === "asking" || step === "seeing") {
+    const isSeeing = step === "seeing";
     return (
       <Result
         badge={<KnotLoader className="size-7 text-(--secondary)" />}
-        title={`Checking ${source.modelName}`}
+        title={`Checking ${name}`}
         footer={
           <Button variant="outline" onClick={props.onClose}>
             Close
@@ -130,27 +164,23 @@ export function SourceCheck(props: {
           aria-label="Steps"
           className="m-0 flex w-full list-none flex-col gap-2 rounded-md bg-card px-4 py-3 text-start text-sm font-medium"
         >
-          {done && (
-            <li className="flex items-center gap-2.5">
-              <Check aria-hidden="true" className="size-4 text-(--leaf-text)" />
-              {done}
+          {done && <DoneStep>{done}</DoneStep>}
+          {isSeeing ? (
+            <DoneStep>Asked it one short question</DoneStep>
+          ) : (
+            <CurrentStep>Asking it one short question</CurrentStep>
+          )}
+          {isSeeing ? (
+            <CurrentStep>Seeing whether it uses the tool</CurrentStep>
+          ) : (
+            <li className="flex items-center gap-2.5 text-muted-foreground">
+              <span
+                aria-hidden="true"
+                className="mx-0.5 size-3 rounded-full border-[1.5px] border-current opacity-70"
+              />
+              Seeing whether it uses the tool
             </li>
           )}
-          <li className="flex items-center gap-2.5" aria-current="step">
-            {/* The knot above shows it's under way; one loader at a time. */}
-            <span
-              aria-hidden="true"
-              className="mx-0.5 size-3 rounded-full border-[1.5px] border-current"
-            />
-            Asking it one short question
-          </li>
-          <li className="flex items-center gap-2.5 text-muted-foreground">
-            <span
-              aria-hidden="true"
-              className="mx-0.5 size-3 rounded-full border-[1.5px] border-current opacity-70"
-            />
-            Seeing whether it uses the tool
-          </li>
         </ol>
         <p className={help}>
           {inHome(source)
@@ -163,34 +193,19 @@ export function SourceCheck(props: {
     );
   }
 
-  const used = tokensText(check?.tokens);
-  const tokens = used && (
-    <span className="inline-flex items-center gap-1.5 rounded-sm bg-foreground/8 px-2.5 py-1 text-[13px] leading-[18px] font-medium text-muted-foreground">
-      <Coins aria-hidden="true" className="size-3.5" />
-      {used}
-    </span>
-  );
+  const facts = check && factsText(check);
 
   if (!check || check.outcome === "failed") {
-    const lines = [
-      check
-        ? checkProblemText(check.problem ?? "answer", source)
-        : "You can start a new check.",
-      "It stays in your sources.",
-    ];
-    if (!inHome(source)) {
-      lines.push("Checking it again uses a few hundred tokens.");
-    }
     return (
       <Result
         badge={<CircleAlert className="size-6.5 text-destructive" />}
-        title={
+        title={check ? `${name} didn't answer` : "The check didn't finish"}
+        line={
           check
-            ? `${source.modelName} didn't answer`
-            : "The check didn't finish"
+            ? checkProblemText(check.problem ?? "answer", source)
+            : "You can start a new check."
         }
-        lines={lines}
-        tokens={tokens}
+        facts={facts}
         problem={
           failedAction === "check"
             ? "Couldn't start the check. Try again."
@@ -214,12 +229,9 @@ export function SourceCheck(props: {
     return (
       <Result
         badge={<TriangleAlert className="size-6 text-(--sun-text)" />}
-        title={`${source.modelName} may not work well`}
-        lines={[
-          "It answered, but didn't use your home's tools, so it may not act on your devices.",
-          "A model that supports tools works better.",
-        ]}
-        tokens={tokens}
+        title={`${name} may not act on your devices`}
+        line="It answered but didn't use the tool. A model that supports tools works better."
+        facts={facts}
         footer={
           <>
             <Button variant="outline" onClick={props.onClose}>
@@ -234,28 +246,21 @@ export function SourceCheck(props: {
     );
   }
 
-  const seconds = ((check.firstWordMs ?? 0) / 1000).toFixed(1);
-  const lines = [
-    source.inUse
-      ? "It's now your home's AI model."
-      : props.inUse
-        ? `Your home still uses ${sourceName(props.inUse)}.`
-        : "No source is in use.",
-    `It answered in ${seconds} s and used your home's tools.`,
-  ];
-  // Use it now checks it again, which a provider charges for.
-  if (!source.inUse && !inHome(source)) {
-    lines.push("Use it now checks it again, which uses a few hundred tokens.");
-  }
   return (
     <Result
       badge={<CircleCheck className="size-6.5 text-(--leaf-text)" />}
-      title={`${source.modelName} is ready`}
-      lines={lines}
-      tokens={tokens}
+      title={`${name} is ready`}
+      line={
+        source.inUse
+          ? "It's now your home's AI model."
+          : props.inUse
+            ? `Your home still uses ${otherName(props.inUse, source)}.`
+            : "No source is in use."
+      }
+      facts={facts}
       problem={
         !source.inUse && failedAction === "use"
-          ? "Couldn't switch to this source. Try again."
+          ? "Couldn't switch to it. Try again."
           : undefined
       }
       footer={
@@ -266,7 +271,7 @@ export function SourceCheck(props: {
               disabled={acting}
               onClick={() => void act("use")}
             >
-              Use it now
+              Switch to {name}
             </Button>
           )}
           <Button onClick={props.onClose}>Done</Button>
@@ -276,16 +281,39 @@ export function SourceCheck(props: {
   );
 }
 
+function DoneStep(props: { children: ReactNode }) {
+  return (
+    <li className="flex items-center gap-2.5">
+      <Check aria-hidden="true" className="size-4 text-(--leaf-text)" />
+      {props.children}
+    </li>
+  );
+}
+
+function CurrentStep(props: { children: ReactNode }) {
+  return (
+    <li className="flex items-center gap-2.5" aria-current="step">
+      {/* The knot above shows it's under way; one loader at a time. */}
+      <span
+        aria-hidden="true"
+        className="mx-0.5 size-3 rounded-full border-[1.5px] border-current"
+      />
+      {props.children}
+    </li>
+  );
+}
+
 function Result(props: {
   badge?: ReactNode;
   title: string;
-  lines?: string[];
-  tokens?: ReactNode;
+  // Where things stand, in one line.
+  line?: string;
+  // What the check found, in a quieter one.
+  facts?: string;
   children?: ReactNode;
   problem?: string;
   footer: ReactNode;
 }) {
-  const [first, ...rest] = props.lines ?? [];
   return (
     <div className="flex flex-col gap-6">
       <div
@@ -304,18 +332,17 @@ function Result(props: {
           <DialogTitle className="text-[17px] leading-6 text-balance">
             {props.title}
           </DialogTitle>
-          {first && (
-            <DialogDescription className="text-sm font-medium text-foreground">
-              {first}
+          {props.line && (
+            <DialogDescription className="text-sm text-pretty text-foreground">
+              {props.line}
             </DialogDescription>
           )}
-          {rest.map((line) => (
-            <p key={line} className="m-0 text-sm text-muted-foreground">
-              {line}
+          {props.facts && (
+            <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
+              {props.facts}
             </p>
-          ))}
+          )}
         </DialogHeader>
-        {props.tokens}
         {props.children}
       </div>
       {props.problem && (

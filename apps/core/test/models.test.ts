@@ -278,6 +278,40 @@ describe("AI models", () => {
     ).toEqual([false, true]);
   });
 
+  it("doesn't check again when switching right after a check that answered", async () => {
+    const { core, token, sources } = await home();
+    await addOfficeMac(core, token);
+    await post(
+      core,
+      "/api/models/sources",
+      {
+        kind: "openrouter",
+        key: sources.openRouter.key,
+        model: "openai/gpt-5-mini",
+      },
+      { token },
+    );
+    const [mac, router] = (await checked(core)).sources;
+    const asked = sources.chats.length;
+
+    await post(core, `/api/models/sources/${router!.id}/use`, {}, { token });
+    const switched = await checked(core);
+    expect(switched.sources[1]).toMatchObject({ inUse: true });
+    expect(sources.chats).toHaveLength(asked);
+
+    // An older answer is checked again on the way in.
+    core.db
+      .update(modelSources)
+      .set({
+        check: { ...mac!.check!, at: "2000-01-01T00:00:00.000Z" },
+      })
+      .where(eq(modelSources.id, mac!.id))
+      .run();
+    await post(core, `/api/models/sources/${mac!.id}/use`, {}, { token });
+    await checked(core);
+    expect(sources.chats).toHaveLength(asked + 1);
+  });
+
   it("replaces a key that no longer opens", async () => {
     const { core, token, sources } = await home();
     await post(

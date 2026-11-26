@@ -16,7 +16,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../components/ui/popover";
-import { sizeText } from "./words";
+import { makerOf, sizeText } from "./words";
 
 // A model to choose from a source's list, which can run to hundreds at a
 // provider: a field that opens a search over them. A provider's names, such
@@ -27,14 +27,10 @@ import { sizeText } from "./words";
 
 type Entry = { choice: ModelChoice; maker?: string; name: string };
 
-const makerOf = /^([^:]{1,40}):\s+(.+)$/;
 const maxRows = 100;
 
 function entryOf(choice: ModelChoice): Entry {
-  const named = makerOf.exec(choice.name);
-  return named
-    ? { choice, maker: named[1]!.trim(), name: named[2]!.trim() }
-    : { choice, name: choice.name };
+  return { choice, ...makerOf(choice.name) };
 }
 
 function shownName(entry: Entry) {
@@ -109,7 +105,7 @@ export function ModelPicker(props: {
   const suggestMaker =
     open &&
     matches === 0 &&
-    props.models.some((choice) => makerOf.test(choice.name));
+    props.models.some((choice) => makerOf(choice.name).maker !== undefined);
 
   return (
     <Popover
