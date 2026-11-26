@@ -12,11 +12,8 @@ import {
 } from "@meetsanctum/ui-sdk";
 import {
   CircleAlert,
-  Cloud,
-  Cpu,
   EllipsisVertical,
   KeyRound,
-  Laptop,
   Pencil,
   RefreshCw,
   Repeat,
@@ -51,7 +48,7 @@ import {
 import { coreJson } from "../core-fetch";
 import { AddSource } from "./add-source";
 import { ModelPicker } from "./model-picker";
-import { SourceCheck } from "./source-check";
+import { SourceCheck, sourceIconOf } from "./source-check";
 import { ollamaAppId } from "./add-sanctum";
 import { NoModel } from "./no-model";
 import { AppsUsing, TokensUsed } from "./usage";
@@ -285,12 +282,7 @@ function SourceRow(props: {
   const name = sourceName(source);
   const detailId = useId();
   const menuButton = useRef<HTMLButtonElement>(null);
-  const Icon =
-    source.kind === "sanctum"
-      ? Cpu
-      : source.kind === "computer"
-        ? Laptop
-        : Cloud;
+  const Icon = sourceIconOf(source);
   const hasKey = source.kind !== "computer" && source.kind !== "sanctum";
   return (
     <li className="flex flex-col gap-2.5">

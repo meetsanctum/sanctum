@@ -5,7 +5,17 @@ import type {
   ModelSourceLook,
 } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
-import { Check, CircleAlert, CircleCheck, TriangleAlert } from "lucide-react";
+import {
+  Check,
+  Circle,
+  CircleAlert,
+  CircleCheck,
+  Cloud,
+  Cpu,
+  Laptop,
+  LoaderCircle,
+  TriangleAlert,
+} from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import { useAuthAttempt } from "../auth/use-auth-attempt";
@@ -16,7 +26,6 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { coreJson } from "../core-fetch";
-import { KnotLoader } from "../knot-loader";
 import type { ModelsResponse } from "./data";
 import { ModelPicker } from "./model-picker";
 import {
@@ -165,7 +174,8 @@ export function SourceCheck(props: {
     const isSeeing = step === "seeing";
     return (
       <Result
-        badge={<KnotLoader className="size-7 text-(--secondary)" />}
+        // What's being checked, as its row shows it; the step below turns.
+        badge={<SourceIcon source={source} />}
         title={`Checking ${name}`}
         footer={
           <Button variant="outline" onClick={props.onClose}>
@@ -187,10 +197,7 @@ export function SourceCheck(props: {
             <CurrentStep>Seeing whether it uses the tool</CurrentStep>
           ) : (
             <li className="flex items-center gap-2.5 text-muted-foreground">
-              <span
-                aria-hidden="true"
-                className="mx-0.5 size-3 rounded-full border-[1.5px] border-current opacity-70"
-              />
+              <Circle aria-hidden="true" className="size-4 opacity-70" />
               Seeing whether it uses the tool
             </li>
           )}
@@ -307,13 +314,27 @@ function DoneStep(props: { children: ReactNode }) {
   );
 }
 
+/** A source's icon, as its row and its check show it. */
+export function sourceIconOf(source: ModelSourceInfo) {
+  return source.kind === "sanctum"
+    ? Cpu
+    : source.kind === "computer"
+      ? Laptop
+      : Cloud;
+}
+
+function SourceIcon(props: { source: ModelSourceInfo }) {
+  const Icon = sourceIconOf(props.source);
+  return <Icon className="size-6" />;
+}
+
 function CurrentStep(props: { children: ReactNode }) {
   return (
     <li className="flex items-center gap-2.5" aria-current="step">
-      {/* The knot above shows it's under way; one loader at a time. */}
-      <span
+      {/* The step under way turns; still under Reduce motion. */}
+      <LoaderCircle
         aria-hidden="true"
-        className="mx-0.5 size-3 rounded-full border-[1.5px] border-current"
+        className="size-4 animate-spin text-muted-foreground motion-reduce:animate-none"
       />
       {props.children}
     </li>
