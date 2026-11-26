@@ -488,16 +488,16 @@ describe("Security's card", () => {
 });
 
 describe("Switches' cards", () => {
-  const asPlug = (device: DeviceInfo, id: string, on: boolean): DeviceInfo => ({
-    ...device,
-    id,
-    type: "plug",
-    capabilities: device.capabilities.map((each) => ({
-      ...each,
-      state: { on },
-      observed: { on },
-    })) as DeviceInfo["capabilities"],
-  });
+  const relay = plug.capabilities.find((each) => each.kind === "switch")!;
+  const asPlug = (id: string, on: boolean | null): DeviceInfo => {
+    const state = on === null ? null : { on };
+    return {
+      ...plug,
+      id,
+      type: "plug",
+      capabilities: [{ ...relay, state, observed: state }],
+    };
+  };
 
   it("say how many are on, as Home's status tile in Ember, with no line under the name", async () => {
     await show("switches");
@@ -511,15 +511,16 @@ describe("Switches' cards", () => {
 
   it("are one for the plugs and one for the other switches, each only where the home has one", async () => {
     devices = [
-      ...devices,
-      asPlug(plug, "tv-plug", false),
-      asPlug(plug, "fan-plug", true),
+      { ...plug, capabilities: [relay, { ...relay, id: "second" }] },
+      asPlug("tv-plug", false),
+      asPlug("fan-plug", true),
+      asPlug("desk-plug", null),
     ];
     await show("switches");
 
     expect(cards().map(said)).toEqual([
       ["Plugs", "1 on"],
-      ["Switches", "1 on"],
+      ["Switches", "2 on"],
     ]);
     const glyphs = ["plug", "toggle-right"];
     expect(
@@ -535,9 +536,40 @@ describe("Switches' cards", () => {
     expect(cards().map(said)).toEqual([["Plugs", "1 on"]]);
   });
 
-  it("say Off while none is on", async () => {
-    devices = [asPlug(plug, "tv-plug", false)];
+  it("count a light's switch relay in Switches", async () => {
+    devices = [{ ...lamp, capabilities: [...lamp.capabilities, relay] }];
+    await show("switches");
+
+    expect(cards().map(said)).toEqual([["Switches", "1 on"]]);
+  });
+
+  it("count offline plugs and plugs with no state as not known", async () => {
+    devices = [
+      offline(asPlug("tv-plug", true)),
+      asPlug("fan-plug", null),
+      asPlug("desk-plug", false),
+      plug,
+    ];
+    await show("switches");
+
+    expect(cards().map(said)).toEqual([
+      ["Plugs", "2 not known"],
+      ["Switches", "1 on"],
+    ]);
+  });
+
+  it("say Off while the plug is off and follow it live", async () => {
+    devices = [asPlug("tv-plug", false)];
     await show("switches");
     expect(cards().map(said)).toEqual([["Plugs", "Off"]]);
+
+    await act(async () => {
+      live.publish({
+        type: "device",
+        id: "tv-plug",
+        device: asPlug("tv-plug", true),
+      });
+    });
+    expect(cards().map(said)).toEqual([["Plugs", "1 on"]]);
   });
 });
