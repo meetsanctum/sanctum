@@ -443,21 +443,26 @@ function EditSource(props: {
     const opened = props.editing;
     if (opened?.action === "check") {
       // Asked at once: the dialog follows the check from its start.
+      // It gives up after ten seconds, as the page's other actions do, so
+      // the dialog never waits on a core that doesn't answer.
       const controller = new AbortController();
-      const { signal } = controller;
+      const signal = AbortSignal.any([
+        controller.signal,
+        AbortSignal.timeout(10_000),
+      ]);
       setWorking(true);
       void coreJson<ModelsResponse>(
         `/api/models/sources/${opened.source.id}/check`,
         { method: "POST", signal },
       )
         .then((info) => {
-          if (signal.aborted) return;
+          if (controller.signal.aborted) return;
           onDone(info);
           setWorking(false);
           setChecked(opened.source.id);
         })
         .catch(() => {
-          if (signal.aborted) return;
+          if (controller.signal.aborted) return;
           setWorking(false);
           setProblem("Couldn't start the check. Try again.");
         });
