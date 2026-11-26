@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 
+import { AppRefusal } from "../apps/refusal.js";
 import {
   ServiceBusyError,
   ServiceRequestError,
@@ -34,6 +35,9 @@ const coordinatorBody = z.object({
 });
 
 function fail(reply: FastifyReply, error: unknown) {
+  if (error instanceof AppRefusal) {
+    return reply.code(error.status).send({ error: error.message });
+  }
   if (error instanceof UnknownServiceError) {
     return reply.code(404).send({ error: error.message });
   }
@@ -63,9 +67,7 @@ export function registerServiceRoutes(
   app.get<{ Params: { service: string } }>(
     "/api/services/:service",
     async (request, reply) => {
-      const service = services
-        .list()
-        .find((each) => each.name === request.params.service);
+      const service = await services.endpoint(request.params.service);
       if (!service) {
         return reply.code(404).send({ error: "No such service" });
       }

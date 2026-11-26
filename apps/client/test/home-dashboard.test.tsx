@@ -208,7 +208,9 @@ const sections = () =>
   [...container.querySelectorAll("section")].map((section) => ({
     heading: section.querySelector("h2")?.textContent,
     groups: [...section.querySelectorAll("[role=group]")].map((group) => [
-      group.getAttribute("aria-label"),
+      group.getAttribute("aria-label") ??
+        document.getElementById(group.getAttribute("aria-labelledby")!)
+          ?.textContent,
       // Buttons say their accessible names, tiles their names.
       ...[...group.children]
         .flatMap(parts)
@@ -297,20 +299,63 @@ describe("Home", () => {
     // The attic has nothing, and devices with no room come last.
     expect(sections()).toEqual([
       // The hall's light is off Home, but its room's Lights tile is there.
-      { heading: "Hall", groups: [["On Home", "Lights"]] },
+      { heading: "Hall", groups: [["Devices", "Lights"]] },
       {
         heading: "Office",
         groups: [
           ["Looks in Office", "Relax", "Work"],
-          ["On Home", "Lights", "Desk strip", "Lamp"],
+          ["Devices", "Lights", "Desk strip", "Lamp"],
         ],
       },
-      { heading: "No room", groups: [["On Home", "Loose lamp"]] },
+      { heading: "No room", groups: [["Devices", "Loose lamp"]] },
     ]);
+    // Each room's devices, its Lights tile first, No room's too, under
+    // Devices, a level under the room's name.
+    expect(
+      [...container.querySelectorAll("h3")].map((each) => each.textContent),
+    ).toEqual(["Devices", "Devices", "Devices"]);
+    const office = container.querySelector(
+      'section[aria-labelledby="home-office"]',
+    )!;
+    const row = office.querySelector(
+      '[role=group][aria-label="Looks in Office"]',
+    )!;
+    const grid = office.querySelector("[role=group][aria-labelledby]")!;
+    const heading = office.querySelector("h3")!;
+    expect(grid.getAttribute("aria-labelledby")).toBe(heading.id);
+    expect(
+      row.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      heading.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(
       container.querySelector("[data-slot=readings]")?.textContent,
     ).toContain("21.5°");
     expect(container.textContent).not.toContain("Kettle");
+  });
+
+  it("heads a room's devices on Home when it has no row", async () => {
+    devices.push(
+      device("attic-plug", "Attic plug", "attic", [
+        capability("switch", "power", {}, { on: false }),
+      ]),
+    );
+    onHome.push("attic-plug");
+    await show();
+
+    expect(sections().find((section) => section.heading === "Attic")).toEqual({
+      heading: "Attic",
+      groups: [["Devices", "Attic plug"]],
+    });
+    const attic = container.querySelector(
+      'section[aria-labelledby="home-attic"]',
+    )!;
+    expect(
+      [...attic.querySelectorAll("h1, h2, h3, h4, h5, h6")].map(
+        (each) => each.textContent,
+      ),
+    ).toEqual(["Attic", "Devices"]);
   });
 
   it("lays each room out in full first, then skips it while off screen", async () => {

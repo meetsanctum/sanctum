@@ -5,9 +5,9 @@ import type { ServiceSpec } from "./containers.js";
 import type { ZigbeeCoordinatorChoice } from "./zigbee-coordinator.js";
 
 // What the manager keeps about services, in its data volume: which apps need
-// which service, which the core wants for itself, the broker accounts it
-// generated, the chosen Zigbee coordinator and how far each change of image
-// got. It survives updates and reboots; the services' own data lives in
+// which service, which the core wants for itself, the broker accounts and
+// services' tokens it generated, the chosen Zigbee coordinator and how far
+// each change of image got. It survives updates and reboots; the services' own data lives in
 // their volumes.
 
 export type MqttAccount = { password: string; hash: string };
@@ -38,6 +38,9 @@ export type ServicesState = {
   // One broker account per MQTT client, by username: each service and each
   // app that talks MQTT.
   mqttAccounts: Record<string, MqttAccount>;
+  // A secret for each service that takes one from the core, by service name,
+  // as Speech-to-Phrase's for teaching it. Kept once made.
+  tokens?: Record<string, string>;
   zigbeeCoordinator?: ZigbeeCoordinatorChoice;
   // The image each service last ran from, whose version its data holds. A
   // service nothing needs has no container left to tell.
@@ -69,7 +72,7 @@ export async function createServicesStateStore(
         .then(async () => {
           const draft = structuredClone(state);
           const result = change(draft);
-          // It holds the broker passwords.
+          // It holds the broker passwords and services' tokens.
           await writeJson(path, draft, { mode: 0o600 });
           state = draft;
           return result;

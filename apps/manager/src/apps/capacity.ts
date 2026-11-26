@@ -217,6 +217,23 @@ export function createCapacity(options: {
       assertMemory(app, memoryMb + servicesMb, memoryFreeMb);
     },
 
+    // Hold the admission turn until the service is saved and counts as wanted.
+    admitService(
+      name: string,
+      held: () => Promise<readonly HeldApp[]>,
+      save: () => Promise<void>,
+    ) {
+      return inTurn(async () => {
+        const { memoryFreeMb, servicesMb } = await memory(
+          await held(),
+          undefined,
+          [name],
+        );
+        assertMemory(name, servicesMb, memoryFreeMb);
+        await save();
+      });
+    },
+
     /**
      * Holds what an add needs, or refuses it with what's short. The caller
      * reads the containers and disk and reserves in the same turn.

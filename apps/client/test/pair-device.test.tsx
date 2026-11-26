@@ -249,11 +249,22 @@ describe("a shared device's pairing screen", () => {
     const [formatted, first, second] = shownCode()!;
     expect(first).toMatch(/^K7/);
     expect(liveRegion.textContent).toBe(formatted);
+    // The boxes Add a shared device types into, drawn with no input under
+    // them, and hidden from screen readers, which hear the code in words.
     const boxes = container.querySelector('[data-slot="pairing-code"]')!;
-    expect([...boxes.children].map((box) => box.textContent)).toEqual([
-      ...first!,
-      "",
-      ...second!,
+    expect(boxes.getAttribute("aria-hidden")).toBe("true");
+    expect(boxes.querySelector("input")).toBeNull();
+    expect(
+      [...boxes.children].map((part) => [
+        part.getAttribute("data-slot"),
+        [...part.querySelectorAll('[data-slot="input-otp-slot"]')].map(
+          (slot) => slot.textContent,
+        ),
+      ]),
+    ).toEqual([
+      ["input-otp-group", [...first!]],
+      ["input-otp-separator", []],
+      ["input-otp-group", [...second!]],
     ]);
     expect(
       container.querySelector("svg[aria-label='Pairing QR code']"),
@@ -598,6 +609,13 @@ describe("a shared device's pairing screen", () => {
     });
     await settle(2_000);
     expect(shownCode()).toBeNull();
+    expect(
+      [
+        ...container.querySelectorAll(
+          '[data-slot="pairing-code"] [data-slot="input-otp-slot"]',
+        ),
+      ].map((slot) => slot.textContent),
+    ).toEqual(Array.from({ length: 8 }, () => ""));
     expect(
       container.querySelector("svg[aria-label='Pairing QR code']"),
     ).toBeNull();

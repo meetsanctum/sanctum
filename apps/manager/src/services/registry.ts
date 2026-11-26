@@ -2,6 +2,12 @@ import type { ServiceSpec } from "./containers.js";
 import { mosquittoSpec, type MqttClient } from "./mosquitto.js";
 import { ollamaData, ollamaMemoryMb, ollamaSpec, ollamaUrl } from "./ollama.js";
 import { piperData, piperMemoryMb, piperSpec, piperUrl } from "./piper.js";
+import {
+  speechToPhraseData,
+  speechToPhraseMemoryMb,
+  speechToPhraseSpec,
+  speechToPhraseUrl,
+} from "./speech-to-phrase.js";
 import type { ServicesState } from "./state.js";
 import type { ZigbeeCoordinator } from "./zigbee-coordinator.js";
 import {
@@ -40,24 +46,30 @@ export type ServiceDefinition = {
   forApps: boolean;
   // Whether the core may ask for it for itself, as for speech it makes.
   forCore?: true;
+  // It takes a token only the core is given, beside its url, which the
+  // manager makes the first time the core wants it.
+  token?: true;
   // Topics the service uses on the broker, as a client with its own account.
   // An app that asks for the service gets an account for the same topics.
   mqttTopics?: string[];
   // What an app needs to know to use the service, besides its broker account,
   // on a host with this much memory, in MB.
   connection?: (hostMemoryMb: number) => Record<string, unknown>;
-  // Where it answers over HTTP: the core reaches it there on the `sanctum`
-  // network, and an app that asks for it on a network shared only with it
-  // (apps/service-networks.ts), since no account limits it.
+  // Where the core reaches it. Apps that ask for an HTTP service reach it
+  // on a network shared only with it (apps/service-networks.ts).
   url?: string;
   // Its image is large: it downloads while the others go on, and the
   // service runs once it's there.
   largeImage?: true;
+  // Publish its endpoint only after Docker's health check passes.
+  readyWhenHealthy?: true;
   // Its data needs no copy before a new version, as models that download
   // again, too large to copy (image-change.ts).
   dataNeedsNoCopy?: true;
   // The container to run, or why it cannot run yet.
-  spec: (context: SpecContext) => Promise<ServiceSpec | NotYet> | ServiceSpec;
+  spec: (
+    context: SpecContext,
+  ) => Promise<ServiceSpec | NotYet> | ServiceSpec | NotYet;
   // The volumes its own data lives in, which erasing it deletes, as
   // Zigbee2MQTT's holds the Zigbee network and its key.
   dataVolumes?: string[];
@@ -65,6 +77,8 @@ export type ServiceDefinition = {
   // with this much. It isn't a limit unless its spec sets one: one that ran
   // out would take its network down with it.
   memoryMb: number | ((hostMemoryMb: number) => number);
+  // Check that a request from the core fits beside apps and other services.
+  checkMemory?: true;
 };
 
 // In the order they start.
@@ -126,6 +140,28 @@ export const serviceDefinitions: ServiceDefinition[] = [
     dataNeedsNoCopy: true,
     dataVolumes: [piperData],
     spec: () => piperSpec(),
+  },
+  {
+    name: "speech-to-phrase",
+    needs: [],
+    forApps: false,
+    forCore: true,
+    token: true,
+    memoryMb: speechToPhraseMemoryMb,
+    checkMemory: true,
+    url: speechToPhraseUrl,
+    largeImage: true,
+    readyWhenHealthy: true,
+    // Models can download again. The service loads its saved grammar at
+    // startup and accepts training requests over Wyoming.
+    dataNeedsNoCopy: true,
+    dataVolumes: [speechToPhraseData],
+    spec: ({ state }): ServiceSpec | NotYet => {
+      const token = state.tokens?.["speech-to-phrase"];
+      return token
+        ? speechToPhraseSpec(token)
+        : { problem: "It has no token for the core yet" };
+    },
   },
 ];
 

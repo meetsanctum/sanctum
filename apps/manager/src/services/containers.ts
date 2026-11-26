@@ -27,6 +27,7 @@ export type ServiceSpec = {
   image: string;
   env?: string[];
   cmd?: string[];
+  healthcheck?: ContainerCreateOptions["Healthcheck"];
   volumes?: Array<{ name: string; target: string }>;
   // Host devices, such as a Zigbee coordinator.
   devices?: Array<{ host: string; container: string }>;
@@ -52,6 +53,7 @@ export function serviceContainerOptions(
     Image: spec.image,
     ...(spec.env ? { Env: spec.env } : {}),
     ...(spec.cmd ? { Cmd: spec.cmd } : {}),
+    ...(spec.healthcheck ? { Healthcheck: spec.healthcheck } : {}),
     Labels: managedLabels(service),
     HostConfig: {
       Binds: (spec.volumes ?? []).map(
@@ -133,11 +135,15 @@ export async function reconcileServiceContainer(options: {
   spec: ServiceSpec;
   log: Log;
   removeReplacedImage?: boolean;
+  onStarting?: () => void;
 }) {
   const { docker, service, spec, log } = options;
   const desired = serviceContainerOptions(service, spec);
   const name = desired.name;
   const existing = await inspectService(docker, service);
+  if (!existing?.State.Running || existing.State.Restarting) {
+    options.onStarting?.();
+  }
   if (existing) {
     if (
       existing.Config.Labels?.[definitionLabel] ===
@@ -156,6 +162,7 @@ export async function reconcileServiceContainer(options: {
       // Pull first, so a failed pull leaves the old container running.
       await ensureImage(docker, spec.image);
       log(`Replacing ${name}: its definition changed`);
+      options.onStarting?.();
       await stopAndRemove(docker, name);
     }
   }

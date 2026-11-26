@@ -251,9 +251,14 @@ pnpm build
 pnpm format:check
 ```
 
-`pnpm test:containers` runs real stacks and images in Docker and takes minutes:
-run it when changing the manager, `deploy/` or how apps are packaged, where CI
-runs it too.
+`pnpm test:containers` runs real stacks and images in Docker and takes minutes.
+The [Containers workflow](.github/workflows/containers.yml) uses the changed
+paths to decide when to run the tests on arm64. Leave the tests to CI for
+changes the workflow covers, such as changes in `apps/manager/`, `deploy/`,
+`catalog/apps/` or `packages/app-sdk/`. Run them locally to debug a failure
+CI found, when CI can't run, and before merging a change to app packaging
+that the workflow skips, such as a change to the page builder in
+`packages/ui-sdk/tools/`.
 
 Use focused `pnpm --filter <package> <task>` runs while iterating, then the
 full set before finishing.

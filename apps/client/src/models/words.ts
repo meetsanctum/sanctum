@@ -228,6 +228,14 @@ export function checkLine(
   }
 }
 
+/**
+ * What a check uses at a provider, said as a ceiling: the question is a
+ * hundred or so tokens, and the answer stops at 1,024, which a model that
+ * thinks first can reach. Who charges for it goes unsaid: it's the
+ * provider, and some models there are free.
+ */
+export const checkCostText = "The check uses up to about 1,000 tokens.";
+
 /** A model's download, such as 5.2 GB. */
 export function sizeText(bytes: number) {
   return bytes >= 1e9

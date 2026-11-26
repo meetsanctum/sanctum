@@ -1,8 +1,9 @@
-import type { LightCommand } from "@meetsanctum/app-sdk";
+import type { LightCommand, LightsSwitch } from "@meetsanctum/app-sdk";
 import { DeviceTile, icons, lightColour, type Tile } from "@meetsanctum/ui-sdk";
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 
 import { supportsBrightness } from "./device-tiles";
+import { useLightsPress } from "./lights-button";
 import { sameData } from "./same-data";
 import type { Devices } from "./use-devices";
 
@@ -147,26 +148,36 @@ export function useRoomLights(devices: RoomLightsDevices) {
     void sending.catch(() => undefined);
   }, []);
 
-  const onToggle = useCallback(
-    (tile: Tile) => command(tile.roomId!, { on: !tile.on }),
-    [command],
+  // The tile's round icon, which shows its own failures (useLightsPress).
+  const switchRoom = useCallback(
+    (roomId: string, to: Exclude<LightsSwitch, "toggle">) => {
+      const { tiles, switchLights } = latest.current;
+      return switchLights(
+        { kind: "room", id: roomId },
+        tiles.filter((tile) => tile.kind === "light" && tile.roomId === roomId),
+        to,
+      );
+    },
+    [],
   );
   const onDim = useCallback(
     (tile: Tile, brightness: number) => command(tile.roomId!, { brightness }),
     [command],
   );
   return useMemo(
-    () => ({ command, onToggle, onDim }),
-    [command, onToggle, onDim],
+    () => ({ command, switchRoom, onDim }),
+    [command, switchRoom, onDim],
   );
 }
 
 export type RoomLights = ReturnType<typeof useRoomLights>;
 
 /**
- * A room's Lights tile, on the grid as a light's tile is. It keeps its tile
- * while what it says is the same, so a change to one of the room's other
- * tiles doesn't draw it again.
+ * A room's Lights tile, on the grid as a light's tile is. Its round icon
+ * presses as a floor's button does (lights-button.tsx): turning on, it is
+ * lit from the press until a light is on. It keeps its tile while what it
+ * says is the same, so a change to one of the room's other tiles doesn't
+ * draw it again.
  */
 export function RoomLightsTile(props: {
   tile: Tile;
@@ -174,16 +185,42 @@ export function RoomLightsTile(props: {
   lights: RoomLights;
   onOpen: (tile: Tile) => void;
 }) {
-  const kept = useRef(props.tile);
-  if (kept.current !== props.tile && !sameData(kept.current, props.tile)) {
-    kept.current = props.tile;
+  const { roomId } = props.tile;
+  const { switchRoom } = props.lights;
+  const pressing = useLightsPress({
+    isOn: props.tile.on,
+    where: `in ${props.roomName}`,
+    isDisabled: props.tile.disabled,
+    switchLights: (to) => switchRoom(roomId!, to),
+  });
+  const latestPress = useRef(pressing.press);
+  useLayoutEffect(() => {
+    latestPress.current = pressing.press;
+  });
+  const onToggle = useCallback(() => latestPress.current(), []);
+  let tile = props.tile;
+  if (pressing.isOn && !tile.on) {
+    tile = {
+      ...tile,
+      on: true,
+      look: "lit",
+      colour: lightColour({ on: true }),
+      status: "On",
+    };
+  }
+  if (pressing.failures > 0) {
+    tile = { ...tile, failures: (tile.failures ?? 0) + pressing.failures };
+  }
+  const kept = useRef(tile);
+  if (kept.current !== tile && !sameData(kept.current, tile)) {
+    kept.current = tile;
   }
   return (
     <DeviceTile
       tile={kept.current}
       icon={icons.Power}
       label={roomLightsLabel(props.roomName)}
-      onToggle={props.lights.onToggle}
+      onToggle={onToggle}
       onDim={props.lights.onDim}
       onOpen={props.onOpen}
     />

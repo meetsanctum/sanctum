@@ -295,7 +295,7 @@ export function PairDevice(props: {
         </div>
       ) : (
         <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-5">
-          <PairingCode formattedCode={formattedCode} />
+          <PairingCode code={shown && !stopped ? shown.code : undefined} />
           {shown ? (
             <QrCode
               text={pairingQrText({

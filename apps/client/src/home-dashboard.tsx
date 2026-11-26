@@ -43,8 +43,9 @@ import { useTileHandlers, type Devices } from "./use-devices";
 // Home's rooms: after the home's status, each room by name that has
 // something to show, under its name, which opens its page. A room's line
 // says what its motion and sensors say, as its page's header does; then its
-// row, Natural Light and its moods, as on its page; then its Lights tile
-// (room-lights.tsx) and its devices on Home, in the household's order. Devices on Home
+// row, Natural Light and its moods, as on its page; then under "Devices"
+// its Lights tile (room-lights.tsx) and its devices on Home, in the
+// household's order. Devices on Home
 // with no room come last, under a name that opens their page as a room's
 // does. A room's page stays complete and fixed; Home shows only what was put
 // on it, so a sensor needs no tile here for its readings. A room with
@@ -236,6 +237,7 @@ function sameRoom(before: HomeRoomProps, after: HomeRoomProps) {
 const HomeRoom = memo(function HomeRoom(props: HomeRoomProps) {
   const { place } = props;
   const headingId = `home-${place.id}`;
+  const devicesId = `home-${place.id}-devices`;
   const { room } = place;
   const Heading = props.level === 3 ? "h3" : "h2";
   return (
@@ -266,33 +268,54 @@ const HomeRoom = memo(function HomeRoom(props: HomeRoomProps) {
         <RoomRow row={place.row} roomName={place.name} press={props.press} />
       )}
       {(place.lightsTile || place.onHome.length > 0) && (
-        <div
-          role="group"
-          aria-label="On Home"
-          className="tile-grid auto-rows-(--cell)"
-        >
-          {place.lightsTile && (
-            <RoomLightsTile
-              tile={place.lightsTile}
-              roomName={place.name}
-              lights={props.roomLights}
-              onOpen={props.openDevice}
-            />
-          )}
-          {place.onHome.map((tile) => (
-            <DeviceTile
-              key={tile.key}
-              tile={tile}
-              onToggle={props.onToggle}
-              onDim={props.onDim}
-              onOpen={props.openDevice}
-            />
-          ))}
+        <div className="flex flex-col gap-2">
+          <DevicesHeading id={devicesId} level={props.level}>
+            Devices
+          </DevicesHeading>
+          <div
+            role="group"
+            aria-labelledby={devicesId}
+            className="tile-grid auto-rows-(--cell)"
+          >
+            {place.lightsTile && (
+              <RoomLightsTile
+                tile={place.lightsTile}
+                roomName={place.name}
+                lights={props.roomLights}
+                onOpen={props.openDevice}
+              />
+            )}
+            {place.onHome.map((tile) => (
+              <DeviceTile
+                key={tile.key}
+                tile={tile}
+                onToggle={props.onToggle}
+                onDim={props.onDim}
+                onOpen={props.openDevice}
+              />
+            ))}
+          </div>
         </div>
       )}
     </RoomSection>
   );
 }, sameRoom);
+
+// Over a room's devices on Home, every room's and No room's alike, so the
+// row's tiles, such as its moods, and its devices, tiles of one size, read
+// as two groups. It names the devices' group too. It is quieter than the
+// room's name, in the room line's 13 px at 65%, and a level under it.
+function DevicesHeading(props: { id: string; level: 2 | 3; children: string }) {
+  const Heading = props.level === 3 ? "h4" : "h3";
+  return (
+    <Heading
+      id={props.id}
+      className="m-0 text-[13px] leading-[18px] font-medium text-(--tile-secondary)"
+    >
+      {props.children}
+    </Heading>
+  );
+}
 
 /**
  * The home's rooms by name, then devices with no room, each with its tiles

@@ -58,7 +58,7 @@ export type ServiceStatus = {
   neverSetUp?: true;
   image?: string;
   restarts?: number;
-  // Where it answers over HTTP on the `sanctum` network, while it runs.
+  // Where it answers, while it runs.
   url?: string;
 };
 
@@ -74,6 +74,8 @@ type Download = { image: string; failedAt?: number; problem?: string };
 
 // A large image that failed to download is tried again after this.
 const downloadAgainMs = 5 * 60_000;
+// Reuse a recent endpoint check between requests, including concurrent ones.
+const endpointCheckMs = 2_000;
 
 // Reverse-DNS app ids, as packages/app-sdk requires them.
 const appId = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$/;
@@ -96,14 +98,26 @@ function syncAccounts(draft: ServicesState) {
   }
 }
 
-function observe(container: ContainerInfo, image: string): Observed {
-  const running = container.State.Running && !container.State.Restarting;
+function isRunning(container: ContainerInfo) {
+  return container.State.Running && !container.State.Restarting;
+}
+
+function isUnhealthy(container: ContainerInfo) {
+  return isRunning(container) && container.State.Health?.Status === "unhealthy";
+}
+
+function observe(container: ContainerInfo, needsHealthCheck?: true): Observed {
+  const running = isRunning(container);
+  const unhealthy = needsHealthCheck && isUnhealthy(container);
+  const ready =
+    !needsHealthCheck || container.State.Health?.Status === "healthy";
   return {
-    state: running ? "running" : "failed",
-    ...(running
-      ? {}
-      : { problem: `It is ${container.State.Status ?? "not running"}` }),
-    image,
+    state: !running || unhealthy ? "failed" : ready ? "running" : "starting",
+    ...(!running && {
+      problem: `It is ${container.State.Status ?? "not running"}`,
+    }),
+    ...(unhealthy && { problem: "It stopped answering" }),
+    image: container.Config.Image,
     restarts: container.RestartCount ?? 0,
   };
 }
@@ -120,6 +134,8 @@ export function createServices(options: {
   // The host's memory, in bytes, and its cores, for services' caps.
   totalMemory?: () => number;
   cpus?: () => number;
+  // Checks and saves a new service request in the same turn as app admission.
+  admitCoreService?: (name: string, save: () => Promise<void>) => Promise<void>;
   log: Log;
   // Called after a change, to reconcile soon; resolves once that reconcile
   // has run.
@@ -142,6 +158,10 @@ export function createServices(options: {
   const totalMemory = options.totalMemory ?? totalmem;
   const cpus = options.cpus ?? availableParallelism;
   const seen = new Map<string, Observed>();
+  const endpointChecks = new Map<
+    string,
+    { until: number; result: Promise<Observed> }
+  >();
   // Large images on their way, or the last that failed, by service.
   const downloads = new Map<string, Download>();
   // Count old containers until Docker confirms their removal, even if the
@@ -155,6 +175,7 @@ export function createServices(options: {
     get: (name: string) => seen.get(name),
     set(name: string, next: Observed) {
       const before = seen.get(name);
+      endpointChecks.delete(name);
       seen.set(name, next);
       options.onObserved?.(name, before, next);
     },
@@ -202,9 +223,8 @@ export function createServices(options: {
     }
   }
 
-  function status(name: string): ServiceStatus {
+  function status(name: string, last = observed.get(name)): ServiceStatus {
     const state = store.current();
-    const last = observed.get(name);
     const current: Observed = wantedServices(state).has(name)
       ? last && last.state !== "off"
         ? last
@@ -218,8 +238,31 @@ export function createServices(options: {
       apps: state.apps[name] ?? [],
       ...((state.core ?? []).includes(name) ? { core: true as const } : {}),
       ...current,
-      ...(url && current.state === "running" ? { url } : {}),
+      ...(url !== undefined && current.state === "running" ? { url } : {}),
     };
+  }
+
+  async function checkEndpoint(name: string) {
+    const before = observed.get(name);
+    const now = performance.now();
+    let check = endpointChecks.get(name);
+    if (!check || now >= check.until) {
+      check = {
+        until: now + endpointCheckMs,
+        result: inspectService(docker, name).then((container) =>
+          container ? observe(container, true) : { state: "starting" },
+        ),
+      };
+      endpointChecks.set(name, check);
+    }
+    try {
+      const result = await check.result;
+      // A reconcile may have changed the service while this check was pending.
+      return status(name, observed.get(name) === before ? result : undefined);
+    } catch (error) {
+      if (endpointChecks.get(name) === check) endpointChecks.delete(name);
+      throw error;
+    }
   }
 
   // Downloads a large image while the reconcile goes on, then reconciles
@@ -348,10 +391,24 @@ export function createServices(options: {
         spec: wanted,
         log,
         removeReplacedImage: definition.dataNeedsNoCopy,
+        ...(definition.readyWhenHealthy && {
+          onStarting: () => observed.set(name, { state: "starting" }),
+        }),
       });
     }
+    if (definition.readyWhenHealthy && isUnhealthy(container)) {
+      observed.set(name, observe(container, true));
+      log(`Restarting ${name}: it stopped answering`);
+      await docker.getContainer(container.Id).restart();
+      const restarted = await inspectService(docker, name);
+      if (!restarted) {
+        observed.set(name, { state: "starting" });
+        return;
+      }
+      container = restarted;
+    }
     if (isBroker(name)) await joinAppNetworks(docker, container, log);
-    if (definition.url) {
+    if (definition.forApps && definition.url) {
       await syncServiceNetworks(
         docker,
         name,
@@ -361,12 +418,24 @@ export function createServices(options: {
       );
     }
     if (!isMissingImage) await imageChanges.ran(name, wanted.image);
-    observed.set(name, observe(container, container.Config.Image));
+    observed.set(name, observe(container, definition.readyWhenHealthy));
   }
 
   return {
     status,
     list: () => serviceDefinitions.map((definition) => status(definition.name)),
+    async endpoint(name: string) {
+      const definition = findService(name);
+      if (!definition) return undefined;
+      let service = status(name);
+      if (definition.readyWhenHealthy && service.state === "running") {
+        // Docker may have restarted it since the last reconcile.
+        service = await checkEndpoint(name);
+      }
+      const token =
+        service.url && definition.token && store.current().tokens?.[name];
+      return { ...service, ...(token ? { token } : {}) };
+    },
 
     /** The services it keeps running, with their dependencies. */
     wanted: () => wantedServices(store.current()),
@@ -448,10 +517,22 @@ export function createServices(options: {
     // needs. Asking again changes nothing. The core reaches it at its url,
     // which GET /api/services/:service gives once it runs.
     async wantForCore(name: string) {
-      forCore(name);
-      await store.update((draft) => {
-        draft.core = [...new Set([...(draft.core ?? []), name])].sort();
-      });
+      const definition = forCore(name);
+      const save = () =>
+        store.update((draft) => {
+          draft.core = [...new Set([...(draft.core ?? []), name])].sort();
+          if (definition.token) {
+            draft.tokens = {
+              ...draft.tokens,
+              [name]: draft.tokens?.[name] ?? randomBytes(32).toString("hex"),
+            };
+          }
+        });
+      if (definition.checkMemory && options.admitCoreService) {
+        await options.admitCoreService(name, save);
+      } else {
+        await save();
+      }
       void options.onChange?.();
       return { service: status(name) };
     },

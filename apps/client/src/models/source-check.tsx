@@ -29,11 +29,11 @@ import { coreJson } from "../core-fetch";
 import type { ModelsResponse } from "./data";
 import { ModelPicker } from "./model-picker";
 import {
+  checkCostText,
   checkProblemText,
   otherName,
   ownName,
   problemText,
-  providerNames,
 } from "./words";
 
 // A source's check, followed in the dialog that started it: adding a source,
@@ -460,7 +460,7 @@ function ChooseModel(props: {
         <DialogDescription>
           {source.kind === "computer" || source.kind === "sanctum"
             ? "Choose one that can use tools, so it can act on your devices."
-            : `Choose one that can use tools, so it can act on your devices. Checking it uses tokens again, and ${providerNames[source.kind]} charges for them.`}
+            : checkCostText}
         </DialogDescription>
       </DialogHeader>
       {models && models.length > 0 && (
