@@ -1,4 +1,5 @@
 import {
+  formatPairingCode,
   pairingExchangesPerRequest,
   pairingQrText,
   type NewClient,
@@ -261,6 +262,8 @@ export function PairDevice(props: {
   const status = stopped
     ? "A wrong code was entered too many times, so this device stopped showing one."
     : problem;
+  const formattedCode =
+    shown && !stopped ? formatPairingCode(shown.code) : undefined;
 
   return (
     <Sheet
@@ -269,6 +272,9 @@ export function PairDevice(props: {
       subtitle="Nobody signs in here. Someone approves it from another device."
       back={{ onBack: props.onBack }}
     >
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {formattedCode}
+      </span>
       {stopped ? (
         <div className="flex flex-col items-center gap-4 py-4">
           <SheetProblem>{status}</SheetProblem>
@@ -289,7 +295,7 @@ export function PairDevice(props: {
         </div>
       ) : (
         <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-5">
-          <PairingCode code={shown?.code} />
+          <PairingCode formattedCode={formattedCode} />
           {shown ? (
             <QrCode
               text={pairingQrText({

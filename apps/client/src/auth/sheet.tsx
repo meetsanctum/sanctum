@@ -81,7 +81,10 @@ export function SheetField(
     hint?: string;
     // Whether the sheet's problem is about this field, which it then names.
     problemId?: string;
-  } & InputHTMLAttributes<HTMLInputElement>,
+  } & Omit<
+    InputHTMLAttributes<HTMLInputElement>,
+    "id" | "aria-invalid" | "aria-describedby"
+  >,
 ) {
   const { label, hint, problemId, ...input } = props;
   const id = useId();
@@ -95,13 +98,13 @@ export function SheetField(
         {label}
       </label>
       <Input
+        className="h-11 rounded-md px-3.5 text-[15px] md:text-[15px]"
+        {...input}
         id={id}
         aria-invalid={problemId ? true : undefined}
         aria-describedby={
           [hint && hintId, problemId].filter(Boolean).join(" ") || undefined
         }
-        className="h-11 rounded-md px-3.5 text-[15px] md:text-[15px]"
-        {...input}
       />
       {hint && (
         <span
@@ -167,9 +170,8 @@ export function SheetRow(props: {
   return (
     <Button
       variant="tile"
-      size="card"
+      size="sheet-row"
       type="button"
-      className="min-h-16 gap-3.5"
       onClick={props.onClick}
     >
       <span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-foreground/8">

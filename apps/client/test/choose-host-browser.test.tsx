@@ -74,4 +74,26 @@ describe("choosing a home in a plain browser", () => {
     expect(container.querySelector("h1")?.textContent).toBe("Choose your home");
     expect(container.querySelector("button")?.textContent).toBe("Sanctum");
   });
+
+  it("cancels the scheduled retry when leaving the chooser", async () => {
+    vi.mocked(hostStatus).mockRejectedValue(new Error("not up yet"));
+    await act(async () => root.render(<ChooseHost onChoose={() => {}} />));
+    expect(container.textContent).toContain("Still looking…");
+
+    await act(async () => root.render(null));
+    await wait(10_000);
+
+    expect(hostStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborts a pending status request when leaving the chooser", async () => {
+    vi.mocked(hostStatus).mockImplementation(() => new Promise(() => {}));
+    await act(async () => root.render(<ChooseHost onChoose={() => {}} />));
+    const signal = vi.mocked(hostStatus).mock.calls[0]![1];
+    expect(signal?.aborted).toBe(false);
+
+    await act(async () => root.render(null));
+
+    expect(signal?.aborted).toBe(true);
+  });
 });

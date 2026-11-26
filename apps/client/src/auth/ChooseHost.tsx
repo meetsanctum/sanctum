@@ -59,17 +59,20 @@ function useHosts() {
   return { hosts, searched };
 }
 
-// What a home's row says under its name. A home that is set up needs
-// nothing more, and its address names the machine, so it shows only where
-// two homes share a name and something has to tell them apart.
+// The address shows where two new homes, or two set-up homes with the same
+// name, need to be told apart.
 function detailOf(host: FoundHost, hosts: readonly FoundHost[]) {
-  if (!host.claimed) {
-    return "Ready to set up";
-  }
   const namesake = hosts.some(
-    (other) => other !== host && other.claimed && other.name === host.name,
+    (other) =>
+      other !== host &&
+      other.claimed === host.claimed &&
+      (!host.claimed || other.name === host.name),
   );
-  return namesake ? new URL(host.url).hostname : undefined;
+  const address = namesake ? new URL(host.url).hostname : undefined;
+  if (!host.claimed) {
+    return address ? `Ready to set up · ${address}` : "Ready to set up";
+  }
+  return address;
 }
 
 // What to check while nothing answers: things people can see and change,
@@ -85,6 +88,14 @@ export function ChooseHost(props: {
   onChoose: (host: FoundHost) => void;
 }) {
   const { hosts, searched } = useHosts();
+  const notice = props.notice && (
+    <p
+      role="status"
+      className="-mt-2 mb-0 text-center text-[15px] leading-[21px] text-balance"
+    >
+      {props.notice}
+    </p>
+  );
 
   if (hosts.length === 0 && searched) {
     return (
@@ -93,6 +104,7 @@ export function ChooseHost(props: {
         title="No home found yet"
         subtitle="It shows up here as soon as this device finds it. In the meantime, check these."
       >
+        {notice}
         <ul className="m-0 flex list-none flex-col gap-3 p-0">
           {checks.map((check) => (
             <li
@@ -119,14 +131,7 @@ export function ChooseHost(props: {
       title="Choose your home"
       subtitle="Homes on this network."
     >
-      {props.notice && (
-        <p
-          role="status"
-          className="-mt-2 mb-0 text-center text-[15px] leading-[21px] text-balance"
-        >
-          {props.notice}
-        </p>
-      )}
+      {notice}
       {hosts.length > 0 ? (
         <>
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
