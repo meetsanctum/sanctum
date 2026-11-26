@@ -248,6 +248,10 @@ const button = (name: string) =>
   [...document.querySelectorAll("button")].find(
     (candidate) => candidate.textContent === name,
   )!;
+const place = (name: string) =>
+  [
+    ...document.querySelectorAll<HTMLButtonElement>('[role="group"] button'),
+  ].find((candidate) => candidate.textContent?.startsWith(name))!;
 const click = (element: HTMLElement) =>
   act(async () => {
     element.click();
@@ -534,11 +538,62 @@ describe("Settings → AI models", () => {
     ).toBe(false);
   });
 
-  it("says when the home has no model yet", async () => {
+  it("offers where the model can run when the home has none", async () => {
     sources = [];
     await show();
-    expect(container.textContent).toContain("Your home has no AI model yet");
-    expect(container.textContent).not.toContain("Tokens Used");
+    const text = container.textContent ?? "";
+    expect(text).toContain("No AI model yet");
+    expect(text).toContain("It's the brain of your home.");
+    expect(text).not.toContain("Tokens Used");
+    // The places are the way in, so the bar has no Add a source.
+    expect(button("Add a source")).toBeUndefined();
+    const group = container.querySelector('[role="group"]')!;
+    expect(
+      document.getElementById(group.getAttribute("aria-labelledby")!)
+        ?.textContent,
+    ).toBe("No AI model yet");
+    expect(
+      [...group.querySelectorAll("button")].map((each) => each.textContent),
+    ).toEqual([
+      "On SanctumWith the Ollama app.Stays in your home",
+      "On a computer in your homeA Mac or PC that runs Ollama.Stays in your home",
+      "With an AI providerOpenRouter, Anthropic or OpenAI, with your own API key.Leaves your home",
+    ]);
+  });
+
+  it("leaves out On Sanctum where Ollama can't run on it", async () => {
+    sources = [];
+    usage = undefined;
+    await show();
+    expect(
+      [...container.querySelectorAll('[role="group"] button')].map(
+        (each) => each.textContent?.split("With")[0]?.split("A Mac")[0],
+      ),
+    ).toEqual(["On a computer in your home", ""]);
+  });
+
+  it("starts Add a source at the place chosen, and gives focus back to it", async () => {
+    sources = [];
+    await show();
+    const provider = place("With an AI provider");
+    await click(provider);
+    expect(document.querySelector('input[name="where"]')).toBeNull();
+    expect(document.body.textContent).toContain("What goes to OpenRouter");
+    await type(labelled("API key"), "sk-or-v1-test-key-4f2a");
+    await click(button("Check key"));
+    expect(document.body.textContent).toContain("The key works");
+
+    await act(async () => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+    expect(document.querySelector("[role=dialog]")).toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(provider));
+
+    await click(place("On a computer in your home"));
+    expect(labelled("Address")).toBeDefined();
+    expect(document.body.textContent).not.toContain("The key works");
   });
 
   it("keeps a typed computer name until it is saved", async () => {

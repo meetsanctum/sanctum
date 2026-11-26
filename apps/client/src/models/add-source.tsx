@@ -28,14 +28,21 @@ import {
 import { coreJson } from "../core-fetch";
 import { AddSanctum, ollamaAppId } from "./add-sanctum";
 import type { ModelsResponse } from "./data";
-import { problemText, providerNames, sizeText } from "./words";
+import {
+  placeNames,
+  problemText,
+  providerList,
+  providerNames,
+  sizeText,
+  type Place,
+} from "./words";
 
 // Adding a source of the home's AI model: first where it runs, then Ollama
 // on Sanctum (add-sanctum.tsx), a computer's address, which Sanctum looks at
 // for Ollama and its models, or a provider's key, which Sanctum checks and
 // lists the models of. Adding it runs a check, whose answer the page shows.
 
-type Where = "sanctum" | "computer" | "provider";
+type Where = Place;
 type Found = { models: ModelChoice[]; address?: string };
 
 const help = "m-0 text-[13px] leading-[18px] text-muted-foreground";
@@ -46,9 +53,6 @@ const providerOptions = modelProviders.map((value) => ({
   value,
   label: providerNames[value],
 }));
-const providerList = new Intl.ListFormat("en-GB", {
-  type: "disjunction",
-}).format(providerOptions.map(({ label }) => label));
 
 export function AddSource(props: {
   open: boolean;
@@ -58,6 +62,9 @@ export function AddSource(props: {
   // The home's apps, as the shell has them, for whether Ollama is there.
   apps: readonly AppInfo[];
   supportsSanctum: boolean;
+  // Where to start, when the page already asked where it runs; otherwise
+  // the dialog asks first.
+  start?: Where;
   onAppAdded?: (app: AppInfo) => void;
   // Opens an app's page, as Ollama's.
   onOpenApp?: (appId: string) => void;
@@ -86,8 +93,8 @@ export function AddSource(props: {
   useEffect(() => {
     if (!props.open) return;
     cancel();
-    setStep("where");
-    setWhere(defaultSource);
+    setStep(props.start ?? "where");
+    setWhere(props.start ?? defaultSource);
     setAddress("");
     setComputer("");
     setProvider("openrouter");
@@ -97,7 +104,7 @@ export function AddSource(props: {
     setProblem(undefined);
     setLooking(false);
     setAdding(false);
-  }, [props.open, defaultSource, cancel]);
+  }, [props.open, props.start, defaultSource, cancel]);
 
   // What was found is for what was typed: typing again asks again.
   const forget = () => {
@@ -265,7 +272,7 @@ export function AddSource(props: {
                   />
                   <span className="flex flex-col gap-0.5 leading-tight">
                     <span className="text-sm font-medium">
-                      On {productName}
+                      {placeNames.sanctum}
                     </span>
                     <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
                       With the Ollama app. Your data never leaves your home.
@@ -283,7 +290,7 @@ export function AddSource(props: {
                 />
                 <span className="flex flex-col gap-0.5 leading-tight">
                   <span className="text-sm font-medium">
-                    On a computer in your home
+                    {placeNames.computer}
                   </span>
                   <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
                     A Mac or PC that runs a local model with Ollama.
@@ -300,7 +307,7 @@ export function AddSource(props: {
                 />
                 <span className="flex flex-col gap-0.5 leading-tight">
                   <span className="text-sm font-medium">
-                    With an AI provider
+                    {placeNames.provider}
                   </span>
                   <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
                     {providerList}, with your own API key. Faster, but what's

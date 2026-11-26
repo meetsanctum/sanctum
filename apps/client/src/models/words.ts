@@ -1,7 +1,8 @@
-import type {
-  ModelProblem,
-  ModelProvider,
-  ModelSourceInfo,
+import {
+  modelProviders,
+  type ModelProblem,
+  type ModelProvider,
+  type ModelSourceInfo,
 } from "@meetsanctum/app-sdk";
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 
@@ -18,6 +19,20 @@ export const providerNames: Record<ModelProvider, string> = {
   anthropic: "Anthropic",
   openai: "OpenAI",
 };
+
+/** The providers by name, as one choice among them: "A, B or C". */
+export const providerList = new Intl.ListFormat("en-GB", {
+  type: "disjunction",
+}).format(modelProviders.map((provider) => providerNames[provider]));
+
+/** Where the home's AI model can run, as Add a source names each place. */
+export const placeNames = {
+  sanctum: `On ${productName}`,
+  computer: "On a computer in your home",
+  provider: "With an AI provider",
+} as const;
+
+export type Place = keyof typeof placeNames;
 
 /** A source as people read it, such as "Qwen3 8B on Office Mac". */
 export function sourceName(source: ModelSourceInfo) {

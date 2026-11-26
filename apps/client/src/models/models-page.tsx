@@ -54,6 +54,7 @@ import {
 import { coreJson } from "../core-fetch";
 import { AddSource } from "./add-source";
 import { ollamaAppId } from "./add-sanctum";
+import { NoModel } from "./no-model";
 import { AppsUsing, TokensUsed } from "./usage";
 import { useModels, type ModelsResponse } from "./data";
 import {
@@ -62,6 +63,7 @@ import {
   problemText,
   sourceDetail,
   sourceName,
+  type Place,
 } from "./words";
 
 // Settings → AI models: the sources of the home's AI model, the one in use
@@ -69,7 +71,8 @@ import {
 // menu to check it again, rename it, change its model or key, or remove it;
 // then the tokens used and the apps that use it (usage.tsx). Add a source
 // adds Ollama on Sanctum, or looks at a computer's address or a provider's
-// key before adding it. Every client sees and changes the same.
+// key before adding it; with no source yet, the page offers the places it
+// can run instead (no-model.tsx). Every client sees and changes the same.
 
 type Editing = {
   action: "rename" | "model" | "key" | "remove";
@@ -88,11 +91,16 @@ export function ModelsPage(props: {
 }) {
   const { info, refresh, answered } = useModels(props.live);
   const [adding, setAdding] = useState(false);
+  // Where Add a source starts, when the empty page asked where it runs, and
+  // the choice that opened it, which gets focus back when it closes.
+  const [start, setStart] = useState<Place>();
+  const opener = useRef<HTMLButtonElement>(null);
   const [editing, setEditing] = useState<Editing>();
   const [isActing, setIsActing] = useState(false);
   const addButton = useRef<HTMLButtonElement>(null);
   const supportsSanctum = info === undefined || info.usage !== undefined;
   const sources = info?.sources ?? [];
+  const isEmpty = info !== undefined && sources.length === 0;
   const inUse = sources.find((source) => source.inUse);
   const others = sources.filter((source) => !source.inUse);
   const hasOllamaPage = props.apps.some(
@@ -137,28 +145,33 @@ export function ModelsPage(props: {
         id="settings-models"
         title={modelsTitle}
         action={
-          <Button
-            ref={addButton}
-            disabled={isActing}
-            onClick={() => setAdding(true)}
-          >
-            Add a source
-          </Button>
+          // With no source yet, the empty page's places are the way in.
+          !isEmpty && (
+            <Button
+              ref={addButton}
+              disabled={isActing}
+              onClick={() => {
+                setStart(undefined);
+                opener.current = null;
+                setAdding(true);
+              }}
+            >
+              Add a source
+            </Button>
+          )
         }
         page={props.page}
       >
-        {info && sources.length === 0 && (
-          <div className="flex flex-col gap-2">
-            <span className="text-sm font-medium">
-              Your home has no AI model yet
-            </span>
-            <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
-              Your home's AI model can run{" "}
-              {supportsSanctum && `on ${productName} with the Ollama app, `}
-              on a computer in your home with Ollama, or with an AI provider and
-              your own API key. With a provider, what's asked leaves your home.
-            </p>
-          </div>
+        {isEmpty && (
+          <NoModel
+            supportsSanctum={supportsSanctum}
+            disabled={isActing}
+            onChoose={(place, button) => {
+              setStart(place);
+              opener.current = button;
+              setAdding(true);
+            }}
+          />
         )}
         {info && sources.length > 0 && !inUse && (
           <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
@@ -193,9 +206,15 @@ export function ModelsPage(props: {
         open={adding}
         onOpenChange={setAdding}
         onAdded={answered}
-        onCloseAutoFocus={() => addButton.current?.focus()}
+        onCloseAutoFocus={() =>
+          (opener.current?.isConnected
+            ? opener.current
+            : addButton.current
+          )?.focus()
+        }
         apps={props.apps}
         supportsSanctum={supportsSanctum}
+        start={start}
         onAppAdded={props.onAppAdded}
         onOpenApp={props.onOpenApp}
       />
