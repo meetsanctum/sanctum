@@ -35,7 +35,6 @@ export const canUseSettingsPage = "ai-can-use";
 export const modelsSettingsPage = "ai-models";
 export const clientsSettingsPage = "clients";
 export const systemSettingsPage = "system";
-export const statusSettingsPage = "status";
 
 export const roomsTitle = "Rooms and Floors";
 
@@ -64,7 +63,6 @@ const pageTitles: Record<string, string> = {
   [modelsSettingsPage]: modelsTitle,
   [clientsSettingsPage]: "Clients",
   [systemSettingsPage]: "System",
-  [statusSettingsPage]: "Status",
 };
 
 /** A page of Settings' title, which Back on the page over it names. */

@@ -17,7 +17,7 @@ import {
   testCore,
 } from "./support.js";
 
-// Settings → Status: the host as its manager reports it, the space the core's
+// Settings → System: the host as its manager reports it, the space the core's
 // own data and each app's take, and what needs someone, for every client.
 
 async function statusOf(

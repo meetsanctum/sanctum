@@ -10,7 +10,7 @@ import type { UpdateJournal } from "../src/update/journal.js";
 import { createRegistry } from "../src/update/registry.js";
 import { notFound } from "./fake-docker.js";
 
-// Free up space from Settings → Status: old versions of Sanctum and its
+// Free up space from Settings → System: old versions of Sanctum and its
 // services, and on a dev host the builds it won't go back or forward to.
 // What runs, the version before (a rollback's) and the newest build stay.
 

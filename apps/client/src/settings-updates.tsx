@@ -1,11 +1,17 @@
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
-import { Button, useHomeClock } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  useHomeClock,
+} from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
-import { Check, Circle, LoaderCircle } from "lucide-react";
+import { Check, ChevronDown, Circle, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { productName } from "./brand";
-import { Row } from "./components";
+import { Section } from "./components";
 import {
   Dialog,
   DialogClose,
@@ -16,8 +22,7 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import type { CoreStatus } from "./core-status";
-import { StatusRow } from "./settings-status";
-import type { SystemStatus } from "./system-status";
+import { Fact, Facts } from "./settings-status-facts";
 import {
   channelNames,
   isAway,
@@ -30,24 +35,21 @@ import {
   type UpdateStep,
 } from "./system-update";
 
-// Settings → System, for every client: Status, which opens its page
-// (settings-status.tsx), the version the home runs, the last restore from a
-// backup, and updates: the versions the host can update to, a confirmed
-// Update, the update's progress as the manager reports it and how it ended.
-// The core restarts during an update; meanwhile the connection veil covers
-// the page, and the progress carries on when the core is back.
+// System's Updates, for every client (settings-status.tsx): the version the
+// home runs, the last update, and the versions the host can update to; on
+// the dev channel its builds, folded under a row that names the one chosen,
+// then a confirmed Update, the update's progress as the manager reports it
+// and how it ended. The core restarts during an update; meanwhile the
+// connection veil covers the page, and the progress carries on when the
+// core is back. The last restore from a backup is said in Sanctum's card.
 
 // A day and a time on the home clock: "25 Nov, 14:03".
 const dayAndTime = (clock: HomeClock, at: Date) =>
   `${clock.dayText(at)}, ${clock.timeText(at)}`;
 
-export function SystemSettings(props: {
+export function UpdatesSection(props: {
   core: CoreStatus;
   onUpdating: (updating: boolean) => void;
-  // The host's status, which Home asks for now and then.
-  status: SystemStatus | undefined;
-  statusFailed: boolean;
-  onOpenStatus: () => void;
 }) {
   const { core } = props;
   const version =
@@ -55,21 +57,15 @@ export function SystemSettings(props: {
       ? core.version
       : undefined;
   return (
-    <>
-      <StatusRow
-        status={props.status}
-        failed={props.statusFailed}
-        onOpen={props.onOpenStatus}
-      />
-      <RestoreNotice online={core.state === "online"} />
+    <Section id="status-updates" title="Updates">
       <Updates core={core} version={version} onUpdating={props.onUpdating} />
-    </>
+    </Section>
   );
 }
 
 // After a restore from a backup every device was signed out; the first to
 // look is told what that means.
-function RestoreNotice(props: { online: boolean }) {
+export function RestoreNotice(props: { online: boolean }) {
   const clock = useHomeClock();
   const [restore, setRestore] = useState<RestoreInfo | null>(null);
 
@@ -232,7 +228,9 @@ function Updates(props: {
   if (!status) {
     return (
       <>
-        <Row title="Version" detail={coreVersion ?? "Not known right now"} />
+        <Facts>
+          <Fact label="Version">{coreVersion ?? "Not known right now"}</Fact>
+        </Facts>
         {isWaiting && (
           <p className="m-0 text-[13px] text-muted-foreground">
             Waiting for {productName} to answer…
@@ -244,21 +242,25 @@ function Updates(props: {
 
   // The core that answers runs the new version, and the manager is away:
   // it is replacing itself, the last step.
+  // The last update, ended before this screen opened.
+  const lastUpdate =
+    update && !running && update.id !== followed ? update : undefined;
   const step: UpdateStep =
     running && isWaiting && coreVersion === update.version
       ? "finish"
       : (update?.step ?? "done");
 
   return (
-    <div className="flex flex-col gap-4">
-      <Row
-        title="Version"
-        detail={`${coreVersion ?? status.version} · ${channelNames[status.channel]}`}
-      />
-      {update && (running || update.id === followed) ? (
+    <>
+      <Facts>
+        <Fact label="Version">
+          {`${coreVersion ?? status.version} · ${channelNames[status.channel]}`}
+        </Fact>
+        {lastUpdate && <LastUpdate update={lastUpdate} />}
+      </Facts>
+      {lastUpdate && <WhyItFailed update={lastUpdate} />}
+      {update && (running || update.id === followed) && (
         <Progress update={update} step={step} />
-      ) : (
-        update && <LastUpdate update={update} />
       )}
       {!running && (
         <>
@@ -315,7 +317,7 @@ function Updates(props: {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
 
@@ -454,30 +456,35 @@ function Outcome(props: { update: UpdateInfo }) {
   );
 }
 
-// The last update, ended before this screen opened.
+// The last update, ended before this screen opened, as one of the card's
+// facts.
 function LastUpdate(props: { update: UpdateInfo }) {
   const { update } = props;
   const clock = useHomeClock();
   const { title } = outcomeText(update);
   const when = update.finishedAt ?? update.startedAt;
-  const failed =
-    update.outcome === "rolled-back" || update.outcome === "failed";
   return (
-    <div className="flex flex-col gap-px leading-tight">
-      <span className="text-sm font-medium">Last update</span>
-      <span className="text-[13px] font-medium text-muted-foreground">
-        {title} · {dayAndTime(clock, new Date(when))}
-      </span>
-      {failed && update.error && (
-        <span className="text-[13px] break-words text-muted-foreground">
-          Reason: {update.error}
-        </span>
-      )}
-    </div>
+    <Fact label="Last update">
+      {title} · {dayAndTime(clock, new Date(when))}
+    </Fact>
   );
 }
 
-// A dev host's builds, newest first; the one it runs cannot be chosen.
+// Why that update did not work, under the facts.
+function WhyItFailed(props: { update: UpdateInfo }) {
+  const { update } = props;
+  const failed =
+    update.outcome === "rolled-back" || update.outcome === "failed";
+  if (!failed || !update.error) return null;
+  return (
+    <p className="m-0 text-[13px] break-words text-muted-foreground">
+      Reason: {update.error}
+    </p>
+  );
+}
+
+// A dev host's builds, newest first, folded under a row that says which is
+// chosen and how many there are; the one it runs cannot be chosen.
 function VersionPicker(props: {
   versions: AvailableVersion[];
   running?: string;
@@ -492,43 +499,85 @@ function VersionPicker(props: {
       </p>
     );
   }
+  const count =
+    props.versions.length === 1 ? "1 build" : `${props.versions.length} builds`;
   return (
-    <fieldset className="m-0 flex flex-col gap-1 border-0 p-0">
-      <legend className="sr-only">Version to update to</legend>
-      {props.versions.map(({ version, builtAt }) => {
-        const isRunning = version === props.running;
-        const detail = [
-          builtAt && `Built ${dayAndTime(clock, new Date(builtAt))}`,
-          isRunning && "Running",
-        ]
-          .filter(Boolean)
-          .join(" · ");
-        return (
-          <label
-            key={version}
-            className={cn(
-              "flex cursor-pointer items-center justify-between gap-3 rounded-md px-3 py-2 has-focus-visible:ring-3 has-focus-visible:ring-ring/50 has-checked:bg-foreground has-checked:text-background",
-              isRunning && "cursor-default text-muted-foreground",
-            )}
-          >
-            <input
-              type="radio"
-              name="version"
-              value={version}
-              checked={props.selected === version}
-              disabled={isRunning}
-              onChange={() => props.onSelect(version)}
-              className="sr-only"
-            />
-            <span className="truncate text-sm font-medium">{version}</span>
-            <span
-              className={cn("shrink-0 text-[13px]", !isRunning && "opacity-65")}
-            >
-              {detail}
+    <Collapsible className="flex flex-col gap-1">
+      <CollapsibleTrigger asChild>
+        <Button
+          variant="row"
+          size="row"
+          type="button"
+          className="group -mx-2.5 w-[calc(100%+20px)]"
+        >
+          <span className="flex min-w-0 flex-1 flex-col gap-px leading-tight">
+            <span className="truncate text-sm font-medium">Builds</span>
+            <span className="truncate text-[13px] font-medium text-muted-foreground">
+              {props.selected
+                ? `${props.selected} chosen · ${count}`
+                : `None chosen · ${count}`}
             </span>
-          </label>
-        );
-      })}
-    </fieldset>
+          </span>
+          <ChevronDown
+            aria-hidden="true"
+            className="ms-auto size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none"
+          />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <fieldset className="m-0 flex flex-col gap-1 border-0 p-0">
+          <legend className="sr-only">Build to update to</legend>
+          {props.versions.map(({ version, builtAt }) => {
+            const isRunning = version === props.running;
+            const isChosen = props.selected === version;
+            const detail = [
+              builtAt && `Built ${dayAndTime(clock, new Date(builtAt))}`,
+              isRunning && "Running",
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            return (
+              <label
+                key={version}
+                className={cn(
+                  "flex cursor-pointer items-center justify-between gap-3 rounded-md px-3 py-2 has-focus-visible:ring-3 has-focus-visible:ring-ring/50 has-checked:bg-foreground has-checked:text-background",
+                  isRunning && "cursor-default text-muted-foreground",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="version"
+                  value={version}
+                  checked={isChosen}
+                  disabled={isRunning}
+                  onChange={() => props.onSelect(version)}
+                  className="sr-only"
+                />
+                <span className="flex min-w-0 items-center gap-1.5">
+                  {isChosen && (
+                    <Check
+                      aria-hidden="true"
+                      className="size-3.5 shrink-0"
+                      strokeWidth={2.5}
+                    />
+                  )}
+                  <span className="truncate text-sm font-medium">
+                    {version}
+                  </span>
+                </span>
+                <span
+                  className={cn(
+                    "shrink-0 text-[13px]",
+                    !isRunning && "opacity-65",
+                  )}
+                >
+                  {detail}
+                </span>
+              </label>
+            );
+          })}
+        </fieldset>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

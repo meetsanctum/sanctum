@@ -17,7 +17,7 @@ import { CoreError, coreJson } from "./core-fetch";
 import { formatBytes, serviceNames } from "./system-status";
 import { everyWhileShown } from "./while-shown";
 
-// Free up space, the Storage card's last row on Status: what it would free
+// Free up space, the Storage card's last row on System: what it would free
 // and what goes, asked first, naming what stays: the version running, the
 // one before it, which a rollback needs, and on the dev channel the newest
 // build. It then says so in place, with what the disk freed, until Status

@@ -32,7 +32,7 @@ const mountOptions = "discard,sync";
 const imagesFolder = "images";
 const appUser = "1000:1000";
 const mebibyte = 1024 * 1024;
-// What an update needs free, which Settings → Status warns under too.
+// What an update needs free, which Settings → System warns under too.
 const keptForUpdates = 1536 * mebibyte;
 // A file's change time comes from a coarse clock that ticks at least every
 // 10 ms: a change to a file whose time is older than this gives it a new one,

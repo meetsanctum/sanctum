@@ -8,7 +8,7 @@ import { coreJson } from "./core-fetch";
 import type { Channel } from "./system-update";
 import { isShown, onShown } from "./while-shown";
 
-// The host's status (apps/core/src/system/status.ts), for Settings → Status,
+// The host's status (apps/core/src/system/status.ts), for Settings → System,
 // System's row, Needs attention and the dashboard's Attention tile, in the
 // words they share. Sizes are in bytes.
 
@@ -79,7 +79,7 @@ export type SystemStatus = {
   /**
    * The services that wait for what the home has never had, as Zigbee for
    * an adapter nobody has plugged in: no problem, so nothing asks for
-   * attention, and the Status page says it plainly. An older core says
+   * attention, and the System page says it plainly. An older core says
    * nothing of them.
    */
   notSetUp?: ServiceNotSetUp[];
@@ -336,7 +336,7 @@ function serviceFix(problem: { problem: string | null }) {
   return `${productName} starts it again by itself`;
 }
 
-/** What a service that was never set up says on the Status page, and what starts it. */
+/** What a service that was never set up says on the System page, and what starts it. */
 export function notSetUpWords(waiting: ServiceNotSetUp) {
   return {
     title: `${serviceName(waiting.service)} isn't set up`,

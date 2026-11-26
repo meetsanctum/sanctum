@@ -23,7 +23,7 @@ import { serviceOf } from "./services.js";
 
 const mebibyte = 1024 * 1024;
 // What an update needs free, which the manager keeps whatever an app's image
-// asks for, and Settings → Status warns under.
+// asks for, and Settings → System warns under.
 const keptForUpdates = 1536 * mebibyte;
 
 /** What adding this app asks the manager to hold, including saved grants. */

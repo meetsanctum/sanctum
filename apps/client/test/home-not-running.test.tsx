@@ -349,7 +349,7 @@ it("reads grants missed while the live connection was away as soon as it returns
   );
 });
 
-it("sends a stopped app's page to Status, where Restart is", async () => {
+it("sends a stopped app's page to System, where Restart is", async () => {
   installed = [moods, { ...weather, state: "stopped" }];
   await act(async () => window.dispatchEvent(new Event("focus")));
   await openWeather();
@@ -357,8 +357,8 @@ it("sends a stopped app's page to Status, where Restart is", async () => {
   const notice = container.querySelector('main [role="status"]')!;
   expect(notice.textContent).toContain("Weather isn't running");
   expect(buttonCalled("Open settings", notice)).toBeUndefined();
-  await press(buttonCalled("Open Status", notice)!);
-  expect(pageTitle()).toBe("Status");
+  await press(buttonCalled("Open System", notice)!);
+  expect(pageTitle()).toBe("System");
 });
 
 it("counts a paused app on Home's Attention tile, which leads to its row in Needs attention", async () => {

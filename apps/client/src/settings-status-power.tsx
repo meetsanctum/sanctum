@@ -17,7 +17,7 @@ import { goneWithinMs } from "./power-notice";
 import { systemUpdate } from "./system-update";
 import { everyWhileShown } from "./while-shown";
 
-// Restart and Shut down, at the end of Status' Sanctum card, under Running
+// Restart and Shut down, at the end of System's Sanctum card, under Running
 // for, which they reset. Each asks first, saying what happens and how to
 // start it again; the confirming button names the result, and Cancel comes
 // first. Once it is asked, every screen's veil says Restarting or Shutting

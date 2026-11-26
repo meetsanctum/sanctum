@@ -5,7 +5,7 @@ import type { Channel, HostHistory, HostStatus } from "../manager-answers.js";
 import { ManagerRefusal, ManagerUnavailable } from "../manager.js";
 import { relay } from "./errors.js";
 
-// Settings → Status: what the host is and how it is doing, for every client.
+// Settings → System: what the host is and how it is doing, for every client.
 // The manager reports the host; the core adds what only it knows, the space
 // its own data and each app's take, and works out what needs someone, the
 // one rule Settings' Needs attention and the dashboard's Attention tile

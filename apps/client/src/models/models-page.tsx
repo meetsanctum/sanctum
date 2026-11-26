@@ -169,7 +169,7 @@ export function ModelsPage(props: {
         page={props.page}
       >
         {hasFailed && (
-          // As Status says it: the page asks again on its own.
+          // As System says it: the page asks again on its own.
           <p
             role="status"
             className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground"

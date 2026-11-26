@@ -295,10 +295,10 @@ describe("its notice", () => {
     );
   });
 
-  it("keeps Open Status for one that didn't stop cleanly, in the core's process", async () => {
+  it("keeps Open System for one that didn't stop cleanly, in the core's process", async () => {
     await notice(app("stopped"));
 
-    expect(button("Open Status")).toBeDefined();
+    expect(button("Open System")).toBeDefined();
     expect(button("Restart Weather")).toBeUndefined();
   });
 });

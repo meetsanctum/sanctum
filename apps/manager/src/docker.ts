@@ -160,7 +160,7 @@ export type DockerClientLike = {
   };
 };
 
-// What Settings → Status asks of Docker (host/status.ts): the host's system,
+// What Settings → System asks of Docker (host/status.ts): the host's system,
 // the space images and volumes take, and each container's processes, whose
 // memory Docker's stats can't give on a Raspberry Pi whose memory cgroup is off,
 // as it is unless its boot settings turn it on.

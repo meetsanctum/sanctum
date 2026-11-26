@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CoreError, coreJson } from "../src/core-fetch";
 import { clientDetail } from "../src/settings-clients";
 import { useGoing, type Going } from "../src/power-notice";
-import { StatusPage } from "../src/settings-status";
+import { SystemPage } from "../src/settings-status";
 import type { SpacePlan } from "../src/settings-status-space";
 import type { SystemStatus } from "../src/system-status";
 import type { HostPoint } from "../src/system-status-day";
@@ -141,12 +141,20 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+// The core away, so the page's Updates asks nothing of it here.
+const offline = { state: "offline" } as const;
+
 async function render(timeZone?: string) {
   await act(async () => {
     root.render(
       <HomeTimeZoneProvider timeZone={timeZone}>
         <TemperatureUnitProvider unit="celsius">
-          <StatusPage apps={statusApps} onDone={() => {}} />
+          <SystemPage
+            apps={statusApps}
+            core={offline}
+            onUpdating={() => {}}
+            onDone={() => {}}
+          />
         </TemperatureUnitProvider>
       </HomeTimeZoneProvider>,
     );
@@ -177,8 +185,10 @@ describe("restart and shut down", () => {
     function Screen() {
       going = useGoing(live, "online");
       return (
-        <StatusPage
+        <SystemPage
           apps={statusApps}
+          core={offline}
+          onUpdating={() => {}}
           onDone={() => {}}
           onPowerAccepted={(action) =>
             live.publish({ type: "system", going: action })

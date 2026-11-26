@@ -342,7 +342,7 @@ if (config.supervise) {
   });
 }
 
-// The host's status for Settings → Status, sampled while the manager runs,
+// The host's status for Settings → System, sampled while the manager runs,
 // and its last 24 hours, kept across restarts.
 const hostHistory = createHostHistory({ dataDir: config.dataDir, log });
 await hostHistory.load();

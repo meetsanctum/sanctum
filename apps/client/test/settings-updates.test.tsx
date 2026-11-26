@@ -19,9 +19,9 @@ import type { SystemStatus } from "../src/system-status";
 import type { UpdateInfo } from "../src/system-update";
 import { piStatus } from "./system-status-fixtures";
 
-// Settings → System and the connection veil: someone updates the host from
-// the UI, the screen rides out the core's restart, and a shared client gets
-// the version and the updates too.
+// Settings → System's Updates and the connection veil: someone updates the
+// host from the UI, the screen rides out the core's restart, and a shared
+// client gets the version and the updates too.
 
 const fake = vi.hoisted(() => ({
   report: (_status: CoreStatus) => {},
@@ -207,7 +207,19 @@ const areaRow = (area: string) =>
     ),
   ].find((button) => button.textContent?.startsWith(area));
 
-const system = () => container.querySelector("#settings-system")!;
+// The System page's Updates card.
+const system = () =>
+  container.querySelector('section[aria-labelledby="status-updates"]')!;
+
+// The dev channel's builds, folded under their row until it is pressed.
+const buildsRow = () =>
+  [...system().querySelectorAll<HTMLButtonElement>("button")].find((each) =>
+    each.textContent?.startsWith("Builds"),
+  );
+
+async function openBuilds() {
+  await act(async () => buildsRow()!.click());
+}
 
 function button(text: string, within: ParentNode = document) {
   return [...within.querySelectorAll<HTMLButtonElement>("button")].find(
@@ -260,7 +272,7 @@ describe("Settings → System", () => {
     expect(asked).toContain("/api/system/update");
   });
 
-  it("starts with Status, a green check while everything's running", async () => {
+  it("opens one page with how Sanctum is doing and its updates, a green check while everything's running", async () => {
     await render();
     await openSettings();
     expect(
@@ -271,16 +283,16 @@ describe("Settings → System", () => {
     );
     await openSystem();
 
-    const row = button(
-      "StatusEverything's running · 6.92 GB free · 58°C",
-      system(),
-    );
-    expect(row?.getAttribute("aria-label")).toBe(
-      "Status: everything's running. Opens Status",
-    );
-    expect(row?.querySelector("span.text-green")?.textContent).toBe(
-      "Everything's running",
-    );
+    expect(container.querySelector(".top-bar h1")?.textContent).toBe("System");
+    const sanctum = container.querySelector(
+      'section[aria-labelledby="status-sanctum"]',
+    )!;
+    expect(
+      sanctum.querySelector('[role="status"] span.text-green')?.textContent,
+    ).toBe("Everything's running");
+    // The version is said once, in Updates.
+    expect(sanctum.textContent).not.toContain("Version");
+    expect(system().textContent).toContain("Versiondev-1 · Dev channel");
   });
 
   it("puts Sanctum first in Needs attention while its clock isn't synchronised, and both open Status", async () => {
@@ -295,7 +307,7 @@ describe("Settings → System", () => {
     expect(attention.textContent).toContain("Needs AttentionSanctum");
     const sanctum = button("SanctumClock not synchronised", attention)!;
     expect(sanctum.getAttribute("aria-label")).toBe(
-      "Sanctum: Clock not synchronised. Opens Status",
+      "Sanctum: Clock not synchronised. Opens System",
     );
 
     await act(async () => {
@@ -339,6 +351,12 @@ describe("Settings → System", () => {
     await render();
     await openSystem();
 
+    // Folded at first, saying which build is chosen.
+    expect(buildsRow()?.getAttribute("aria-expanded")).toBe("false");
+    expect(buildsRow()?.textContent).toBe("Buildsdev-3 chosen · 3 builds");
+    expect(system().textContent).not.toContain("Built 28 Oct");
+    await openBuilds();
+    expect(buildsRow()?.getAttribute("aria-expanded")).toBe("true");
     expect(system().textContent).toContain("Built 28 Oct, 12:30 AM");
     expect(system().textContent).toContain(
       "Updated to dev-1 · 27 Oct, 12:45 AM",
@@ -348,6 +366,9 @@ describe("Settings → System", () => {
   it("updates the host to a build someone chose, once they confirm", async () => {
     await render();
     await openSystem();
+    // Update names the chosen build while the list is folded.
+    expect(button("Update to dev-3", system())).toBeDefined();
+    await openBuilds();
 
     // The newest build is chosen; the running one cannot be.
     const radios = [
@@ -407,6 +428,8 @@ describe("Settings → System", () => {
     expect(system().textContent).toContain("Reason: sanctum-core stopped");
 
     // The build that just failed is offered again only when chosen.
+    expect(buildsRow()?.textContent).toBe("BuildsNone chosen · 3 builds");
+    await openBuilds();
     const radios = [
       ...system().querySelectorAll<HTMLInputElement>('input[type="radio"]'),
     ];

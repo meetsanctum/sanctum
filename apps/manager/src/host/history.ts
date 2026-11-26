@@ -3,11 +3,11 @@ import { join } from "node:path";
 import { errorMessage } from "../docker.js";
 import { readJson, writeJson } from "../state.js";
 
-// The host's last 24 hours for Settings → Status: how busy the processor was,
+// The host's last 24 hours for Settings → System: how busy the processor was,
 // how warm it ran and how much memory was in use, as each 5 minutes' mean of
 // the samples taken every 10 seconds. The machine is not one of the home's
 // devices, so this is not the core's History: the manager already samples
-// it, and 24 hours is all Status shows.
+// it, and 24 hours is all System shows.
 //
 // The day is kept in memory and written to the manager's volume every 15
 // minutes and when it stops, so an update or a restart keeps it; a power

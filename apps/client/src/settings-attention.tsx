@@ -48,9 +48,9 @@ import { plural } from "./plural";
 
 // Settings' Needs attention: first on the page while Sanctum itself, any app
 // or any device needs someone. Sanctum leads, with its first problem, and
-// opens Status, where each says what to do. Each app that isn't running
+// opens System, where each says what to do. Each app that isn't running
 // follows: a paused one opens its settings, where the permission it needs
-// is, and one that stopped opens Status, where Restart is. Each device has
+// is, and one that stopped opens System, where Restart is. Each device has
 // its fix in its row: Remove for one its network no longer has, Repair for
 // one whose driver says what's wrong and how to set it right, Check
 // connection for one that is offline, a room for one in none. The same on
@@ -353,10 +353,10 @@ export function NeedsAttentionSection(props: {
             ) : app.state === "stopped" ? (
               props.onOpenStatus && (
                 <RowButton
-                  label={`Open Status, to restart ${productName}`}
+                  label={`Open System, to restart ${productName}`}
                   onClick={props.onOpenStatus}
                 >
-                  Open Status
+                  Open System
                 </RowButton>
               )
             ) : app.waiting && !waitsForRoom(app.waiting) ? (

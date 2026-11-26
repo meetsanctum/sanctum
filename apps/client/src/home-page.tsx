@@ -36,7 +36,7 @@ import {
   devicesSettingsPage,
   maintenanceSettingsPage,
   settingsApp,
-  statusSettingsPage,
+  systemSettingsPage,
 } from "./system-apps";
 import type { SystemStatus } from "./system-status";
 
@@ -178,7 +178,7 @@ function HomePageWithDevices({
             devices={devices}
             live={live}
             openAppSettings={(app) => settingsOf(app)()}
-            openStatus={() => opener(settingsApp.id)(statusSettingsPage)}
+            openStatus={() => opener(settingsApp.id)(systemSettingsPage)}
             ask={ask}
           />
         </SystemPageBoundary>
@@ -257,7 +257,7 @@ function HomePageWithDevices({
           }
           openDevices={() => opener(settingsApp.id)(devicesSettingsPage)}
           openSettings={settingsOf(route.app)}
-          openStatus={() => opener(settingsApp.id)(statusSettingsPage)}
+          openStatus={() => opener(settingsApp.id)(systemSettingsPage)}
         />
       ) : route && routeApp && isAppPage ? (
         <>
@@ -271,7 +271,7 @@ function HomePageWithDevices({
               ).length
             }
             openSettings={openedByItsApp ? undefined : settingsOf(route.app)}
-            openStatus={() => opener(settingsApp.id)(statusSettingsPage)}
+            openStatus={() => opener(settingsApp.id)(systemSettingsPage)}
           />
           <WhileNotRunning
             app={routeApp.info}
@@ -322,7 +322,7 @@ function HomePageWithDevices({
               notSetUp={shownStatus?.notSetUp}
               apps={installed}
               openAttention={settings.openOverview}
-              openStatus={() => opener(settingsApp.id)(statusSettingsPage)}
+              openStatus={() => opener(settingsApp.id)(systemSettingsPage)}
               openMaintenance={() =>
                 opener(settingsApp.id)(maintenanceSettingsPage)
               }

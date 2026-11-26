@@ -60,14 +60,14 @@ its pages and cards dim if it stays down. Turning it off also takes its
 cards off Home. In its settings, **How It's Running** shows memory use and
 restarts. A notice near the top says what went wrong when Sanctum knows.
 
-| What it says                                        | What to do                                                                       |
-| --------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Starting, or Restarting                             | Give the app time. Sanctum starts it or tries again by itself.                   |
-| Waiting for Zigbee2MQTT, or for Sanctum             | Nothing. It starts once what it waits for is ready.                              |
-| Paused                                              | Turn the [needed permission](/apps/permissions/#changing-your-answer) back on.   |
-| Off                                                 | Choose **Turn on** if you want it back.                                          |
-| Stopped after 5 failures in 10 minutes              | Choose **Restart**. If it keeps stopping, the reason under it says why.          |
-| Not running · it starts again when Sanctum restarts | It didn't stop cleanly. Go to Settings → System → Status and choose **Restart**. |
+| What it says                                        | What to do                                                                     |
+| --------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Starting, or Restarting                             | Give the app time. Sanctum starts it or tries again by itself.                 |
+| Waiting for Zigbee2MQTT, or for Sanctum             | Nothing. It starts once what it waits for is ready.                            |
+| Paused                                              | Turn the [needed permission](/apps/permissions/#changing-your-answer) back on. |
+| Off                                                 | Choose **Turn on** if you want it back.                                        |
+| Stopped after 5 failures in 10 minutes              | Choose **Restart**. If it keeps stopping, the reason under it says why.        |
+| Not running · it starts again when Sanctum restarts | It didn't stop cleanly. Go to Settings → System and choose **Restart**.        |
 
 Each app has a limit on the memory it uses. One that goes over it restarts,
 and its settings say "It ran out of memory". Only that app restarts, never

@@ -17,7 +17,7 @@ import {
   type TestCore,
 } from "./support.js";
 
-// Settings → Status' last 24 hours, Restart and Shut down, Free up space and
+// Settings → System's last 24 hours, Restart and Shut down, Free up space and
 // Connected now: every client, shared ones too, may ask; each request goes in
 // the activity log, and every client hears of a restart or a shutdown before it
 // happens.

@@ -31,7 +31,8 @@ import {
   type HostProblem,
   type SystemStatus,
 } from "./system-status";
-import { channelNames } from "./system-update";
+import type { CoreStatus } from "./core-status";
+import { Fact, Facts } from "./settings-status-facts";
 import { ConnectedSection } from "./settings-status-connected";
 import { MemorySection, StorageSection } from "./settings-status-parts";
 import { LastDaySection } from "./settings-status-day";
@@ -42,13 +43,15 @@ import {
   useSpace,
   type Space,
 } from "./settings-status-space";
+import { RestoreNotice, UpdatesSection } from "./settings-updates";
 
-// Settings → Status: what's going on with the machine Sanctum runs on, the
-// same on every client. Its row comes first in System, a green check and
-// "Everything's running" while nothing needs anyone, otherwise each problem
-// in red; the page, a page of Settings with Done, leads with the same
-// verdict, each problem with what to do, then Sanctum's model, processor,
-// power supply, version and system with Restart and Shut down, the storage
+// Settings → System: what's going on with the machine Sanctum runs on and
+// the version it runs, the same on every client. Its row on Settings' first
+// page says a green check and "Everything's running" while nothing needs
+// anyone, otherwise the first problem in red; the page leads with the same
+// verdict, each problem with what to do, and a restore's notice while there
+// is one, then Sanctum's model, processor, power supply and system with
+// Restart and Shut down, its updates (settings-updates.tsx), the storage
 // with Free up space and the memory with what fills them
 // (settings-status-parts.tsx), the last 24 hours of the processor, its
 // temperature and the memory, each headed by what it reads now
@@ -67,8 +70,7 @@ const plainRound = (Icon: LucideIcon) => (
   </span>
 );
 
-// The line of System's rows, in Settings and on its System page, and of
-// Sanctum in Needs attention: the first problem, or every one, in red after
+// The line of System's row in Settings and of Sanctum in Needs attention: the first problem, or every one, in red after
 // a sign; or a green check and "Everything's running" with what's free and
 // how warm it is.
 export function SummaryLine(props: {
@@ -140,26 +142,25 @@ export function summarySpoken(
   return status.problems.map((each) => problemTitle(each, unit)).join(", ");
 }
 
-// A row that opens Status, as Maintenance's updates row opens its page.
-function OpensStatus(props: {
-  title: string;
-  label: string;
-  line: ReactNode;
+/** Sanctum in Needs attention, while anything about it needs someone: its first problem, opening System. */
+export function SanctumAttentionRow(props: {
+  status: SystemStatus;
   onOpen: () => void;
 }) {
+  const unit = useTemperatureUnit() ?? "celsius";
   return (
     <Button
       variant="row"
       size="row"
       type="button"
       onClick={props.onOpen}
-      aria-label={props.label}
+      aria-label={`${productName}: ${summarySpoken(props.status, unit)}. Opens System`}
       className="-mx-2.5 w-[calc(100%+20px)]"
     >
       {plainRound(Gauge)}
       <span className="flex min-w-0 flex-1 flex-col gap-px leading-tight">
-        <span className="truncate text-sm font-medium">{props.title}</span>
-        {props.line}
+        <span className="truncate text-sm font-medium">{productName}</span>
+        <SummaryLine status={props.status} failed={false} unit={unit} first />
       </span>
       <ChevronRight
         aria-hidden="true"
@@ -168,70 +169,6 @@ function OpensStatus(props: {
     </Button>
   );
 }
-
-/** System's first row: Status and how Sanctum is doing, opening the page. */
-export function StatusRow(props: {
-  status: SystemStatus | undefined;
-  failed: boolean;
-  onOpen: () => void;
-}) {
-  const unit = useTemperatureUnit() ?? "celsius";
-  return (
-    <OpensStatus
-      title="Status"
-      label={`Status: ${summarySpoken(props.status, unit, props.failed)}. Opens Status`}
-      line={
-        <SummaryLine status={props.status} failed={props.failed} unit={unit} />
-      }
-      onOpen={props.onOpen}
-    />
-  );
-}
-
-/** Sanctum in Needs attention, while anything about it needs someone: its first problem, opening Status. */
-export function SanctumAttentionRow(props: {
-  status: SystemStatus;
-  onOpen: () => void;
-}) {
-  const unit = useTemperatureUnit() ?? "celsius";
-  return (
-    <OpensStatus
-      title={productName}
-      label={`${productName}: ${summarySpoken(props.status, unit)}. Opens Status`}
-      line={
-        <SummaryLine status={props.status} failed={false} unit={unit} first />
-      }
-      onOpen={props.onOpen}
-    />
-  );
-}
-
-function Fact(props: {
-  label: string;
-  children: ReactNode;
-  problem?: boolean;
-}) {
-  return (
-    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
-      <dt className="text-sm font-medium">{props.label}</dt>
-      <dd
-        className={cn(
-          "m-0 flex min-w-0 items-center gap-1 text-end text-sm text-muted-foreground tabular-nums",
-          props.problem && "text-destructive",
-        )}
-      >
-        {props.problem && (
-          <CircleAlert aria-hidden="true" className="size-3.5 shrink-0" />
-        )}
-        {props.children}
-      </dd>
-    </div>
-  );
-}
-
-const Facts = (props: { children: ReactNode }) => (
-  <dl className="m-0 flex flex-col gap-3">{props.children}</dl>
-);
 
 // A verdict's row: a glyph without a round, its words and what to do.
 function VerdictRow(props: {
@@ -388,38 +325,44 @@ function NetworkSection(props: { host: HostInfo }) {
   );
 }
 
-// The rows' shapes, at once, while the first answer is on its way.
-function Loading() {
-  const shape = "block h-3 rounded-xs bg-foreground/8";
+// The rows' shapes, at once, while the first answer is on its way: Sanctum's
+// above Updates, and Storage's under it.
+const shape = "block h-3 rounded-xs bg-foreground/8";
+
+function SanctumLoading() {
   return (
-    <>
-      <Section id="status-sanctum" title={productName}>
-        <div aria-busy="true" className="flex flex-col gap-3">
-          <span className="flex items-center gap-3">
-            <span className="size-6 shrink-0 rounded-full bg-foreground/8" />
-            <span className={cn(shape, "w-2/5")} />
-          </span>
-          {["w-1/3", "w-1/4", "w-2/5", "w-1/5", "w-1/2", "w-1/6"].map(
-            (width) => (
-              <span key={width} className={cn(shape, width)} />
-            ),
-          )}
-        </div>
-      </Section>
-      <Section id="status-storage" title="Storage">
-        <div aria-busy="true" className="flex flex-col gap-3">
-          <span className="block h-4 rounded-xs bg-foreground/8" />
-          <span className={cn(shape, "w-1/3")} />
-          <span className={cn(shape, "w-1/4")} />
-        </div>
-      </Section>
-    </>
+    <Section id="status-sanctum" title={productName}>
+      <div aria-busy="true" className="flex flex-col gap-3">
+        <span className="flex items-center gap-3">
+          <span className="size-6 shrink-0 rounded-full bg-foreground/8" />
+          <span className={cn(shape, "w-2/5")} />
+        </span>
+        {["w-1/3", "w-1/4", "w-2/5", "w-1/5", "w-1/2"].map((width) => (
+          <span key={width} className={cn(shape, width)} />
+        ))}
+      </div>
+    </Section>
   );
 }
 
-/** The Status page: the verdict, then Sanctum with Restart and Shut down, its storage with Free up space, memory, the last 24 hours, network and the clients connected now. */
-export function StatusPage(props: {
+function StorageLoading() {
+  return (
+    <Section id="status-storage" title="Storage">
+      <div aria-busy="true" className="flex flex-col gap-3">
+        <span className="block h-4 rounded-xs bg-foreground/8" />
+        <span className={cn(shape, "w-1/3")} />
+        <span className={cn(shape, "w-1/4")} />
+      </div>
+    </Section>
+  );
+}
+
+/** The System page: the verdict, then Sanctum with Restart and Shut down, its updates, its storage with Free up space, memory, the last 24 hours, network and the clients connected now. */
+export function SystemPage(props: {
   apps: readonly AppInfo[];
+  core: CoreStatus;
+  // Whether an update is running, for the connection veil's words.
+  onUpdating: (updating: boolean) => void;
   onDone: () => void;
   // The page under it in Settings, which Back returns to: without one it
   // was opened from elsewhere, and Done closes it.
@@ -430,76 +373,72 @@ export function StatusPage(props: {
   const space = useSpace();
   const unit = useTemperatureUnit() ?? "celsius";
   const host = failed ? null : status?.host;
+  const isLoading = !status && !failed;
   return (
     <>
       <SettingsPageBar
-        title="Status"
+        title="System"
         backTo={props.backTo}
         onBack={props.onDone}
       />
-      {!status && !failed ? (
-        <Loading />
+      {isLoading ? (
+        <SanctumLoading />
       ) : (
-        <>
-          <Section id="status-sanctum" title={productName}>
-            <Verdict
-              status={failed ? undefined : status}
-              unit={unit}
-              apps={props.apps}
-              space={space}
-            />
+        <Section id="status-sanctum" title={productName}>
+          <RestoreNotice online={props.core.state === "online"} />
+          <Verdict
+            status={failed ? undefined : status}
+            unit={unit}
+            apps={props.apps}
+            space={space}
+          />
+          {host && (
             <Facts>
-              {host && modelText(host) && (
-                <Fact label="Model">{modelText(host)}</Fact>
-              )}
-              {host && (
-                <Fact label="Processor">{processorText(host.processor)}</Fact>
-              )}
-              {host?.power && (
+              {modelText(host) && <Fact label="Model">{modelText(host)}</Fact>}
+              <Fact label="Processor">{processorText(host.processor)}</Fact>
+              {host.power && (
                 <PowerFact power={host.power} problems={status!.problems} />
               )}
-              {status && (
-                <Fact label="Version">
-                  {status.channel
-                    ? `${status.version} · ${channelNames[status.channel]}`
-                    : status.version}
-                </Fact>
-              )}
-              {host && osText(host) && (
+              {osText(host) && (
                 <Fact label="Operating system">{osText(host)}</Fact>
               )}
-              {host?.uptimeSeconds != null && (
+              {host.uptimeSeconds != null && (
                 <Fact label="Running for">
                   {runningFor(host.uptimeSeconds)}
                 </Fact>
               )}
             </Facts>
-            {host && <PowerButtons onPowerAccepted={props.onPowerAccepted} />}
-          </Section>
-          {host && (
-            <>
-              <StorageSection
-                host={host}
-                problems={status!.problems}
-                apps={props.apps}
-                space={space}
-              />
-              <MemorySection
-                host={host}
-                problems={status!.problems}
-                apps={props.apps}
-              />
-              <LastDaySection
-                host={host}
-                problems={status!.problems}
-                unit={unit}
-                checkedAt={status!.checkedAt}
-              />
-              <NetworkSection host={host} />
-              <ConnectedSection />
-            </>
           )}
-        </>
+          {host && <PowerButtons onPowerAccepted={props.onPowerAccepted} />}
+        </Section>
+      )}
+      <UpdatesSection core={props.core} onUpdating={props.onUpdating} />
+      {isLoading ? (
+        <StorageLoading />
+      ) : (
+        host && (
+          <>
+            <StorageSection
+              host={host}
+              problems={status!.problems}
+              apps={props.apps}
+              space={space}
+            />
+            <MemorySection
+              host={host}
+              problems={status!.problems}
+              apps={props.apps}
+            />
+            <LastDaySection
+              host={host}
+              problems={status!.problems}
+              unit={unit}
+              checkedAt={status!.checkedAt}
+            />
+            <NetworkSection host={host} />
+            <ConnectedSection />
+          </>
+        )
       )}
     </>
   );

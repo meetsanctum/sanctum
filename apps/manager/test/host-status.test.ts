@@ -10,7 +10,7 @@ import { createHostStatus } from "../src/host/status.js";
 import { createServer } from "../src/server.js";
 import type { ServiceStatus } from "../src/services/services.js";
 
-// Settings → Status: what the host's kernel and Docker say about it, as the
+// Settings → System: what the host's kernel and Docker say about it, as the
 // manager reports it on GET /api/host/status. The files are a Raspberry Pi
 // 4's, read inside the manager's container on the dev Pi (2026-11-02).
 

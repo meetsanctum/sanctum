@@ -13,7 +13,7 @@ import {
   type HostInfo,
 } from "./system-status";
 
-// Settings → Status' last 24 hours: how busy the processor was, how warm it
+// Settings → System's last 24 hours: how busy the processor was, how warm it
 // ran and how much memory was in use, each 5 minutes' mean as the manager
 // keeps them, carried on to now by what Status reads every 5 seconds, as a
 // sensor's day is by what it reads now.

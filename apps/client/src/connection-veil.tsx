@@ -20,7 +20,7 @@ import { Veil } from "./veil";
 // has answered as itself, while its core is not up yet; away whenever the
 // core stops answering after that; updating while an update restarts it;
 // restarting, shutting down and off once someone restarted or shut down
-// the machine from Status (power-notice.ts).
+// the machine from System (power-notice.ts).
 export type ConnectionState =
   | "connecting"
   | "found"

@@ -15,7 +15,7 @@ import {
   type StoragePart,
 } from "./system-status";
 
-// Status' Storage and Memory: a bar of what fills each, 16 px with 2 px
+// System's Storage and Memory: a bar of what fills each, 16 px with 2 px
 // between its parts and the free space its track, then a row for each part
 // with its swatch or its app's icon and its size. Storage ends with Free up
 // space (settings-status-space.tsx).
@@ -32,7 +32,7 @@ const colourOf: Record<string, string> = {
   graphite: "bg-gray",
 };
 
-// The services' colours, as Status shows them. Piper's yellow leans a
+// The services' colours, as System shows them. Piper's yellow leans a
 // little to green, so it stays apart from Natural Light's beside it.
 const serviceColours: Record<string, string> = {
   zigbee2mqtt: "bg-gray",

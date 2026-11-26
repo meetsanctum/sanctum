@@ -8,7 +8,7 @@ import { AgentsPage } from "./agents/agents-page";
 import { CanUsePage } from "./agents/can-use-page";
 import { AppPage } from "./app-settings";
 import { ModelsPage } from "./models/models-page";
-import { BackButton, Section } from "./components";
+import { BackButton } from "./components";
 import type { CoreStatus } from "./core-status";
 import { dashboardBackground, type OnHome } from "./dashboards";
 import { AddAppsSection, AppsSection } from "./settings-apps";
@@ -19,10 +19,9 @@ import { HouseholdSection } from "./settings-household";
 import { MaintenancePage } from "./settings-maintenance";
 import { SettingsOverview } from "./settings-overview";
 import { RoomsSection } from "./settings-rooms";
-import { StatusPage } from "./settings-status";
+import { SystemPage } from "./settings-status";
 import type { PowerAction } from "./settings-status-power";
 import type { SetupTarget } from "./setup-guide";
-import { SystemSettings } from "./system-settings";
 import type { SystemStatus } from "./system-status";
 import type { Devices } from "./use-devices";
 import {
@@ -38,7 +37,6 @@ import {
   modelsSettingsPage,
   roomsSettingsPage,
   roomsTitle,
-  statusSettingsPage,
   systemSettingsPage,
 } from "./system-apps";
 
@@ -52,8 +50,8 @@ import {
 // preferences and what it brings, which its own pages open too, with those
 // it can add, the AI agents with what they can use, the AI models, the
 // clients, this
-// device among them, and System: Status, with a page of how the machine
-// Sanctum runs on is doing, the version, updates and the last restore. Each
+// device among them, and System: how the machine Sanctum runs on is doing,
+// the version, updates and the last restore. Each
 // page leads with Back, named for the page under it. It is the same on every
 // device, a shared one too. Opened from the dashboard's setup guide, it opens
 // the step's page over its first and starts it once: Add room, Add devices,
@@ -93,7 +91,7 @@ export function SettingsPage(props: {
   onUpdating: (updating: boolean) => void;
   onPowerAccepted?: (action: PowerAction) => void;
   // The host's status, which Home asks for now and then, for Needs
-  // attention and System's rows; the Status page asks often itself.
+  // attention and System's row; the System page asks often itself.
   status?: SystemStatus;
   statusFailed?: boolean;
   // A step of the dashboard's setup guide to start on its page, until it
@@ -107,7 +105,7 @@ export function SettingsPage(props: {
   }, [start, onStarted]);
   const rooms = props.devices.places?.rooms ?? [];
   const back = backTo ? <BackButton to={backTo} onBack={props.back} /> : null;
-  const openStatus = () => props.open(statusSettingsPage);
+  const openStatus = () => props.open(systemSettingsPage);
   const openCanUse = () => props.open(canUseSettingsPage);
   const openApp = (id: string) => props.open(appSettingsPage, { id });
   switch (props.page) {
@@ -131,10 +129,12 @@ export function SettingsPage(props: {
           backTo={backTo}
         />
       );
-    case statusSettingsPage:
+    case systemSettingsPage:
       return (
-        <StatusPage
+        <SystemPage
           apps={props.apps}
+          core={props.core}
+          onUpdating={props.onUpdating}
           onDone={props.back}
           backTo={backTo}
           onPowerAccepted={props.onPowerAccepted}
@@ -225,18 +225,6 @@ export function SettingsPage(props: {
       );
     case clientsSettingsPage:
       return <ClientsSection page={back} />;
-    case systemSettingsPage:
-      return (
-        <Section id="settings-system" title="System" page={back}>
-          <SystemSettings
-            core={props.core}
-            onUpdating={props.onUpdating}
-            status={props.status}
-            statusFailed={props.statusFailed ?? false}
-            onOpenStatus={openStatus}
-          />
-        </Section>
-      );
   }
   return (
     <>

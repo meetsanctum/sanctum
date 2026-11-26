@@ -19,7 +19,7 @@ import {
   useHostDay,
 } from "./system-status-day";
 
-// Status' last 24 hours: the processor, its temperature and the memory in
+// System's last 24 hours: the processor, its temperature and the memory in
 // use, stacked on one time axis as iOS's Battery page stacks its own, so a
 // spike reads across all three at once. Each is headed by its name, with
 // what it reads now under it, as Status read it last; the chart is a sensor's

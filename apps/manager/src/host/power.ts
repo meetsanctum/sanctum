@@ -8,7 +8,7 @@ import {
 import { stack, stacked } from "../stack.js";
 import { managerContainerName } from "../update/manager-update.js";
 
-// Restart and Shut down, from Settings → Status. The manager's container
+// Restart and Shut down, from Settings → System. The manager's container
 // cannot reboot the machine itself, so, as with its updater, it starts a
 // short-lived helper from its own image: privileged and in the host's process
 // namespace, it enters init's namespaces and asks systemd. The helper is made
