@@ -28,7 +28,7 @@ import shutil
 import sys
 import unicodedata
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
@@ -81,6 +81,13 @@ class Taught:
     def grammar(self, language: str, digest: str) -> Path:
         return self.data / language / "grammars" / digest / "grammar.fst"
 
+    def has_lesson(self, language: str, digest: str) -> bool:
+        return (
+            self.digest == digest
+            and self.language == language
+            and self.grammar(language, digest).is_file()
+        )
+
     def read_state(self) -> Dict[str, Any]:
         try:
             state = json.loads(self.state_path.read_text())
@@ -97,21 +104,17 @@ class Taught:
     async def restore(self) -> None:
         state = self.read_state()
         language = state.get("language")
-        if language not in LANGUAGES:
-            return
         digest = state.get("digest")
-        if "version" not in state:
-            # An older state file cannot establish which lesson wrote this grammar.
-            grammar = self.data / language / "grammar.fst"
-            digest = None
-        elif (
-            state["version"] == 1
-            and isinstance(digest, str)
-            and re.fullmatch(r"[0-9a-f]{64}", digest)
+        version = state.get("version")
+        if (
+            type(version) is not int
+            or version != 1
+            or language not in LANGUAGES
+            or not isinstance(digest, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", digest)
         ):
-            grammar = self.grammar(language, digest)
-        else:
             return
+        grammar = self.grammar(language, digest)
         if not grammar.is_file():
             return
         try:
@@ -126,7 +129,7 @@ class Taught:
         self.activate(holder, info, digest)
 
     def activate(
-        self, holder: wyoming_server.GrammarHolder, info: Info, digest: Optional[str]
+        self, holder: wyoming_server.GrammarHolder, info: Info, digest: str
     ) -> None:
         self.info = info
         self.holder = holder
@@ -175,23 +178,23 @@ def _lesson(data: Any) -> Dict[str, Any]:
     lists = data.get("lists", {})
     if not isinstance(lists, dict) or len(lists) > MAX_LISTS:
         raise ValueError("lists are up to 64 named lists")
-    checked: Dict[str, List[str]] = {}
     for name, values in lists.items():
         if (
             not isinstance(name, str)
             or not name.isidentifier()
-            or not isinstance(values, list)
+            or name != name.lower()
+            or not unicodedata.is_normalized("NFC", name)
+        ):
+            raise ValueError(f"list name {name!r} must be a lowercase NFC identifier")
+        if (
+            not isinstance(values, list)
             or len(values) > MAX_VALUES
             or not all(
                 isinstance(v, str) and 0 < len(v) <= MAX_TEXT for v in values
             )
         ):
             raise ValueError(f"list {name!r} is up to 2,000 names")
-        normalized = unicodedata.normalize("NFC", name).lower()
-        if normalized in checked:
-            raise ValueError(f"duplicate list name {name!r}")
-        checked[normalized] = values
-    return {"language": language, "templates": templates, "lists": checked}
+    return {"language": language, "templates": templates, "lists": lists}
 
 
 def _digest(lesson: Dict[str, Any]) -> str:
@@ -217,14 +220,13 @@ async def _train(taught: Taught, data: Any) -> Event:
     except ValueError as error:
         return Error(text=str(error), code="invalid-lesson").event()
     language = lesson["language"]
+    if taught.has_lesson(language, digest):
+        return Event("trained", {"digest": digest, "changed": False})
     async with taught.lock:
-        grammar = taught.grammar(language, digest)
-        if (
-            taught.digest == digest
-            and taught.language == language
-            and grammar.is_file()
-        ):
+        # Another request may have taught this lesson while we waited.
+        if taught.has_lesson(language, digest):
             return Event("trained", {"digest": digest, "changed": False})
+        grammar = taught.grammar(language, digest)
         previous = (
             taught.grammar(taught.language, taught.digest)
             if taught.language is not None and taught.digest is not None

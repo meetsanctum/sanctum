@@ -4,6 +4,7 @@ import asyncio
 import tempfile
 import unittest
 from pathlib import Path
+from threading import Event as ThreadEvent
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -92,6 +93,39 @@ class TrainingTests(unittest.IsolatedAsyncioTestCase):
             Event("trained", {"changed": False, "digest": original.data["digest"]}),
         )
 
+    async def test_current_lesson_answers_while_a_new_model_downloads(self):
+        original = await server._train(self.taught, LESSON)
+        lesson = {**LESSON, "language": "de", "templates": ["mach das licht an"]}
+        loop = asyncio.get_running_loop()
+        started = asyncio.Event()
+        release = ThreadEvent()
+
+        def stalled_download(*args):
+            loop.call_soon_threadsafe(started.set)
+            release.wait()
+            raise TimeoutError("model download stalled")
+
+        with (
+            patch.object(server.models, "ensure_model", side_effect=stalled_download),
+            self.assertLogs("sanctum", level="ERROR"),
+        ):
+            pending = asyncio.create_task(server._train(self.taught, lesson))
+            try:
+                await asyncio.wait_for(started.wait(), timeout=2)
+                repeat = await asyncio.wait_for(
+                    server._train(self.taught, LESSON), timeout=2
+                )
+                self.assertEqual(
+                    repeat,
+                    Event("trained", {"changed": False, "digest": original.data["digest"]}),
+                )
+            finally:
+                release.set()
+                failed = await pending
+        self.assertEqual(failed.data["code"], "train-failed")
+        self.assertEqual(self.taught.digest, original.data["digest"])
+        self.assertTrue((await server._train(self.taught, lesson)).data["changed"])
+
     async def test_failed_grammar_load_keeps_the_active_model(self):
         await server._train(self.taught, LESSON)
         holder = self.taught.holder
@@ -110,6 +144,23 @@ class TrainingTests(unittest.IsolatedAsyncioTestCase):
 
         self.loader.side_effect = self.holder
         self.assertTrue((await server._train(self.taught, lesson)).data["changed"])
+
+
+class ModelDownloadTests(unittest.TestCase):
+    def test_model_download_uses_a_socket_timeout(self):
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.object(
+                server.models.urllib.request, "urlopen", side_effect=TimeoutError
+            ) as open_url,
+        ):
+            models_dir = Path(tmp) / "models"
+            with self.assertRaises(TimeoutError):
+                server.models.ensure_model("test-model", models_dir)
+            open_url.assert_called_once_with(
+                f"{server.models.HF_BASE}/test-model.tar.gz", timeout=30
+            )
+            self.assertFalse((models_dir / "test-model").exists())
 
 
 class WyomingTests(unittest.IsolatedAsyncioTestCase):
@@ -186,12 +237,13 @@ class WyomingTests(unittest.IsolatedAsyncioTestCase):
 
 
 class LessonTests(unittest.TestCase):
-    def test_normalized_list_keys_are_unique(self):
-        lesson = {**LESSON, "lists": {"Room": ["Kitchen"]}}
-        self.assertEqual(server._lesson(lesson)["lists"], {"room": ["Kitchen"]})
-        lesson["lists"]["room"] = ["Hall"]
-        with self.assertRaisesRegex(ValueError, "duplicate list name"):
-            server._lesson(lesson)
+    def test_list_names_must_already_be_lowercase_and_nfc(self):
+        for name in ("Room", "cafe\u0301"):
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(ValueError, "lowercase NFC identifier"):
+                    server._lesson({**LESSON, "lists": {name: ["Kitchen"]}})
+        lists = {"room": ["Kitchen"], "café": ["Coffee Shop"]}
+        self.assertEqual(server._lesson({**LESSON, "lists": lists})["lists"], lists)
 
     def test_numeric_expansion_checks_the_budget_before_spelling_numbers(self):
         fst = templates.Fst(budget=templates._ExpansionBudget(remaining=5))

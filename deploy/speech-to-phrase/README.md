@@ -11,7 +11,8 @@ Home Assistant's add-on. That runs upstream's Wyoming server only, on port
 10300, with no web UI and no Home Assistant. It adds two events:
 
 - **`train`** accepts `{ token, language, templates, lists }`, with sentence
-  templates and the values for their named blanks. Set `SANCTUM_TRAIN_TOKEN`
+  templates and the values for their named blanks. List names must be
+  lowercase identifiers in Unicode NFC form, such as `room`. Set `SANCTUM_TRAIN_TOKEN`
   in the container and send its value as `token`. With the variable unset,
   training is disabled. Use a private network or a secure transport when
   sending the token, since Wyoming over TCP sends it in clear text.

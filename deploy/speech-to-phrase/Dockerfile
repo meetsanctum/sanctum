@@ -16,7 +16,7 @@ ENV PYTHONUNBUFFERED=1
 # Upstream's add-on folder at a pinned commit: its sources (src/), the
 # recognition library it vendors (lib/), and its requirements.
 ADD https://github.com/OHF-Voice/apps.git#6c2ae7f0dfbde74ad926d15dc865c085d0255c50:speech-to-phrase /usr/src
-COPY bound-grammar-expansion.patch /tmp/bound-grammar-expansion.patch
+COPY bound-grammar-expansion.patch model-download-timeout.patch /tmp/
 
 # The compilers build the library's native module and leave in the same
 # layer, keeping the OpenFST runtime the module links: every shared library
@@ -36,7 +36,8 @@ RUN \
         patch \
         python3-dev \
     && patch --batch --fuzz=0 -p1 < /tmp/bound-grammar-expansion.patch \
-    && rm /tmp/bound-grammar-expansion.patch \
+    && patch --batch --fuzz=0 -p1 < /tmp/model-download-timeout.patch \
+    && rm /tmp/bound-grammar-expansion.patch /tmp/model-download-timeout.patch \
     && python3 -m venv "${VIRTUAL_ENV}" \
     && "${VIRTUAL_ENV}/bin/python3" -m pip install --no-cache-dir -r requirements.txt \
     && fst_so="$("${VIRTUAL_ENV}/bin/python3" -c 'import glob, pathlib, speech_to_phrase as s; print(glob.glob(str(pathlib.Path(s.__file__).parent / "_fst*.so"))[0])')" \

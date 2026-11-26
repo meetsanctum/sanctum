@@ -59,8 +59,8 @@ def main(audio_path):
                 {
                     "token": os.environ["SANCTUM_TRAIN_TOKEN"],
                     "language": "en",
-                    "templates": ["turn on the {Room} lights"],
-                    "lists": {"Room": ["kitchen"]},
+                    "templates": ["turn on the {room} lights"],
+                    "lists": {"room": ["kitchen"]},
                 },
             )
             trained = receive(response, "trained")
