@@ -144,6 +144,8 @@ export function Section(props: {
   action?: ReactNode;
   // The way back of the page it is the whole of, which makes it that page.
   page?: ReactNode;
+  // A page can show its bar before its card is ready.
+  hideBody?: boolean;
   children: ReactNode;
 }) {
   const Heading = props.level === 3 ? "h3" : "h2";
@@ -168,14 +170,16 @@ export function Section(props: {
         <PageBar title={props.title} leading={props.page}>
           {props.action}
         </PageBar>
-        <section
-          id={props.id}
-          aria-label={props.title}
-          className="flex min-w-0 shrink-0 flex-col gap-2"
-        >
-          {hint}
-          {card}
-        </section>
+        {!props.hideBody && (
+          <section
+            id={props.id}
+            aria-label={props.title}
+            className="flex min-w-0 shrink-0 flex-col gap-2"
+          >
+            {hint}
+            {card}
+          </section>
+        )}
       </>
     );
   }

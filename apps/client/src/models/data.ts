@@ -19,7 +19,8 @@ const restingEvery = 30_000;
 const requestTimeoutMs = 10_000;
 
 export function useModels(live?: LiveFeed) {
-  const [info, setInfo] = useState<ModelsResponse>();
+  const [load, setLoad] = useState<ModelsResponse | "failed">();
+  const info = load === "failed" ? undefined : load;
   const request = useRef(0);
   const latestAnswer = useRef(0);
   const refresh = useCallback(async () => {
@@ -30,15 +31,17 @@ export function useModels(live?: LiveFeed) {
       });
       if (current < latestAnswer.current) return;
       latestAnswer.current = current;
-      setInfo(next);
+      setLoad(next);
     } catch {
-      // The next refresh can ask again.
+      if (current === request.current) {
+        setLoad((previous) => previous ?? "failed");
+      }
     }
   }, []);
   // An answer to a change, which is newer than any listing under way.
   const answered = useCallback((next: ModelsResponse) => {
     latestAnswer.current = ++request.current;
-    setInfo(next);
+    setLoad(next);
   }, []);
   const checking = info?.sources.some((source) => source.checking) ?? false;
   useEffect(() => {
@@ -60,5 +63,5 @@ export function useModels(live?: LiveFeed) {
     },
     [],
   );
-  return { info, refresh, answered };
+  return { info, hasFailed: load === "failed", refresh, answered };
 }

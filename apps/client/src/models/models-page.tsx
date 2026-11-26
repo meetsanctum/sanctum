@@ -89,7 +89,7 @@ export function ModelsPage(props: {
   // Opens an app's page, as Ollama's.
   onOpenApp?: (appId: string) => void;
 }) {
-  const { info, refresh, answered } = useModels(props.live);
+  const { info, hasFailed, refresh, answered } = useModels(props.live);
   const [adding, setAdding] = useState(false);
   // Where Add a source starts, when the empty page asked where it runs, and
   // the choice that opened it, which gets focus back when it closes.
@@ -99,7 +99,7 @@ export function ModelsPage(props: {
   const [isActing, setIsActing] = useState(false);
   const addButton = useRef<HTMLButtonElement>(null);
   const firstChoice = useRef<HTMLButtonElement>(null);
-  const supportsSanctum = info === undefined || info.usage !== undefined;
+  const supportsSanctum = info?.usage !== undefined;
   const sources = info?.sources ?? [];
   const isEmpty = info !== undefined && sources.length === 0;
   const inUse = sources.find((source) => source.inUse);
@@ -147,9 +147,12 @@ export function ModelsPage(props: {
       <Section
         id="settings-models"
         title={modelsTitle}
+        // Until the first answer it isn't known whether the home has a
+        // source or needs the empty page, so only the bar shows.
+        hideBody={info === undefined && !hasFailed}
         action={
           // With no source yet, the empty page's places are the way in.
-          !isEmpty && (
+          sources.length > 0 && (
             <Button
               ref={addButton}
               disabled={isActing}
@@ -165,6 +168,15 @@ export function ModelsPage(props: {
         }
         page={props.page}
       >
+        {hasFailed && (
+          // As Status says it: the page asks again on its own.
+          <p
+            role="status"
+            className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground"
+          >
+            Couldn't read your AI models. It checks again by itself.
+          </p>
+        )}
         {isEmpty && (
           <NoModel
             supportsSanctum={supportsSanctum}
@@ -206,26 +218,30 @@ export function ModelsPage(props: {
           onOpenApp={props.onOpenApp}
         />
       )}
-      <AddSource
-        open={adding}
-        onOpenChange={setAdding}
-        onAdded={answered}
-        onCloseAutoFocus={() => {
-          if (opener.current?.isConnected) opener.current.focus();
-          else focusAddSource();
-        }}
-        apps={props.apps}
-        supportsSanctum={supportsSanctum}
-        start={start}
-        onAppAdded={props.onAppAdded}
-        onOpenApp={props.onOpenApp}
-      />
-      <EditSource
-        editing={editing}
-        onClose={() => setEditing(undefined)}
-        onDone={answered}
-        onFocusFallback={focusAddSource}
-      />
+      {info && (
+        <>
+          <AddSource
+            open={adding}
+            onOpenChange={setAdding}
+            onAdded={answered}
+            onCloseAutoFocus={() => {
+              if (opener.current?.isConnected) opener.current.focus();
+              else focusAddSource();
+            }}
+            apps={props.apps}
+            supportsSanctum={supportsSanctum}
+            start={start}
+            onAppAdded={props.onAppAdded}
+            onOpenApp={props.onOpenApp}
+          />
+          <EditSource
+            editing={editing}
+            onClose={() => setEditing(undefined)}
+            onDone={answered}
+            onFocusFallback={focusAddSource}
+          />
+        </>
+      )}
     </>
   );
 }
