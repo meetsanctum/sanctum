@@ -1,6 +1,7 @@
 // `pnpm dev:approve <code>` (deploy/dev/stack.sh): approves a shared
 // device's pairing code, as someone would from Settings → Clients. It signs
-// in with the seed's login (deploy/dev/seed.mjs), approves the code and signs
+// in with the seed's login (deploy/dev/seed.mjs), types the code, waits while
+// the core checks the device through their exchange, approves it and signs
 // its own client out again. It runs in the core's container, where its
 // dependencies are, as the seed does.
 import {
@@ -71,8 +72,23 @@ const { token, client } = await call("/api/auth/sign-in/finish", {
   client: { name: "pnpm dev:approve", platform: "macos" },
 });
 try {
-  await call("/api/auth/pair/approve", { code, name }, token);
-  console.log(`Approved ${name}.`);
+  const exchange = await call("/api/auth/pair/lookup", { code }, token);
+  // The core gives the device 30 seconds for each of its two steps.
+  const until = Date.now() + 75_000;
+  let status = await call("/api/auth/pair/exchange", exchange, token);
+  while (status.status === "exchanging" && Date.now() < until) {
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    status = await call("/api/auth/pair/exchange", exchange, token);
+  }
+  if (status.status === "verified") {
+    await call("/api/auth/pair/approve", { ...exchange, name }, token);
+    console.log(`Approved ${name}.`);
+  } else {
+    console.error(
+      `The device wasn't checked: ${status.reason ?? "it didn't answer"}.`,
+    );
+    process.exitCode = 1;
+  }
 } finally {
   try {
     await call("/api/auth/clients/revoke", { id: client.id }, token);

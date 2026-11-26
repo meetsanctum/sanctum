@@ -10,7 +10,11 @@ import {
   type ClaimStart,
   type CollectAgentToken,
   type Me,
+  pairingProtocol,
+  type PairAnswer,
   type PairApprove,
+  type PairBind,
+  type PairExchange,
   type PairLookup,
   type PairPoll,
   type PairRequest,
@@ -65,6 +69,10 @@ const id = z.string().min(1).max(64);
 const clientName = z.string().trim().min(1).max(60);
 const newClient = z.object({ name: clientName, platform: z.enum(platforms) });
 const username = z.string().max(64);
+const deviceSecret = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]+$/)
+  .max(128);
 const stretching = z.number().int().min(1).max(keyStretching.version);
 
 const schemas = {
@@ -120,20 +128,35 @@ const schemas = {
   pairRequest: z.object({
     platform: z.enum(platforms),
     suggestedName: clientName,
+    protocol: z.literal(pairingProtocol),
   }) satisfies z.ZodType<PairRequest>,
   pairLookup: z.object({
     code: z.string().max(32),
   }) satisfies z.ZodType<PairLookup>,
+  pairExchange: z.object({
+    requestId: id,
+    exchangeId: id,
+  }) satisfies z.ZodType<PairExchange>,
   pairApprove: z.object({
-    code: z.string().max(32),
+    requestId: id,
+    exchangeId: id,
     name: clientName,
   }) satisfies z.ZodType<PairApprove>,
-  pairPoll: z.object({
-    deviceSecret: z
-      .string()
-      .regex(/^[A-Za-z0-9_-]+$/)
-      .max(128),
-  }) satisfies z.ZodType<PairPoll>,
+  pairPoll: z.object({ deviceSecret }) satisfies z.ZodType<PairPoll>,
+  pairAnswer: z.object({
+    deviceSecret,
+    exchangeId: id,
+    loginResponse: message,
+  }) satisfies z.ZodType<PairAnswer>,
+  pairBind: z.object({
+    deviceSecret,
+    exchangeId: id,
+    hostId: id,
+    homeId: id,
+    // A pin is base64url, none over plain HTTP.
+    pin: message.nullable(),
+    binding: message,
+  }) satisfies z.ZodType<PairBind>,
   agentSetup: z.object({
     name: clientName,
   }) satisfies z.ZodType<StartAgentSetup>,
@@ -232,16 +255,30 @@ export async function registerAuth(
     ),
   );
 
-  // Pairing a shared device: the device asks and polls before a principal
-  // exists; another authenticated client looks its code up and approves it.
+  // Pairing a shared device: the device asks, polls and answers its
+  // exchanges before a principal exists; another authenticated client types
+  // its code, follows the exchange and approves it.
   app.post("/api/auth/pair/request", open, async (request) =>
     pairing.request(address(request), parse(schemas.pairRequest, request.body)),
   );
   app.post("/api/auth/pair/poll", open, async (request) =>
     pairing.poll(address(request), parse(schemas.pairPoll, request.body)),
   );
+  app.post("/api/auth/pair/answer", open, async (request) =>
+    pairing.answer(parse(schemas.pairAnswer, request.body)),
+  );
+  app.post("/api/auth/pair/bind", open, async (request, reply) => {
+    await pairing.bind(parse(schemas.pairBind, request.body));
+    return reply.code(204).send();
+  });
   app.post("/api/auth/pair/lookup", async (request) =>
-    pairing.lookup(parse(schemas.pairLookup, request.body)),
+    pairing.lookup(principal(request), parse(schemas.pairLookup, request.body)),
+  );
+  app.post("/api/auth/pair/exchange", async (request) =>
+    pairing.exchange(
+      principal(request),
+      parse(schemas.pairExchange, request.body),
+    ),
   );
   app.post("/api/auth/pair/approve", async (request, reply) => {
     pairing.approve(

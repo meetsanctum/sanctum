@@ -22,8 +22,9 @@ import { getShell, type FoundHost } from "../shell";
 // itself. These are first-contact exchanges, so they never carry a stored
 // token.
 
-// OPAQUE is WebAssembly, loaded only when a password is used.
-async function loadOpaque() {
+// OPAQUE is WebAssembly, loaded only when a password is used or a shared
+// device shows its pairing code.
+export async function loadOpaque() {
   const opaque = await import("@serenity-kit/opaque");
   await opaque.ready;
   return opaque;

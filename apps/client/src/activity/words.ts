@@ -551,6 +551,17 @@ function setupEntry(clock: HomeClock, entry: ActivityInfo): Words | null {
       return said("A shared device asked to join");
     case "pair.approve":
       return said("Let a shared device join");
+    case "pair.check":
+      // The home couldn't check a shared device that asked to join, so it
+      // can't join with that code.
+      return {
+        title:
+          entry.reason === "channel_mismatch"
+            ? `A shared device wasn't connected to ${productName} directly`
+            : "Couldn't check a shared device",
+        detail: by,
+        problem: true,
+      };
     case "client.pair":
       return said(`Paired ${name ?? "a device"}`);
     case "client.rename": {

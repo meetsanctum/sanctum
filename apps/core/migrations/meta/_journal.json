@@ -386,6 +386,20 @@
       "when": 1795639978329,
       "tag": "0054_client-drawing",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "6",
+      "when": 1795715591241,
+      "tag": "0055_pairing-requests-drop",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "6",
+      "when": 1795715603777,
+      "tag": "0056_pairing-exchange",
+      "breakpoints": true
     }
   ]
 }

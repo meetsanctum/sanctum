@@ -4,8 +4,9 @@
 // OPAQUE leaves the device and the real host with the same session key, which
 // nobody in between can learn. Each side MACs what it sees under a key
 // derived from it:
-// - the device's binding lets the host refuse a sign-in or password change
-//   that came through an interceptor, before anything is created;
+// - the device's binding lets the host refuse a sign-in, a password change
+//   or a shared device's pairing that came through an interceptor, before
+//   anything is created;
 // - the host's confirmation lets the device check that the token came from
 //   the host it is about to pin.
 //
@@ -13,6 +14,8 @@
 // (pin.ts). Over plain HTTP, in development only, there is no certificate,
 // so the pin is null. A host that has a pin always binds it, so a device
 // that saw none fails against it.
+
+import { pairingProtocol } from "./pairing.js";
 
 export type HostView = { hostId: string; homeId: string; pin: string | null };
 
@@ -31,7 +34,17 @@ function toBase64url(bytes: ArrayBuffer) {
     .replace(/=+$/, "");
 }
 
-type Purpose = "client" | "server" | "password";
+type Purpose =
+  "client" | "server" | "password" | "pairing device" | "pairing host";
+
+// Sign-in's labels keep their version; pairing's keys have labels of their
+// own, so a MAC made for one exchange never checks for another.
+function label(purpose: Purpose) {
+  return purpose.startsWith("pairing")
+    ? `sanctum ${purpose} binding v1`
+    : // v2: v1 bound the host id and pin alone, before home ids.
+      `sanctum sign-in binding v2 ${purpose}`;
+}
 
 async function macKey(sessionKey: string, purpose: Purpose) {
   const ikm = await subtle.importKey(
@@ -46,8 +59,7 @@ async function macKey(sessionKey: string, purpose: Purpose) {
       name: "HKDF",
       hash: "SHA-256",
       salt: new Uint8Array(0),
-      // v2: v1 bound the host id and pin alone, before home ids.
-      info: text.encode(`sanctum sign-in binding v2 ${purpose}`),
+      info: text.encode(label(purpose)),
     },
     ikm,
     { name: "HMAC", hash: "SHA-256", length: 256 },
@@ -56,7 +68,8 @@ async function macKey(sessionKey: string, purpose: Purpose) {
   );
 }
 
-// Every field is a UUID or base64url, so a newline cannot appear inside one.
+// Every field is a UUID, a number or base64url, so a newline cannot appear
+// inside one.
 function message(fields: string[]) {
   return text.encode(fields.join("\n"));
 }
@@ -149,4 +162,68 @@ export function verifyPasswordChangeBinding(
   binding: string,
 ) {
   return verify(sessionKey, "password", host, [registrationRecord], binding);
+}
+
+/** Which exchange of which pairing request a MAC belongs to. */
+export type PairingExchangeIds = { requestId: string; exchangeId: string };
+
+function exchangeFields(ids: PairingExchangeIds) {
+  return [String(pairingProtocol), ids.requestId, ids.exchangeId];
+}
+
+/**
+ * A shared device's MAC over the host it sees, sent with its view once the
+ * pairing exchange finished, so the host can tell an interceptor from a
+ * wrong code.
+ */
+export function pairingBinding(
+  sessionKey: string,
+  host: HostView,
+  ids: PairingExchangeIds,
+) {
+  return sign(sessionKey, "pairing device", host, exchangeFields(ids));
+}
+
+export function verifyPairingBinding(
+  sessionKey: string,
+  host: HostView,
+  ids: PairingExchangeIds,
+  binding: string,
+) {
+  return verify(
+    sessionKey,
+    "pairing device",
+    host,
+    exchangeFields(ids),
+    binding,
+  );
+}
+
+/** The host's MAC over itself and the token it gives a shared device. */
+export function pairingConfirmation(
+  sessionKey: string,
+  host: HostView,
+  ids: PairingExchangeIds,
+  token: string,
+) {
+  return sign(sessionKey, "pairing host", host, [
+    ...exchangeFields(ids),
+    token,
+  ]);
+}
+
+export function verifyPairingConfirmation(
+  sessionKey: string,
+  host: HostView,
+  ids: PairingExchangeIds,
+  token: string,
+  confirmation: string,
+) {
+  return verify(
+    sessionKey,
+    "pairing host",
+    host,
+    [...exchangeFields(ids), token],
+    confirmation,
+  );
 }

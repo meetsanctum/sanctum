@@ -80,6 +80,7 @@ export async function createAuth(
   const pairing = createPairing(db, {
     clients,
     record,
+    host: logins.host,
     limits: options.limits,
     now,
   });

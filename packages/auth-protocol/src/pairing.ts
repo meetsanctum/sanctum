@@ -1,9 +1,16 @@
 // Pairing a shared device: its display code, the QR code it shows whoever
-// approves it, and the short form of the host's pin people compare. The core
-// makes codes; the device shows them and the approving device reads them
-// back, so both sides share these rules.
-
-import { isPin } from "./pin.js";
+// approves it, and the settings of the OPAQUE exchange that checks the host.
+// The core and the device each make half of the code, and the approving
+// device reads it back, so all three share these rules.
+//
+// The code's first characters are its lookup, which the core gives the
+// device and uses to find the request. The rest is the device's secret: the
+// device draws it, shows it and never sends it. Whoever approves types both
+// halves on a device the home already trusts; the core then runs OPAQUE with
+// the shared device, the core knowing the secret and the device holding a
+// one-time record of it. Only the real host learns the secret that way, so a
+// finished exchange shows that the device reached this home, with no second
+// value for anyone to compare.
 
 /**
  * The characters a display code is made of: digits and capitals without
@@ -11,20 +18,57 @@ import { isPin } from "./pin.js";
  */
 export const pairingCodeAlphabet = "23456789ABCDEFGHJKMNPQRSTVWXYZ";
 export const pairingCodeLength = 8;
+/** The characters of the code the core gives the device. */
+export const pairingLookupLength = 2;
+/** The characters the device draws itself and never sends. */
+export const pairingSecretLength = pairingCodeLength - pairingLookupLength;
 
 /** A request expires this long after it was made, approved or not. */
 export const pairingRequestMs = 10 * 60_000;
 
-/** A new display code, uniformly drawn from the alphabet. */
-export function newPairingCode() {
+/**
+ * The pairing exchange a device and a core speak: a device asks with it, and
+ * a core refuses another.
+ */
+export const pairingProtocol = 2;
+
+/**
+ * OPAQUE's settings for the exchange, the same on both sides, or the
+ * exchange fails as if the code were wrong. The record lives minutes in the
+ * device's memory, and nothing anyone in between sees lets them test a guess
+ * offline, so key stretching stays light enough for a wall display.
+ */
+export const pairingOpaque = {
+  identifiers: {
+    client: "sanctum pair core v1",
+    server: "sanctum pair device v1",
+  },
+  // Each code has its own server setup, so one name serves every request.
+  userIdentifier: "shared device",
+  keyStretching: {
+    "argon2id-custom": { iterations: 1, memory: 8192, parallelism: 1 },
+  },
+} as const;
+
+/**
+ * How many exchanges a request allows, counting each one the core starts,
+ * so a wrong code, a device that never answers and an interrupted exchange
+ * all count.
+ */
+export const pairingExchangesPerRequest = 3;
+
+/** How long a started exchange waits for the device's answer. */
+export const pairingAnswerMs = 30_000;
+
+function randomCode(length: number) {
   const size = pairingCodeAlphabet.length;
   // The largest multiple of the alphabet's size a byte reaches, so every
   // character is equally likely.
   const below = 256 - (256 % size);
   let code = "";
-  while (code.length < pairingCodeLength) {
+  while (code.length < length) {
     for (const byte of globalThis.crypto.getRandomValues(new Uint8Array(16))) {
-      if (byte < below && code.length < pairingCodeLength) {
+      if (byte < below && code.length < length) {
         code += pairingCodeAlphabet[byte % size];
       }
     }
@@ -32,9 +76,19 @@ export function newPairingCode() {
   return code;
 }
 
+/** A new lookup, which the core makes, uniformly drawn from the alphabet. */
+export function newPairingLookup() {
+  return randomCode(pairingLookupLength);
+}
+
+/** A device's new secret, uniformly drawn from the alphabet. */
+export function newPairingSecret() {
+  return randomCode(pairingSecretLength);
+}
+
 /**
- * A typed or scanned code as the core stores it: capitals, without spaces
- * or dashes. None when it cannot be a display code.
+ * A typed or scanned code as the core reads it: capitals, without spaces or
+ * dashes. None when it cannot be a display code.
  */
 export function normalisePairingCode(value: string): string | null {
   const code = value.toUpperCase().replace(/[\s-]/g, "");
@@ -46,37 +100,27 @@ export function normalisePairingCode(value: string): string | null {
     : null;
 }
 
+/** A normalised code's two halves. */
+export function splitPairingCode(code: string) {
+  return {
+    lookup: code.slice(0, pairingLookupLength),
+    secret: code.slice(pairingLookupLength),
+  };
+}
+
 /** The code as people read it: `K7QX-M4PD`. */
 export function formatPairingCode(code: string) {
   const half = pairingCodeLength / 2;
   return `${code.slice(0, half)}-${code.slice(half)}`;
 }
 
-/**
- * The short form of a pin people compare by eye: its first 80 bits in five
- * groups, such as `860E-A699-0C71-92C9-1541`.
- */
-export function shortPin(pin: string) {
-  const base64 = pin.replace(/-/g, "+").replace(/_/g, "/");
-  const hex = [...atob(base64).slice(0, 10)]
-    .map((char) => char.charCodeAt(0).toString(16).padStart(2, "0"))
-    .join("")
-    .toUpperCase();
-  return hex.match(/.{4}/g)!.join("-");
-}
-
 /** What a shared device's QR code holds. */
-export type PairingQr = {
-  hostId: string;
-  homeId: string;
-  code: string;
-  /** The pin of the certificate the device sees; none over plain HTTP. */
-  pin: string | null;
-};
+export type PairingQr = { hostId: string; homeId: string; code: string };
 
 const qrScheme = "sanctum-pair:";
-// Version 2 added the home id; version 1 is no longer read.
-const qrVersion = "2";
+// Version 3 dropped the pin, which the exchange checks instead; version 2
+// added the home id. Neither earlier version is read.
+const qrVersion = "3";
 
 /** The text a shared device's QR code encodes. */
 export function pairingQrText(qr: PairingQr) {
@@ -86,9 +130,6 @@ export function pairingQrText(qr: PairingQr) {
     home: qr.homeId,
     code: qr.code,
   });
-  if (qr.pin) {
-    params.set("pin", qr.pin);
-  }
   return `${qrScheme}?${params}`;
 }
 
@@ -101,15 +142,8 @@ export function parsePairingQr(text: string): PairingQr | null {
   const hostId = params.get("host");
   const homeId = params.get("home");
   const code = normalisePairingCode(params.get("code") ?? "");
-  const pin = params.get("pin");
-  if (
-    params.get("v") !== qrVersion ||
-    !hostId ||
-    !homeId ||
-    !code ||
-    (pin !== null && !isPin(pin))
-  ) {
+  if (params.get("v") !== qrVersion || !hostId || !homeId || !code) {
     return null;
   }
-  return { hostId, homeId, code, pin };
+  return { hostId, homeId, code };
 }

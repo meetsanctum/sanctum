@@ -113,22 +113,26 @@ export const authTokens = sqliteTable(
   (table) => [index("auth_tokens_client_id").on(table.clientId)],
 );
 
-// Shared devices' pairing requests. Only the display code's and the device
-// secret's hashes are kept. A request stays here until it expires, 10
-// minutes after it was made, even once used up, so a used code is refused
-// rather than unknown.
+// Shared devices' pairing requests. The lookup is the display code's first
+// characters, which the core gives the device; the rest is the device's own
+// secret, never sent, which the core holds only in memory while an exchange
+// runs (pairing.ts). Only the device secret's hash is kept. A request stays
+// here 10 minutes after it expires or is used up, so its lookup rests before
+// another request gets it: a code read off one device never reaches another.
 export const authPairingRequests = sqliteTable("auth_pairing_requests", {
   id: text("id").primaryKey(),
-  // Unique among the requests kept, which are swept once they expire.
-  codeHash: text("code_hash").notNull().unique(),
+  lookup: text("lookup").notNull().unique(),
   deviceSecretHash: text("device_secret_hash").notNull().unique(),
   platform: text("platform", { enum: platforms }).notNull(),
   suggestedName: text("suggested_name").notNull(),
-  // The connection's own address, for the per-address cap and for whoever
-  // approves it to see.
+  // The connection's own address, for the per-address cap.
   sourceAddress: text("source_address").notNull(),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  // When it can no longer be approved or collected; brought forward when
+  // its exchanges run out.
   expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  // The exchanges started with the device, each counted as it starts.
+  exchanges: integer("exchanges").notNull().default(0),
   // The person who approved it, none on a shared client, and the name they
   // gave the device. No reference, as in the activity log.
   approvedBy: text("approved_by"),

@@ -180,35 +180,90 @@ export type SignedIn = {
 export type Me = { client: ClientInfo; person: PersonInfo | null };
 
 // Pairing a shared device: it asks for a request and polls with its device
-// secret, while someone looks its display code up on another of the home's
-// clients and approves it.
-export type PairRequest = { platform: Platform; suggestedName: string };
+// secret, while someone types its display code on another of the home's
+// clients. The core then runs the OPAQUE exchange with the device through
+// its polls (pairing.ts), and whoever typed the code watches it and approves
+// the device once the exchange checked the host.
+export type PairRequest = {
+  platform: Platform;
+  suggestedName: string;
+  /** The pairing exchange the device speaks (pairingProtocol). */
+  protocol: number;
+};
 export type PairRequested = {
-  /** The display code, as the core stores it (see formatPairingCode). */
-  code: string;
-  /** Only the device holding this can collect the token. */
+  requestId: string;
+  /** The code's first characters; the device draws the rest. */
+  lookup: string;
+  /** Only the device holding this can answer its exchanges and collect. */
   deviceSecret: string;
   expiresAt: string;
 };
 
 export type PairLookup = { code: string };
-/** What the approving client sees of a request: never its secret. */
+/** The exchange the core started with the device that shows the code. */
+export type PairExchangeStarted = { requestId: string; exchangeId: string };
+
+export type PairExchange = { requestId: string; exchangeId: string };
+/** Why an exchange didn't check the device. */
+export type PairExchangeFailure =
+  // The code typed is not the one the device shows.
+  | "wrong_code"
+  // The device didn't answer in time.
+  | "no_answer"
+  // The exchange didn't finish, so the host couldn't check the device.
+  | "unchecked"
+  // The device sees another host: something is in between.
+  | "channel_mismatch";
+export type PairExchangeStatus =
+  | { status: "exchanging" }
+  | { status: "verified"; request: PairingRequestInfo }
+  | { status: "failed"; reason: PairExchangeFailure };
+
+/** What the approving client sees of a request once it is checked. */
 export type PairingRequestInfo = {
-  code: string;
   platform: Platform;
   suggestedName: string;
-  /** The address the device asked from. */
-  address: string;
   createdAt: string;
   expiresAt: string;
 };
 
-export type PairApprove = { code: string; name: string };
+export type PairApprove = {
+  requestId: string;
+  exchangeId: string;
+  name: string;
+};
 
 export type PairPoll = { deviceSecret: string };
 export type PairPolled =
   | { status: "waiting" }
-  | { status: "paired"; token: string; client: ClientInfo };
+  // The core started an exchange: OPAQUE's first message for the device.
+  | { status: "exchange"; exchangeId: string; startLoginRequest: string }
+  | {
+      status: "paired";
+      token: string;
+      client: ClientInfo;
+      /** The host's MAC over itself and the token (pairingConfirmation). */
+      confirmation: string;
+    };
+
+/** The device's answer to an exchange: OPAQUE's second message. */
+export type PairAnswer = {
+  deviceSecret: string;
+  exchangeId: string;
+  loginResponse: string;
+};
+export type PairAnswered =
+  { status: "continue"; finishLoginRequest: string } | { status: "failed" };
+
+/** The device's view of the host, bound to the exchange (pairingBinding). */
+export type PairBind = {
+  deviceSecret: string;
+  exchangeId: string;
+  hostId: string;
+  homeId: string;
+  pin: string | null;
+  binding: string;
+};
 
 export type RenameClient = { id: string; name: string };
 export type RevokeClient = { id: string };

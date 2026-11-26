@@ -1,7 +1,24 @@
 // @vitest-environment jsdom
+import {
+  pairingBinding,
+  pairingConfirmation,
+  pairingOpaque,
+  pairingProtocol,
+  pairingQrText,
+  type HostView,
+} from "@meetsanctum/auth-protocol";
+import * as opaque from "@serenity-kit/opaque";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import { PairDevice } from "../src/auth/PairDevice";
 import { CoreError, coreJson, type CoreFetchInit } from "../src/core-fetch";
@@ -19,11 +36,37 @@ const host: FoundHost = {
   claimed: true,
   url: "http://192.168.7.222:4100",
 };
+const pin = "hg6mmQxxksnFQb7m8qDqK0hT9z6lRb6vS8aW2b0FbUQ";
 
 let root: Root;
 let container: HTMLDivElement;
 let polls: (() => unknown)[];
 let requests: CoreFetchInit[];
+// What the device sent to the fake host's exchange routes.
+let answers: unknown[];
+let bindings: Record<string, unknown>[];
+// The fake host's side of the exchange under way.
+let exchange:
+  | {
+      requestId: string;
+      exchangeId: string;
+      password: string;
+      clientLoginState: string;
+      sessionKey?: string;
+    }
+  | undefined;
+let exchangeCount: number;
+
+beforeAll(() => opaque.ready);
+
+// WebCrypto answers on real time, which fake timers don't move.
+const realTimeout = globalThis.setTimeout;
+const cryptoTicks = () =>
+  Array.from({ length: 10 }).reduce<Promise<void>>(
+    (previous) =>
+      previous.then(() => new Promise((resolve) => realTimeout(resolve, 1))),
+    Promise.resolve(),
+  );
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -31,19 +74,25 @@ beforeEach(() => {
   localStorage.clear();
   polls = [];
   requests = [];
-  let codes = ["K7QXM4PD", "W3RT9HNC"];
+  answers = [];
+  bindings = [];
+  exchange = undefined;
+  exchangeCount = 0;
+  let lookups = ["K7", "W3", "P4", "M9"];
   vi.mocked(coreJson).mockReset();
   vi.mocked(coreJson).mockImplementation(async (path, init = {}) => {
+    const json = init.json as Record<string, string>;
     switch (path) {
       case "/api/auth/status":
         return { hostId: host.id, homeId: host.homeId, claimed: true };
       case "/api/auth/pair/request": {
         requests.push(init);
-        const [code, ...rest] = codes;
-        codes = rest;
+        const [lookup, ...rest] = lookups;
+        lookups = rest;
         return {
-          code,
-          deviceSecret: `secret-${code}`,
+          requestId: `request-${lookup}`,
+          lookup,
+          deviceSecret: `secret-${lookup}`,
           expiresAt: "2026-10-28T12:10:00Z",
         };
       }
@@ -51,6 +100,25 @@ beforeEach(() => {
         const next = polls.shift();
         return next ? next() : { status: "waiting" };
       }
+      case "/api/auth/pair/answer": {
+        answers.push(json);
+        const finished = opaque.client.finishLogin({
+          clientLoginState: exchange!.clientLoginState,
+          loginResponse: json.loginResponse!,
+          password: exchange!.password,
+          identifiers: pairingOpaque.identifiers,
+          keyStretching: pairingOpaque.keyStretching,
+        });
+        if (!finished) return { status: "failed" };
+        exchange!.sessionKey = finished.sessionKey;
+        return {
+          status: "continue",
+          finishLoginRequest: finished.finishLoginRequest,
+        };
+      }
+      case "/api/auth/pair/bind":
+        bindings.push(json);
+        return undefined;
       default:
         throw new Error(`Unexpected request: ${path}`);
     }
@@ -68,47 +136,120 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function render(onPaired = vi.fn<(host: StoredHost) => void>()) {
+async function render(
+  onPaired = vi.fn<(host: StoredHost) => void>(),
+  at: FoundHost = host,
+) {
   await act(async () => {
-    root.render(
-      <PairDevice host={host} onBack={() => {}} onPaired={onPaired} />,
-    );
+    root.render(<PairDevice host={at} onBack={() => {}} onPaired={onPaired} />);
   });
+  await settle();
+  return onPaired;
+}
+
+async function settle(ms = 0) {
   await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+    await cryptoTicks();
     await vi.advanceTimersByTimeAsync(0);
   });
-  return onPaired;
+}
+
+// The code the device shows, as people read it.
+function shownCode() {
+  return container.textContent!.match(
+    /([2-9A-HJKMNP-TV-Z]{4})-([2-9A-HJKMNP-TV-Z]{4})/,
+  );
+}
+
+// Someone types `typed` (or the shown code) on another device: the fake host
+// starts an exchange, which the device's next poll answers.
+async function typeCode(typed?: string) {
+  const [, first, second] = shownCode()!;
+  const code = typed ?? `${first}${second}`;
+  exchangeCount += 1;
+  const { clientLoginState, startLoginRequest } = opaque.client.startLogin({
+    password: code.slice(2),
+  });
+  exchange = {
+    requestId: `request-${code.slice(0, 2)}`,
+    exchangeId: `exchange-${exchangeCount}`,
+    password: code.slice(2),
+    clientLoginState,
+  };
+  const { exchangeId } = exchange;
+  polls.push(() => ({ status: "exchange", exchangeId, startLoginRequest }));
+  await settle(2_000);
+}
+
+function ids() {
+  return { requestId: exchange!.requestId, exchangeId: exchange!.exchangeId };
+}
+
+// The fake host hands over the token, confirmed under the exchange's key
+// unless a test says otherwise.
+async function approve(
+  view: HostView = { hostId: host.id, homeId: host.homeId!, pin: null },
+  sessionKey = exchange?.sessionKey,
+) {
+  const confirmation = sessionKey
+    ? await pairingConfirmation(sessionKey, view, ids(), "client_token")
+    : "bm8tY29uZmlybWF0aW9u";
+  polls.push(() => ({
+    status: "paired",
+    token: "client_token",
+    client: { id: "tablet", kind: "shared" },
+    confirmation,
+  }));
 }
 
 describe("a shared device's pairing screen", () => {
   it("shows its code and QR code, asking the chosen host without a token", async () => {
     await render();
 
-    expect(container.textContent).toContain("K7QX-M4PD");
+    expect(shownCode()![1]).toMatch(/^K7/);
     expect(
       container.querySelector("svg[aria-label='Pairing QR code']"),
     ).not.toBeNull();
-    expect(container.textContent).toContain("Waiting for someone");
+    expect(container.textContent).toContain("Waiting for approval");
+    expect(container.textContent).toContain(
+      "open Settings → Clients on a device that’s signed in",
+    );
     expect(requests).toEqual([
       expect.objectContaining({
         at: host.url,
         omitToken: true,
-        json: { platform: "web", suggestedName: "Web browser" },
+        json: {
+          platform: "web",
+          suggestedName: "Web browser",
+          protocol: pairingProtocol,
+        },
       }),
     ]);
   });
 
-  it("stores its token and goes home once someone approved it", async () => {
+  it("answers the exchange for its code, binds it to the host it sees, and saves the confirmed token", async () => {
     const onPaired = await render();
-    polls.push(() => ({
-      status: "paired",
-      token: "client_token",
-      client: { id: "tablet", kind: "shared" },
-    }));
+    await typeCode();
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_000);
-    });
+    expect(answers).toEqual([
+      expect.objectContaining({
+        deviceSecret: "secret-K7",
+        exchangeId: "exchange-1",
+      }),
+    ]);
+    const view = { hostId: host.id, homeId: host.homeId!, pin: null };
+    expect(bindings).toEqual([
+      {
+        deviceSecret: "secret-K7",
+        exchangeId: "exchange-1",
+        ...view,
+        binding: await pairingBinding(exchange!.sessionKey!, view, ids()),
+      },
+    ]);
+
+    await approve();
+    await settle(2_000);
 
     const stored = {
       hostId: host.id,
@@ -124,8 +265,45 @@ describe("a shared device's pairing screen", () => {
     expect(JSON.parse(localStorage.getItem("sanctum.host")!)).toEqual(stored);
   });
 
-  it("carries the pin of the certificate it sees, and shows the short pin", async () => {
-    const pin = "hg6mmQxxksnFQb7m8qDqK0hT9z6lRb6vS8aW2b0FbUQ";
+  it("never sends the half of its code it drew itself", async () => {
+    await render();
+    await typeCode();
+    const [, first, second] = shownCode()!;
+    const secret = `${first}${second}`.slice(2);
+
+    const sent = JSON.stringify(
+      vi.mocked(coreJson).mock.calls.map(([, init]) => init?.json),
+    );
+    expect(sent).not.toContain(secret);
+  });
+
+  it("refuses a token no exchange checked, and shows a new code", async () => {
+    const onPaired = await render();
+    await approve(undefined, undefined);
+
+    await settle(2_000);
+
+    expect(onPaired).not.toHaveBeenCalled();
+    expect(container.textContent).toContain(
+      "This home could not prove it is yours",
+    );
+    await settle(4_000);
+    expect(requests).toHaveLength(2);
+    expect(shownCode()![1]).toMatch(/^W3/);
+  });
+
+  it("refuses a token the checked host doesn't confirm", async () => {
+    const onPaired = await render();
+    await typeCode();
+    await approve({ hostId: host.id, homeId: host.homeId!, pin });
+
+    await settle(2_000);
+
+    expect(onPaired).not.toHaveBeenCalled();
+    expect(localStorage.getItem("sanctum.host")).toBeNull();
+  });
+
+  it("binds the pin of the certificate it sees, and keeps the pin out of its QR code", async () => {
     const checked: (string | null)[] = [];
     vi.spyOn(getShell(), "trust", "get").mockReturnValue({
       check: async (hostId) => void checked.push(hostId),
@@ -133,46 +311,100 @@ describe("a shared device's pairing screen", () => {
       failure: async () => null,
       resumed: async () => null,
     });
-    const { pairingQrText, shortPin } =
-      await import("@meetsanctum/auth-protocol");
     const qr = await import("../src/qr-code");
     const text = vi.spyOn(qr, "QrCode");
-    const onPaired = vi.fn<(host: StoredHost) => void>();
-    await act(async () => {
-      root.render(
-        <PairDevice
-          host={{ ...host, url: "https://192.168.7.222:4100" }}
-          onBack={() => {}}
-          onPaired={onPaired}
-        />,
-      );
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
+    const onPaired = await render(vi.fn(), {
+      ...host,
+      url: "https://192.168.7.222:4100",
     });
 
     expect(checked).toEqual([host.id]);
-    expect(container.textContent).toContain(
-      `Home certificate ${shortPin(pin)}`,
-    );
+    const [, first, second] = shownCode()!;
     expect(text.mock.calls.at(-1)?.[0].text).toBe(
       pairingQrText({
         hostId: host.id,
         homeId: host.homeId!,
-        code: "K7QXM4PD",
-        pin,
+        code: `${first}${second}`,
       }),
     );
+    expect(container.textContent).not.toContain("certificate");
 
-    polls.push(() => ({
-      status: "paired",
-      token: "client_token",
-      client: { id: "tablet", kind: "shared" },
-    }));
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_000);
-    });
+    await typeCode();
+    expect(bindings[0]).toMatchObject({ pin });
+    await approve({ hostId: host.id, homeId: host.homeId!, pin });
+    await settle(2_000);
     expect(onPaired).toHaveBeenCalledWith(expect.objectContaining({ pin }));
+  });
+
+  it("saves nothing once the certificate it sees changed since its exchange", async () => {
+    let seen = pin;
+    vi.spyOn(getShell(), "trust", "get").mockReturnValue({
+      check: async () => undefined,
+      candidate: async () => seen,
+      failure: async () => null,
+      resumed: async () => null,
+    });
+    const onPaired = await render(vi.fn(), {
+      ...host,
+      url: "https://192.168.7.222:4100",
+    });
+    await typeCode();
+    seen = "c29tZW9uZS1lbHNlcy1jZXJ0aWZpY2F0ZS1waW4tYnl0ZXM";
+    await approve({ hostId: host.id, homeId: host.homeId!, pin });
+
+    await settle(2_000);
+
+    expect(onPaired).not.toHaveBeenCalled();
+  });
+
+  it("shows a new code after three that didn't match, following a pause", async () => {
+    await render();
+    for (let i = 0; i < 3; i += 1) {
+      await typeCode("K7AAAAAA");
+      await settle(5_000);
+    }
+
+    expect(answers).toHaveLength(3);
+    expect(bindings).toEqual([]);
+    expect(shownCode()).toBeNull();
+    await settle(30_000);
+    expect(requests).toHaveLength(2);
+    expect(shownCode()![1]).toMatch(/^W3/);
+  });
+
+  it("answers at most one exchange every 5 seconds", async () => {
+    await render();
+    await typeCode("K7AAAAAA");
+    await typeCode("K7AAAAAB");
+
+    expect(answers).toHaveLength(1);
+  });
+
+  it("stops answering after six codes didn't match, until someone asks for a new code", async () => {
+    await render();
+    for (let i = 0; i < 6; i += 1) {
+      const [, first] = shownCode()!;
+      await typeCode(`${first!.slice(0, 2)}AAAAAA`);
+      await settle(5_000);
+      if (!shownCode()) await settle(30_000);
+    }
+    expect(answers).toHaveLength(6);
+
+    // Even a new code from the host doesn't answer a seventh.
+    await typeCode();
+    expect(answers).toHaveLength(6);
+    expect(container.textContent).toContain(
+      "Several codes didn’t match, so this device stopped answering.",
+    );
+
+    const button = [...container.querySelectorAll("button")].find(
+      (candidate) => candidate.textContent === "Show a new code",
+    )!;
+    await act(async () => button.click());
+    await settle();
+    expect(shownCode()).not.toBeNull();
+    await typeCode();
+    expect(answers).toHaveLength(7);
   });
 
   it("shows a new code once its request expired", async () => {
@@ -181,31 +413,24 @@ describe("a shared device's pairing screen", () => {
       throw new CoreError(409, "expired");
     });
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_000);
-    });
+    await settle(2_000);
 
-    expect(container.textContent).toContain("W3RT-9HNC");
-    expect(container.textContent).not.toContain("K7QX-M4PD");
+    expect(shownCode()![1]).toMatch(/^W3/);
   });
 
   it("retries saving a collected token without collecting it again", async () => {
     const save = vi.spyOn(getShell().credentials, "save");
     save.mockRejectedValueOnce(new Error("Storage temporarily unavailable"));
-    polls.push(() => ({
-      status: "paired",
-      token: "client_token",
-      client: { id: "tablet", kind: "shared" },
-    }));
+    const onPaired = await render();
+    await typeCode();
+    await approve();
     polls.push(() => {
       throw new CoreError(409, "expired");
     });
-    const onPaired = await render();
-    expect(onPaired).not.toHaveBeenCalled();
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(4_000);
-    });
+    await settle(2_000);
+    expect(onPaired).not.toHaveBeenCalled();
+    await settle(4_000);
 
     expect(save).toHaveBeenCalledTimes(2);
     expect(onPaired).toHaveBeenCalledWith(
@@ -223,11 +448,9 @@ describe("a shared device's pairing screen", () => {
     expect(container.textContent).toContain("Can't read this device's name");
     expect(requests).toHaveLength(0);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(4_000);
-    });
+    await settle(4_000);
     expect(requests).toHaveLength(1);
-    expect(container.textContent).toContain("K7QX-M4PD");
+    expect(shownCode()).not.toBeNull();
   });
 
   it("removes an expired code while its replacement cannot be fetched", async () => {
@@ -242,10 +465,8 @@ describe("a shared device's pairing screen", () => {
       }
       return original(path, init);
     });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_000);
-    });
-    expect(container.textContent).not.toContain("K7QX-M4PD");
+    await settle(2_000);
+    expect(shownCode()).toBeNull();
     expect(
       container.querySelector("svg[aria-label='Pairing QR code']"),
     ).toBeNull();
@@ -256,16 +477,12 @@ describe("a shared device's pairing screen", () => {
     const save = vi
       .spyOn(getShell().credentials, "save")
       .mockRejectedValue(new Error("Storage unavailable"));
-    polls.push(() => ({
-      status: "paired",
-      token: "client_token",
-      client: { id: "tablet" },
-    }));
     const onPaired = await render();
+    await typeCode();
+    await approve();
+    await settle(2_000);
     await act(async () => root.render(null));
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(30_000);
-    });
+    await settle(30_000);
     expect(save).toHaveBeenCalledTimes(1);
     expect(onPaired).not.toHaveBeenCalled();
   });
@@ -276,15 +493,11 @@ describe("a shared device's pairing screen", () => {
       throw new TypeError("Failed to fetch");
     });
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_000);
-    });
+    await settle(2_000);
     expect(container.textContent).toContain("Can't reach Sanctum");
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(4_000);
-    });
-    expect(container.textContent).toContain("Waiting for someone");
-    expect(container.textContent).toContain("K7QX-M4PD");
+    await settle(4_000);
+    expect(container.textContent).toContain("Waiting for approval");
+    expect(shownCode()![1]).toMatch(/^K7/);
   });
 });

@@ -224,6 +224,8 @@ export function createLogins(
   }
 
   return {
+    // The host as a device that signs in or pairs must see it.
+    host,
     status(): HostStatus {
       const { hostId, homeId } = host();
       return { hostId, homeId, claimed: isClaimed(db) };
