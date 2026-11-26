@@ -36,7 +36,7 @@ export function ClientDrawing(props: {
   client?: ClientInfo;
   onClose: () => void;
   /** Reads the clients again once a change is saved. */
-  onChanged: () => Promise<void>;
+  onChanged: (saved: SetClientDrawing) => Promise<void>;
 }) {
   // What the dialog showed stays while it closes.
   const last = useRef<ClientInfo>(undefined);
@@ -74,13 +74,19 @@ export function ClientDrawing(props: {
     setPending({ opening: opened, change });
     setProblem(undefined);
     try {
-      await coreJson("/api/auth/clients/drawing", {
+      const saved = await coreJson<ClientInfo>("/api/auth/clients/drawing", {
         method: "POST",
         json: { id: openId, ...change } satisfies SetClientDrawing,
       });
       // Clients read afresh, since a read that ended while this was on its
       // way can already hold a newer change from another client.
-      await props.onChanged();
+      await props.onChanged({
+        id: saved.id,
+        reduceEffects:
+          change.reduceEffects === undefined ? undefined : saved.reduceEffects,
+        reduceMotion:
+          change.reduceMotion === undefined ? undefined : saved.reduceMotion,
+      });
     } catch {
       if (opening.current === opened) {
         setProblem("That did not work. Try again.");

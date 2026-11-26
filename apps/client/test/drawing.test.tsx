@@ -4,17 +4,15 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { followStoredDrawing, useDrawing } from "../src/drawing";
-import { followEffects } from "../src/effects";
-
 // How this client draws as set for it: from the copy it keeps before it
 // knows Me, then as Me says.
 
 const stored = new Map<string, string>();
+const readStored = vi.fn(async (key: string) => stored.get(key) ?? null);
 vi.mock("../src/shell", () => ({
   getShell: () => ({
     preferences: {
-      get: async (key: string) => stored.get(key) ?? null,
+      get: readStored,
       set: async (key: string, value: string) => void stored.set(key, value),
     },
   }),
@@ -39,15 +37,21 @@ const me = (changes: Partial<ClientInfo>): Me => ({
   person: null,
 });
 
+let drawing: typeof import("../src/drawing");
+
 function Probe(props: { me?: Me }) {
-  useDrawing(props.me);
+  drawing.useDrawing(props.me);
   return null;
 }
 
 let stop: () => void;
-beforeEach(() => {
+beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   stored.clear();
+  readStored.mockReset();
+  vi.resetModules();
+  drawing = await import("../src/drawing");
+  const { followEffects } = await import("../src/effects");
   stop = followEffects({
     location: { search: "" },
     document,
@@ -67,18 +71,18 @@ it("draws as its kept copy says before it knows Me", async () => {
     "drawing",
     JSON.stringify({ reduceEffects: true, reduceMotion: false }),
   );
-  await followStoredDrawing();
+  await drawing.followStoredDrawing();
   expect(html()).toMatchObject({ effects: "reduced" });
   expect(html().motion).toBeUndefined();
 });
 
 it("leaves a copy it can't read to Me", async () => {
   stored.set("drawing", '{"effects":"on","motion":"on"}');
-  await followStoredDrawing();
+  await drawing.followStoredDrawing();
   stored.set("drawing", '{"reduceEffects":"yes","reduceMotion":true}');
-  await followStoredDrawing();
+  await drawing.followStoredDrawing();
   stored.set("drawing", "not json");
-  await followStoredDrawing();
+  await drawing.followStoredDrawing();
   expect(html().effects).toBeUndefined();
   expect(html().motion).toBeUndefined();
 });
@@ -109,6 +113,30 @@ it("draws as Me says and keeps a copy", async () => {
     reduceMotion: false,
   });
   await act(async () => root.unmount());
+});
+
+it("keeps drawing as Me says when reading the stored copy finishes later", async () => {
+  let finishRead!: (copy: string) => void;
+  readStored.mockReturnValueOnce(
+    new Promise<string>((resolve) => {
+      finishRead = resolve;
+    }),
+  );
+  const reading = drawing.followStoredDrawing();
+  const root = createRoot(document.createElement("div"));
+  try {
+    await act(async () =>
+      root.render(<Probe me={me({ reduceMotion: true })} />),
+    );
+
+    finishRead(JSON.stringify({ reduceEffects: true, reduceMotion: false }));
+    await reading;
+
+    expect(html().effects).toBeUndefined();
+    expect(html().motion).toBe("reduced");
+  } finally {
+    await act(async () => root.unmount());
+  }
 });
 
 it("leaves the look as it is where Me says something other than on or off", async () => {

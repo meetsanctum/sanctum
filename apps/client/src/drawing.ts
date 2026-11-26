@@ -10,11 +10,13 @@ import { getShell } from "./shell";
 // paired draw as set too.
 
 const preferenceKey = "drawing";
+let drawingFromMe = false;
 
 /** The copy this device keeps, applied as soon as it is read. */
 export async function followStoredDrawing() {
   try {
     const stored = await getShell().preferences.get(preferenceKey);
+    if (drawingFromMe) return;
     const choices: unknown = stored && JSON.parse(stored);
     if (
       typeof choices === "object" &&
@@ -43,6 +45,7 @@ export function useDrawing(me: Me | undefined) {
     // A core from before the two were switches says something else.
     if (typeof reduceEffects !== "boolean") return;
     if (typeof reduceMotion !== "boolean") return;
+    drawingFromMe = true;
     const choices: DrawingChoices = { reduceEffects, reduceMotion };
     chooseDrawing(choices);
     void getShell()

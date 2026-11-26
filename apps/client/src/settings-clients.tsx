@@ -1,5 +1,9 @@
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
-import type { ClientInfo, PersonInfo } from "@meetsanctum/auth-protocol";
+import type {
+  ClientInfo,
+  PersonInfo,
+  SetClientDrawing,
+} from "@meetsanctum/auth-protocol";
 import { Button, Input, useHomeClock } from "@meetsanctum/ui-sdk";
 import { EllipsisVertical, Gauge, House, Pencil, Trash2 } from "lucide-react";
 import {
@@ -103,16 +107,35 @@ export function ClientsSection(props: {
   const refreshId = useRef(0);
   const lastAppliedRefresh = useRef(0);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (saved?: SetClientDrawing) => {
     const id = ++refreshId.current;
-    const [nextClients, nextPeople] = await Promise.all([
-      coreJson<ClientInfo[]>("/api/auth/clients"),
-      coreJson<PersonInfo[]>("/api/people"),
-    ]);
-    if (id < lastAppliedRefresh.current) return;
-    lastAppliedRefresh.current = id;
-    setClients(nextClients);
-    setPeople(nextPeople);
+    try {
+      const [nextClients, nextPeople] = await Promise.all([
+        coreJson<ClientInfo[]>("/api/auth/clients"),
+        coreJson<PersonInfo[]>("/api/people"),
+      ]);
+      if (id < lastAppliedRefresh.current) return;
+      lastAppliedRefresh.current = id;
+      setClients(nextClients);
+      setPeople(nextPeople);
+    } catch (error) {
+      if (!saved) throw error;
+      if (id < lastAppliedRefresh.current) return;
+      lastAppliedRefresh.current = id;
+      // Keep the saved switch without replacing other values a read may
+      // have picked up while the save was in flight.
+      setClients((current) =>
+        current?.map((client) =>
+          client.id === saved.id
+            ? {
+                ...client,
+                reduceEffects: saved.reduceEffects ?? client.reduceEffects,
+                reduceMotion: saved.reduceMotion ?? client.reduceMotion,
+              }
+            : client,
+        ),
+      );
+    }
   }, []);
 
   // A device approved here shows up once it collects its token, and
@@ -170,7 +193,7 @@ export function ClientsSection(props: {
             : undefined
         }
         onClose={() => setEditing(undefined)}
-        onChanged={() => refresh().catch(() => undefined)}
+        onChanged={refresh}
       />
       <EditClient
         editing={editing?.action === "drawing" ? undefined : editing}

@@ -260,6 +260,24 @@ describe("Settings → Clients", () => {
     ).toBe("That did not work. Try again.");
   });
 
+  it("keeps a saved switch value when the client list cannot refresh", async () => {
+    await editClient("Kitchen tablet", "Effects and motion");
+    const original = vi.mocked(coreJson).getMockImplementation()!;
+    vi.mocked(coreJson).mockImplementation((path, init) =>
+      path === "/api/auth/clients"
+        ? Promise.reject(new CoreError(500, "unknown"))
+        : original(path, init),
+    );
+
+    await act(async () => toggle("Reduce effects").click());
+
+    expect(drawing).toEqual([{ id: "tablet", reduceEffects: true }]);
+    expect(isOn("Reduce effects")).toBe(true);
+    expect(isOn("Reduce motion")).toBe(false);
+    expect(container.textContent).toContain("Reduced effects");
+    expect(document.querySelector("[role=dialog] [role=alert]")).toBeNull();
+  });
+
   it("lets a press go while a save is on its way, and keeps its failure out of a reopened dialog", async () => {
     await editClient("Kitchen tablet", "Effects and motion");
     let refuseSave!: (error: Error) => void;
@@ -290,26 +308,34 @@ describe("Settings → Clients", () => {
     expect(isOn("Reduce motion")).toBe(false);
   });
 
-  it("keeps newer switch values when an earlier save's answer arrives", async () => {
-    await editClient("Kitchen tablet", "Effects and motion");
-    let finishSave!: (client: ClientInfo) => void;
-    vi.mocked(coreJson).mockReturnValueOnce(
-      new Promise<ClientInfo>((resolve) => {
-        finishSave = resolve;
-      }),
-    );
-    await act(async () => toggle("Reduce effects").click());
-    shownTablet = { ...tablet, reduceEffects: true, reduceMotion: true };
-    await refreshClients();
-    expect(isOn("Reduce motion")).toBe(true);
+  it.each([false, true])(
+    "keeps newer switch values when an earlier save's answer arrives (refresh fails: %s)",
+    async (refreshFails) => {
+      await editClient("Kitchen tablet", "Effects and motion");
+      let finishSave!: (client: ClientInfo) => void;
+      vi.mocked(coreJson).mockReturnValueOnce(
+        new Promise<ClientInfo>((resolve) => {
+          finishSave = resolve;
+        }),
+      );
+      await act(async () => toggle("Reduce effects").click());
+      shownTablet = { ...tablet, reduceEffects: true, reduceMotion: true };
+      await refreshClients();
+      expect(isOn("Reduce motion")).toBe(true);
 
-    await act(async () =>
-      finishSave({ ...tablet, reduceEffects: true, reduceMotion: false }),
-    );
-    expect(isOn("Reduce effects")).toBe(true);
-    expect(isOn("Reduce motion")).toBe(true);
-    expect(container.textContent).toContain("Reduced effects and motion");
-  });
+      if (refreshFails) {
+        vi.mocked(coreJson).mockRejectedValueOnce(
+          new CoreError(500, "unknown"),
+        );
+      }
+      await act(async () =>
+        finishSave({ ...tablet, reduceEffects: true, reduceMotion: false }),
+      );
+      expect(isOn("Reduce effects")).toBe(true);
+      expect(isOn("Reduce motion")).toBe(true);
+      expect(container.textContent).toContain("Reduced effects and motion");
+    },
+  );
 
   it("lists every client, marking those never seen", () => {
     expect(container.textContent).toContain("Maya's MacBook");
