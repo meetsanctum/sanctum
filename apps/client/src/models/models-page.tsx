@@ -10,6 +10,7 @@ import {
   NativeSelect,
   NativeSelectOption,
   type LiveFeed,
+  useHomeClock,
 } from "@meetsanctum/ui-sdk";
 import {
   Check,
@@ -209,7 +210,8 @@ export function ModelsPage(props: {
 }
 
 function CheckStatus(props: { source: ModelSourceInfo }) {
-  const line = checkLine(props.source);
+  const clock = useHomeClock();
+  const line = checkLine(clock, props.source);
   if (!line) return null;
   return (
     <p

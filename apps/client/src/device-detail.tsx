@@ -13,6 +13,7 @@ import {
   SwipePages,
   usePhone,
   type LiveFeed,
+  useHomeClock,
 } from "@meetsanctum/ui-sdk";
 import {
   Blocks,
@@ -154,6 +155,7 @@ export function DeviceDetail(props: {
   onOpenAppSettings: (app: string) => void;
   onOpenStatus: () => void;
 }) {
+  const clock = useHomeClock();
   const { devices, onClose } = props;
   const now = new Date(useMinuteClock());
   const tile = devices.tiles.find((each) => each.key === props.tileKey);
@@ -237,13 +239,16 @@ export function DeviceDetail(props: {
   const room = devices.places?.rooms.find((each) => each.id === tile?.roomId);
   const status =
     device?.availability === "offline"
-      ? `Offline · ${seenText(device.lastSeenAt, now)}`
+      ? `Offline · ${seenText(clock, device.lastSeenAt, now)}`
       : openedPlayer
         ? mediaText(openedPlayer, { what: false })
         : controlTile
           ? controlTile.status
           : (motion || contact || hasReadings) && device?.lastSeenAt
-            ? seenText(device.lastSeenAt, now).replace(/^Seen/, "Updated")
+            ? seenText(clock, device.lastSeenAt, now).replace(
+                /^Seen/,
+                "Updated",
+              )
             : tile?.status;
   // The pages apps add, as one page of the detail.
   const fromApps =

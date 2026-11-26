@@ -26,6 +26,7 @@ const deviceActions = new Set([
   "device.problem",
   "device.repair",
   "device.add",
+  "device.announce",
 ]);
 
 // What the core records of an app's place in the home, under the app's id.

@@ -246,8 +246,10 @@ describe("in Needs attention", () => {
     const waits = app();
     expect(appsNotRunning([waits])).toEqual([waits]);
     expect(isStopped(waits)).toBe(false);
-    expect(appAttentionText(waits)).toBe(waitingAttentionText(waits, waiting));
-    expect(appAttentionText(waits)).toBe(
+    expect(appAttentionText(clock, waits)).toBe(
+      waitingAttentionText(waits, waiting),
+    );
+    expect(appAttentionText(clock, waits)).toBe(
       "0.11.0 is waiting: it needs to see who lives here",
     );
     expect(attentionTile([], [], "celsius", [waits])).toMatchObject({
@@ -260,14 +262,14 @@ describe("in Needs attention", () => {
   it("lists one stopped for it as a problem", () => {
     const stopped = app("0.11.0", "paused");
     expect(isStopped(stopped)).toBe(true);
-    expect(appAttentionText(stopped)).toBe(
+    expect(appAttentionText(clock, stopped)).toBe(
       `Can't run on this ${productName}: allow 0.11.0 to start it again`,
     );
   });
 
   it("says first that the version it has stopped, with Restart", async () => {
     const failed = app("0.10.0", "failed");
-    expect(appAttentionText(failed)).not.toContain("0.11.0");
+    expect(appAttentionText(clock, failed)).not.toContain("0.11.0");
     expect(isStopped(failed)).toBe(true);
   });
 

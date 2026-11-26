@@ -466,6 +466,8 @@ class Radio {
     }
     this.received.push({ command, actor });
     this.heard.push(`${command.key} command`);
+    // An announcement plays and changes nothing it reports.
+    if (command.kind === "audio" && "announce" in command.command) return;
     const { transitionSeconds: _, ...fields } = command.command as Record<
       string,
       unknown

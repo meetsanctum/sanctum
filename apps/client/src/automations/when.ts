@@ -3,6 +3,10 @@ import type {
   WorkflowInfo,
   WorkflowRunInfo,
 } from "@meetsanctum/app-sdk";
+import {
+  calendarDaysBetween,
+  type HomeClock,
+} from "@meetsanctum/app-sdk/clock";
 
 import { productName } from "../brand";
 
@@ -13,42 +17,23 @@ import { productName } from "../brand";
 export type StatusKind =
   "ran" | "skipped" | "failed" | "next" | "off" | "problem";
 
-const day = 24 * 3600_000;
-const weekdayNames = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
-
-const midnight = (date: Date) =>
-  new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-
-/** A day as people say it: today, yesterday, tomorrow, Monday, 28 Oct. */
-export function dayWords(at: Date, now: Date) {
-  const days = Math.round((midnight(at) - midnight(now)) / day);
+/** A day on the home clock as people say it: today, yesterday, tomorrow, Monday, 28 Oct. */
+export function dayWords(clock: HomeClock, at: Date, now: Date) {
+  const days = calendarDaysBetween(now.getTime(), at.getTime(), clock.timeZone);
   if (days === 0) return "today";
   if (days === -1) return "yesterday";
   if (days === 1) return "tomorrow";
   if (Math.abs(days) < 7) {
-    return `${days < 0 ? "last " : ""}${weekdayNames[at.getDay()]}`;
+    return `${days < 0 ? "last " : ""}${clock.longWeekdayText(at)}`;
   }
-  if (days === 7) return `next ${weekdayNames[at.getDay()]}`;
-  return at.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-}
-
-/** 07:30, in this device's time. */
-export function timeWords(at: Date) {
-  return at.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  if (days === 7) return `next ${clock.longWeekdayText(at)}`;
+  return clock.dayText(at);
 }
 
 /** A run's moment: Today at 07:30, Wednesday at 07:30. */
-export function momentWords(at: Date, now: Date) {
-  const words = dayWords(at, now);
-  return `${words.charAt(0).toUpperCase()}${words.slice(1)} at ${timeWords(at)}`;
+export function momentWords(clock: HomeClock, at: Date, now: Date) {
+  const words = dayWords(clock, at, now);
+  return `${capitalise(words)} at ${clock.timeText(at)}`;
 }
 
 const runStatuses: Record<RunStatus, { kind: StatusKind; text: string }> = {
@@ -67,6 +52,7 @@ const runStatuses: Record<RunStatus, { kind: StatusKind; text: string }> = {
  * when it runs next, or when it last ran.
  */
 export function listStatus(
+  clock: HomeClock,
   workflow: Pick<
     WorkflowInfo,
     "problems" | "enabled" | "lastRun" | "nextRun" | "id"
@@ -79,18 +65,18 @@ export function listStatus(
   if (workflow.nextRun && options.nextId === workflow.id) {
     return {
       kind: "next",
-      text: `Next at ${timeWords(new Date(workflow.nextRun))}`,
+      text: `Next at ${clock.timeText(new Date(workflow.nextRun))}`,
       ink: true,
     };
   }
   const last = workflow.lastRun;
-  const lastDay = last && dayWords(new Date(last.at), now);
+  const lastDay = last && dayWords(clock, new Date(last.at), now);
   const outcome = last && runStatuses[last.status];
   if (outcome?.kind === "next") return outcome;
   if (outcome && lastDay === "today")
     return { ...outcome, text: `${outcome.text} today` };
   if (workflow.nextRun) {
-    const next = dayWords(new Date(workflow.nextRun), now);
+    const next = dayWords(clock, new Date(workflow.nextRun), now);
     return {
       kind: null,
       text: next === "today" ? "Later today" : capitalise(next),

@@ -160,8 +160,10 @@ describe("what it asks", () => {
     await press("Go back to 0.8.0");
 
     expect(document.body.textContent).toContain("Go back to Moods 0.8.0?");
-    expect(document.body.textContent).toContain(goingBackWords(app(), to));
-    expect(goingBackWords(app(), to)).toBe(
+    expect(document.body.textContent).toContain(
+      goingBackWords(clock, app(), to),
+    );
+    expect(goingBackWords(clock, app(), to)).toBe(
       "Its data returns to how it was before the update on 2 November, so anything it has saved since is lost, and automations that use it may need changing. Settings you've chosen stay where 0.8.0 can use them. It stays on 0.8.0 until a version newer than 0.9.0 arrives.",
     );
     expect(document.activeElement).toBe(button("Cancel"));

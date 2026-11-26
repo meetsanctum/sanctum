@@ -5,6 +5,7 @@ import {
   PageBar,
   PageBarButton,
   PageSection,
+  useHomeClock,
 } from "@meetsanctum/ui-sdk";
 import { ChevronRight, CircleAlert, Play, Plus } from "lucide-react";
 import { useState } from "react";
@@ -12,7 +13,7 @@ import { useState } from "react";
 import { blockedBy, blockedLine } from "./blocked";
 import { pieceOf, problemOf, type Automations } from "./data";
 import { PieceIcon, Status, TriggerCard } from "./parts";
-import { listStatus, nextOf, timeWords } from "./when";
+import { listStatus, nextOf } from "./when";
 import {
   cardOf,
   compareGroups,
@@ -102,6 +103,7 @@ export function AutomationsList(props: {
   open(page: string, params?: Record<string, string>): void;
   now?: Date;
 }) {
+  const clock = useHomeClock();
   const { workflows, pieces, problem, load } = props.automations;
   const [running, setRunning] = useState<string>();
   const [runProblem, setRunProblem] = useState<string>();
@@ -228,7 +230,7 @@ export function AutomationsList(props: {
       </div>
       {next?.nextRun && (
         <p className="sr-only">
-          Next: {next.name} at {timeWords(new Date(next.nextRun))}
+          Next: {next.name} at {clock.timeText(new Date(next.nextRun))}
         </p>
       )}
     </>
@@ -246,7 +248,9 @@ function AutomationRow(props: {
   onOpen(): void;
   onRun(): void;
 }) {
+  const clock = useHomeClock();
   const { workflow, pieces, names } = props;
+  const { name } = workflow;
   const triggers = triggersOf(workflow);
   const first = triggers[0];
   const piece = first && pieceOf(pieces, first);
@@ -256,7 +260,7 @@ function AutomationRow(props: {
   const blocked = problem ? null : blockedBy(workflow, props.apps, pieces);
   const status = blocked
     ? null
-    : listStatus(workflow, { now: props.now, nextId: props.nextId });
+    : listStatus(clock, workflow, { now: props.now, nextId: props.nextId });
   const runs = byHand(workflow, pieces);
   const stepIcons = workflow.graph.nodes
     .filter((node) => node.kind === "step")
@@ -287,7 +291,7 @@ function AutomationRow(props: {
               workflow.enabled ? "" : " text-muted-foreground"
             }`}
           >
-            {workflow.name}
+            {name}
           </span>
           {problem || blocked ? (
             <span className="flex min-w-0 items-center gap-1.5 text-[13px] leading-[18px] font-medium">
@@ -329,7 +333,7 @@ function AutomationRow(props: {
           size="sm"
           disabled={props.running || workflow.problems.length > 0 || !!blocked}
           onClick={props.onRun}
-          aria-label={`Run ${workflow.name}`}
+          aria-label={`Run ${name}`}
         >
           <Play aria-hidden="true" />
           {props.running ? "Running…" : "Run"}

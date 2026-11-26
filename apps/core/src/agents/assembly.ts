@@ -27,6 +27,7 @@ import {
   type AgentCommandLimits,
 } from "./limits.js";
 import { createAgentTools, type AgentTools } from "./tools.js";
+import type { Speech } from "../speech/speech.js";
 
 export function createAgentAccess(
   db: CoreDatabase,
@@ -36,6 +37,8 @@ export function createAgentAccess(
     apps: () => AppHost;
     tools: () => AgentTools;
     commandLimits?: AgentCommandLimits;
+    // One of the core's areas was switched on or off.
+    onAreaChanged?: () => void;
     now?: () => Date;
   },
 ) {
@@ -45,6 +48,7 @@ export function createAgentAccess(
     record,
     apps: () => apps().offers(),
     onRevoked: () => apps().clearRequestWindows(),
+    onAreaChanged: options.onAreaChanged,
     now,
   });
   const ticks = now && (() => now().getTime());
@@ -142,6 +146,7 @@ export function assembleAgentTools(
     activity: Activity;
     activityViews: ActivityViews;
     history: History;
+    speech?: Speech;
     now?: () => Date;
   },
 ) {
@@ -173,6 +178,7 @@ export function assembleAgentTools(
       now,
       record: activity.for("agents"),
       agentWho: activity.agentWho,
+      speech: options.speech,
     }),
     readableDeviceKinds,
     places: () => places.list(),

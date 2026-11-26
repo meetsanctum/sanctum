@@ -29,6 +29,12 @@ export type AiToolAnswer = { text: string; isError: boolean };
 export const activityReadPermission = "activity.read";
 /** Reading what devices reported over time. */
 export const historyReadPermission = "history.read";
+/**
+ * Saying something out loud on a smart speaker, in the home's voice. Only AI
+ * agents have it, through the core's announce tool: what an announcement
+ * plays is always the core's own speech, never a recording an agent brings.
+ */
+export const announcePermission = "devices.announce";
 
 /** What an app offers AI agents of one of its actions or entity types. */
 export type AssistantOffer = {
@@ -85,6 +91,7 @@ export const aiAreas: readonly string[] = [
   ...capabilityKinds
     .filter((kind) => !aiControlKinds.includes(kind))
     .map(readPermission),
+  announcePermission,
   activityReadPermission,
   historyReadPermission,
   peopleReadPermission,
@@ -97,6 +104,7 @@ export const aiAlwaysOn: readonly string[] = [placesReadPermission];
 export const aiAreasOnAtFirst: readonly string[] = [
   controlPermission("light"),
   readPermission("switch"),
+  announcePermission,
 ];
 
 /** One of the core's areas, as the household has it. */

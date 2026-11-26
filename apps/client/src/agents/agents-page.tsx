@@ -1,6 +1,11 @@
 import type { AgentInfo } from "@meetsanctum/auth-protocol";
 import type { AppInfo } from "@meetsanctum/app-sdk";
-import { Button, Input, type LiveFeed } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  Input,
+  type LiveFeed,
+  useHomeClock,
+} from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import {
   Bot,
@@ -71,6 +76,7 @@ export function AgentsPage(props: {
   // The page's way back.
   page: ReactNode;
 }) {
+  const clock = useHomeClock();
   const { agents, refresh } = useAgents();
   const { canUse, hasFailed, refresh: refreshCanUse } = useAiCanUse(props.live);
   const [editing, setEditing] = useState<Editing>();
@@ -111,7 +117,7 @@ export function AgentsPage(props: {
               <AgentRow
                 key={agent.id}
                 agent={agent}
-                detail={agentDetail(agent, agents)}
+                detail={agentDetail(clock, agent, agents)}
                 onEdit={(action, trigger) =>
                   setEditing({ action, agent, trigger })
                 }

@@ -190,6 +190,21 @@ describe("the home's words", () => {
     expect(dayText(late, newYork)).toBe("24 Nov");
   });
 
+  it("write a time to the second, a schedule's time and whole names", () => {
+    const late = at("2026-11-24T23:30:12Z");
+    const zurich24 = homeClock({ timeZone: zurich });
+    const newYork12 = homeClock({ timeZone: newYork, hourCycle: "12h" });
+    expect(zurich24.secondsText(late)).toBe("00:30:12");
+    expect(newYork12.secondsText(late)).toBe("6:30:12 PM");
+    expect(zurich24.wallTimeText("07:30")).toBe("07:30");
+    expect(newYork12.wallTimeText("07:30")).toBe("7:30 AM");
+    expect(newYork12.wallTimeText("00:05")).toBe("12:05 AM");
+    expect(newYork12.wallTimeText("25:00")).toBe("25:00");
+    expect(zurich24.longWeekdayText(late)).toBe("Wednesday");
+    expect(newYork12.longWeekdayText(late)).toBe("Tuesday");
+    expect(zurich24.longDayText(late)).toBe("25 November");
+  });
+
   it("write Invalid Date for a time that isn't one, rather than fail", () => {
     const twelve = homeClock({ timeZone: zurich, hourCycle: "12h" });
     const clock = homeClock({ timeZone: zurich });
@@ -201,6 +216,9 @@ describe("the home's words", () => {
       clock.weekdayText,
       clock.dayText,
       clock.dateText,
+      clock.secondsText,
+      clock.longWeekdayText,
+      clock.longDayText,
     ]) {
       expect(word(Number.NaN)).toBe("Invalid Date");
       expect(word(new Date("not a time"))).toBe("Invalid Date");

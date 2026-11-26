@@ -223,6 +223,17 @@ export function startOfDay(at: number, timeZone: string, daysBack = 0) {
   return dayStart(addDays(localParts(at, timeZone), -daysBack), timeZone);
 }
 
+/** How many calendar days separate two instants, positive when to is later. */
+export function calendarDaysBetween(
+  from: number,
+  to: number,
+  timeZone: string,
+) {
+  return Math.round(
+    (startOfDay(to, timeZone) - startOfDay(from, timeZone)) / (24 * 3600_000),
+  );
+}
+
 // A date's whole hours every `every` hours from midnight, leaving out those
 // the clocks skip.
 const markedHours = (date: LocalDate, timeZone: string, every: number) =>
@@ -288,35 +299,67 @@ function written(
   return formatter(key, locale, options).format(time);
 }
 
-/** A time of day as the home writes it: 07:30, or 7:30 AM with 12 hours. */
-export function timeText(
+// A time of day on the clock, with or without its seconds.
+function clockText(
   at: Date | number,
   timeZone: string,
-  hourCycle: HourCycle = "24h",
+  hourCycle: HourCycle,
+  seconds: boolean,
 ) {
+  const second = seconds ? ({ second: "2-digit" } as const) : {};
+  const key = `${seconds ? "seconds" : "time"}|${hourCycle}|${timeZone}`;
   return hourCycle === "12h"
     ? written(
-        `time12|${timeZone}`,
+        key,
         "en-US",
         {
           timeZone,
           hour: "numeric",
           minute: "2-digit",
+          ...second,
           hourCycle: "h12",
         },
         at,
       )
     : written(
-        `time24|${timeZone}`,
+        key,
         "en-GB",
         {
           timeZone,
           hour: "2-digit",
           minute: "2-digit",
+          ...second,
           hourCycle: "h23",
         },
         at,
       );
+}
+
+/** A time of day as the home writes it: 07:30, or 7:30 AM with 12 hours. */
+export const timeText = (
+  at: Date | number,
+  timeZone: string,
+  hourCycle: HourCycle = "24h",
+) => clockText(at, timeZone, hourCycle, false);
+
+/** A time of day to the second, where minutes don't tell two apart: 07:30:12, or 7:30:12 AM. */
+export const secondsText = (
+  at: Date | number,
+  timeZone: string,
+  hourCycle: HourCycle = "24h",
+) => clockText(at, timeZone, hourCycle, true);
+
+/**
+ * A wall-clock time as the home writes it, such as a schedule's 07:30, which
+ * belongs to no day or zone: 07:30, or 7:30 AM with 12 hours. Anything that
+ * isn't a time of day comes back as it is.
+ */
+export function wallTimeText(time: string, hourCycle: HourCycle = "24h") {
+  const parts = /^(\d{1,2}):(\d{2})$/.exec(time);
+  const hour = Number(parts?.[1]);
+  const minute = Number(parts?.[2]);
+  if (!parts || hour > 23 || minute > 59) return time;
+  return timeText(Date.UTC(1970, 0, 1, hour, minute), "UTC", hourCycle);
 }
 
 /** An hour on its own, as an axis or a column of hours writes it: 16:00, or 4 PM with 12 hours. */
@@ -351,6 +394,24 @@ export const weekdayText = (at: Date | number, timeZone: string) =>
       timeZone,
       weekday: "short",
     },
+    at,
+  );
+
+/** A day's whole name, such as Monday. */
+export const longWeekdayText = (at: Date | number, timeZone: string) =>
+  written(
+    `longWeekday|${timeZone}`,
+    "en-GB",
+    { timeZone, weekday: "long" },
+    at,
+  );
+
+/** A date without its day, its month in full, such as 3 November. */
+export const longDayText = (at: Date | number, timeZone: string) =>
+  written(
+    `longDay|${timeZone}`,
+    "en-GB",
+    { timeZone, day: "numeric", month: "long" },
     at,
   );
 
@@ -401,10 +462,18 @@ export type HomeClock = {
   timeText(at: Date | number): string;
   /** An hour on its own: 16:00, or 4 PM. */
   hourText(at: Date | number): string;
+  /** A time of day to the second: 07:30:12, or 7:30:12 AM. */
+  secondsText(at: Date | number): string;
+  /** A wall-clock time such as a schedule's 07:30, as the home writes it: 07:30, or 7:30 AM. */
+  wallTimeText(time: string): string;
   /** A day's name, such as Mon. */
   weekdayText(at: Date | number): string;
+  /** A day's whole name, such as Monday. */
+  longWeekdayText(at: Date | number): string;
   /** A date without its day, such as 3 Nov. */
   dayText(at: Date | number): string;
+  /** A date without its day, its month in full, such as 3 November. */
+  longDayText(at: Date | number): string;
   /** A day and its date, such as Mon 3 Nov. */
   dateText(at: Date | number): string;
 };
@@ -445,8 +514,12 @@ export function homeClock(
     hours: (from, to, every) => hoursBetween(from, to, timeZone, every),
     timeText: (at) => timeText(at, timeZone, hourCycle),
     hourText: (at) => hourText(at, timeZone, hourCycle),
+    secondsText: (at) => secondsText(at, timeZone, hourCycle),
+    wallTimeText: (time) => wallTimeText(time, hourCycle),
     weekdayText: (at) => weekdayText(at, timeZone),
+    longWeekdayText: (at) => longWeekdayText(at, timeZone),
     dayText: (at) => dayText(at, timeZone),
+    longDayText: (at) => longDayText(at, timeZone),
     dateText: (at) => dateText(at, timeZone),
   };
 }

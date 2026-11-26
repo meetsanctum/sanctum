@@ -1,6 +1,7 @@
 import type { ServiceSpec } from "./containers.js";
 import { mosquittoSpec, type MqttClient } from "./mosquitto.js";
 import { ollamaData, ollamaMemoryMb, ollamaSpec, ollamaUrl } from "./ollama.js";
+import { piperData, piperMemoryMb, piperSpec, piperUrl } from "./piper.js";
 import type { ServicesState } from "./state.js";
 import type { ZigbeeCoordinator } from "./zigbee-coordinator.js";
 import {
@@ -10,8 +11,9 @@ import {
 } from "./zigbee2mqtt.js";
 
 // The services the manager can run: programs in containers of their own that
-// an app asks for with a `services:<name>` permission. The manager declares
-// what each one is; an app only names it.
+// an app asks for with a `services:<name>` permission, or the core asks for
+// itself. The manager declares what each one is; an app or the core only
+// names it.
 
 /**
  * Why a service cannot run yet. `neverSetUp` where it waits for what the
@@ -36,6 +38,8 @@ export type ServiceDefinition = {
   // Whether an app may ask for it. Apps reach the broker only through the
   // services that use it.
   forApps: boolean;
+  // Whether the core may ask for it for itself, as for speech it makes.
+  forCore?: true;
   // Topics the service uses on the broker, as a client with its own account.
   // An app that asks for the service gets an account for the same topics.
   mqttTopics?: string[];
@@ -110,6 +114,19 @@ export const serviceDefinitions: ServiceDefinition[] = [
     }),
     spec: ({ host }) => ollamaSpec(host),
   },
+  {
+    name: "piper",
+    needs: [],
+    forApps: false,
+    forCore: true,
+    memoryMb: piperMemoryMb,
+    url: piperUrl,
+    largeImage: true,
+    // Voices download again.
+    dataNeedsNoCopy: true,
+    dataVolumes: [piperData],
+    spec: () => piperSpec(),
+  },
 ];
 
 /** What a service counts for beside apps, in MB, on a host with this much memory. */
@@ -134,11 +151,13 @@ export function withServiceDependencies(names: Iterable<string>) {
   return wanted;
 }
 
-// The services that should run: those an app asked for, and what they need.
+// The services that should run: those an app or the core asked for, and
+// what they need.
 export function wantedServices(state: ServicesState) {
-  return withServiceDependencies(
-    Object.keys(state.apps).filter((name) => state.apps[name]!.length > 0),
-  );
+  return withServiceDependencies([
+    ...Object.keys(state.apps).filter((name) => state.apps[name]!.length > 0),
+    ...(state.core ?? []),
+  ]);
 }
 
 // Everything that needs a broker account, and its topics: each wanted

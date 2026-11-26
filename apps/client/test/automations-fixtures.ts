@@ -410,6 +410,7 @@ export const names: Names = {
   entity: (type, key) =>
     type === "moods.mood" && key === "focus" ? "Focus" : undefined,
   app: (id) => (id === "sanctum.moods" ? "Moods" : undefined),
+  time: (wall) => wall,
 };
 
 export function workflow(

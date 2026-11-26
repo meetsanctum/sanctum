@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type {
   AppInfo,
   ModelSourceInfo,
@@ -12,6 +13,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { coreJson } from "../src/core-fetch";
 import { ModelsPage } from "../src/models/models-page";
 import { checkLine, sourceDetail, sourceName } from "../src/models/words";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 vi.mock("../src/core-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/core-fetch")>()),
@@ -281,15 +285,16 @@ describe("the words for AI models", () => {
   });
 
   it("says how the last check went", () => {
-    expect(checkLine(mac, now)).toEqual({
+    expect(checkLine(clock, mac, now)).toEqual({
       text: "Answered in 2.1 s and used the tool · checked 5 minutes ago",
       tone: "good",
     });
-    expect(checkLine(router, now)?.text).toBe(
+    expect(checkLine(clock, router, now)?.text).toBe(
       "Answered, but may not use your home's AI tools well or act on your devices",
     );
     expect(
       checkLine(
+        clock,
         {
           ...mac,
           check: {
@@ -305,10 +310,12 @@ describe("the words for AI models", () => {
       tone: "problem",
     });
     expect(
-      checkLine({ ...mac, downSince: "2026-11-23T11:02:00Z" }, now)?.text,
+      checkLine(clock, { ...mac, downSince: "2026-11-23T11:02:00Z" }, now)
+        ?.text,
     ).toContain("Check that Office Mac is awake and Ollama is running there.");
     expect(
       checkLine(
+        clock,
         {
           ...router,
           downSince: "2026-11-23T11:02:00Z",
@@ -317,7 +324,9 @@ describe("the words for AI models", () => {
         now,
       )?.text,
     ).toContain("OpenRouter didn't take that key.");
-    expect(checkLine({ ...mac, checking: true }, now)?.tone).toBe("plain");
+    expect(checkLine(clock, { ...mac, checking: true }, now)?.tone).toBe(
+      "plain",
+    );
   });
 });
 

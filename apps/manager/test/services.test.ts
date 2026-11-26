@@ -112,6 +112,7 @@ describe("services", () => {
       { name: "mosquitto", apps: [], state: "off" },
       { name: "zigbee2mqtt", apps: [], state: "off" },
       { name: "ollama", apps: [], state: "off" },
+      { name: "piper", apps: [], state: "off" },
     ]);
   });
 
@@ -159,6 +160,7 @@ describe("services", () => {
         restarts: 0,
       }),
       { name: "ollama", apps: [], state: "off" },
+      { name: "piper", apps: [], state: "off" },
     ]);
     for (const name of ["sanctum-mosquitto", "sanctum-zigbee2mqtt"]) {
       const container = docker.container(name);
@@ -569,6 +571,7 @@ describe("services", () => {
     expect(docker.images.size).toBe(0);
     expect(docker.volumes.has("sanctum-zigbee2mqtt-data")).toBe(true);
     expect(services.list().map((service) => service.state)).toEqual([
+      "off",
       "off",
       "off",
       "off",

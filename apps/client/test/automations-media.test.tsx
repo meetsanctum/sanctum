@@ -5,6 +5,7 @@ import {
   type DeviceInfo,
   type PieceInfo,
 } from "@meetsanctum/app-sdk";
+import { wallTimeText } from "@meetsanctum/app-sdk/clock";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -163,6 +164,7 @@ const names: Names = {
   },
   entity: () => undefined,
   app: () => undefined,
+  time: (wall) => wall,
 };
 
 // Whether a step's preset is offered for a part.
@@ -234,7 +236,7 @@ describe("a player's steps", () => {
         ...speaker,
         id: "microphones",
         kind: "audio" as const,
-        features: { mutes: true, muteSwitch: false },
+        features: { mutes: true, muteSwitch: false, announces: false },
       } as CapabilityInfo;
       const device = {
         ...homeDevices[0]!,
@@ -314,7 +316,7 @@ describe("a player's volume", () => {
             }}
             apps={[]}
             home={{ places, devices, entities: [] }}
-            names={namesOf(places, devices, [], [])}
+            names={namesOf(places, devices, [], [], wallTimeText)}
             back={vi.fn()}
             ask={vi.fn()}
           />,

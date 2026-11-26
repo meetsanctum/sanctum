@@ -138,6 +138,7 @@ export const hostStatus = z.object({
       interface: z.string(),
       kind: z.enum(["wifi", "ethernet", "other"]),
       address: z.string().nullable(),
+      cidr: z.cidrv4().optional(),
       signalDbm: z.number().nullable(),
       speedMbps: z.number().nullable(),
     })

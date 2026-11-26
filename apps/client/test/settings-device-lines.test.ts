@@ -1,3 +1,4 @@
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { DeviceInfo, JoinedDevice } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
@@ -5,6 +6,9 @@ import { stageText } from "../src/add-devices-cards";
 import { countdown } from "../src/add-devices-joining";
 import { deviceDetail, deviceStatus } from "../src/settings-devices";
 import { light, now, office, remote } from "./settings-devices-fixtures";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 // How Settings → Devices words a device's line and adding devices.
 
@@ -30,26 +34,28 @@ describe("a device's line", () => {
     );
     const low = { ...remote, battery: 8 };
     expect(deviceDetail(low, [office])).toBe("Office · Wireless mini switch");
-    expect(deviceStatus(low, null, now)).toEqual({
+    expect(deviceStatus(clock, low, null, now)).toEqual({
       text: "Battery low, 8%: replace it soon",
       tone: "problem",
     });
     const updating = { text: "Updating, 40%", tone: "busy" } as const;
-    expect(deviceStatus(low, updating, now)).toBe(updating);
+    expect(deviceStatus(clock, low, updating, now)).toBe(updating);
     // The device says its battery is low: its charge stays on its line.
     const flagged = { ...remote, battery: 63, batteryLow: true };
     expect(deviceDetail(flagged, [office])).toBe(
       "Office · Wireless mini switch · Battery 63%",
     );
-    expect(deviceStatus(flagged, null, now)).toEqual({
+    expect(deviceStatus(clock, flagged, null, now)).toEqual({
       text: "Battery low: replace it soon",
       tone: "problem",
     });
-    expect(deviceStatus({ ...flagged, battery: null }, null, now)).toEqual({
+    expect(
+      deviceStatus(clock, { ...flagged, battery: null }, null, now),
+    ).toEqual({
       text: "Battery low: replace it soon",
       tone: "problem",
     });
-    expect(deviceStatus(remote, null, now)).toBeNull();
+    expect(deviceStatus(clock, remote, null, now)).toBeNull();
   });
 
   it("leads with a remote on a battery gone quiet, as Maintenance says it", () => {
@@ -59,13 +65,18 @@ describe("a device's line", () => {
       availability: "unknown",
       lastSeenAt: "2026-10-27T09:10:00Z",
     } satisfies DeviceInfo;
-    expect(deviceStatus(quiet, null, now)).toEqual({
+    expect(deviceStatus(clock, quiet, null, now)).toEqual({
       text: "Not heard from since Tuesday: try a new battery",
       tone: "problem",
     });
     // Not for a day yet: its low battery leads.
     expect(
-      deviceStatus({ ...quiet, lastSeenAt: "2026-10-31T01:00:00Z" }, null, now),
+      deviceStatus(
+        clock,
+        { ...quiet, lastSeenAt: "2026-10-31T01:00:00Z" },
+        null,
+        now,
+      ),
     ).toEqual({ text: "Battery low, 6%: replace it soon", tone: "problem" });
   });
 
@@ -79,7 +90,12 @@ describe("a device's line", () => {
     } satisfies DeviceInfo;
     expect(deviceDetail(left, [office])).toBe("Office · Wireless mini switch");
     expect(
-      deviceStatus(left, { text: "Update available", tone: "plain" }, now),
+      deviceStatus(
+        clock,
+        left,
+        { text: "Update available", tone: "plain" },
+        now,
+      ),
     ).toEqual({
       text: "Not paired any more: add it again or remove it",
       tone: "problem",
@@ -92,7 +108,12 @@ describe("a device's line", () => {
       problem: { id: "loose", words: "Its plug is loose", repair: null },
     } satisfies DeviceInfo;
     expect(
-      deviceStatus(broken, { text: "Update available", tone: "plain" }, now),
+      deviceStatus(
+        clock,
+        broken,
+        { text: "Update available", tone: "plain" },
+        now,
+      ),
     ).toEqual({ text: "Its plug is loose", tone: "problem" });
   });
 

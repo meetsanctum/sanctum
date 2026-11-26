@@ -1,6 +1,7 @@
 import {
   activityReadPermission,
   aiAssistantPermission,
+  announcePermission,
   historyReadPermission,
 } from "./ai-agents.js";
 import type { CapabilityKind } from "./devices.js";
@@ -39,6 +40,7 @@ export const permissionIcons = [
   "sparkles",
   "mic",
   "bot",
+  "megaphone",
 ] as const;
 export type PermissionIcon = (typeof permissionIcons)[number];
 
@@ -111,6 +113,11 @@ const fixed: Record<string, PermissionWords> = {
     title: "See what your devices reported",
     detail: null,
     icon: "history",
+  },
+  [announcePermission]: {
+    title: "Speak on your smart speakers",
+    detail: null,
+    icon: "megaphone",
   },
   "devices.register": {
     title: "Bring devices into your home",

@@ -3,7 +3,7 @@ import type {
   ActivityTrigger,
   ActivityWho,
 } from "@meetsanctum/app-sdk";
-import { timeText, type HomeClock } from "@meetsanctum/app-sdk/clock";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import { pressLabel } from "@meetsanctum/ui-sdk";
 
 import { productName } from "../brand";
@@ -17,18 +17,12 @@ export function triggerWords(
   at: string,
 ) {
   switch (trigger.piece) {
-    case "time": {
-      const { time } = trigger;
-      if (time === undefined || time === null) {
-        return `at ${clock.timeText(Date.parse(at))}`;
-      }
-      // The schedule already holds wall time, so format it without shifting zones.
-      const scheduled = Date.parse(`1970-01-01T${time}:00Z`);
-      const shown = Number.isNaN(scheduled)
-        ? time
-        : timeText(scheduled, "UTC", clock.hourCycle);
-      return `at ${shown}`;
-    }
+    case "time":
+      return `at ${
+        trigger.time
+          ? clock.wallTimeText(trigger.time)
+          : clock.timeText(Date.parse(at))
+      }`;
     case "sun": {
       const event = trigger.event ?? "sunset";
       const offset = trigger.offsetMinutes ?? 0;

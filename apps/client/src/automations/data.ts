@@ -136,6 +136,7 @@ export function namesOf(
   devices: readonly DeviceInfo[],
   apps: readonly AppInfo[],
   entities: readonly EntityInfo[],
+  time: Names["time"],
 ): Names {
   return {
     room: (id) => places?.rooms.find((room) => room.id === id)?.name,
@@ -153,6 +154,7 @@ export function namesOf(
     entity: (type, key) =>
       entities.find((each) => each.type === type && each.key === key)?.name,
     app: (id) => apps.find((app) => app.id === id)?.name,
+    time,
   };
 }
 

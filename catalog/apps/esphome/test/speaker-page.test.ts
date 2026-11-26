@@ -67,7 +67,12 @@ describe("a smart speaker's page", () => {
     ).toEqual({
       id: "audio",
       kind: "audio",
-      features: { mutes: true, muteSwitch: true },
+      features: {
+        mutes: true,
+        muteSwitch: true,
+        announces: true,
+        announcementPlayer: "media-media_player",
+      },
     });
   });
 
@@ -263,7 +268,12 @@ describe("a smart speaker's page", () => {
     ).toEqual({
       id: "audio",
       kind: "audio",
-      features: { mutes: false, muteSwitch: false },
+      features: {
+        mutes: false,
+        muteSwitch: false,
+        announces: true,
+        announcementPlayer: "media-media_player",
+      },
     });
     device.wake();
     await home.core.until(

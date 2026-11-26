@@ -1,5 +1,9 @@
 import type { AppInfo } from "@meetsanctum/app-sdk";
-import type { LiveFeed, PageParams } from "@meetsanctum/ui-sdk";
+import {
+  useHomeClock,
+  type LiveFeed,
+  type PageParams,
+} from "@meetsanctum/ui-sdk";
 import { useMemo } from "react";
 
 import type { useDevices } from "../use-devices";
@@ -31,9 +35,11 @@ export function AutomationsPage(props: {
 }) {
   const automations = useAutomations(props.live);
   const { places, devices } = props.devices;
+  const { wallTimeText } = useHomeClock();
   const names = useMemo(
-    () => namesOf(places, devices, props.apps, automations.entities),
-    [places, devices, props.apps, automations.entities],
+    () =>
+      namesOf(places, devices, props.apps, automations.entities, wallTimeText),
+    [places, devices, props.apps, automations.entities, wallTimeText],
   );
   const home = useMemo<Home>(
     () => ({ places, devices, entities: automations.entities }),

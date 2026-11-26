@@ -4,7 +4,7 @@ import { join } from "node:path";
 import {
   coreContainerName,
   coreRole,
-  createCoreContainer,
+  startCoreContainer,
   previousCoreContainerName,
 } from "../core-container.js";
 import { assertManaged } from "../docker-resources.js";
@@ -107,8 +107,11 @@ export async function updateCore(
       name: previousCoreContainerName,
     });
   }
-  await createCoreContainer(docker, target.imageId!);
-  await docker.getContainer(coreContainerName).start();
+  await startCoreContainer({
+    docker,
+    image: target.imageId!,
+    log: context.log,
+  });
 
   await step(context, journal, "checking", "Checking the new core's health");
   try {

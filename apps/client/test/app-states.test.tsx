@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { AppInfo, AppRun, AppState } from "@meetsanctum/app-sdk";
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -25,6 +26,9 @@ import {
 } from "../src/automations/blocked";
 import { productName } from "../src/brand";
 import { coreJson } from "../src/core-fetch";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 // An app's states from its supervisor, said the same everywhere it shows.
 
@@ -325,7 +329,7 @@ describe("Needs attention", () => {
         { ...failed, name: "Weather" },
       ]).map(({ name }) => name),
     ).toEqual(["Weather", "Zigbee"]);
-    expect(appAttentionText(longer)).toMatch(
+    expect(appAttentionText(clock, longer)).toMatch(
       /^Waiting for Zigbee2MQTT since .+\. It starts by itself once it can$/,
     );
     expect(appAttentionSpoken(longer)).toBe("Weather is waiting");
@@ -375,7 +379,7 @@ describe("Needs attention", () => {
   });
 
   it("says one stopped for good is a problem", () => {
-    expect(appAttentionText(failed)).toBe(
+    expect(appAttentionText(clock, failed)).toBe(
       "Not running: stopped after 5 failures in 10 minutes",
     );
     expect(appAttentionSpoken(failed)).toBe("Weather isn't running");
