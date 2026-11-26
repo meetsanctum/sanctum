@@ -6,9 +6,10 @@ import {
   type WidgetContent,
   type WidgetValue,
 } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 
 import { condition } from "./conditions.js";
-import { daysFromToday, homeDate, sunToday } from "./days.js";
+import { dateIn, daysFromToday, sunToday } from "./days.js";
 
 // Weather's card for dashboards, which the shell draws from what Weather
 // works out here: four cells square, the temperature now as its headline,
@@ -88,15 +89,16 @@ const degrees = (celsius: number | null): WidgetValue =>
 
 /** What the card says for the home now, from the sun and the forecast Weather has. */
 export function cardOf(
+  clock: HomeClock,
   sun: SunTimes | null,
   forecast: Forecast | null,
   now: Date,
 ): WidgetContent {
   return {
     blocks: [
-      ...(forecast ? weatherNow(forecast, now) : noForecast),
-      ...(sun ? sunBlocks(sun, now) : []),
-      ...(forecast ? nextDays(forecast, now) : []),
+      ...(forecast ? weatherNow(clock, forecast, now) : noForecast),
+      ...(sun ? sunBlocks(clock, sun, now) : []),
+      ...(forecast ? nextDays(clock, forecast, now) : []),
     ],
   };
 }
@@ -105,9 +107,13 @@ const noForecast: WidgetBlock[] = [{ kind: "note", text: "No forecast yet." }];
 
 // The temperature now, the weather in words, today's high and low and its
 // chance of rain.
-function weatherNow(forecast: Forecast, now: Date): WidgetBlock[] {
-  const today = daysFromToday(forecast, now).find(
-    (day) => day.date === homeDate(forecast.timeZone, now),
+function weatherNow(
+  clock: HomeClock,
+  forecast: Forecast,
+  now: Date,
+): WidgetBlock[] {
+  const today = daysFromToday(clock, forecast, now).find(
+    (day) => day.date === dateIn(clock, forecast.timeZone, now),
   );
   const current = forecast.current;
   const { text, icon } = condition(
@@ -138,8 +144,8 @@ function weatherNow(forecast: Forecast, now: Date): WidgetBlock[] {
 }
 
 // Sunrise and sunset on the home's today, if it has them.
-function sunBlocks(sun: SunTimes, now: Date): WidgetBlock[] {
-  const today = sunToday(sun, now);
+function sunBlocks(clock: HomeClock, sun: SunTimes, now: Date): WidgetBlock[] {
+  const today = sunToday(clock, sun, now);
   if (!today) return [];
   const items = [
     today.sunrise && {
@@ -159,9 +165,13 @@ function sunBlocks(sun: SunTimes, now: Date): WidgetBlock[] {
 }
 
 // The five days after the home's today.
-function nextDays(forecast: Forecast, now: Date): WidgetBlock[] {
-  const today = homeDate(forecast.timeZone, now);
-  const days = daysFromToday(forecast, now)
+function nextDays(
+  clock: HomeClock,
+  forecast: Forecast,
+  now: Date,
+): WidgetBlock[] {
+  const today = dateIn(clock, forecast.timeZone, now);
+  const days = daysFromToday(clock, forecast, now)
     .filter((day) => day.date > today)
     .slice(0, 5);
   if (days.length === 0) return [];

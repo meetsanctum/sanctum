@@ -1,12 +1,12 @@
 import type { Forecast, TemperatureUnit } from "@meetsanctum/app-sdk";
-import { widgetIconOf } from "@meetsanctum/ui-sdk";
+import { useHomeClock, widgetIconOf } from "@meetsanctum/ui-sdk";
 
 import { condition } from "../conditions";
-import { daysFromToday, homeDate } from "../days";
+import { dateIn, daysFromToday } from "../days";
 import { weatherNow } from "../hours";
 import { daySummary, summarySentence } from "../summary";
 import { Heading } from "./parts";
-import { clock, degrees } from "./words";
+import { degrees, timeAt } from "./words";
 
 // The weather now, on the page itself with no card: the temperature as a
 // large numeral, the sky in words, what it feels like with today's high and
@@ -18,13 +18,14 @@ export function NowBlock(props: {
   now: Date;
 }) {
   const { forecast, unit, now } = props;
+  const clock = useHomeClock();
   const current = weatherNow(forecast, now);
-  const today = daysFromToday(forecast, now).find(
-    (day) => day.date === homeDate(forecast.timeZone, now),
+  const today = daysFromToday(clock, forecast, now).find(
+    (day) => day.date === dateIn(clock, forecast.timeZone, now),
   );
   const { text, icon } = condition(current.weatherCode, current.isDay ?? true);
   const Icon = widgetIconOf[icon];
-  const summary = daySummary(forecast, now);
+  const summary = daySummary(clock, forecast, now);
   return (
     <section aria-labelledby="weather-now" className="flex min-w-0 flex-col">
       <Heading id="weather-now">Now</Heading>
@@ -49,7 +50,7 @@ export function NowBlock(props: {
       {summary && (
         <p className="m-0 mt-4 text-[15px] leading-[22px] text-balance max-sm:mt-3">
           {summarySentence(summary, (instant) =>
-            clock(instant, forecast.timeZone),
+            timeAt(clock, instant, forecast.timeZone),
           )}
         </p>
       )}

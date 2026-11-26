@@ -226,6 +226,10 @@ export function startableHome(options: { devices?: DeviceInfo[] } = {}) {
     readModel: unused,
     cancelModel: unused,
     hostResources: unused,
+    homeClock: async () => ({
+      timeZone: state.places.home.timeZone ?? "UTC",
+      hourCycle: state.places.home.hourCycle,
+    }),
     aiTools: unused,
     callAiTool: unused,
     replyRequest: unused,

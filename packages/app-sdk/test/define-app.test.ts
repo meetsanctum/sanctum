@@ -702,6 +702,7 @@ const noCore: CoreCalls = {
   readModel: unused,
   cancelModel: unused,
   hostResources: unused,
+  homeClock: unused,
   aiTools: unused,
   callAiTool: unused,
   replyRequest: unused,

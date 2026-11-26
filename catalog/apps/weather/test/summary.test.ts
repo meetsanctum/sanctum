@@ -1,7 +1,12 @@
+import type { Forecast } from "@meetsanctum/app-sdk";
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import { describe, expect, it } from "vitest";
 
 import { daySummary, summarySentence } from "../src/summary.js";
 import { forecast, morning, withHours } from "./sample.js";
+
+// Each forecast and sun is read in the zone it was fetched in.
+const clock = homeClock();
 
 // The rest of the home's day in one sentence.
 
@@ -9,14 +14,14 @@ const hour = 3_600_000;
 const later = (hours: number) => new Date(morning.getTime() + hours * hour);
 // The hour of an instant in UTC, such as 15:00.
 const time = (instant: string) => instant.slice(11, 16);
-const sentence = (...args: Parameters<typeof daySummary>) => {
-  const summary = daySummary(...args);
+const sentence = (forecast: Forecast, now: Date) => {
+  const summary = daySummary(clock, forecast, now);
   return summary && summarySentence(summary, time);
 };
 
 describe("the day's summary", () => {
   it("says until when it falls, when it falls now", () => {
-    expect(daySummary(forecast, morning)).toEqual({
+    expect(daySummary(clock, forecast, morning)).toEqual({
       kind: "wet-until",
       words: "Rain",
       until: "2026-10-29T15:00:00.000Z",
@@ -43,7 +48,7 @@ describe("the day's summary", () => {
           : each.weatherCode,
     }));
 
-    expect(daySummary(rainAgain, morning)).toEqual({
+    expect(daySummary(clock, rainAgain, morning)).toEqual({
       kind: "wet-until",
       words: "Rain",
       until: "2026-10-29T20:00:00.000Z",
@@ -115,17 +120,19 @@ describe("the day's summary", () => {
   });
 
   it("says nothing without hours left today or a sky for now", () => {
-    expect(daySummary({ ...forecast, hours: undefined }, morning)).toBeNull();
-    expect(daySummary(forecast, later(48))).toBeNull();
+    expect(
+      daySummary(clock, { ...forecast, hours: undefined }, morning),
+    ).toBeNull();
+    expect(daySummary(clock, forecast, later(48))).toBeNull();
     const unknownNow = {
       ...forecast,
       current: { ...forecast.current!, weatherCode: null },
     };
-    expect(daySummary(unknownNow, morning)).toBeNull();
+    expect(daySummary(clock, unknownNow, morning)).toBeNull();
   });
 
   it("says nothing when a kept forecast ends before the day's end", () => {
-    expect(daySummary(forecast, later(41))).toBeNull();
+    expect(daySummary(clock, forecast, later(41))).toBeNull();
   });
 
   it("does not treat unknown hours as dry weather", () => {
@@ -134,6 +141,6 @@ describe("the day's summary", () => {
         each.time === "2026-10-29T15:00:00.000Z" ? null : each.weatherCode,
     }));
 
-    expect(daySummary(missingHour, morning)).toBeNull();
+    expect(daySummary(clock, missingHour, morning)).toBeNull();
   });
 });

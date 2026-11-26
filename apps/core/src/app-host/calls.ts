@@ -167,7 +167,7 @@ export function createCoreCalls(options: {
   // What this start on a new version has claimed so far (commits.ts).
   claims?: () => Claims | undefined;
   people: Pick<People, "list">;
-  places: Pick<PlacesModule, "list" | "location">;
+  places: Pick<PlacesModule, "list" | "location" | "clock">;
   devices: Devices;
   presses: Pick<Presses, "press" | "released">;
   firmware: Pick<Firmware, "report">;
@@ -618,6 +618,14 @@ export function createCoreCalls(options: {
       const pieces = await turn.read(read?.handle, read?.after);
       need(modelsUsePermission);
       return pieces;
+    },
+
+    // The home's time zone and how it writes times, which every app's page
+    // has in its frame already: it needs no permission.
+    async homeClock() {
+      open();
+      const { timeZone, hourCycle } = options.places.clock();
+      return { timeZone, hourCycle };
     },
 
     // What the host has: nothing private, so it needs no permission.

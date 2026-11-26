@@ -139,16 +139,3 @@ export function nextFreeWindow(spans: readonly Span[]): Span | null {
     freeWindow(taken, 0, step)
   );
 }
-
-/** The minute of the day it is at an instant in a time zone. */
-export function minuteIn(at: Date, timeZone: string) {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    hourCycle: "h23",
-    minute: "2-digit",
-    timeZone,
-  }).formatToParts(at);
-  const part = (type: string) =>
-    Number(parts.find((each) => each.type === type)?.value ?? 0);
-  return (part("hour") % 24) * 60 + part("minute");
-}

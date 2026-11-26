@@ -1,8 +1,8 @@
 import type { Forecast, TemperatureUnit } from "@meetsanctum/app-sdk";
-import { PageSection, widgetIconOf } from "@meetsanctum/ui-sdk";
+import { PageSection, useHomeClock, widgetIconOf } from "@meetsanctum/ui-sdk";
 
 import { condition } from "../conditions";
-import { daysFromToday, homeDate, temperatureSpans } from "../days";
+import { dateIn, daysFromToday, temperatureSpans } from "../days";
 import { Chance } from "./parts";
 import { degrees, weekdayOf } from "./words";
 
@@ -17,8 +17,9 @@ export function DaysCard(props: {
   now: Date;
 }) {
   const { forecast, unit, now } = props;
-  const days = daysFromToday(forecast, now).slice(0, 10);
-  const today = homeDate(forecast.timeZone, now);
+  const clock = useHomeClock();
+  const days = daysFromToday(clock, forecast, now).slice(0, 10);
+  const today = dateIn(clock, forecast.timeZone, now);
   const spans = temperatureSpans(days);
   if (days.length === 0) return null;
   return (
@@ -36,7 +37,7 @@ export function DaysCard(props: {
               className="flex h-[42px] items-center gap-2 rounded-sm px-2.5 text-[15px] leading-[22px] whitespace-nowrap max-sm:h-[46px]"
             >
               <span className="w-[58px] shrink-0">
-                {day.date === today ? "Today" : weekdayOf(day.date)}
+                {day.date === today ? "Today" : weekdayOf(clock, day.date)}
               </span>
               <Icon
                 role="img"

@@ -448,6 +448,11 @@ export type HomeClock = {
   readonly timeZone: string;
   readonly hourCycle: HourCycle;
   now(): Date;
+  /**
+   * The same hours and time in another zone, for data stamped with the zone
+   * it was fetched in, such as a forecast's days.
+   */
+  withTimeZone(timeZone: string): HomeClock;
   /** What the home's wall clock reads, now unless said. */
   parts(at?: Date | number): LocalParts;
   /** The home's date, today unless said, such as 2026-10-29. */
@@ -500,6 +505,7 @@ export function homeClock(
     timeZone,
     hourCycle,
     now,
+    withTimeZone: (zone) => homeClock({ timeZone: zone, hourCycle, now }),
     parts: (at = now()) => localParts(at, timeZone),
     date: (at = now()) => localDate(timeZone, at),
     startOfDay: (at = now().getTime(), daysBack = 0) =>

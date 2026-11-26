@@ -58,17 +58,10 @@ describe("a card's values", () => {
           { date: "2026-11-04" },
           { ...celsius, clock: homeClock({ timeZone }) },
         ),
-      ).toBe(
-        new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(
-          new Date(2026, 10, 4),
-        ),
-      );
+      ).toBe("Wed");
     }
     expect(formatWidgetValue({ date: "2026-11-04", as: "day" }, celsius)).toBe(
-      new Intl.DateTimeFormat(undefined, {
-        day: "numeric",
-        month: "short",
-      }).format(new Date(2026, 10, 4)),
+      "4 Nov",
     );
   });
 });

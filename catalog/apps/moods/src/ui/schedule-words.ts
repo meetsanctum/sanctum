@@ -1,4 +1,7 @@
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
+
 import {
+  day,
   formatMinute,
   isOvernight,
   lengthOf,
@@ -11,9 +14,33 @@ import type { RoomSchedule } from "./schedules";
 // its lights on brings, apart from the pages so they can be checked on
 // their own.
 
+/** The minute of the day it is at an instant on the home's clock. */
+export function minuteOfDay(clock: HomeClock, at: Date) {
+  const { hour, minute } = clock.parts(at);
+  return hour * 60 + minute;
+}
+
+/**
+ * A minute of the day as the home writes it: 07:45, or 7:45 AM. The day's
+ * end is 24:00, or 12:00 AM.
+ */
+export function minuteWords(clock: HomeClock, minute: number) {
+  return clock.hourCycle === "24h"
+    ? formatMinute(minute)
+    : clock.wallTimeText(formatMinute(minute % day));
+}
+
+/** Midnight at the end of the day needs a day label in 12-hour time. */
+export function endWords(clock: HomeClock, minute: number) {
+  const time = minuteWords(clock, minute);
+  return minute === day && clock.hourCycle === "12h"
+    ? `${time}, next day`
+    : time;
+}
+
 /** Such as "06:30 to 09:00", or "22:00 to 06:30, overnight". */
-export function spanWords(span: Span) {
-  const words = `${formatMinute(span.start)} to ${formatMinute(span.end)}`;
+export function spanWords(clock: HomeClock, span: Span) {
+  const words = `${minuteWords(clock, span.start)} to ${endWords(clock, span.end)}`;
   return isOvernight(span) && span.end !== 0 ? `${words}, overnight` : words;
 }
 
@@ -35,36 +62,15 @@ export function namesWords(names: readonly string[]) {
   return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
 
-const dateIn = (at: Date, timeZone: string) => {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  }).formatToParts(at);
-  const part = (type: string) =>
-    Number(parts.find((each) => each.type === type)!.value);
-  // Compare calendar dates; a local day can be 23 or 25 hours long.
-  return Date.UTC(part("year"), part("month") - 1, part("day"));
-};
-
 /** Such as "at 23:10 yesterday", "at 08:15 today" or "on 28 October". */
-export function whenWords(at: Date, now: Date, timeZone: string) {
-  const time = new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-    timeZone,
-  }).format(at);
-  const day = dateIn(at, timeZone);
-  if (day === dateIn(now, timeZone)) return `at ${time} today`;
-  const yesterday = dateIn(now, timeZone) - 24 * 60 * 60 * 1000;
-  if (day === yesterday) return `at ${time} yesterday`;
-  return `on ${new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "long",
-    timeZone,
-  }).format(at)}`;
+export function whenWords(clock: HomeClock, at: Date, now: Date) {
+  const time = clock.timeText(at);
+  const date = clock.date(at);
+  if (date === clock.date(now)) return `at ${time} today`;
+  // The day before's own date: a day can be 23 or 25 hours long.
+  const yesterday = clock.date(clock.startOfDay(now.getTime(), 1));
+  if (date === yesterday) return `at ${time} yesterday`;
+  return `on ${clock.longDayText(at)}`;
 }
 
 /**
@@ -79,20 +85,20 @@ export function turnOnWords(options: {
   lightName: (light: { device: string; capability: string }) => string;
   minute: number;
   now: Date;
-  timeZone: string;
+  clock: HomeClock;
 }) {
-  const { schedule, moodNames, minute, now, timeZone } = options;
+  const { schedule, moodNames, minute, now, clock } = options;
   const holding = spanAt(schedule.scheduled, minute);
   const mood = holding && moodNames.get(holding.moodId);
   if (schedule.turnOn === "followSchedule" && holding && mood) {
-    return `Turning the lights on now brings ${mood}, until ${formatMinute(holding.end)}.`;
+    return `Turning the lights on now brings ${mood}, until ${endWords(clock, holding.end)}.`;
   }
   const snapshot = schedule.snapshot;
   if (!snapshot || snapshot.lights.length === 0) {
     return "Turning the lights on now brings each light on as it remembers itself.";
   }
   const names = namesWords(snapshot.lights.map(options.lightName));
-  const when = whenWords(new Date(snapshot.takenAt), now, timeZone);
+  const when = whenWords(clock, new Date(snapshot.takenAt), now);
   return schedule.turnOn === "asTheyWere"
     ? `Turning the lights on now brings back ${names} as they were ${when}.`
     : `Turning the lights on now brings back ${names}, the lights that were on ${when}.`;

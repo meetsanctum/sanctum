@@ -1,4 +1,5 @@
 import type { DeviceInfo, EntityInfo, Places } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import { useAppClient, useAppSettings } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useState } from "react";
 
@@ -258,11 +259,10 @@ export function kelvinLabel(kelvin: number) {
 /** A colour temperature in mireds, as people read it. */
 export const kelvin = (mired: number) => kelvinLabel(1_000_000 / mired);
 
-/** A time of day in the home's time zone, as this device writes times. */
-export function timeOfDay(iso: string, timeZone: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone,
-  }).format(new Date(iso));
+/**
+ * A time of day as the home writes it, 07:04 or 7:04 AM, in the time zone
+ * the sun's times were worked out in.
+ */
+export function timeOfDay(clock: HomeClock, iso: string, timeZone: string) {
+  return clock.withTimeZone(timeZone).timeText(Date.parse(iso));
 }

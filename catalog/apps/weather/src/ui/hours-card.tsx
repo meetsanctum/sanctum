@@ -1,5 +1,10 @@
 import type { Forecast, TemperatureUnit } from "@meetsanctum/app-sdk";
-import { PageSection, usePhone, widgetIconOf } from "@meetsanctum/ui-sdk";
+import {
+  PageSection,
+  useHomeClock,
+  usePhone,
+  widgetIconOf,
+} from "@meetsanctum/ui-sdk";
 
 import { condition } from "../conditions";
 import { hourColumns, plotOf } from "../hours";
@@ -21,9 +26,16 @@ export function HoursCard(props: {
   now: Date;
 }) {
   const { forecast, unit, now } = props;
+  const clock = useHomeClock();
+  const forecastClock = clock.withTimeZone(forecast.timeZone);
   const isPhone = usePhone();
   const count = isPhone ? 8 : 12;
-  const columns = hourColumns(forecast, { count, every: isPhone ? 3 : 2 }, now);
+  const columns = hourColumns(
+    clock,
+    forecast,
+    { count, every: isPhone ? 3 : 2 },
+    now,
+  );
   if (columns.length === 0) return null;
   const temperatures = columns.map((column) => column.temperatureC);
   const plot = plotOf(temperatures, plotSize);
@@ -81,8 +93,8 @@ export function HoursCard(props: {
                   {column.isNow
                     ? "Now"
                     : column.startsDay
-                      ? weekdayAt(column.time, forecast.timeZone)
-                      : hourLabel(column.time, forecast.timeZone)}
+                      ? weekdayAt(forecastClock, column.time)
+                      : hourLabel(forecastClock, column.time)}
                 </span>
                 <span className="mt-[42px] text-[15px] leading-[22px] font-medium">
                   {degrees(column.temperatureC, unit)}

@@ -37,6 +37,7 @@ import type {
   Actor,
   EventDefinition,
 } from "./index.js";
+import { homeClock, type HomeClock, type HourCycle } from "./clock.js";
 import type { HostResources } from "./host.js";
 import type { RequestReply } from "./requests.js";
 import { modelAnswerOf } from "./model-answers.js";
@@ -110,6 +111,8 @@ export interface CoreCalls {
   people(): Promise<PersonInfo[]>;
   places(): Promise<Places>;
   location(): Promise<HomeLocation | null>;
+  /** The home's time zone and how it writes times. */
+  homeClock(): Promise<{ timeZone: string; hourCycle: HourCycle }>;
   devices(): Promise<DeviceInfo[]>;
   device(id: string): Promise<DeviceInfo>;
   command(command: DeviceCommand): Promise<CapabilityInfo>;
@@ -223,6 +226,14 @@ export interface AppContext {
     /** Where the home is, or null until someone sets it; needs `places.location`. */
     location(): Promise<HomeLocation | null>;
   };
+  /**
+   * The home clock: the home's days and times, and its words for them, such
+   * as 07:30 or 7:30 AM, in the time zone and hours the household set. It
+   * needs no permission. It is bound to them as they are when it answers, so
+   * ask again each time something is worked out, and a changed zone or hour
+   * setting reaches the app. The time itself is the app's own.
+   */
+  clock(): Promise<HomeClock>;
   readonly devices: {
     /** The devices with capabilities the app may read (`devices.read:<kind>`), showing only those. */
     list(): Promise<DeviceInfo[]>;
@@ -532,6 +543,7 @@ export function createRequestContext(options: ContextOptions): RequestContext {
     },
     people: { list: () => core.people() },
     places: { list: () => core.places(), location: () => core.location() },
+    clock: async () => homeClock(await core.homeClock()),
     devices: {
       list: () => core.devices(),
       state: (deviceId) => core.device(deviceId),

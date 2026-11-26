@@ -48,12 +48,10 @@ export function formatWidgetValue(value: WidgetValue, shown: Shown) {
     return shown.clock.timeText(new Date(value.time));
   }
   if ("date" in value) {
-    return new Intl.DateTimeFormat(
-      undefined,
-      value.as === "day"
-        ? { day: "numeric", month: "short", timeZone: "UTC" }
-        : { weekday: "short", timeZone: "UTC" },
-    ).format(new Date(`${value.date}T12:00:00Z`));
+    // A date belongs to no zone: read at its noon in UTC, it is that day.
+    const day = shown.clock.withTimeZone("UTC");
+    const noon = Date.parse(`${value.date}T12:00:00Z`);
+    return value.as === "day" ? day.dayText(noon) : day.weekdayText(noon);
   }
   if ("percent" in value) return `${Math.round(value.percent)}%`;
   return value.unit === "lux"

@@ -7,20 +7,25 @@ import {
   PageSection,
   tileIconOf,
   type PageProps,
+  useHomeClock,
 } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   day,
   endsFrom,
-  formatMinute,
   nextFreeWindow,
   spanAt,
   step,
   type Span,
 } from "../schedules/times.js";
 import type { Mood } from "./mood-draft";
-import { lengthWords, spanWords } from "./schedule-words";
+import {
+  endWords,
+  lengthWords,
+  minuteWords,
+  spanWords,
+} from "./schedule-words";
 import type { RoomSchedule } from "./schedules";
 import { useMoodsApp } from "./state";
 
@@ -104,6 +109,7 @@ function Editor(props: {
 }) {
   const { schedule, moods, editing, leave } = props;
   const { schedules } = useMoodsApp();
+  const clock = useHomeClock();
   const [draft, setDraft] = useState(() => initial(schedule, moods, editing));
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -152,7 +158,7 @@ function Editor(props: {
   const timesOf = (moodId: string) => {
     const times = others.filter((each) => each.moodId === moodId);
     return times.length
-      ? times.map((each) => spanWords(each)).join(", ")
+      ? times.map((each) => spanWords(clock, each)).join(", ")
       : moodId === editing?.moodId
         ? "Scheduled here only"
         : "Not scheduled";
@@ -199,8 +205,8 @@ function Editor(props: {
                     disabled={taken !== undefined}
                   >
                     {taken
-                      ? `${formatMinute(start)} · ${by?.name ?? "Taken"}`
-                      : formatMinute(start)}
+                      ? `${minuteWords(clock, start)} · ${by?.name ?? "Taken"}`
+                      : minuteWords(clock, start)}
                   </NativeSelectOption>
                 );
               })}
@@ -219,9 +225,9 @@ function Editor(props: {
             >
               {ends.map((end) => (
                 <NativeSelectOption key={end} value={String(end)}>
-                  {end <= draft.start && end !== day
-                    ? `${formatMinute(end)}, next day`
-                    : formatMinute(end)}
+                  {end <= draft.start
+                    ? `${minuteWords(clock, end)}, next day`
+                    : endWords(clock, end)}
                 </NativeSelectOption>
               ))}
             </NativeSelect>
@@ -278,10 +284,10 @@ function Editor(props: {
       </PageSection>
       {mood && (
         <p className="m-0 shrink-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
-          At {formatMinute(draft.start)} {mood.name} comes on if one of the
-          room&apos;s lights is on.
+          At {minuteWords(clock, draft.start)} {mood.name} comes on if one of
+          the room&apos;s lights is on.
           {schedule.turnOn === "followSchedule" &&
-            ` Until ${formatMinute(draft.end)}, turning the room's lights on brings ${mood.name}.`}
+            ` Until ${minuteWords(clock, draft.end)}, turning the room's lights on brings ${mood.name}.`}
         </p>
       )}
       {error && (

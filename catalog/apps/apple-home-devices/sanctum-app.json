@@ -3,7 +3,7 @@
   "name": "Apple Home Devices",
   "version": "0.2.1",
   "core": "^2.0.0",
-  "protocol": 23,
+  "protocol": 24,
   "summary": "Brings your Apple TVs into your home, with what they play.",
   "runtime": {
     "memory": 128,

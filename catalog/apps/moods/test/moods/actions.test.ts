@@ -119,6 +119,10 @@ function home(
     readModel: unused,
     cancelModel: unused,
     hostResources: unused,
+    homeClock: async () => ({
+      timeZone: places.home.timeZone ?? "UTC",
+      hourCycle: places.home.hourCycle,
+    }),
     aiTools: unused,
     callAiTool: unused,
     replyRequest: unused,

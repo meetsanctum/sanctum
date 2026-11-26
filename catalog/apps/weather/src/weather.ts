@@ -6,6 +6,7 @@ import {
   type Forecast,
   type HomeLocation,
 } from "@meetsanctum/app-sdk";
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import { eq } from "drizzle-orm";
 
 import { cardKey, cardOf, weatherCard } from "./card.js";
@@ -43,6 +44,9 @@ export function createWeather(ctx: AppContext, options: WeatherOptions = {}) {
   const refreshMs = options.refreshMs ?? 60 * 60_000;
   const retryMs = options.retryMs ?? 10 * 60_000;
   const now = options.now ?? (() => new Date());
+  // The card's days are read in the zone the sun and the forecast were
+  // fetched in (days.ts), so only the clock's way of reading them is needed.
+  const clock = homeClock({ now });
   let timer: ReturnType<typeof setTimeout> | undefined;
   let wake: (() => void) | undefined;
   let isStopped = false;
@@ -103,7 +107,11 @@ export function createWeather(ctx: AppContext, options: WeatherOptions = {}) {
       name,
       state: sun,
     });
-    await ctx.widgets.show(weatherCard, cardKey, cardOf(sun, forecast, at));
+    await ctx.widgets.show(
+      weatherCard,
+      cardKey,
+      cardOf(clock, sun, forecast, at),
+    );
     return { sun, where };
   }
 
@@ -136,7 +144,11 @@ export function createWeather(ctx: AppContext, options: WeatherOptions = {}) {
         .where(eq(forecastLocation.id, 1));
       forecast = fresh;
       fetched.ok = true;
-      await ctx.widgets.show(weatherCard, cardKey, cardOf(sun, fresh, at));
+      await ctx.widgets.show(
+        weatherCard,
+        cardKey,
+        cardOf(clock, sun, fresh, at),
+      );
     } catch (error) {
       ctx.log(
         `no forecast (${error instanceof Error ? error.message : String(error)})`,

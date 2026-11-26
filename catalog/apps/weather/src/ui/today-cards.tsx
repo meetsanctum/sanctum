@@ -4,14 +4,15 @@ import {
   formatNumber,
   icons,
   type LucideIcon,
+  useHomeClock,
 } from "@meetsanctum/ui-sdk";
 
-import { daysFromToday, homeDate } from "../days";
+import { dateIn, daysFromToday } from "../days";
 import { weatherNow } from "../hours";
 import { fallLine, fallOf, uvLine, windLine } from "../measures";
 import { daySummary } from "../summary";
 import { Heading } from "./parts";
-import { clock, degrees } from "./words";
+import { degrees, timeAt } from "./words";
 
 // Today's measures, a small card each: what falls today, rain in
 // millimetres or snow in centimetres, the wind now, the UV index now and the
@@ -36,9 +37,10 @@ export function TodayCards(props: {
   now: Date;
 }) {
   const { forecast, unit, now } = props;
+  const clock = useHomeClock();
   const current = weatherNow(forecast, now);
-  const today = daysFromToday(forecast, now).find(
-    (day) => day.date === homeDate(forecast.timeZone, now),
+  const today = daysFromToday(clock, forecast, now).find(
+    (day) => day.date === dateIn(clock, forecast.timeZone, now),
   );
   const fall = fallOf(today);
   const measures: Measure[] = [
@@ -49,8 +51,8 @@ export function TodayCards(props: {
       ...(fall.amount !== null && {
         unit: fall.kind === "snow" ? "cm" : "mm",
       }),
-      line: fallLine(fall, daySummary(forecast, now), (instant) =>
-        clock(instant, forecast.timeZone),
+      line: fallLine(fall, daySummary(clock, forecast, now), (instant) =>
+        timeAt(clock, instant, forecast.timeZone),
       ),
     },
     {

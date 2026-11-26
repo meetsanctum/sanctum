@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import type { DeviceInfo, LightState, Places } from "@meetsanctum/app-sdk";
-import { AppScope, type PageProps } from "@meetsanctum/ui-sdk";
+import type { HourCycle } from "@meetsanctum/app-sdk/clock";
+import {
+  AppScope,
+  HomeTimeZoneProvider,
+  type PageProps,
+} from "@meetsanctum/ui-sdk";
 import { act, type ComponentType } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,7 +20,8 @@ import { fakeClient } from "./support";
 
 // A room's schedule and how its lights turn on, on Moods' page for the
 // room, the editor of a scheduled mood, and Moods' main page with every
-// room. It is 15:20 on 30 October, in UTC, the home's time zone.
+// room. It is 15:20 on 30 October, in UTC, the home's time zone, and the
+// device is in Los Angeles, so a time still worked out in its zone fails.
 
 const places: Places = {
   home: {
@@ -117,6 +123,7 @@ function answer(action: string, input: Record<string, unknown>) {
 async function show(
   Page: ComponentType<PageProps>,
   params: PageProps["params"],
+  hourCycle: HourCycle = "24h",
 ) {
   client = fakeClient();
   client.devices.mockResolvedValue([
@@ -127,16 +134,21 @@ async function show(
   client.call.mockImplementation(answer);
   await act(async () => {
     root.render(
-      <AppScope client={client}>
-        <MoodsProvider>
-          <Page
-            params={params}
-            open={open}
-            back={back}
-            openSettings={() => {}}
-          />
-        </MoodsProvider>
-      </AppScope>,
+      <HomeTimeZoneProvider
+        timeZone={places.home.timeZone}
+        hourCycle={hourCycle}
+      >
+        <AppScope client={client}>
+          <MoodsProvider>
+            <Page
+              params={params}
+              open={open}
+              back={back}
+              openSettings={() => {}}
+            />
+          </MoodsProvider>
+        </AppScope>
+      </HomeTimeZoneProvider>,
     );
   });
 }
@@ -174,6 +186,7 @@ async function choose(select: HTMLSelectElement, value: string) {
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubEnv("TZ", "America/Los_Angeles");
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-30T15:20:00Z"));
   schedule = {
@@ -206,6 +219,7 @@ afterEach(async () => {
   container.remove();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe("a room's schedule", () => {
@@ -223,6 +237,34 @@ describe("a room's schedule", () => {
     expect(row("Schedule a mood")?.textContent).toBe(
       "Schedule a mood17:00 to 18:00 is free",
     );
+  });
+
+  it("writes the day's times as the home does, with 12 hours", async () => {
+    await show(RoomMoodsPage, { placeId: "office" }, "12h");
+
+    const day = container.querySelector('[role="img"]');
+    expect(day?.getAttribute("aria-label")).toBe(
+      "Morning 6:30 AM to 9:00 AM, Focus 9:00 AM to 5:00 PM, Evening 6:30 PM to 10:00 PM, Night 10:00 PM to 6:30 AM, overnight. Now 3:20 PM.",
+    );
+    expect(
+      [...(day?.nextElementSibling?.children ?? [])].map(
+        (tick) => tick.textContent,
+      ),
+    ).toEqual(["12:00 AM", "6:00 AM", "12:00 PM", "6:00 PM", "12:00 AM"]);
+  });
+
+  it("shows when a full-day mood ends in 12-hour time", async () => {
+    schedule.scheduled = [
+      { id: "s2", roomId: "office", moodId: "focus", start: 0, end: 1440 },
+    ];
+    await show(RoomMoodsPage, { placeId: "office" }, "12h");
+
+    expect(scheduleRow("Focus")?.textContent).toBe(
+      "Focus12:00 AM to 12:00 AM, next dayNow",
+    );
+    expect(
+      container.querySelector('[role="img"]')?.getAttribute("aria-label"),
+    ).toBe("Focus 12:00 AM to 12:00 AM, next day. Now 3:20 PM.");
   });
 
   it("opens a scheduled mood, or a new one, in the editor", async () => {
@@ -261,6 +303,15 @@ describe("turning a room's lights on", () => {
     );
   });
 
+  it("says since when in the home's hours", async () => {
+    schedule = { ...schedule, turnOn: "asTheyWere" };
+    await show(RoomMoodsPage, { placeId: "office" }, "12h");
+
+    expect(said()).toBe(
+      "Turning the lights on now brings back Desk and Lamp as they were at 11:10 PM yesterday.",
+    );
+  });
+
   it("says the lights that were on come back where nothing is scheduled now", async () => {
     vi.setSystemTime(new Date("2026-10-30T17:40:00Z"));
     await show(RoomMoodsPage, { placeId: "office" });
@@ -275,12 +326,14 @@ describe("a scheduled mood's editor", () => {
   const selects = () => [...container.querySelectorAll("select")];
 
   it("starts a new one at the first free hour, with a mood not yet scheduled", async () => {
-    await show(ScheduledMoodPage, { room: "office" });
+    await show(ScheduledMoodPage, { room: "office" }, "12h");
 
     expect(container.querySelector("h1")?.textContent).toBe("Schedule a mood");
     const [from, to] = selects();
     expect(from?.value).toBe("1020");
     expect(to?.value).toBe("1080");
+    expect(from?.selectedOptions[0]?.textContent).toBe("5:00 PM");
+    expect(to?.selectedOptions[0]?.textContent).toBe("6:00 PM");
     const checked = container.querySelector(
       '[role="radio"][aria-checked="true"]',
     );
@@ -349,5 +402,12 @@ describe("Moods' main page", () => {
     expect(row("Kitchen")).toBeUndefined();
     await press(row("Office"));
     expect(open).toHaveBeenCalledWith("room", { placeId: "office" });
+  });
+
+  it("writes its times as the home does, with 12 hours", async () => {
+    await show(MainPage, {}, "12h");
+    expect(row("Office")?.textContent).toBe(
+      "OfficeFocus until 5:00 PM · 5 moods",
+    );
   });
 });

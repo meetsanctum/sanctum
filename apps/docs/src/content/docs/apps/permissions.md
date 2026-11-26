@@ -61,3 +61,10 @@ These are the permissions the apps in Sanctum ask for:
 
 Each website has its own permission. Weather sends your home's position
 and time zone to Open-Meteo to fetch the forecast.
+
+## What needs no permission
+
+Every app can know your home's time zone, and whether it writes times as
+14:30 or 2:30 PM, as set in **Settings → Household**. That way its times
+read like the rest of Sanctum's. A time zone tells roughly which country
+your home is in. Where it is needs **Know where your home is**.

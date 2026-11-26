@@ -257,6 +257,20 @@ describe("the home clock", () => {
     expect(clock.parts()).toMatchObject({ day: 24, hour: 23, minute: 30 });
   });
 
+  it("reads data in the zone it was stamped with, keeping the home's hours and time", () => {
+    const now = () => at("2026-11-24T22:30:00Z");
+    const clock = homeClock({ timeZone: zurich, hourCycle: "12h", now });
+    const there = clock.withTimeZone("America/New_York");
+    expect(there.timeZone).toBe("America/New_York");
+    expect(there.hourCycle).toBe("12h");
+    expect(there.now).toBe(now);
+    expect(there.date()).toBe("2026-11-24");
+    expect(there.timeText(now())).toBe("5:30 PM");
+    expect(clock.date()).toBe("2026-11-24");
+    expect(clock.withTimeZone("Asia/Tokyo").date()).toBe("2026-11-25");
+    expect(clock.withTimeZone("Mars/Olympus").timeZone).toBe(hostTimeZone());
+  });
+
   it("uses the device's zone while the home's isn't known, or the runtime doesn't know it", () => {
     expect(homeClock().timeZone).toBe(hostTimeZone());
     expect(homeClock({ timeZone: null }).timeZone).toBe(hostTimeZone());

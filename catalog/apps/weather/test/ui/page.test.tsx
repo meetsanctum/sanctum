@@ -7,6 +7,7 @@ import type {
   SunTimes,
   TemperatureUnit,
 } from "@meetsanctum/app-sdk";
+import type { HourCycle } from "@meetsanctum/app-sdk/clock";
 import {
   AppScope,
   HomeTimeZoneProvider,
@@ -20,13 +21,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { weatherCard } from "../../src/card";
 import ui from "../../src/ui/index";
-import { forecast, morning } from "../sample";
+import { forecast, hourAt, morning } from "../sample";
 
 // Weather's page: the weather now, the next 24 hours, the next ten days,
 // today's measures and the sun, for a home without a location, one whose
 // forecast has not come yet, one with both, and one whose forecast was kept
-// while Open-Meteo could not be reached. Times are written as the device
-// writes them, so the tests take either a 24-hour or a 12-hour clock.
+// while Open-Meteo could not be reached. Times use the household's 24-hour
+// or 12-hour clock in the zone recorded with the data.
 
 const sun: SunTimes = {
   date: "2026-10-29",
@@ -123,6 +124,8 @@ let container: HTMLDivElement;
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  // The device is in Los Angeles, so a time still written in its zone fails.
+  vi.stubEnv("TZ", "America/Los_Angeles");
   // Ten in the morning in Zurich, two minutes after the forecast was fetched.
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(morning);
@@ -135,6 +138,7 @@ afterEach(() => {
   container.remove();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 const sunEntity = entity("sun", "sun", sun);
@@ -147,12 +151,14 @@ const shown = [sunEntity, forecastEntity()];
 async function show(
   client: AppClient,
   unit: TemperatureUnit | "unknown" = "celsius",
+  hourCycle: HourCycle = "24h",
+  timeZone = "Europe/Zurich",
 ) {
   const Main = ui.pages.main!;
   await act(async () => {
     root.render(
       <TemperatureUnitProvider unit={unit === "unknown" ? undefined : unit}>
-        <HomeTimeZoneProvider timeZone="Europe/Zurich">
+        <HomeTimeZoneProvider timeZone={timeZone} hourCycle={hourCycle}>
           <AppScope client={client}>
             <Main
               params={{}}
@@ -179,19 +185,13 @@ const texts = (within: Element | null, selector: string) =>
   [...(within?.querySelectorAll(selector) ?? [])].map(
     (each) => each.textContent,
   );
-// A time as the device writes it, such as 16:00, 4:00 PM or 4:00 pm, and
-// 07:05 or 7:05.
-const meridiem = "\\s?[AaPp]\\.?\\s?[Mm]\\.?";
+// A time as the home writes it with 24 hours, such as 07:05 or 16:00.
 const time = (hour: number, minute = "00") =>
-  `(?:0?${hour}:${minute}|${hour % 12 || 12}:${minute}${meridiem})`;
-// Friday, the day after the forecast's, as the device shortens it.
-const friday = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  timeZone: "UTC",
-}).format(new Date("2026-10-30T12:00:00Z"));
-// An hour above its column, such as 16:00, 4 PM or 4 pm.
-const column = (hour: number) =>
-  new RegExp(`^(?:0?${hour}:00|${hour % 12 || 12}${meridiem})$`);
+  `${String(hour).padStart(2, "0")}:${minute}`;
+// Friday, the day after the forecast's.
+const friday = "Fri";
+// An hour above its column, such as 16:00.
+const column = (hour: number) => new RegExp(`^${time(hour)}$`);
 
 describe("Weather's page", () => {
   it("says where to set the location before the home has one", async () => {
@@ -226,6 +226,69 @@ describe("Weather's page", () => {
     // Its icon says nothing the words beside it don't.
     expect(now?.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
   });
+
+  it("writes times in the recorded zones with the home's 12-hour format", async () => {
+    const text = await show(
+      fakeClient(shown).client,
+      "celsius",
+      "12h",
+      "Pacific/Honolulu",
+    );
+
+    const labels = [
+      ...(section("Next 24 hours")?.querySelectorAll(
+        "ol > li > span:first-child",
+      ) ?? []),
+    ].map((each) => each.textContent);
+    expect(labels.slice(0, 9)).toEqual([
+      "Now",
+      "12 PM",
+      "2 PM",
+      "4 PM",
+      "6 PM",
+      "8 PM",
+      "10 PM",
+      friday,
+      "2 AM",
+    ]);
+    expect(section("Sun")?.textContent).toMatch(
+      /Sunrise 7:05 AMSunset 5:16 PM$/,
+    );
+    expect(texts(section("Now"), "p").at(-1)).toBe(
+      "Rain until 4:00 PM, then dry.",
+    );
+    expect(texts(section("Today"), "h3 + p + p")[0]).toBe("Until 4:00 PM");
+    expect(text).toMatch(/Updated 9:58 AM · Forecast by Open-Meteo$/);
+  });
+
+  it.each([
+    ["24h", "03:30"],
+    ["12h", "3:30 AM"],
+  ] as const)(
+    "keeps minutes after a half-hour clock change in %s time",
+    async (hourCycle, label) => {
+      const first = Date.parse("2026-10-03T14:30:00Z");
+      vi.setSystemTime(first);
+      const lordHowe: Forecast = {
+        ...forecast,
+        timeZone: "Australia/Lord_Howe",
+        updatedAt: new Date(first).toISOString(),
+        hours: Array.from({ length: 3 }, (_, index) => ({
+          ...hourAt(index),
+          time: new Date(first + index * 3_600_000).toISOString(),
+        })),
+      };
+      await show(
+        fakeClient([forecastEntity(lordHowe)]).client,
+        "celsius",
+        hourCycle,
+      );
+
+      expect(
+        texts(section("Next 24 hours"), "ol > li > span:first-child"),
+      ).toEqual(["Now", label]);
+    },
+  );
 
   it("shows the next 24 hours, two hours apart from the hour it is", async () => {
     await show(fakeClient(shown).client);
