@@ -69,14 +69,9 @@ export function yOn(
     : height / 2;
 }
 
-// A gridline's centre, snapped to a pixel. The axis takes any gridline
-// that would overlap it or fall below it.
+// A gridline's centre, snapped to a pixel.
 export const gridYOn = (
   scale: ChartScale | null,
   height: number,
   value: number,
-) => {
-  const y = Math.round(yOn(scale, height, value)) + 0.5;
-  const foot = height - 0.5;
-  return y > foot - 1 ? foot : y;
-};
+) => Math.round(yOn(scale, height, value)) + 0.5;

@@ -302,30 +302,34 @@ describe("a day's line", () => {
     grid: (value: number) => `${value}°`,
   };
 
-  it("uses the axis for a gridline at the bottom of a fixed scale", async () => {
-    await render(
-      <LineChart
-        runs={runs}
-        now={now}
-        format={format}
-        name="Temperature"
-        height={100}
-        scale={{ min: 0, max: 40, lines: [0, 20, 40] }}
-      />,
-    );
-    expectFoot();
-    const gridlines = container.querySelectorAll(
-      'svg rect[class="fill-white/12"]',
-    );
-    expect([...gridlines].map((line) => line.getAttribute("y"))).toEqual([
-      "50",
-      "0",
-    ]);
-    const zero = [...container.querySelectorAll("span")].find(
-      (span) => span.textContent === "0°",
-    );
-    expect(zero?.style.top).toBe("99.5px");
-  });
+  it.each([0, 2])(
+    "merges the gridline at %s into the axis on a 0–100 scale",
+    async (tick) => {
+      await render(
+        <LineChart
+          runs={runs}
+          now={now}
+          format={format}
+          name="Temperature"
+          height={100}
+          scale={{ min: 0, max: 100, lines: [tick, 3, 50, 100] }}
+        />,
+      );
+      expectFoot();
+      const gridlines = container.querySelectorAll(
+        'svg rect[class="fill-white/12"]',
+      );
+      expect([...gridlines].map((line) => line.getAttribute("y"))).toEqual([
+        "97",
+        "50",
+        "0",
+      ]);
+      const label = [...container.querySelectorAll("span")].find(
+        (span) => span.textContent === `${tick}°`,
+      );
+      expect(label?.style.top).toBe("99.5px");
+    },
+  );
 
   it("draws the axis without gridlines when there are no readings", async () => {
     await render(
