@@ -148,8 +148,9 @@ export function ModelsPage(props: {
         id="settings-models"
         title={modelsTitle}
         action={
-          // With no source yet, the empty page's places are the way in.
-          !isEmpty && (
+          // With no source yet, the empty page's places are the way in, and
+          // until the first answer it isn't known which page this is.
+          sources.length > 0 && (
             <Button
               ref={addButton}
               disabled={isActing}
@@ -165,6 +166,7 @@ export function ModelsPage(props: {
         }
         page={props.page}
       >
+        {info === undefined && <Loading />}
         {isEmpty && (
           <NoModel
             supportsSanctum={supportsSanctum}
@@ -227,6 +229,19 @@ export function ModelsPage(props: {
         onFocusFallback={focusAddSource}
       />
     </>
+  );
+}
+
+// A source's shape, at once, while the first answer is on its way.
+function Loading() {
+  return (
+    <div aria-busy="true" className="flex items-center gap-3">
+      <span className="size-8 shrink-0 rounded-full bg-foreground/8" />
+      <span className="flex flex-1 flex-col gap-2">
+        <span className="block h-3 w-2/5 rounded-xs bg-foreground/8" />
+        <span className="block h-3 w-1/4 rounded-xs bg-foreground/8" />
+      </span>
+    </div>
   );
 }
 
