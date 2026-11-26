@@ -16,7 +16,7 @@ import {
   type TileSection,
   useHomeClock,
 } from "@meetsanctum/ui-sdk";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 
 import { appsNotRunning, attentionTile, needingAttention } from "./attention";
 import {
@@ -235,10 +235,11 @@ function Sections(props: {
   );
 }
 
-// The categories in the shell's order, Home's status row and the sidebar
-// alike: Lights first, the one with something to press, then Environment,
-// Security and Presence, as a room's line of readings has them, and Media
-// before Buttons.
+// The sidebar and Home's status row share this category order. Lights leads
+// the categories, the one with something to press, followed by Environment,
+// Security and Presence, as in a room's line of readings. Media comes before
+// Buttons. On Home, the Attention tile comes before the categories while
+// there's a problem.
 const categoryOrder = [
   "lights",
   "environment",
@@ -273,13 +274,15 @@ type StatusItem =
   StatusTile | { key: "lights"; tiles: Tile[]; open: () => void };
 
 /**
- * The home's status on the dashboard: Lights' card first, with its switch
+ * The home's status on the dashboard: Lights' card, with its switch
  * (lights-card.tsx), then a tile for what the sensors read, how many
  * contact sensors are open, where there is motion and how many switches
- * are on, each opening its category, and last, while Sanctum or any device needs attention, one
- * that opens Settings, where they show first, or Status when only Sanctum
- * does, then, while a battery is to replace, Batteries, in Graphite, which
- * opens Maintenance; being last, they move nothing as they come and go.
+ * are on, each opening its category. While Sanctum, an app or any device
+ * needs attention, a tile opens Settings, where they show first, or Status
+ * when only Sanctum does: first, in red, while something is wrong, so a
+ * problem is the first thing seen, and otherwise last, in Graphite, where it
+ * moves nothing as it comes and goes. Last of all, while a battery is to
+ * replace, comes Batteries, in Graphite, which opens Maintenance.
  */
 export function HomeStatus(props: {
   devices: Devices;
@@ -326,8 +329,14 @@ export function HomeStatus(props: {
     unit,
     appsNotRunning(props.apps, props.notSetUp),
   );
+  const hasProblem = attention?.problem ?? false;
+  useLayoutEffect(() => {
+    // Reveal the tile when it moves to the front of a scrolled row.
+    if (hasProblem && row.current) row.current.scrollLeft = 0;
+  }, [hasProblem]);
+
   if (attention) {
-    shown.push({
+    const tile: StatusItem = {
       key: "attention",
       title: attention.title,
       value: attention.value,
@@ -339,7 +348,9 @@ export function HomeStatus(props: {
         attention.opens === "status"
           ? (props.openStatus ?? props.openAttention)
           : props.openAttention,
-    });
+    };
+    if (attention.problem) shown.unshift(tile);
+    else shown.push(tile);
   }
   const batteries = batteriesTile(clock, devices.devices, Date.now());
   if (batteries) {

@@ -15,6 +15,7 @@ import {
   lamp,
   light,
   loose,
+  moods,
   places,
   plug,
   sensor,
@@ -76,12 +77,17 @@ describe("the home's status", () => {
   const openAttention = vi.fn();
   const openMaintenance = vi.fn();
 
-  function Status() {
+  type AttentionInputs = Partial<
+    Pick<ComponentProps<typeof HomeStatus>, "apps" | "problems">
+  >;
+
+  function Status({ apps = [], problems }: AttentionInputs) {
     const shown = useDevices(live);
     return (
       <HomeStatus
         devices={shown}
-        apps={[]}
+        apps={apps}
+        problems={problems}
         openCategory={openCategory}
         openAttention={openAttention}
         openMaintenance={openMaintenance}
@@ -89,9 +95,9 @@ describe("the home's status", () => {
     );
   }
 
-  async function showStatus() {
+  async function showStatus(inputs: AttentionInputs = {}) {
     await act(async () => {
-      root.render(<Status />);
+      root.render(<Status {...inputs} />);
     });
     await act(async () => {
       live.refresh();
@@ -99,10 +105,9 @@ describe("the home's status", () => {
   }
 
   // Each tile, Lights' being its card with a switch (lights-card.tsx).
-  const tiles = () =>
-    [
-      ...container.querySelector("section[aria-label='Home status']")!.children,
-    ] as HTMLElement[];
+  const statusRow = () =>
+    container.querySelector<HTMLElement>("section[aria-label='Home status']")!;
+  const tiles = () => [...statusRow().children] as HTMLElement[];
   const shown = (each: Element) =>
     copyWithoutScreenReaderText(each).textContent;
 
@@ -254,19 +259,19 @@ describe("the home's status", () => {
     await showStatus();
 
     expect(tiles().map(shown)).toEqual([
+      // The sensor that doesn't answer needs attention, first.
+      "hall sensorOffline",
       "Lights1 on",
       "EnvironmentNo readings",
-      // The sensor that doesn't answer needs attention.
-      "hall sensorOffline",
     ]);
   });
 
-  it("ends with what needs attention, by name for one device, opening Settings", async () => {
+  it("starts with what needs attention, by name for one device, opening Settings", async () => {
     openAttention.mockReset();
     devices = [lamp, { ...hallLight, availability: "offline" }];
     await showStatus();
 
-    const attention = tiles().at(-1)!;
+    const attention = tiles()[0]!;
     expect(shown(attention)).toBe("CeilingOffline");
     expect(attention.getAttribute("aria-label")).toBe("Ceiling is offline");
     // A problem's sign is red.
@@ -277,6 +282,45 @@ describe("the home's status", () => {
     expect(openAttention).toHaveBeenCalledOnce();
   });
 
+  it("starts with Attention for a clock problem while the devices are healthy", async () => {
+    devices = [lamp];
+    await showStatus({ problems: [{ kind: "clock" }] });
+
+    expect(tiles().map(shown)).toEqual(["ClockNot set", "Lights1 on"]);
+  });
+
+  it("starts with Attention for a stopped app while the devices are healthy", async () => {
+    devices = [lamp];
+    await showStatus({ apps: [{ ...moods, state: "stopped" }] });
+
+    expect(tiles().map(shown)).toEqual(["MoodsNot running", "Lights1 on"]);
+  });
+
+  it("reveals Attention when a problem starts and keeps later scroll positions while it lasts", async () => {
+    const thermometer = sensor("desk", "office", 21.5, 48);
+    devices = [lamp, hallLight, thermometer, plug];
+    await showStatus();
+    const row = statusRow();
+    const offline = { ...hallLight, availability: "offline" } as const;
+    const update = (device: DeviceInfo) =>
+      act(async () => live.publish({ type: "device", id: device.id, device }));
+
+    row.scrollLeft = 300;
+    await update(offline);
+    expect(statusRow()).toBe(row);
+    expect(shown(tiles()[0]!)).toBe("CeilingOffline");
+    expect(row.scrollLeft).toBe(0);
+
+    row.scrollLeft = 300;
+    await update(sensor(thermometer.id, "office", 22, 48));
+    expect(row.scrollLeft).toBe(300);
+
+    await update(hallLight);
+    expect(row.scrollLeft).toBe(300);
+    await update(offline);
+    expect(row.scrollLeft).toBe(0);
+  });
+
   it("gives each tile its whole words, at least two cells", async () => {
     devices = [
       lamp,
@@ -285,7 +329,7 @@ describe("the home's status", () => {
     ];
     await showStatus();
 
-    // Lights, Environment, then Attention, in one line that scrolls.
+    // Attention, then Lights and Environment, in one line that scrolls.
     expect(
       container.querySelector("section[aria-label='Home status']")?.classList,
     ).toContain("overflow-x-auto");
@@ -296,12 +340,12 @@ describe("the home's status", () => {
       true,
     );
     expect(container.querySelector(".truncate")).toBeNull();
-    expect(tiles()[1]?.className).toContain(
+    expect(tiles()[2]?.className).toContain(
       "min-w-[calc(var(--cell)*2+var(--cell-gap))]",
     );
-    expect(shown(tiles().at(-1)!)).toContain("Offline");
+    expect(shown(tiles()[0]!)).toContain("Offline");
     // Attention too grows with its words from two cells.
-    expect(tiles().at(-1)?.className).toContain(
+    expect(tiles()[0]?.className).toContain(
       "min-w-[calc(var(--cell)*2+var(--cell-gap))]",
     );
   });
@@ -316,8 +360,8 @@ describe("the home's status", () => {
       { ...lamp, id: "dark", name: "Desk lamp", availability: "offline" },
     ];
     await showStatus();
-    expect(shown(tiles().at(-1)!)).toBe("Attention2 devices");
-    expect(tiles().at(-1)?.getAttribute("aria-label")).toBe(
+    expect(shown(tiles()[0]!)).toBe("Attention2 devices");
+    expect(tiles()[0]?.getAttribute("aria-label")).toBe(
       "Attention, 2 devices: Hall plug isn't paired any more, Desk lamp is offline",
     );
 
@@ -343,15 +387,32 @@ describe("the home's status", () => {
     ]);
   });
 
-  it("ends with Attention, then Batteries", async () => {
+  it("starts with Attention for a problem, and ends with Batteries", async () => {
     devices = [
       lamp,
       { ...sensor("hall", "hall", 19.5, 58), battery: 8 },
       { ...hallLight, availability: "offline" },
     ];
     await showStatus();
-    expect(tiles().map(shown).slice(-2)).toEqual([
+    expect(tiles().map(shown)).toEqual([
       "CeilingOffline",
+      "Lights1 on",
+      "Environment19.5°",
+      "hall sensorBattery 8%",
+    ]);
+  });
+
+  it("keeps Attention last, before Batteries, while nothing is wrong", async () => {
+    devices = [
+      lamp,
+      { ...sensor("hall", "hall", 19.5, 58), battery: 8 },
+      loose,
+    ];
+    await showStatus();
+    expect(tiles().map(shown)).toEqual([
+      "Lights1 on",
+      "Environment19.5°",
+      "LooseNo room",
       "hall sensorBattery 8%",
     ]);
   });
