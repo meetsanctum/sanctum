@@ -111,13 +111,15 @@ pnpm lint
 pnpm test
 pnpm build
 pnpm format:check
-pnpm test:containers   # real stacks and images in Docker, which takes minutes
 ```
 
 Use focused runs while iterating, such as `pnpm --filter @meetsanctum/core
 test`, then the full set before you finish. After changing an app's actions,
 events, settings or widgets, run `pnpm manifest` and commit the regenerated
 `sanctum-app.json`.
+
+CI runs `pnpm test:containers` for covered changes. See
+[Verification in AGENTS.md](AGENTS.md#verification) for when to run it locally.
 
 ## How it fits together
 
