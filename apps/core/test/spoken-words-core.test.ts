@@ -80,7 +80,7 @@ it("teaches the Assistant's sentences and hears a speaker's words with them", as
   });
 
   const stp = await fakeSpeechToPhrase({
-    transcript: "turn off the office lights",
+    transcript: "turn off the office lamp",
   });
   const piper = await fakePiper([]);
   try {
@@ -124,19 +124,16 @@ it("teaches the Assistant's sentences and hears a speaker's words with them", as
     await running(core, assistantAppId);
     await running(core, "sanctum.example");
 
-    await vi.waitFor(() => expect(stp.lessons[0]).toBeDefined(), {
-      timeout: 5_000,
-    });
     // The names come as they register; a change retrains a minute later.
-    expect(stp.lessons[0]).toMatchObject({
-      language: "en",
-      templates: [
-        "turn (on|off) the {room} lights",
-        "turn (on|off) [the] {light}",
-        "set the mood to {mood}",
-      ],
-      lists: { room: ["no room"] },
-    });
+    await vi.waitFor(
+      () =>
+        expect(stp.lessons[0]).toEqual({
+          language: "en",
+          templates: ["turn (on|off) [the] {light}"],
+          lists: { light: ["Office Lamp"] },
+        }),
+      { timeout: 5_000 },
+    );
     expect(wanted).toEqual(new Set(["speech-to-phrase", "piper"]));
 
     const wake = () =>
@@ -155,9 +152,9 @@ it("teaches the Assistant's sentences and hears a speaker's words with them", as
     }
     expect(steps.slice(0, 2)).toEqual([
       { step: "stopped" },
-      { step: "heard", text: "turn off the office lights" },
+      { step: "heard", text: "turn off the office lamp" },
     ]);
-    expect(asked).toEqual(["turn off the office lights"]);
+    expect(asked).toEqual(["turn off the office lamp"]);
     expect(steps.at(-1)).toMatchObject({ step: "reply", text: "Done" });
     await run.close("played");
 

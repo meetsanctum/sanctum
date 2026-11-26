@@ -59,6 +59,7 @@ export async function fakeSpeechToPhrase(
 ) {
   const lessons: Record<string, unknown>[] = [];
   const heard: Heard[] = [];
+  let hasLesson = true;
   const server = createServer((socket) => {
     socket.on("error", () => {});
     let buffered = Buffer.alloc(0);
@@ -104,6 +105,11 @@ export async function fakeSpeechToPhrase(
         const payload = head.payload_length ?? 0;
         buffered = buffered.subarray(end);
         heard.push({ type: head.type, data, bytes: payload });
+        if (head.type === "describe") {
+          send("info", {
+            asr: [{ models: hasLesson ? [{ name: "test" }] : [] }],
+          });
+        }
         if (head.type === "train") {
           const { token, ...lesson } = data;
           const error = options.trainError?.();
@@ -113,13 +119,14 @@ export async function fakeSpeechToPhrase(
             send("error", { text: error });
           } else {
             lessons.push(lesson);
+            hasLesson = true;
             send("trained", {
               digest: `digest-${lessons.length}`,
               changed: true,
             });
           }
         }
-        if (head.type === "audio-chunk" && !answered) {
+        if (head.type === "audio-chunk" && hasLesson && !answered) {
           bytes += payload;
           const voiceAfter =
             options.voiceAfter === undefined ? 3_200 : options.voiceAfter;
@@ -152,6 +159,9 @@ export async function fakeSpeechToPhrase(
     server,
     lessons,
     heard,
+    forgetLesson() {
+      hasLesson = false;
+    },
     url: `tcp://127.0.0.1:${address.port}`,
     port: address.port,
   };

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ManagerRefusal } from "../src/manager.js";
 import { createLearning } from "../src/speech/learning.js";
 import { noVoiceMs, train, transcribe } from "../src/speech/words.js";
+import * as words from "../src/speech/words.js";
 import { fakeSpeechToPhrase } from "./speech-support.js";
 
 // What speech recognition knows: the core hears a run's words over
@@ -56,11 +57,12 @@ describe("hearing a run's words", () => {
     });
     expect(words).toBe("turn off the office lights");
     expect(run.stopped).toBe(true);
-    expect(fake.heard.map((event) => event.type).slice(0, 2)).toEqual([
+    expect(fake.heard.map((event) => event.type).slice(0, 3)).toEqual([
+      "describe",
       "transcribe",
       "audio-start",
     ]);
-    expect(fake.heard[0]!.data).toEqual({ language: "en" });
+    expect(fake.heard[1]!.data).toEqual({ language: "en" });
   });
 
   it("answers empty for speech it doesn't know", async () => {
@@ -222,7 +224,15 @@ function learningSetup(
 describe("what speech recognition learns", () => {
   it("wants the service while the Assistant has sentences and a speaker listens, and teaches it the home's names", async () => {
     const fake = await service({});
-    const { learning, calls } = learningSetup(fake);
+    const { learning, calls } = learningSetup(fake, {
+      sentences: {
+        en: [
+          "turn (on|off) the {room} lights",
+          "turn on [the] {light}",
+          "set the {floor} mood to {mood}",
+        ],
+      },
+    });
     expect(learning.notHearing()).toBe("no_speech_to_text");
     learning.start();
 
@@ -240,6 +250,118 @@ describe("what speech recognition learns", () => {
     expect(learning.notHearing()).toBeNull();
     expect(learning.transcriber()).toBeTypeOf("function");
     learning.stop();
+  });
+
+  it("skips teaching when every sentence needs a name the home lacks", async () => {
+    const { learning, logs, manager } = learningSetup(
+      { url: "" },
+      { sentences: { en: ["set the mood to {mood}"] } },
+    );
+    try {
+      learning.start();
+      await vi.waitFor(() =>
+        expect(logs.at(-1)).toContain("no usable en sentences"),
+      );
+      expect(manager.serviceConnection).not.toHaveBeenCalled();
+      expect(learning.transcriber()).toBeNull();
+    } finally {
+      learning.stop();
+    }
+  });
+
+  it("keeps the previous lesson when its templates lose their names", async () => {
+    const teach = vi
+      .spyOn(words, "train")
+      .mockResolvedValue({ digest: "digest-1", changed: true });
+    const { learning, logs, names } = learningSetup({
+      url: "tcp://127.0.0.1:10300",
+    });
+    try {
+      learning.start();
+      await vi.waitFor(() =>
+        expect(learning.transcriber()).toBeTypeOf("function"),
+      );
+      names.room.length = 0;
+      names.light.length = 0;
+      learning.changed();
+      await vi.waitFor(() =>
+        expect(logs.at(-1)).toContain("no usable en sentences"),
+      );
+      expect(teach).toHaveBeenCalledOnce();
+      expect(learning.transcriber()).toBeTypeOf("function");
+    } finally {
+      learning.stop();
+      teach.mockRestore();
+    }
+  });
+
+  it("retries teaching after a speaker finds the service unavailable", async () => {
+    const teach = vi
+      .spyOn(words, "train")
+      .mockResolvedValue({ digest: "digest-1", changed: true });
+    const { learning, names, setRunning } = learningSetup({
+      url: "tcp://127.0.0.1:10300",
+    });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      learning.start();
+      await vi.waitFor(() =>
+        expect(learning.transcriber()).toBeTypeOf("function"),
+      );
+      setRunning(false);
+      await expect(
+        learning.transcriber()!({
+          ...sound(5),
+          language: "en",
+          signal: new AbortController().signal,
+        }),
+      ).rejects.toThrow("Speech recognition isn't running");
+      expect(learning.transcriber()).toBeNull();
+      names.room.length = 0;
+      names.light.length = 0;
+      setRunning(true);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(teach).toHaveBeenCalledTimes(2);
+      expect(teach.mock.lastCall?.[0].lesson.lists).toEqual({
+        room: ["Office", "Kitchen"],
+        light: ["Desk Lamp"],
+      });
+      expect(learning.transcriber()).toBeTypeOf("function");
+    } finally {
+      learning.stop();
+      teach.mockRestore();
+    }
+  });
+
+  it("teaches again when the same endpoint loses its grammar", async () => {
+    const transcript = "turn off the office lights";
+    const fake = await service({ transcript });
+    const { learning } = learningSetup(fake);
+    try {
+      learning.start();
+      await vi.waitFor(() =>
+        expect(learning.transcriber()).toBeTypeOf("function"),
+      );
+      fake.forgetLesson();
+      const run = () => ({
+        ...sound(5),
+        language: "en" as const,
+        signal: new AbortController().signal,
+      });
+      await expect(learning.transcriber()!(run())).rejects.toThrow(
+        "Speech recognition has no lesson",
+      );
+      expect(fake.heard.some((event) => event.type === "audio-start")).toBe(
+        false,
+      );
+      await vi.waitFor(() =>
+        expect(learning.transcriber()).toBeTypeOf("function"),
+      );
+      expect(fake.lessons).toEqual([fake.lessons[0], fake.lessons[0]]);
+      await expect(learning.transcriber()!(run())).resolves.toBe(transcript);
+    } finally {
+      learning.stop();
+    }
   });
 
   it("wants nothing while no speaker listens or the Assistant has no sentences in the home's language", async () => {

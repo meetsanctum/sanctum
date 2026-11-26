@@ -26,6 +26,8 @@ export type Lesson = {
   lists: Record<string, readonly string[]>;
 };
 
+export class MissingSpeechLesson extends SpeechError {}
+
 // One connection to the service: events out, and the next event back
 // within a time.
 function open(endpoint: { host: string; port: number }, signal?: AbortSignal) {
@@ -157,6 +159,22 @@ export async function transcribe(options: {
   let answerBy: number | null = null;
   try {
     await connection.connected;
+    options.signal.throwIfAborted();
+    // A restart can leave the service at the same address without its grammar.
+    connection.send("describe");
+    const info = await connection.next(connectMs);
+    const asr = info?.data.asr;
+    if (info?.type !== "info" || !Array.isArray(asr)) {
+      throw new SpeechError("Speech recognition didn't describe its models");
+    }
+    if (
+      !asr.some(
+        (program) =>
+          Array.isArray(program?.models) && program.models.length > 0,
+      )
+    ) {
+      throw new MissingSpeechLesson("Speech recognition has no lesson");
+    }
     options.signal.throwIfAborted();
     connection.send("transcribe", { language: options.language });
     connection.send("audio-start", format);

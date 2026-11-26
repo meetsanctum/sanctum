@@ -9,7 +9,12 @@ import {
 
 import { ManagerRefusal } from "../manager.js";
 import type { Transcriber } from "./spoken.js";
-import { train, transcribe, type Lesson } from "./words.js";
+import {
+  MissingSpeechLesson,
+  train,
+  transcribe,
+  type Lesson,
+} from "./words.js";
 
 // What speech recognition knows: the core wants Speech-to-Phrase while the
 // Assistant has sentences in the home's language and a smart speaker
@@ -46,6 +51,8 @@ type Manager = {
   ): Promise<void>;
 };
 
+type HomeLesson = Lesson & { language: RequestLanguage };
+
 function endpointOf(url: string) {
   const parsed = URL.parse(url);
   const port = Number(parsed?.port);
@@ -72,8 +79,9 @@ export function createLearning(options: {
   let running = false;
   let wanted: boolean | null = null;
   let admitted = false;
-  // The lesson the service last learned, which it hears with.
-  let learned: { language: RequestLanguage; digest: string } | null = null;
+  // Keep the last lesson the service acknowledged in case it loses its grammar.
+  let learned: HomeLesson | null = null;
+  let recovering = false;
   let changing: AbortController | null = null;
   let teaching: AbortController | null = null;
   let retrain: NodeJS.Timeout | undefined;
@@ -84,29 +92,39 @@ export function createLearning(options: {
     return options.sentences()?.[options.language()] ?? null;
   }
 
-  function lesson(): Lesson | null {
-    const list = templates();
+  function lesson(): HomeLesson | null {
+    const language = options.language();
+    const list = options.sentences()?.[language];
     if (!list) return null;
     const names = options.names();
-    const used = new Set(
-      list.flatMap((template) =>
-        [...template.matchAll(/\{(\w+)\}/g)].map(([, blank]) => blank!),
-      ),
+    const used = new Set<SentenceBlank>();
+    const usable = list.filter((template) => {
+      const blanks = [...template.matchAll(/\{(\w+)\}/g)].map(
+        ([, blank]) => blank as SentenceBlank,
+      );
+      if (blanks.some((blank) => !names[blank]?.length)) return false;
+      for (const blank of blanks) used.add(blank);
+      return true;
+    });
+    if (usable.length === 0) {
+      options.log(
+        `speech: the home has no usable ${language} sentences; keeping what it learned`,
+      );
+      return null;
+    }
+    const lists = Object.fromEntries(
+      sentenceBlanks
+        .filter((blank) => used.has(blank))
+        .map((blank) => [blank, names[blank].slice()]),
     );
-    return {
-      language: options.language(),
-      templates: list,
-      // Only the blanks its sentences use, each with a name at least, since
-      // recognition can't learn an empty list.
-      lists: Object.fromEntries(
-        sentenceBlanks
-          .filter((blank) => used.has(blank))
-          .map((blank) => [
-            blank,
-            names[blank].length > 0 ? names[blank] : [`no ${blank}`],
-          ]),
-      ),
-    };
+    const steps = grammarSteps(usable, lists);
+    if (steps > sentenceLimits.grammarSteps) {
+      options.log(
+        `speech: the home's ${language} sentences take about ${steps} steps to learn, over ${sentenceLimits.grammarSteps}; keeping what it learned`,
+      );
+      return null;
+    }
+    return { language, templates: usable, lists };
   }
 
   async function connection(signal: AbortSignal) {
@@ -125,41 +143,43 @@ export function createLearning(options: {
   async function teach() {
     if (!running || !admitted) return;
     clearTimeout(looking);
+    looking = undefined;
     teaching?.abort();
+    teaching = null;
+    const now = lesson() ?? (recovering ? learned : null);
+    if (!now) return;
     const controller = new AbortController();
     teaching = controller;
-    const now = lesson();
-    if (!now) return;
-    const steps = grammarSteps(now.templates, now.lists);
-    if (steps > sentenceLimits.grammarSteps) {
-      options.log(
-        `speech: the home's ${now.language} sentences take about ${steps} steps to learn, over ${sentenceLimits.grammarSteps}; keeping what it learned`,
-      );
-      return;
-    }
-    const at = await connection(controller.signal);
-    if (controller.signal.aborted) return;
-    if (!at) {
-      looking = setTimeout(() => void teach(), lookEveryMs);
-      looking.unref();
-      return;
-    }
     try {
-      const { digest } = await train({
+      const at = await connection(controller.signal);
+      if (controller.signal.aborted) return;
+      if (!at) {
+        looking = setTimeout(() => void teach(), lookEveryMs).unref();
+        return;
+      }
+      await train({
         ...at,
         lesson: now,
         signal: controller.signal,
       });
       if (controller.signal.aborted) return;
-      learned = { language: now.language as RequestLanguage, digest };
+      learned = now;
+      recovering = false;
     } catch (error) {
       if (controller.signal.aborted) return;
       options.log(
         `speech: speech recognition didn't learn the home's sentences (${error instanceof Error ? error.message : String(error)}); trying again`,
       );
-      looking = setTimeout(() => void teach(), lookEveryMs);
-      looking.unref();
+      looking = setTimeout(() => void teach(), lookEveryMs).unref();
+    } finally {
+      if (teaching === controller) teaching = null;
     }
+  }
+
+  function recover() {
+    if (!running || !admitted || !learned || recovering) return;
+    recovering = true;
+    if (!teaching && !looking) void teach();
   }
 
   // Wants or releases the service as the home needs it, one write at a
@@ -213,8 +233,10 @@ export function createLearning(options: {
     teaching?.abort();
     clearTimeout(retrain);
     clearTimeout(looking);
+    looking = undefined;
     clearTimeout(retryAdmission);
     learned = null;
+    recovering = false;
     options.onWanted?.();
     if (changing) changing.abort();
     else void apply();
@@ -251,18 +273,27 @@ export function createLearning(options: {
     /** Why nothing hears a run, or null while something does. */
     notHearing(): NotHearing | null {
       if (templates() === null) return "no_sentences";
-      return learned ? null : "no_speech_to_text";
+      return learned && !recovering ? null : "no_speech_to_text";
     },
 
     /** What hears a run's words, once speech recognition has a lesson. */
     transcriber(): Transcriber | null {
-      if (!learned) return null;
+      if (!learned || recovering) return null;
       const { language } = learned;
       return async (run) => {
         const at = await connection(run.signal);
         run.signal.throwIfAborted();
-        if (!at) throw new Error("Speech recognition isn't running");
-        return transcribe({ ...at, ...run, language });
+        if (!at) {
+          recover();
+          throw new Error("Speech recognition isn't running");
+        }
+        try {
+          return await transcribe({ ...at, ...run, language });
+        } catch (error) {
+          if (!run.signal.aborted && error instanceof MissingSpeechLesson)
+            recover();
+          throw error;
+        }
       };
     },
 
@@ -271,8 +302,10 @@ export function createLearning(options: {
       wanted = null;
       admitted = false;
       learned = null;
+      recovering = false;
       clearTimeout(retrain);
       clearTimeout(looking);
+      looking = undefined;
       clearTimeout(retryAdmission);
       changing?.abort();
       teaching?.abort();
