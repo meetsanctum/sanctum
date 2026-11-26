@@ -1,5 +1,5 @@
 {
-  "version": "0.1.36",
+  "version": "0.1.35",
   "react": "19.3.1",
   "exports": {
     "@meetsanctum/ui-sdk": [
@@ -2607,11 +2607,10 @@
     "components/ui/button.d.ts": [
       "import * as React from \"react\";",
       "import { type VariantProps } from \"class-variance-authority\";",
-      "declare const variants: (props?: ({",
-      "    variant?: \"destructive\" | \"link\" | \"tile\" | \"default\" | \"row\" | \"option\" | \"outline\" | \"ghost\" | \"glass\" | \"section-tile\" | \"placeholder\" | \"grip\" | \"choice\" | null | undefined;",
-      "    size?: \"app\" | \"tile\" | \"round\" | \"bar\" | \"default\" | \"inline\" | \"row\" | \"step\" | \"label\" | \"option\" | \"section-tile\" | \"choice\" | \"sm\" | \"lg\" | \"chip\" | \"icon-sm\" | \"icon-lg\" | \"item\" | \"avatar\" | \"round-lg\" | \"field\" | \"card\" | \"sheet-row\" | null | undefined;",
+      "declare const buttonVariants: (props?: ({",
+      "    variant?: \"destructive\" | \"link\" | \"tile\" | \"default\" | \"row\" | \"option\" | \"outline\" | \"ghost\" | \"glass\" | \"placeholder\" | \"grip\" | \"choice\" | null | undefined;",
+      "    size?: \"app\" | \"tile\" | \"round\" | \"bar\" | \"default\" | \"inline\" | \"row\" | \"step\" | \"label\" | \"option\" | \"choice\" | \"sm\" | \"lg\" | \"chip\" | \"icon-sm\" | \"icon-lg\" | \"item\" | \"avatar\" | \"round-lg\" | \"field\" | \"card\" | \"sheet-row\" | null | undefined;",
       "} & import(\"class-variance-authority/types\").ClassProp) | undefined) => string;",
-      "declare const buttonVariants: typeof variants;",
       "declare function Button({ className, variant, size, asChild, ...props }: React.ComponentProps<\"button\"> & VariantProps<typeof buttonVariants> & {",
       "    asChild?: boolean;",
       "}): React.JSX.Element;",
