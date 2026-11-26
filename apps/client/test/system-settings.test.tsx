@@ -131,14 +131,22 @@ beforeEach(() => {
       case "/api/auth/me":
         return me;
       case "/api/apps":
+      case "/api/devices":
         return [];
+      case "/api/places":
+        return {
+          home: { name: "Home", timeZone: "Europe/Zurich", hourCycle: "12h" },
+          floors: [],
+          rooms: [],
+          zones: [],
+        };
       case "/api/system/update":
         return { version: "dev-1", channel: "dev", update: journal };
       case "/api/system/update/versions":
         return {
           channel: "dev",
           versions: [
-            { version: "dev-3", builtAt: "2026-10-28T09:00:00Z" },
+            { version: "dev-3", builtAt: "2026-10-27T23:30:00Z" },
             { version: "dev-2", builtAt: "2026-10-27T09:00:00Z" },
             { version: "dev-1", builtAt: "2026-10-26T09:00:00Z" },
           ],
@@ -318,6 +326,23 @@ describe("Settings → System", () => {
 
     expect(attention()).toBeNull();
     expect(areaRow("System")?.textContent).toBe("SystemCan't check right now");
+  });
+
+  it("shows builds and the last update on the home clock", async () => {
+    journal = update({
+      version: "dev-1",
+      startedAt: "2026-10-26T23:30:00Z",
+      finishedAt: "2026-10-26T23:45:00Z",
+      step: "done",
+      outcome: "updated",
+    });
+    await render();
+    await openSystem();
+
+    expect(system().textContent).toContain("Built 28 Oct, 12:30 AM");
+    expect(system().textContent).toContain(
+      "Updated to dev-1 · 27 Oct, 12:45 AM",
+    );
   });
 
   it("updates the host to a build someone chose, once they confirm", async () => {

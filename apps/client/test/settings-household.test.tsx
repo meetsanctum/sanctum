@@ -28,15 +28,35 @@ const zurichHome = {
   timeZone: "Europe/Zurich",
   coordinates: { latitude: 47.3769, longitude: 8.5417, elevation: 408 },
   temperatureUnit: "celsius",
+  hourCycle: "24h",
+};
+type Home = Omit<typeof zurichHome, "timeZone" | "coordinates"> & {
+  timeZone: string | null;
+  coordinates: {
+    latitude: number;
+    longitude: number;
+    elevation: number | null;
+  } | null;
 };
 
 let root: Root;
 let container: HTMLDivElement;
-let saved: unknown[];
+let saved: Partial<Home>[];
+let storedHome: Home;
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  // The switch measures itself.
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
   saved = [];
+  storedHome = { ...zurichHome, timeZone: null, coordinates: null };
   vi.mocked(coreJson).mockReset();
   vi.mocked(coreJson).mockImplementation(async (path, init = {}) => {
     switch (path) {
@@ -46,27 +66,24 @@ beforeEach(() => {
             name: "Lake house",
             timeZone: "UTC",
             temperatureUnit: "celsius",
+            hourCycle: "24h",
           },
           floors: [],
           rooms: [],
           zones: [],
         };
       case "/api/places/home":
-        return {
-          name: "Lake house",
-          timeZone: null,
-          coordinates: null,
-          temperatureUnit: "celsius",
-        };
+        return storedHome;
       case "/api/places/home/suggest-location":
         return { ...zurich, place: "Zurich, Switzerland" };
       case "/api/places/home/update": {
-        const body = init.json as { name: string; timeZone: string | null };
+        const body = init.json as Partial<Home>;
         if (body.timeZone === "Mars") {
           throw new CoreError(400, "invalid_request");
         }
         saved.push(body);
-        return body;
+        storedHome = { ...storedHome, ...body };
+        return storedHome;
       }
       default:
         throw new Error(`Unexpected request: ${path}`);
@@ -90,6 +107,8 @@ const button = (name: string) =>
   [...container.querySelectorAll("button")].find(
     (each) => each.textContent === name,
   )!;
+const hours = () =>
+  container.querySelector<HTMLButtonElement>('[role="switch"]')!;
 
 // Types into a field the way React hears it.
 async function type(field: HTMLInputElement, value: string) {
@@ -125,10 +144,8 @@ describe("Settings → Household", () => {
     await act(async () => button("Save").click());
     expect(saved).toEqual([
       {
-        name: "Lake house",
         timeZone: "Europe/Zurich",
         coordinates: { latitude: 47.3769, longitude: 8.5417, elevation: 408 },
-        temperatureUnit: "celsius",
       },
     ]);
     expect(container.textContent).toContain("Saved.");
@@ -152,7 +169,7 @@ describe("Settings → Household", () => {
     expect(input("Elevation").value).toBe("");
   });
 
-  it("saves the temperature unit the home shows, with the rest", async () => {
+  it("saves the temperature unit the home shows", async () => {
     await act(async () => root.render(<HouseholdSection />));
     const unit = (name: string) =>
       [...container.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
@@ -165,22 +182,59 @@ describe("Settings → Household", () => {
     expect(button("Save").disabled).toBe(false);
     await act(async () => button("Save").click());
 
-    expect(saved).toEqual([
-      {
-        name: "Lake house",
-        timeZone: null,
-        coordinates: null,
-        temperatureUnit: "fahrenheit",
-      },
-    ]);
+    expect(saved).toEqual([{ temperatureUnit: "fahrenheit" }]);
+  });
+
+  it("saves 12-hour time for the whole home", async () => {
+    await act(async () => root.render(<HouseholdSection />));
+    expect(hours().getAttribute("aria-checked")).toBe("true");
+    expect(
+      document.getElementById(hours().getAttribute("aria-describedby")!)
+        ?.textContent,
+    ).toBe(
+      "How the home writes times, as 14:30 or 2:30 PM: on every screen and device.",
+    );
+    expect(button("Save").disabled).toBe(true);
+
+    await act(async () => hours().click());
+    expect(hours().getAttribute("aria-checked")).toBe("false");
+    expect(button("Save").disabled).toBe(false);
+    await act(async () => button("Save").click());
+
+    expect(saved).toEqual([{ hourCycle: "12h" }]);
+  });
+
+  it("switches back to 24-hour time and keeps location changes from another device", async () => {
+    storedHome = { ...zurichHome, hourCycle: "12h" };
+    await act(async () => root.render(<HouseholdSection />));
+    expect(hours().getAttribute("aria-checked")).toBe("false");
+
+    storedHome = { ...storedHome, timeZone: null, coordinates: null };
+    await act(async () => hours().click());
+    await act(async () => button("Save").click());
+
+    expect(saved).toEqual([{ hourCycle: "24h" }]);
+    expect(hours().getAttribute("aria-checked")).toBe("true");
+    expect(input("Latitude").value).toBe("");
+    expect(input("Time zone").value).toBe("");
+  });
+
+  it("keeps the clock format changed by another device when saving the name", async () => {
+    await act(async () => root.render(<HouseholdSection />));
+    storedHome = { ...storedHome, hourCycle: "12h" };
+    await type(input("Name"), "Lake cabin");
+    await act(async () => button("Save").click());
+
+    expect(saved).toEqual([{ name: "Lake cabin" }]);
+    expect(hours().getAttribute("aria-checked")).toBe("false");
+    expect(button("Save").disabled).toBe(true);
   });
 
   it("saves the elevation typed, or none", async () => {
-    vi.mocked(coreJson).mockImplementationOnce(async () => ({
-      name: "Lake house",
-      timeZone: "Europe/Zurich",
+    storedHome = {
+      ...zurichHome,
       coordinates: { latitude: 46.948, longitude: 7.4474, elevation: null },
-    }));
+    };
     await act(async () => root.render(<HouseholdSection />));
     expect(input("Elevation").value).toBe("");
     expect(button("Save").disabled).toBe(true);
@@ -192,16 +246,14 @@ describe("Settings → Household", () => {
     await type(input("Elevation"), "");
     await act(async () => button("Save").click());
 
-    expect(
-      saved.map((body) => (body as typeof zurichHome).coordinates),
-    ).toEqual([
+    expect(saved.map((body) => body.coordinates)).toEqual([
       { latitude: 46.948, longitude: 7.4474, elevation: 538 },
       { latitude: 46.948, longitude: 7.4474, elevation: null },
     ]);
   });
 
   it("takes the coordinates and elevation away when they are emptied, and keeps the time zone", async () => {
-    vi.mocked(coreJson).mockImplementationOnce(async () => zurichHome);
+    storedHome = zurichHome;
     await act(async () => root.render(<HouseholdSection />));
     expect(input("Latitude").value).toBe("47.3769");
     expect(input("Elevation").value).toBe("408");
@@ -213,14 +265,7 @@ describe("Settings → Household", () => {
     );
     await act(async () => button("Save").click());
 
-    expect(saved).toEqual([
-      {
-        name: "Lake house",
-        timeZone: "Europe/Zurich",
-        coordinates: null,
-        temperatureUnit: "celsius",
-      },
-    ]);
+    expect(saved).toEqual([{ coordinates: null }]);
     expect(input("Elevation").value).toBe("");
   });
 
@@ -245,14 +290,7 @@ describe("Settings → Household", () => {
 
     await type(input("Name"), "Lake cabin");
     await act(async () => button("Save").click());
-    expect(saved).toEqual([
-      {
-        name: "Lake cabin",
-        timeZone: null,
-        coordinates: null,
-        temperatureUnit: "celsius",
-      },
-    ]);
+    expect(saved).toEqual([{ name: "Lake cabin" }]);
 
     await type(input("Latitude"), "47.3769");
     await type(input("Longitude"), "8.5417");
@@ -282,13 +320,16 @@ describe("Settings → Household", () => {
       await act(async () =>
         resolve(
           operation === "saving"
-            ? { name: "First name", timeZone: null, coordinates: null }
+            ? { ...storedHome, name: "First name", hourCycle: "12h" }
             : { ...zurich, place: "Zurich" },
         ),
       );
 
       expect(input("Name").value).toBe("New name");
       expect(input("Latitude").value).toBe("40");
+      if (operation === "saving") {
+        expect(hours().getAttribute("aria-checked")).toBe("false");
+      }
     },
   );
 
@@ -300,7 +341,7 @@ describe("Settings → Household", () => {
   ])(
     "keeps the location together when %s changes during a suggestion",
     async (field, value) => {
-      vi.mocked(coreJson).mockImplementationOnce(async () => zurichHome);
+      storedHome = zurichHome;
       await act(async () => root.render(<HouseholdSection />));
       let resolve!: (value: unknown) => void;
       vi.mocked(coreJson).mockImplementationOnce(
@@ -330,7 +371,7 @@ describe("Settings → Household", () => {
       await act(async () => button("Save").click());
 
       expect(saved).toEqual([
-        expect.objectContaining({ coordinates: edited, timeZone }),
+        field === "Time zone" ? { timeZone } : { coordinates: edited },
       ]);
     },
   );

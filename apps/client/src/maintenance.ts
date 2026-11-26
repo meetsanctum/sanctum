@@ -6,6 +6,10 @@ import {
   type DeviceInfo,
   type FirmwareState,
 } from "@meetsanctum/app-sdk";
+import {
+  calendarDaysBetween,
+  type HomeClock,
+} from "@meetsanctum/app-sdk/clock";
 
 import { plural } from "./plural";
 
@@ -14,28 +18,17 @@ import { plural } from "./plural";
 // line and tile say it: a device on a battery gone quiet, a low battery, and
 // firmware to update.
 
-const dayMs = 24 * 60 * 60_000;
-
-function startOfDay(at: number) {
-  const day = new Date(at);
-  day.setHours(0, 0, 0, 0);
-  return day.getTime();
-}
-
 /** When a device was last heard from, as "since …" says it: yesterday, a weekday this week, or a date. */
-export function sinceWords(at: string, now: number) {
+export function sinceWords(clock: HomeClock, at: string, now: number) {
   const then = Date.parse(at);
-  const days = Math.round((startOfDay(now) - startOfDay(then)) / dayMs);
+  const days = calendarDaysBetween(then, now, clock.timeZone);
   if (days <= 1) return "yesterday";
-  return new Date(then).toLocaleDateString(
-    "en-GB",
-    days < 7 ? { weekday: "long" } : { day: "numeric", month: "long" },
-  );
+  return days < 7 ? clock.longWeekdayText(then) : clock.longDayText(then);
 }
 
 /** What leads a quiet device's line. */
-export function quietText(device: DeviceInfo, now: number) {
-  return `Not heard from since ${sinceWords(device.lastSeenAt!, now)}: try a new battery`;
+export function quietText(clock: HomeClock, device: DeviceInfo, now: number) {
+  return `Not heard from since ${sinceWords(clock, device.lastSeenAt!, now)}: try a new battery`;
 }
 
 /**
@@ -114,11 +107,15 @@ export function maintenanceHint(devices: readonly DeviceInfo[], now: number) {
 }
 
 /** What the dashboard's Batteries tile says, while a battery is to replace: one device by its name, several by their number. */
-export function batteriesTile(devices: readonly DeviceInfo[], now: number) {
+export function batteriesTile(
+  clock: HomeClock,
+  devices: readonly DeviceInfo[],
+  now: number,
+) {
   const due = dueBatteries(devices, now);
   const said = (device: DeviceInfo) =>
     maintenanceOf(device, now) === "quiet"
-      ? `${device.name} hasn't been heard from since ${sinceWords(device.lastSeenAt!, now)}`
+      ? `${device.name} hasn't been heard from since ${sinceWords(clock, device.lastSeenAt!, now)}`
       : lowCharge(device) === undefined
         ? `${device.name}'s battery is low`
         : `${device.name}'s battery is at ${device.battery}%`;

@@ -6,6 +6,7 @@ import {
   type Room,
   type TemperatureUnit,
 } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 
 import {
   givenUpWords,
@@ -121,14 +122,9 @@ export function appsNotRunning(
     .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
 }
 
-// When it began waiting, by this device's clock.
-export const clockTime = (since: string | undefined) =>
-  since
-    ? new Date(since).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "";
+// When it began waiting, on the home clock.
+export const clockTime = (clock: HomeClock, since: string | undefined) =>
+  since ? clock.timeText(new Date(since)) : "";
 
 /**
  * Whether an app's line is a problem: one that stopped, as one that can't run
@@ -142,7 +138,7 @@ export const isStopped = (app: AppInfo) =>
  * a problem; a paused one is not, since someone switched off what it needs, and
  * nor is one waiting, which starts by itself.
  */
-export function appAttentionText(app: AppInfo) {
+export function appAttentionText(clock: HomeClock, app: AppInfo) {
   // The version it has failing says so first.
   if (app.waiting && !isGivenUp(app)) {
     return waitingAttentionText(app, app.waiting);
@@ -155,7 +151,7 @@ export function appAttentionText(app: AppInfo) {
     case "failed":
       return `Not running: ${givenUpWords.charAt(0).toLowerCase()}${givenUpWords.slice(1)}`;
     case "waiting":
-      return `${waitingWords(app)} since ${clockTime(app.run?.since)}. It starts by itself once it can`;
+      return `${waitingWords(app)} since ${clockTime(clock, app.run?.since)}. It starts by itself once it can`;
     default:
       return `Paused: ${needsWords(app)}`;
   }

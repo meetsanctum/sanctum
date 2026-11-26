@@ -3,7 +3,8 @@ import {
   type HomeLocation,
   type TemperatureUnit,
 } from "@meetsanctum/app-sdk";
-import { Button, Input, SegmentedControl } from "@meetsanctum/ui-sdk";
+import type { HourCycle } from "@meetsanctum/app-sdk/clock";
+import { Button, Input, SegmentedControl, Switch } from "@meetsanctum/ui-sdk";
 import {
   useEffect,
   useId,
@@ -25,7 +26,8 @@ import { CoreError, coreJson } from "./core-fetch";
 // when someone presses its button, and fills the fields for them to check
 // and save. The temperature unit is how the home shows temperatures, in
 // rooms, sensors and Weather alike; what sensors and forecasts say stays in
-// Celsius.
+// Celsius. 24-hour time is how the home writes times, 14:30 or 2:30 PM, on
+// every screen and device alike.
 
 type Coordinates = {
   latitude: number;
@@ -37,6 +39,7 @@ type HomeInfo = {
   timeZone: string | null;
   coordinates: Coordinates | null;
   temperatureUnit: TemperatureUnit;
+  hourCycle: HourCycle;
 };
 
 const unitNames: Record<TemperatureUnit, string> = {
@@ -80,6 +83,7 @@ type Draft = {
   elevation: string;
   timeZone: string;
   temperatureUnit: TemperatureUnit;
+  hourCycle: HourCycle;
 };
 
 const numberText = (value: number | null | undefined) =>
@@ -96,6 +100,7 @@ const draftOf = (home: HomeInfo): Draft => ({
   // Until someone sets one, the host's applies, so none is filled in.
   timeZone: home.timeZone ?? "",
   temperatureUnit: home.temperatureUnit,
+  hourCycle: home.hourCycle,
 });
 
 // Where the fields put the home: no coordinates, nor elevation, when both
@@ -151,18 +156,31 @@ function HomeForm() {
   if (!home || !draft) return null;
 
   const change =
-    (key: Exclude<keyof Draft, "temperatureUnit">) => (value: string) => {
-      setDraft({ ...draft, [key]: value });
+    <K extends keyof Draft>(key: K) =>
+    (value: Draft[K]) => {
+      setDraft((current) => current && { ...current, [key]: value });
       setNote(undefined);
       setProblem(undefined);
     };
-  const changeUnit = (temperatureUnit: TemperatureUnit) => {
-    setDraft({ ...draft, temperatureUnit });
-    setNote(undefined);
-    setProblem(undefined);
-  };
   const where = whereOf(draft);
   const name = draft.name.trim();
+  const coordinatesChanged =
+    where?.coordinates?.latitude !== home.coordinates?.latitude ||
+    where?.coordinates?.longitude !== home.coordinates?.longitude ||
+    where?.coordinates?.elevation !== home.coordinates?.elevation;
+  // Only send fields changed here, since another device may have saved since
+  // these settings opened. Coordinates and elevation form one field.
+  const changes = {
+    ...(name !== home.name && { name }),
+    ...(where &&
+      where.timeZone !== home.timeZone && { timeZone: where.timeZone }),
+    ...(where && coordinatesChanged && { coordinates: where.coordinates }),
+    ...(draft.temperatureUnit !== home.temperatureUnit && {
+      temperatureUnit: draft.temperatureUnit,
+    }),
+    ...(draft.hourCycle !== home.hourCycle && { hourCycle: draft.hourCycle }),
+  };
+  const unchanged = Object.keys(changes).length === 0;
   const hasCoordinates = !!(draft.latitude.trim() || draft.longitude.trim());
   const needsTimeZone = !draft.timeZone.trim() && hasCoordinates;
   const dropsElevation = !!draft.elevation.trim() && !hasCoordinates;
@@ -216,19 +234,31 @@ function HomeForm() {
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
-    if (where === undefined || !name) return;
+    if (working || where === undefined || !name || unchanged) return;
     setWorking("saving");
     setNote(undefined);
     setProblem(undefined);
     try {
       const saved = await coreJson<HomeInfo>("/api/places/home/update", {
         method: "POST",
-        json: { name, ...where, temperatureUnit: draft.temperatureUnit },
+        json: changes,
       });
       setHome(saved);
-      // Keep edits made while the request was in flight. The saved result
-      // still becomes the baseline, so those edits remain unsaved.
-      setDraft((current) => (current === draft ? draftOf(saved) : current));
+      // Rebase from what the core saved, preserving only edits made while
+      // the request was in flight.
+      setDraft((current) => {
+        const next = draftOf(saved);
+        if (!current || current === draft) return next;
+        const keys = Object.keys(draft) as (keyof Draft)[];
+        return {
+          ...next,
+          ...Object.fromEntries(
+            keys
+              .filter((key) => current[key] !== draft[key])
+              .map((key) => [key, current[key]]),
+          ),
+        };
+      });
       setNote("Saved.");
     } catch (error) {
       setProblem(
@@ -241,11 +271,6 @@ function HomeForm() {
     }
   };
 
-  const unchanged =
-    name === home.name &&
-    draft.temperatureUnit === home.temperatureUnit &&
-    where?.timeZone === home.timeZone &&
-    JSON.stringify(where?.coordinates) === JSON.stringify(home.coordinates);
   return (
     <form onSubmit={save} className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
@@ -347,11 +372,28 @@ function HomeForm() {
             label: unitNames[unit],
           }))}
           value={draft.temperatureUnit}
-          onValueChange={changeUnit}
+          onValueChange={change("temperatureUnit")}
           className="self-start"
         />
         <span id={`${unitName}-hint`} className={label}>
           How the home shows temperatures: in rooms, sensors and Weather.
+        </span>
+      </div>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-3">
+          <label htmlFor={`${ids}-hours`} className="text-sm font-medium">
+            24-hour time
+          </label>
+          <Switch
+            id={`${ids}-hours`}
+            aria-describedby={`${ids}-hours-hint`}
+            checked={draft.hourCycle === "24h"}
+            onCheckedChange={(on) => change("hourCycle")(on ? "24h" : "12h")}
+          />
+        </div>
+        <span id={`${ids}-hours-hint`} className={label}>
+          How the home writes times, as 14:30 or 2:30 PM: on every screen and
+          device.
         </span>
       </div>
       {(note || problem) && (

@@ -5,7 +5,7 @@ import type {
   ProbeResult,
   Room,
 } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, useHomeClock } from "@meetsanctum/ui-sdk";
 import { CircleAlert } from "lucide-react";
 import { useState } from "react";
 
@@ -130,6 +130,7 @@ function RowButton(props: {
 // An app's name over what is wrong: in red with a sign for one that
 // stopped, plain for one paused.
 function AppLine(props: { app: AppInfo }) {
+  const clock = useHomeClock();
   const stopped = isStopped(props.app);
   return (
     <span className="flex min-w-0 flex-1 flex-col gap-px leading-tight">
@@ -142,7 +143,7 @@ function AppLine(props: { app: AppInfo }) {
         {stopped && (
           <CircleAlert aria-hidden="true" className="size-3.5 shrink-0" />
         )}
-        <span className="truncate">{appAttentionText(props.app)}</span>
+        <span className="truncate">{appAttentionText(clock, props.app)}</span>
       </span>
     </span>
   );

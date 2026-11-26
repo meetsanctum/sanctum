@@ -3,6 +3,7 @@ import type {
   ModelProvider,
   ModelSourceInfo,
 } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 
 import { productName } from "../brand";
 
@@ -44,23 +45,14 @@ export function sourceDetail(source: ModelSourceInfo) {
 
 const minute = 60_000;
 
-function agoText(at: string, now: Date) {
+function agoText(clock: HomeClock, at: string, now: Date) {
   const ago = now.getTime() - new Date(at).getTime();
   if (ago < 2 * minute) return "just now";
   if (ago < 60 * minute) return `${Math.floor(ago / minute)} minutes ago`;
   const hours = Math.floor(ago / (60 * minute));
   if (hours < 24) return hours === 1 ? "an hour ago" : `${hours} hours ago`;
-  return `on ${new Date(at).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-  })}`;
+  return `on ${clock.dayText(new Date(at))}`;
 }
-
-const timeText = (at: string) =>
-  new Date(at).toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 
 /** Why a source gave no answer, and what to do about it. */
 export function problemText(
@@ -109,6 +101,7 @@ export type CheckLine = { text: string; tone: "good" | "problem" | "plain" };
 
 /** How a source's last check went, or what's happening now. */
 export function checkLine(
+  clock: HomeClock,
   source: ModelSourceInfo,
   now = new Date(),
 ): CheckLine | undefined {
@@ -127,12 +120,12 @@ export function checkLine(
           ? `Check that ${source.computer ?? "the computer"} is awake and Ollama is running there.`
           : "Check your home's connection to the internet.";
     return {
-      text: `Not answering since ${timeText(source.downSince)}. ${where}`,
+      text: `Not answering since ${clock.timeText(new Date(source.downSince))}. ${where}`,
       tone: "problem",
     };
   }
   if (!check) return undefined;
-  const checked = `checked ${agoText(check.at, now)}`;
+  const checked = `checked ${agoText(clock, check.at, now)}`;
   switch (check.outcome) {
     case "answered":
       return {

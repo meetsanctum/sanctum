@@ -1,5 +1,6 @@
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import type { ClientInfo, PersonInfo } from "@meetsanctum/auth-protocol";
-import { Button, Input } from "@meetsanctum/ui-sdk";
+import { Button, Input, useHomeClock } from "@meetsanctum/ui-sdk";
 import { EllipsisVertical, Gauge, House, Pencil, Trash2 } from "lucide-react";
 import {
   useCallback,
@@ -42,7 +43,11 @@ const minute = 60_000;
 // When a client was last seen, as people say it. A client that never used
 // its token, such as a shared device whose token was lost on the way, is
 // marked as never seen.
-export function seenText(lastSeenAt: string | null, now = new Date()) {
+export function seenText(
+  clock: HomeClock,
+  lastSeenAt: string | null,
+  now = new Date(),
+) {
   if (!lastSeenAt) {
     return "Never seen";
   }
@@ -57,13 +62,11 @@ export function seenText(lastSeenAt: string | null, now = new Date()) {
     const hours = Math.floor(ago / (60 * minute));
     return hours === 1 ? "Seen an hour ago" : `Seen ${hours} hours ago`;
   }
-  return `Seen on ${new Date(lastSeenAt).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-  })}`;
+  return `Seen on ${clock.dayText(new Date(lastSeenAt))}`;
 }
 
 export function clientDetail(
+  clock: HomeClock,
   client: ClientInfo,
   person: PersonInfo | undefined,
   now?: Date,
@@ -75,7 +78,7 @@ export function clientDetail(
       ? "This device"
       : client.connectedSince
         ? "Connected now"
-        : seenText(client.lastSeenAt, now),
+        : seenText(clock, client.lastSeenAt, now),
     drawnText(client),
   ]
     .filter(Boolean)
@@ -92,6 +95,7 @@ export function ClientsSection(props: {
   // The way back of Settings' Clients page, which it is the whole of.
   page?: ReactNode;
 }) {
+  const clock = useHomeClock();
   const [clients, setClients] = useState<ClientInfo[]>();
   const [people, setPeople] = useState<PersonInfo[]>([]);
   const [editing, setEditing] = useState<Editing>();
@@ -165,7 +169,7 @@ export function ClientsSection(props: {
                 )}
                 <Row
                   title={client.name}
-                  detail={clientDetail(client, person)}
+                  detail={clientDetail(clock, client, person)}
                 />
                 <ClientMenu
                   client={client}

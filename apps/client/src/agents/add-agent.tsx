@@ -9,7 +9,7 @@ import {
   type AgentSetupStarted,
   type AgentSetupStatus,
 } from "@meetsanctum/auth-protocol";
-import { Button, Input } from "@meetsanctum/ui-sdk";
+import { Button, Input, useHomeClock } from "@meetsanctum/ui-sdk";
 import { Copy, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
@@ -92,6 +92,7 @@ export function AddAgent(props: {
   // The agent connected, so the list can show it.
   onConnected: () => void;
 }) {
+  const clock = useHomeClock();
   const [step, setStep] = useState<Step>({ kind: "name" });
   const [name, setName] = useState("");
   const [working, setWorking] = useState(false);
@@ -236,11 +237,8 @@ export function AddAgent(props: {
               <DialogTitle>{step.name} is connected</DialogTitle>
               <DialogDescription>
                 It connected from {step.address} at{" "}
-                {new Date(step.connectedAt).toLocaleTimeString(undefined, {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-                . It can use what's on in {canUseTitle}.
+                {clock.timeText(new Date(step.connectedAt))}. It can use what's
+                on in {canUseTitle}.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>

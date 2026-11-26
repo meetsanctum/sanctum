@@ -57,6 +57,8 @@ export type Names = {
   device(id: string): { name: string; kinds: string[] } | undefined;
   entity(type: string, key: string): string | undefined;
   app(id: string): string | undefined;
+  /** A schedule's time of day as the home writes it: 07:30, or 7:30 AM. */
+  time(wall: string): string;
 };
 
 /** A value in a sentence; missing when a required one is not set or gone. */
@@ -322,7 +324,7 @@ export function formatValue(
         ? names.entity(kind.type, value)
         : undefined;
     case "timeOfDay":
-      return typeof value === "string" ? value : undefined;
+      return typeof value === "string" ? names.time(value) : undefined;
     case "days":
       return formatDays(value as Weekday[] | undefined, style);
     case "offsetMinutes":

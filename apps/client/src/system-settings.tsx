@@ -1,4 +1,5 @@
-import { Button } from "@meetsanctum/ui-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
+import { Button, useHomeClock } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { Check, Circle, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -36,16 +37,9 @@ import {
 // The core restarts during an update; meanwhile the connection veil covers
 // the page, and the progress carries on when the core is back.
 
-const day = new Intl.DateTimeFormat(undefined, {
-  day: "numeric",
-  month: "long",
-});
-const dayAndTime = new Intl.DateTimeFormat(undefined, {
-  day: "numeric",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+// A day and a time on the home clock: "25 Nov, 14:03".
+const dayAndTime = (clock: HomeClock, at: Date) =>
+  `${clock.dayText(at)}, ${clock.timeText(at)}`;
 
 export function SystemSettings(props: {
   core: CoreStatus;
@@ -76,6 +70,7 @@ export function SystemSettings(props: {
 // After a restore from a backup every device was signed out; the first to
 // look is told what that means.
 function RestoreNotice(props: { online: boolean }) {
+  const clock = useHomeClock();
   const [restore, setRestore] = useState<RestoreInfo | null>(null);
 
   useEffect(() => {
@@ -91,7 +86,8 @@ function RestoreNotice(props: { online: boolean }) {
   }, [props.online]);
 
   if (!restore) return null;
-  const date = restore.backupAt && day.format(new Date(restore.backupAt));
+  const date =
+    restore.backupAt && clock.longDayText(new Date(restore.backupAt));
   return (
     <div className="flex flex-col items-start gap-3 rounded-lg border border-(--hairline) p-4">
       <p className="m-0 text-sm">
@@ -461,6 +457,7 @@ function Outcome(props: { update: UpdateInfo }) {
 // The last update, ended before this screen opened.
 function LastUpdate(props: { update: UpdateInfo }) {
   const { update } = props;
+  const clock = useHomeClock();
   const { title } = outcomeText(update);
   const when = update.finishedAt ?? update.startedAt;
   const failed =
@@ -469,7 +466,7 @@ function LastUpdate(props: { update: UpdateInfo }) {
     <div className="flex flex-col gap-px leading-tight">
       <span className="text-sm font-medium">Last update</span>
       <span className="text-[13px] font-medium text-muted-foreground">
-        {title} · {dayAndTime.format(new Date(when))}
+        {title} · {dayAndTime(clock, new Date(when))}
       </span>
       {failed && update.error && (
         <span className="text-[13px] break-words text-muted-foreground">
@@ -487,6 +484,7 @@ function VersionPicker(props: {
   selected?: string;
   onSelect: (version: string) => void;
 }) {
+  const clock = useHomeClock();
   if (props.versions.length === 0) {
     return (
       <p className="m-0 text-sm">
@@ -500,7 +498,7 @@ function VersionPicker(props: {
       {props.versions.map(({ version, builtAt }) => {
         const isRunning = version === props.running;
         const detail = [
-          builtAt && `Built ${dayAndTime.format(new Date(builtAt))}`,
+          builtAt && `Built ${dayAndTime(clock, new Date(builtAt))}`,
           isRunning && "Running",
         ]
           .filter(Boolean)

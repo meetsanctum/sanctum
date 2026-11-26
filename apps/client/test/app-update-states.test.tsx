@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { AppInfo, AppRun, AppState } from "@meetsanctum/app-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -11,6 +12,9 @@ import {
   appsNotRunning,
   attentionTile,
 } from "../src/attention";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 // What clients say of an app's update: that it's updating, that it's going
 // back, and that it went back.
@@ -179,7 +183,7 @@ describe("Needs attention", () => {
   });
   it("lists one back on its old version, plainly, since it runs", () => {
     expect(appsNotRunning([wentBack])).toEqual([wentBack]);
-    expect(appAttentionText(wentBack)).toBe(
+    expect(appAttentionText(clock, wentBack)).toBe(
       "Version 0.4.0 didn't start, so it's back on 0.3.0",
     );
     expect(appAttentionSpoken(wentBack)).toBe("Weather went back to 0.3.0");

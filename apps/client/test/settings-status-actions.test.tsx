@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { ClientInfo, PersonInfo } from "@meetsanctum/auth-protocol";
 import { createLiveFeed, TemperatureUnitProvider } from "@meetsanctum/ui-sdk";
 import { act } from "react";
@@ -14,6 +15,9 @@ import type { SystemStatus } from "../src/system-status";
 import type { HostPoint } from "../src/system-status-day";
 import type { UpdateStatus } from "../src/system-update";
 import { piStatus, statusApps } from "./system-status-fixtures";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 // What Status lets someone do: Restart and Shut down, asked first; Free up
 // space, saying what goes and what stays; the last 24 hours; and the clients
@@ -458,6 +462,7 @@ describe("connected now", () => {
   it("says Connected now in Settings → Clients", () => {
     expect(
       clientDetail(
+        clock,
         client({ connectedSince: today("07:12"), lastSeenAt: today("07:12") }),
         undefined,
       ),

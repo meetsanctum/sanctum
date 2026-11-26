@@ -13,6 +13,7 @@ import {
   PageBarButton,
   PageSection,
   Switch,
+  useHomeClock,
 } from "@meetsanctum/ui-sdk";
 import { ChevronRight, CircleAlert, Pencil, Play } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
@@ -87,6 +88,7 @@ export function AutomationPage(props: {
   openAppSettings(app: string): void;
   openStatus(): void;
 }) {
+  const clock = useHomeClock();
   const { workflows, pieces } = props.automations;
   const workflow = workflows?.find((each) => each.id === props.id);
   const [runs, setRuns] = useState<WorkflowRunInfo[]>();
@@ -168,7 +170,7 @@ export function AutomationPage(props: {
     : blocked
       ? "Next: once it can run again"
       : workflow.nextRun
-        ? `Next: ${momentWords(new Date(workflow.nextRun), new Date())}`
+        ? `Next: ${momentWords(clock, new Date(workflow.nextRun), new Date())}`
         : undefined;
 
   return (
@@ -399,6 +401,7 @@ function RunRow(props: {
   people: readonly PersonInfo[];
   opened: boolean;
 }) {
+  const clock = useHomeClock();
   const { run } = props;
   const [open, setOpen] = useState(props.opened && run.steps.length > 0);
   const person = (id: string) => props.people.find((each) => each.id === id);
@@ -418,7 +421,7 @@ function RunRow(props: {
         )}
       </Status>
       <span className="shrink-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
-        {momentWords(at, new Date())}
+        {momentWords(clock, at, new Date())}
       </span>
       <ChevronRight
         aria-hidden="true"

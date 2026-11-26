@@ -1,3 +1,4 @@
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { DeviceInfo, FirmwareInfo } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
@@ -9,6 +10,9 @@ import {
   sinceWords,
   updatesOf,
 } from "../src/maintenance";
+
+// The device's own zone, which the expectations here are worked out in.
+const clock = homeClock();
 
 // Maintenance: which devices are due, in which order, and how Settings and
 // the dashboard's tile say it.
@@ -84,9 +88,9 @@ const lamp = (name: string, extra: Partial<FirmwareInfo>) =>
 
 describe("when a device was last heard from", () => {
   it("is yesterday, a weekday this week, or a date", () => {
-    expect(sinceWords("2026-10-30T09:00:00Z", now)).toBe("yesterday");
-    expect(sinceWords("2026-10-27T09:10:00Z", now)).toBe("Tuesday");
-    expect(sinceWords("2026-10-12T09:00:00Z", now)).toBe("12 October");
+    expect(sinceWords(clock, "2026-10-30T09:00:00Z", now)).toBe("yesterday");
+    expect(sinceWords(clock, "2026-10-27T09:10:00Z", now)).toBe("Tuesday");
+    expect(sinceWords(clock, "2026-10-12T09:00:00Z", now)).toBe("12 October");
   });
 });
 
@@ -143,12 +147,12 @@ describe("batteries", () => {
   });
 
   it("make a tile without a charge where the device says its battery is low", () => {
-    expect(batteriesTile([kitchen, flagged], now)).toEqual({
+    expect(batteriesTile(clock, [kitchen, flagged], now)).toEqual({
       title: "Porch door",
       value: "Battery low",
       label: "Porch door's battery is low. Opens Maintenance",
     });
-    expect(batteriesTile([unfigured, low], now)).toEqual({
+    expect(batteriesTile(clock, [unfigured, low], now)).toEqual({
       title: "Batteries",
       value: "Replace 2",
       label:
@@ -157,19 +161,19 @@ describe("batteries", () => {
   });
 
   it("make a tile: one device by its name, several by their number", () => {
-    expect(batteriesTile([kitchen], now)).toBeNull();
-    expect(batteriesTile([kitchen, low], now)).toEqual({
+    expect(batteriesTile(clock, [kitchen], now)).toBeNull();
+    expect(batteriesTile(clock, [kitchen, low], now)).toEqual({
       title: "Hall sensor",
       value: "Battery 8%",
       label: "Hall sensor's battery is low, 8%. Opens Maintenance",
     });
-    expect(batteriesTile([quiet], now)).toEqual({
+    expect(batteriesTile(clock, [quiet], now)).toEqual({
       title: "Office button",
       value: "Gone quiet",
       label:
         "Office button hasn't been heard from since Tuesday. Its battery may be empty. Opens Maintenance",
     });
-    expect(batteriesTile([low, quiet, kitchen], now)).toEqual({
+    expect(batteriesTile(clock, [low, quiet, kitchen], now)).toEqual({
       title: "Batteries",
       value: "Replace 2",
       label:
