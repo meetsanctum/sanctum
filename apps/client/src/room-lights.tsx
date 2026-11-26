@@ -1,7 +1,8 @@
-import type { LightCommand, LightsResult } from "@meetsanctum/app-sdk";
+import type { LightCommand } from "@meetsanctum/app-sdk";
 import { DeviceTile, icons, lightColour, type Tile } from "@meetsanctum/ui-sdk";
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 
+import { supportsBrightness } from "./device-tiles";
 import { sameData } from "./same-data";
 import type { Devices } from "./use-devices";
 
@@ -87,17 +88,14 @@ export function roomLightsTile(
               : lightColour({ on: true }),
         }
       : {}),
-    dims: reachable.some((tile) => tile.dims),
+    dims: (isOn ? lit : reachable).some(supportsBrightness),
     ...(level !== undefined ? { brightness: level } : {}),
     disabled: reachable.length === 0,
     ...(failures ? { failures } : {}),
   };
 }
 
-type RoomLightsDevices = Pick<
-  Devices,
-  "tiles" | "switchLights" | "setLights" | "fail"
->;
+type RoomLightsDevices = Pick<Devices, "tiles" | "switchLights" | "setLights">;
 
 /**
  * What a room's Lights tile and its detail ask of the room's lights, the
@@ -111,29 +109,42 @@ export function useRoomLights(devices: RoomLightsDevices) {
   });
 
   const command = useCallback((roomId: string, asked: LightCommand) => {
-    const { tiles, switchLights, setLights, fail } = latest.current;
+    const { tiles, switchLights, setLights } = latest.current;
     const lights = tiles.filter(
       (tile) => tile.kind === "light" && tile.roomId === roomId,
     );
     const place = { kind: "room", id: roomId } as const;
+    const key = roomLightsKey(roomId);
     // A colour or a white goes with any on it carries; a level on its own.
-    const sending: Promise<LightsResult> =
+    const sending =
       asked.hue !== undefined && asked.saturation !== undefined
-        ? setLights(place, lights, {
-            hue: asked.hue,
-            saturation: asked.saturation,
-          })
+        ? setLights(
+            place,
+            lights,
+            {
+              hue: asked.hue,
+              saturation: asked.saturation,
+            },
+            key,
+          )
         : asked.colorTemperature !== undefined
-          ? setLights(place, lights, {
-              colorTemperature: asked.colorTemperature,
-            })
+          ? setLights(
+              place,
+              lights,
+              {
+                colorTemperature: asked.colorTemperature,
+              },
+              key,
+            )
           : asked.brightness !== undefined
-            ? setLights(place, lights, { brightness: asked.brightness })
-            : switchLights(place, lights, asked.on === false ? "off" : "on");
-    const failed = () => fail([roomLightsKey(roomId)]);
-    void sending.then(({ switched, failed: missed }) => {
-      if (switched === 0 && missed.length > 0) failed();
-    }, failed);
+            ? setLights(place, lights, { brightness: asked.brightness }, key)
+            : switchLights(
+                place,
+                lights,
+                asked.on === false ? "off" : "on",
+                key,
+              );
+    void sending.catch(() => undefined);
   }, []);
 
   const onToggle = useCallback(
@@ -177,4 +188,29 @@ export function RoomLightsTile(props: {
       onOpen={props.onOpen}
     />
   );
+}
+
+// A room's Lights tile, as its lights stand.
+export function LightsTileOf(props: {
+  lights: readonly Tile[];
+  room: { id: string; name: string };
+  devices: Pick<Devices, "failures">;
+  roomLights: RoomLights;
+  onOpen: (tile: Tile) => void;
+}) {
+  const { room } = props;
+  const tile = roomLightsTile(
+    props.lights,
+    room.id,
+    props.devices.failures.get(roomLightsKey(room.id)),
+  );
+  return tile ? (
+    <RoomLightsTile
+      key={tile.key}
+      tile={tile}
+      roomName={room.name}
+      lights={props.roomLights}
+      onOpen={props.onOpen}
+    />
+  ) : null;
 }

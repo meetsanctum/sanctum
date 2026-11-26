@@ -40,17 +40,32 @@ export type LightsChange =
  * or a colour by its hue and saturation. Each light takes what it can.
  */
 export type LightsSet =
-  | { brightness: number }
-  | { colorTemperature: number }
-  | { hue: number; saturation: number };
+  | {
+      brightness: number;
+      colorTemperature?: never;
+      hue?: never;
+      saturation?: never;
+    }
+  | {
+      brightness?: never;
+      colorTemperature: number;
+      hue?: never;
+      saturation?: never;
+    }
+  | {
+      brightness?: never;
+      colorTemperature?: never;
+      hue: number;
+      saturation: number;
+    };
 
 /**
  * What POST /api/devices/lights takes: the place's lights switched, or set
  * together.
  */
 export type LightsRequest =
-  | { place: LightsPlace; to: LightsSwitch }
-  | { place: LightsPlace; set: LightsSet };
+  | { place: LightsPlace; to: LightsSwitch; set?: never }
+  | { place: LightsPlace; to?: never; set: LightsSet };
 
 /** What switching a place's lights did. */
 export type LightsResult = {

@@ -48,13 +48,7 @@ import { batteriesTile } from "./maintenance";
 import { mediaSummary } from "./media";
 import { homeMotion, motionWhere, placeMotionText } from "./motion";
 import { PresenceOverview } from "./presence-overview";
-import {
-  roomLightsKey,
-  roomLightsTile,
-  RoomLightsTile,
-  useRoomLights,
-  type RoomLights,
-} from "./room-lights";
+import { LightsTileOf, useRoomLights } from "./room-lights";
 import {
   isRowEmpty,
   RoomRow,
@@ -220,8 +214,8 @@ function Sections(props: {
   sections: TileSection[];
   devices: Devices;
   onOpen: (tile: Tile) => void;
-  /** What a section has between its heading and its tiles. */
-  lead?: (section: TileSection) => ReactNode;
+  /** What a section has at the start of its grid. */
+  firstTile?: (section: TileSection) => ReactNode;
   /** Its headings' level, 3 under a floor's. */
   level?: 2 | 3;
 }) {
@@ -232,7 +226,7 @@ function Sections(props: {
       onToggle={onToggle}
       onDim={onDim}
       onOpen={props.onOpen}
-      lead={props.lead}
+      firstTile={props.firstTile}
       level={props.level}
     />
   );
@@ -485,10 +479,10 @@ export function RoomPage(props: {
         <RoomRow row={row} roomName={room.name} press={entities.press} />
       )}
       <Sections
-        sections={sectionsOfRoom(own, devices.devices)}
+        sections={sectionsOfRoom(own, devices.devices, lights.length > 0)}
         devices={devices}
         onOpen={props.openDevice}
-        lead={(section) =>
+        firstTile={(section) =>
           section.id === "lights" ? (
             <LightsTileOf
               lights={lights}
@@ -502,31 +496,6 @@ export function RoomPage(props: {
       />
     </>
   );
-}
-
-// A room's Lights tile, as its lights stand.
-function LightsTileOf(props: {
-  lights: readonly Tile[];
-  room: { id: string; name: string };
-  devices: Devices;
-  roomLights: RoomLights;
-  onOpen: (tile: Tile) => void;
-}) {
-  const { room } = props;
-  const tile = roomLightsTile(
-    props.lights,
-    room.id,
-    props.devices.failures.get(roomLightsKey(room.id)),
-  );
-  return tile ? (
-    <RoomLightsTile
-      key={tile.key}
-      tile={tile}
-      roomName={room.name}
-      lights={props.roomLights}
-      onOpen={props.onOpen}
-    />
-  ) : null;
 }
 
 const inNoRoom = (devices: Devices) =>
@@ -715,7 +684,7 @@ function CategorySections(props: {
 }) {
   const { devices, isLights } = props;
   const roomLights = useRoomLights(devices);
-  const lead = isLights
+  const firstTile = isLights
     ? (section: TileSection) =>
         // The lights in no room are not together, so have no Lights tile.
         section.id === noRoomSection ? null : (
@@ -737,7 +706,7 @@ function CategorySections(props: {
         sections={props.sections}
         devices={devices}
         onOpen={props.onOpen}
-        lead={lead}
+        firstTile={firstTile}
       />
     );
   }
@@ -762,7 +731,7 @@ function CategorySections(props: {
             sections={items}
             devices={devices}
             onOpen={props.onOpen}
-            lead={lead}
+            firstTile={firstTile}
             level={3}
           />
         </FloorSection>

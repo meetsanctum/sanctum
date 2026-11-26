@@ -8,6 +8,7 @@ import {
   LightControls,
   PowerButton,
   type SwipePage,
+  type Tile,
 } from "@meetsanctum/ui-sdk";
 import { useEffect } from "react";
 
@@ -24,13 +25,13 @@ import type { Devices } from "./use-devices";
 // A room's Lights tile's detail: a light's detail for all the room's lights
 // at once, opened from the tile as a light's is from its own. Its header
 // says "Lights" and the room with how many are on, beside Done. Its pages
-// are a light's controls where any of the room's lights has them: its
+// are a light's controls where any of the lights being set has them: its
 // colour and white, with the button that turns them all on or off, and its
 // brightness; a room whose lights only dim has the power button as a page
 // of its own after its brightness. It shows the lights that are on, their
-// level on average and the colour of the first, and sets them together
-// through the room's Lights tile's calls (room-lights.tsx): every light
-// that is on takes what it can of a colour, a white or a level, and while
+// level on average and the first reported colour and white, and sets them
+// together through the room's Lights tile's calls (room-lights.tsx): every
+// light that is on takes what it can of a colour, a white or a level, and while
 // none is on the room comes on at it. It has no history or activity of its
 // own, which each light's detail keeps. A room removed meanwhile, or left
 // without lights, closes it.
@@ -57,15 +58,36 @@ function featuresOf(lights: readonly Light[]): LightFeatures {
   };
 }
 
-// How the room's lights look together: on while any is on, at their level
-// on average, in the colour or white of the first that is on.
-function stateOf(lights: readonly Light[], level: number | undefined) {
-  const lit = lights.filter((light) => light.state?.on === true);
-  const first = lit[0]?.state ?? lights[0]?.state;
-  const { colorMode, colorTemperature, hue, saturation } = first ?? {};
+// The first reported colour and white among the lights shown in the controls.
+function stateOf(lights: readonly Light[], tile: Tile | undefined) {
+  let colorMode: LightState["colorMode"];
+  let colorTemperature: number | undefined;
+  let hue: number | undefined;
+  let saturation: number | undefined;
+  for (const { state, features } of lights) {
+    if (!state) continue;
+    if (
+      hue === undefined &&
+      features.color &&
+      state.colorMode !== "temperature" &&
+      state.hue !== undefined &&
+      state.saturation !== undefined
+    ) {
+      ({ hue, saturation } = state);
+      colorMode ??= "color";
+    }
+    if (
+      colorTemperature === undefined &&
+      features.colorTemperature &&
+      state.colorMode !== "color"
+    ) {
+      colorTemperature = state.colorTemperature;
+      if (colorTemperature !== undefined) colorMode ??= "temperature";
+    }
+  }
   return {
-    on: lit.length > 0,
-    ...(level !== undefined ? { brightness: level } : {}),
+    on: tile?.on ?? false,
+    brightness: tile?.brightness,
     ...(colorMode ? { colorMode } : {}),
     ...(colorTemperature !== undefined ? { colorTemperature } : {}),
     ...(hue !== undefined && saturation !== undefined
@@ -93,24 +115,26 @@ export function RoomLightsDetail(props: {
     roomId,
     devices.failures.get(roomLightsKey(roomId)),
   );
-  const shown = new Set(
-    tiles.filter((each) => !each.disabled).map((each) => each.key),
+  // Only the lights that can receive a group setting. If all are
+  // offline, keep their controls visible but disabled.
+  const targets = new Set(
+    tiles
+      .filter(
+        (each) => tile?.disabled || (!each.disabled && (!tile?.on || each.on)),
+      )
+      .map((each) => each.key),
   );
-  const capabilities = devices.devices.flatMap((device) =>
-    device.capabilities.flatMap((capability) =>
-      capability.kind === "light" &&
-      tiles.some((each) => each.key === tileKey(device.id, capability.id))
-        ? [{ capability, online: shown.has(tileKey(device.id, capability.id)) }]
-        : [],
-    ),
-  );
-  // What those that answer can do, or all of them while none answers.
-  const online = capabilities.filter((each) => each.online);
-  const lights = (online.length > 0 ? online : capabilities).map(
-    (each) => each.capability,
-  );
+  const lights = devices.devices
+    .filter((device) => device.roomId === roomId)
+    .flatMap((device) =>
+      device.capabilities.filter(
+        (capability): capability is Light =>
+          capability.kind === "light" &&
+          targets.has(tileKey(device.id, capability.id)),
+      ),
+    );
   const features = featuresOf(lights);
-  const state = stateOf(lights, tile?.brightness);
+  const state = stateOf(lights, tile);
   // A room removed meanwhile, or without lights now, closes its detail.
   const gone = props.open && devices.places !== undefined && (!room || !tile);
   useEffect(() => {
@@ -156,6 +180,7 @@ export function RoomLightsDetail(props: {
           name={name}
           features={features}
           state={state}
+          mixedAppearance
           disabled={disabled}
           failures={tile.failures}
           onCommand={(asked) => command(roomId, asked)}

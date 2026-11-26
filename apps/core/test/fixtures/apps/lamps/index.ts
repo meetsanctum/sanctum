@@ -19,6 +19,7 @@ import {
   type DriverRepair,
   type DriverRepairResult,
   type FoundReport,
+  type LightFeatures,
 } from "@meetsanctum/app-sdk";
 
 import { capabilities, capabilityIds } from "./capabilities.js";
@@ -54,6 +55,7 @@ type Gadget = {
   name: string;
   // What the driver says it is, if it says.
   type?: string;
+  lightFeatures?: LightFeatures;
   state: Record<string, unknown>;
   // Whether it still answers; an unplugged one takes nothing.
   answers: boolean;
@@ -166,18 +168,27 @@ class Radio {
   private ctx?: AppContext;
 
   // Puts a gadget in range, as pairing would.
-  async add(key: string, kind: Gadget["kind"], name = key, type?: string) {
+  async add(
+    key: string,
+    kind: Gadget["kind"],
+    name = key,
+    type?: string,
+    lightFeatures?: LightFeatures,
+  ) {
     this.gadgets.set(key, {
       kind,
       name,
       type,
+      lightFeatures,
       state:
         kind === "light"
           ? {
               on: false,
-              brightness: 100,
-              colorMode: "temperature",
-              colorTemperature: 370,
+              ...((lightFeatures?.brightness ?? true) && { brightness: 100 }),
+              ...((!lightFeatures || lightFeatures.colorTemperature) && {
+                colorMode: "temperature",
+                colorTemperature: 370,
+              }),
             }
           : kind === "sensor"
             ? { ...climate }
@@ -537,7 +548,15 @@ class Radio {
       // What a test says it is goes over the wire as it is, one a core
       // refuses too.
       type: (gadget.type as DeclaredType | undefined) ?? typeOf(gadget),
-      capabilities: capabilities[gadget.kind],
+      capabilities: gadget.lightFeatures
+        ? [
+            {
+              id: capabilityIds.light,
+              kind: "light",
+              features: gadget.lightFeatures,
+            },
+          ]
+        : capabilities[gadget.kind],
       // A lamp's firmware can be updated, a plug's only read; a remote
       // sleeps between presses, and a sensor between readings.
       firmware: sleeps(gadget)

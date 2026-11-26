@@ -6,6 +6,7 @@ import type {
 import { Palette, Power, Sun, SunDim, Thermometer } from "lucide-react";
 import { useEffect, useRef } from "react";
 
+import { Button } from "./components/ui/button";
 import { LevelSlider } from "./level-slider";
 import { LightPicker } from "./light-picker";
 import { showFailed } from "./show-failed";
@@ -25,6 +26,8 @@ export function LightControls(props: {
   name: string;
   features: LightFeatures;
   state: LightState;
+  /** Colour and white can come from different lights in a group. */
+  mixedAppearance?: boolean;
   /** Offline: shown, with nothing to press. */
   disabled?: boolean;
   /** How many commands to the light have failed here, so each shows. */
@@ -58,6 +61,7 @@ export function LightControls(props: {
           name={name}
           features={features}
           state={state}
+          mixedAppearance={props.mixedAppearance}
           disabled={disabled}
           failures={failures}
           onCommand={props.onCommand}
@@ -123,16 +127,17 @@ export function PowerButton(props: {
   const on = props.on && !props.disabled;
   return (
     <div className="flex flex-col items-center gap-4">
-      <button
+      <Button
+        variant="device-power"
+        size="device-power"
         type="button"
         aria-label={props.name}
         aria-pressed={on}
         disabled={props.disabled}
         onClick={props.onToggle}
-        className="grid size-28 place-items-center rounded-full bg-white/14 text-white outline-none focus-visible:ring-3 focus-visible:ring-ring/50 aria-pressed:bg-white aria-pressed:text-(--carbon)"
       >
         <Power aria-hidden="true" className="size-11" strokeWidth={1.6} />
-      </button>
+      </Button>
       <span className="text-[13px] leading-[18px] font-medium text-(--silver)">
         {props.disabled ? "Offline" : on ? "On" : "Off"}
       </span>

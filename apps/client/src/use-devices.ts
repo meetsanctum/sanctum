@@ -27,7 +27,7 @@ import { coreDevices } from "./core-devices";
 import { coreJson } from "./core-fetch";
 import { sameData } from "./same-data";
 import { useMinuteClock } from "./device-firmware";
-import { tileKey, tilesOf } from "./device-tiles";
+import { supportsBrightness, tileKey, tilesOf } from "./device-tiles";
 import { playPauseCommand } from "./media";
 
 // The home's devices and places as the shell shows them, for the sidebar,
@@ -50,7 +50,12 @@ const confirmWithin = 90_000;
 export const pressShownMs = 5_000;
 
 // A command from here, followed until its device confirms it or it fails.
-type Sent = { at: number; pending: boolean; failed: boolean };
+type Sent = {
+  at: number;
+  pending: boolean;
+  failed: boolean;
+  onFailure?: (key: string) => void;
+};
 
 type CommandTarget = Pick<Tile, "key" | "deviceId" | "capabilityId"> & {
   kind: Tile["kind"] | "audio";
@@ -187,6 +192,7 @@ export function useDevices(live: LiveFeed) {
         if (command.failed) continue;
         command.failed = true;
         keys.push(key);
+        command.onFailure?.(key);
       }
       fail(keys);
     },
@@ -217,14 +223,49 @@ export function useDevices(live: LiveFeed) {
     },
     [failOnce],
   );
-  const send = useCallback((keys: string[]) => {
+  const send = useCallback((keys: string[], onFailure?: Sent["onFailure"]) => {
     const at = Date.now();
     return keys.map((key): [string, Sent] => {
-      const command = { at, pending: false, failed: false };
+      const command = { at, pending: false, failed: false, onFailure };
       sent.current.set(key, command);
       return [key, command];
     });
   }, []);
+  // Delivery can finish before a light confirms, and a conflict can arrive
+  // before the HTTP response. Use both to tell whether the whole group failed.
+  const followLights = useCallback(
+    (failureKey: string | undefined) => {
+      if (!failureKey) return;
+      const conflicts = new Set<string>();
+      let switched: number | undefined;
+      let finished = false;
+      const report = () => {
+        if (finished) return;
+        finished = true;
+        conflicts.clear();
+        fail([failureKey]);
+      };
+      return {
+        onFailure(key: string) {
+          if (finished) return;
+          conflicts.add(key);
+          if (conflicts.size === switched) report();
+        },
+        delivered(count: number, missed: ReadonlySet<string>) {
+          switched = count;
+          // The group counts delivery failures separately from later conflicts.
+          for (const key of missed) conflicts.delete(key);
+          if (count === 0 ? missed.size > 0 : conflicts.size >= count) report();
+          if (count === 0) {
+            finished = true;
+            conflicts.clear();
+          }
+        },
+        report,
+      };
+    },
+    [fail],
+  );
   // Stops following commands that failed, unless a newer one replaced them.
   const forget = useCallback((commands: [string, Sent][]) => {
     for (const [key, command] of commands) {
@@ -421,14 +462,23 @@ export function useDevices(live: LiveFeed) {
   // light's new state. The core names the lights it could not switch; when
   // the whole call fails, each of `lights` it would have switched failed.
   const switchLights = useCallback(
-    async (place: LightsPlace, lights: Tile[], to: LightsSwitch = "toggle") => {
+    async (
+      place: LightsPlace,
+      lights: Tile[],
+      to: LightsSwitch = "toggle",
+      failureKey?: string,
+    ) => {
       const reachable = lights.filter((tile) => !tile.disabled);
       const on =
         to === "toggle" ? !reachable.some((tile) => tile.on) : to === "on";
       // The core decides which lights to switch from what it knows, which
       // may be newer than these tiles, so every light it might switch is
       // followed; one it leaves alone never shows as pending.
-      const commands = send(reachable.map((tile) => tile.key));
+      const confirmation = followLights(failureKey);
+      const commands = send(
+        reachable.map((tile) => tile.key),
+        confirmation?.onFailure,
+      );
       // A room's turn-on rule can leave individual lights off. Only the
       // core knows which ones it will turn on, so they wait for its live
       // state, and what an earlier command from here asked of them goes.
@@ -452,6 +502,7 @@ export function useDevices(live: LiveFeed) {
         const failedCommands = commands.filter(([key]) => failed.has(key));
         forget(failedCommands);
         failOnce(failedCommands);
+        confirmation?.delivered(result.switched, failed);
         return result;
       } catch (error) {
         forget(commands);
@@ -459,12 +510,13 @@ export function useDevices(live: LiveFeed) {
           reachable.filter((tile) => tile.on !== on).map((tile) => tile.key),
         );
         failOnce(commands.filter(([key]) => switching.has(key)));
+        confirmation?.report();
         throw error;
       } finally {
         answered();
       }
     },
-    [send, forget, failOnce, ask],
+    [send, followLights, forget, failOnce, ask],
   );
 
   // Every light in a room or another place set together, as a room's Lights
@@ -476,18 +528,27 @@ export function useDevices(live: LiveFeed) {
   // names the lights it could not set; when the whole call fails, each that
   // it would have set failed.
   const setLights = useCallback(
-    async (place: LightsPlace, lights: Tile[], set: LightsSet) => {
-      if ("brightness" in set && set.brightness === 0) {
-        return switchLights(place, lights, "off");
+    async (
+      place: LightsPlace,
+      lights: Tile[],
+      set: LightsSet,
+      failureKey?: string,
+    ) => {
+      if (set.brightness === 0) {
+        return switchLights(place, lights, "off", failureKey);
       }
       const reachable = lights.filter((tile) => !tile.disabled);
       const lit = reachable.filter((tile) => tile.on);
       const setting = lit.length > 0 ? lit : reachable;
-      const commands = send(setting.map((tile) => tile.key));
+      const confirmation = followLights(failureKey);
+      const commands = send(
+        setting.map((tile) => tile.key),
+        confirmation?.onFailure,
+      );
       const answered =
-        "brightness" in set && lit.length > 0
+        set.brightness !== undefined && lit.length > 0
           ? ask(
-              lit.filter((tile) => tile.dims).map((tile) => tile.key),
+              lit.filter(supportsBrightness).map((tile) => tile.key),
               { on: true, brightness: set.brightness },
             )
           : ask(
@@ -505,16 +566,18 @@ export function useDevices(live: LiveFeed) {
         const failedCommands = commands.filter(([key]) => failed.has(key));
         forget(failedCommands);
         failOnce(failedCommands);
+        confirmation?.delivered(result.switched, failed);
         return result;
       } catch (error) {
         forget(commands);
         failOnce(commands);
+        confirmation?.report();
         throw error;
       } finally {
         answered();
       }
     },
-    [send, forget, failOnce, ask, switchLights],
+    [send, followLights, forget, failOnce, ask, switchLights],
   );
 
   // Read whenever the shell refreshes its live feed, which it first does

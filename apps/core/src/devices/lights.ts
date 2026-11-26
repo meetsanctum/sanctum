@@ -200,23 +200,34 @@ const keyOf = (device: string, capability: string) => `${device}/${capability}`;
 
 // What of a set a light can take: a brightness where it dims, a colour
 // temperature within its range, a colour where it has colour; or nothing.
-function fieldsOf({ capability }: Light, set: LightsSet): LightCommand | null {
+function fieldsOf({ capability }: Light, set: LightCommand): LightCommand {
   const { features } = capability;
-  if ("brightness" in set) {
-    return features.brightness ? { brightness: set.brightness } : null;
+  const fields: LightCommand = {};
+  if (features.brightness && set.brightness !== undefined) {
+    fields.brightness = set.brightness;
   }
-  if ("colorTemperature" in set) {
-    const range = features.colorTemperature;
-    return range
-      ? {
-          colorTemperature: Math.min(
-            range.max,
-            Math.max(range.min, set.colorTemperature),
-          ),
-        }
-      : null;
+  const range = features.colorTemperature;
+  if (range && set.colorTemperature !== undefined) {
+    fields.colorTemperature = Math.min(
+      range.max,
+      Math.max(range.min, set.colorTemperature),
+    );
   }
-  return features.color ? { hue: set.hue, saturation: set.saturation } : null;
+  if (features.color && set.hue !== undefined && set.saturation !== undefined) {
+    fields.hue = set.hue;
+    fields.saturation = set.saturation;
+  }
+  return fields;
+}
+
+function withSettings(rule: LightCommand, fields: LightCommand): LightCommand {
+  const command: LightCommand = { ...rule, ...fields };
+  if (fields.colorTemperature !== undefined) {
+    delete command.hue;
+    delete command.saturation;
+  }
+  if (fields.hue !== undefined) delete command.colorTemperature;
+  return command;
 }
 
 export function createLights(options: {
@@ -429,7 +440,7 @@ export function createLights(options: {
     view: View,
     send: (light: Light, command: LightCommand) => Promise<unknown>,
   ): Promise<LightsResult> {
-    if ("brightness" in set && set.brightness === 0) {
+    if (set.brightness === 0) {
       return switchWith(place, "off", view, send);
     }
     const lights = lightsIn(place, view);
@@ -437,19 +448,14 @@ export function createLights(options: {
     const sending = lit.length
       ? lit.flatMap((light) => {
           const command = fieldsOf(light, set);
-          return command ? [{ light, command }] : [];
+          return Object.keys(command).length ? [{ light, command }] : [];
         })
       : turningOn(lights).flatMap(({ light, command }) => {
           const fields = fieldsOf(light, set);
-          if (!fields) return "brightness" in set ? [{ light, command }] : [];
-          const merged: LightCommand = { ...command, ...fields };
-          // A colour or a colour temperature, not both.
-          if (fields.colorTemperature !== undefined) {
-            delete merged.hue;
-            delete merged.saturation;
+          if (Object.keys(fields).length === 0) {
+            return set.brightness !== undefined ? [{ light, command }] : [];
           }
-          if (fields.hue !== undefined) delete merged.colorTemperature;
-          return [{ light, command: merged }];
+          return [{ light, command: withSettings(command, fields) }];
         });
     const result = await sendAll(sending, send);
     return { on: lit.length > 0 || result.switched > 0, ...result };
@@ -515,22 +521,10 @@ export function createLights(options: {
     }
     const set = ask.set!;
     return lights.map((light) => {
-      const { features } = light.capability;
-      const fields: LightCommand = {};
-      const ignored: SetField[] = [];
-      if (set.brightness !== undefined) {
-        if (features.brightness) fields.brightness = set.brightness;
-        else ignored.push("brightness");
-      }
-      if (set.colorTemperature !== undefined) {
-        const range = features.colorTemperature;
-        if (range) {
-          fields.colorTemperature = Math.min(
-            range.max,
-            Math.max(range.min, set.colorTemperature),
-          );
-        } else ignored.push("colorTemperature");
-      }
+      const fields = fieldsOf(light, set);
+      const ignored = (["brightness", "colorTemperature"] as const).filter(
+        (field) => set[field] !== undefined && fields[field] === undefined,
+      );
       if (Object.keys(fields).length === 0) {
         return { light, why: "unsupported", ignored };
       }
@@ -540,12 +534,7 @@ export function createLights(options: {
       if (isOn(light)) return { light, command: fields, ...partly };
       const rule = ruleFor(light);
       if (!rule) return { light, why: "kept_off" };
-      const command: LightCommand = { ...rule, ...fields };
-      if (fields.colorTemperature !== undefined) {
-        delete command.hue;
-        delete command.saturation;
-      }
-      return { light, command, ...partly };
+      return { light, command: withSettings(rule, fields), ...partly };
     });
   }
 

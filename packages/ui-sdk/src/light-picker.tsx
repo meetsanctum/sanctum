@@ -117,6 +117,8 @@ export function LightPicker(props: {
   name: string;
   features: LightFeatures;
   state: LightState;
+  /** Colour and white can come from different lights in a group. */
+  mixedAppearance?: boolean;
   disabled?: boolean;
   /** How many commands to the light have failed here, so a preview drops. */
   failures?: number;
@@ -144,7 +146,8 @@ export function LightPicker(props: {
   );
   const inColour =
     preview.value !== null ||
-    (state.colorMode === "color" && state.hue !== undefined);
+    ((props.mixedAppearance || state.colorMode === "color") &&
+      state.hue !== undefined);
   const colour: Colour =
     preview.value ??
     (inColour
@@ -152,7 +155,9 @@ export function LightPicker(props: {
       : { hue: 0, saturation: 100 });
   const presets = range ? whitesOf(range) : [];
   const inWhite =
-    !inColour && range !== null && state.colorTemperature !== undefined;
+    (props.mixedAppearance || !inColour) &&
+    range !== null &&
+    state.colorTemperature !== undefined;
   const mireds = range
     ? clamp(
         state.colorTemperature ?? presets[Math.floor(presets.length / 2)]!,
