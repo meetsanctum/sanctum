@@ -249,12 +249,16 @@ describe("a shared device's pairing screen", () => {
     const [formatted, first, second] = shownCode()!;
     expect(first).toMatch(/^K7/);
     expect(liveRegion.textContent).toBe(formatted);
+    // The boxes Add a shared device types into, drawn with no input under
+    // them, and hidden from screen readers, which hear the code in words.
     const boxes = container.querySelector('[data-slot="pairing-code"]')!;
-    expect([...boxes.children].map((box) => box.textContent)).toEqual([
-      ...first!,
-      "",
-      ...second!,
-    ]);
+    expect(boxes.getAttribute("aria-hidden")).toBe("true");
+    expect(boxes.querySelector("input")).toBeNull();
+    expect(
+      [...boxes.querySelectorAll('[data-slot="input-otp-slot"]')].map(
+        (box) => box.textContent,
+      ),
+    ).toEqual([...first!, ...second!]);
     expect(
       container.querySelector("svg[aria-label='Pairing QR code']"),
     ).not.toBeNull();

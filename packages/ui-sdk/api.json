@@ -1,5 +1,5 @@
 {
-  "version": "0.1.35",
+  "version": "0.1.36",
   "react": "19.3.1",
   "exports": {
     "@meetsanctum/ui-sdk": [
@@ -26,6 +26,7 @@
       "HomeTimeZoneProvider",
       "Input",
       "InputOTP",
+      "InputOTPDisplay",
       "InputOTPGroup",
       "InputOTPSeparator",
       "InputOTPSlot",
@@ -2626,12 +2627,16 @@
       "    filter?: (typed: string) => string;",
       "    containerClassName?: string;",
       "}): React.JSX.Element;",
+      "declare function InputOTPDisplay({ value, maxLength, className, children, ...props }: React.ComponentProps<\"div\"> & {",
+      "    value: string;",
+      "    maxLength: number;",
+      "}): React.JSX.Element;",
       "declare function InputOTPGroup({ className, ...props }: React.ComponentProps<\"div\">): React.JSX.Element;",
       "declare function InputOTPSlot({ index, className, ...props }: React.ComponentProps<\"div\"> & {",
       "    index: number;",
       "}): React.JSX.Element;",
       "declare function InputOTPSeparator({ className, ...props }: React.ComponentProps<\"div\">): React.JSX.Element;",
-      "export { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator };"
+      "export { InputOTP, InputOTPDisplay, InputOTPGroup, InputOTPSlot, InputOTPSeparator, };"
     ],
     "components/ui/input.d.ts": [
       "import * as React from \"react\";",
@@ -2894,7 +2899,7 @@
       "export * from \"./widget-icons\";",
       "export { Button, buttonVariants } from \"./components/ui/button\";",
       "export { Input } from \"./components/ui/input\";",
-      "export { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot, } from \"./components/ui/input-otp\";",
+      "export { InputOTP, InputOTPDisplay, InputOTPGroup, InputOTPSeparator, InputOTPSlot, } from \"./components/ui/input-otp\";",
       "export { NativeSelect, NativeSelectOptGroup, NativeSelectOption, } from \"./components/ui/native-select\";",
       "export { ScrollArea } from \"./components/ui/scroll-area\";",
       "export { Slider } from \"./components/ui/slider\";",

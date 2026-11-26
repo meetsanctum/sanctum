@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   InputOTP,
+  InputOTPDisplay,
   InputOTPGroup,
   InputOTPSeparator,
   InputOTPSlot,
@@ -182,5 +183,51 @@ describe("a code in boxes", () => {
     expect(container.querySelector("input")!.getAttribute("aria-invalid")).toBe(
       "true",
     );
+  });
+});
+
+describe("a code shown in the boxes", () => {
+  const show = (value: string) =>
+    act(async () =>
+      root.render(
+        <InputOTPDisplay value={value} maxLength={4}>
+          <InputOTPGroup>
+            <InputOTPSlot index={0} />
+            <InputOTPSlot index={1} />
+          </InputOTPGroup>
+          <InputOTPSeparator />
+          <InputOTPGroup>
+            <InputOTPSlot index={2} />
+            <InputOTPSlot index={3} />
+          </InputOTPGroup>
+        </InputOTPDisplay>,
+      ),
+    );
+  const slots = () => [
+    ...container.querySelectorAll('[data-slot="input-otp-slot"]'),
+  ];
+
+  it("draws each character in its box, with nothing to type in or focus", async () => {
+    await show("K7QX");
+
+    const display = container.querySelector('[data-slot="input-otp-display"]')!;
+    expect(display.getAttribute("aria-hidden")).toBe("true");
+    expect(container.querySelector("input")).toBeNull();
+    expect(slots().map((slot) => slot.textContent)).toEqual([
+      "K",
+      "7",
+      "Q",
+      "X",
+    ]);
+    expect(slots().some((slot) => slot.hasAttribute("data-active"))).toBe(
+      false,
+    );
+  });
+
+  it("shows empty boxes, with no caret, while there is no code", async () => {
+    await show("");
+
+    expect(slots().map((slot) => slot.textContent)).toEqual(["", "", "", ""]);
+    expect(container.querySelector("[data-active]")).toBeNull();
   });
 });
