@@ -14,14 +14,14 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/sanctum-speech-to-phrase
 
 jobs:
   build:
-    strategy:
+    if: github.event_name == 'pull_request'
+    strategy: &platforms
       matrix:
         platform: [amd64, arm64]
         include:
@@ -33,8 +33,44 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: docker/setup-buildx-action@v3
-      - if: github.event_name == 'push'
-        uses: docker/login-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: deploy/speech-to-phrase
+          platforms: linux/${{ matrix.platform }}
+          load: true
+          tags: sanctum-speech-to-phrase:check
+          cache-from: type=gha,scope=speech-to-phrase-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=speech-to-phrase-${{ matrix.platform }}
+      - name: Test grammar updates and Wyoming events
+        run: |
+          docker run --rm --entrypoint python3 \
+            -e PYTHONPATH=/usr/src \
+            -v "$PWD/deploy/speech-to-phrase:/checks:ro" \
+            sanctum-speech-to-phrase:check -m unittest discover -s /checks
+      - name: Teach and recognize a command
+        timeout-minutes: 10
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends espeak-ng
+          audio="$RUNNER_TEMP/command.wav"
+          espeak-ng -v en-us -s 145 -w "$audio" 'turn on the kitchen lights'
+          export SANCTUM_TRAIN_TOKEN="$(openssl rand -hex 32)"
+          docker run -d --name stp --env SANCTUM_TRAIN_TOKEN \
+            -p 127.0.0.1:10300:10300 sanctum-speech-to-phrase:check
+          trap 'status=$?; if [ "$status" -ne 0 ]; then docker logs stp; fi; docker rm -fv stp >/dev/null' EXIT
+          python3 deploy/speech-to-phrase/smoke_test.py "$audio"
+
+  release-build:
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+    strategy: *platforms
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -45,31 +81,15 @@ jobs:
         with:
           context: deploy/speech-to-phrase
           platforms: linux/${{ matrix.platform }}
-          outputs: ${{ github.event_name == 'push' && format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE) || 'type=docker' }}
-          tags: ${{ github.event_name == 'push' && '' || 'sanctum-speech-to-phrase:check' }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=speech-to-phrase-${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=speech-to-phrase-${{ matrix.platform }}
-      # The image starts, and answers a describe before it is taught.
-      - if: github.event_name != 'push'
-        run: |
-          docker run -d --name stp -p 10300:10300 sanctum-speech-to-phrase:check
-          for _ in $(seq 60); do
-            if echo '{"type": "describe"}' | nc -w 1 127.0.0.1 10300 | grep -q '"asr"'; then
-              docker rm -f stp >/dev/null
-              exit 0
-            fi
-            sleep 1
-          done
-          docker logs stp
-          exit 1
-      - if: github.event_name == 'push'
-        run: |
+      - run: |
           mkdir -p "$RUNNER_TEMP/digests"
           touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
-      - if: github.event_name == 'push'
-        uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7
         with:
           name: digests-speech-to-phrase-${{ matrix.platform }}
           path: ${{ runner.temp }}/digests/*
@@ -78,7 +98,10 @@ jobs:
 
   publish:
     if: github.event_name == 'push'
-    needs: build
+    permissions:
+      contents: read
+      packages: write
+    needs: release-build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8

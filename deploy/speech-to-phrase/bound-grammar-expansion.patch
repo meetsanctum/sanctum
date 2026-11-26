@@ -1,0 +1,173 @@
+--- a/lib/speech_to_phrase/templates.py
++++ b/lib/speech_to_phrase/templates.py
+@@ -46,6 +46,17 @@
+     to_state: int
+     in_label: int = EPS
+     out_label: int = EPS
++
++
++@dataclass
++class _ExpansionBudget:
++    # Shared by all templates in a lesson, including the arcs they produce.
++    remaining: int = 250_000
++
++    def charge(self, count: int) -> None:
++        if count > self.remaining:
++            raise ValueError("lesson exceeds the grammar expansion budget")
++        self.remaining -= count
+ 
+ 
+ @dataclass
+@@ -55,6 +66,7 @@
+     final_states: Set[int] = field(default_factory=set)
+     start: int = 0
+     current_state: int = 0
++    budget: _ExpansionBudget = field(default_factory=_ExpansionBudget)
+ 
+     def next_state(self) -> int:
+         self.states.add(self.current_state)
+@@ -86,6 +98,7 @@
+ 
+         self.states.add(from_state)
+         self.states.add(to_state)
++        self.budget.charge(1)
+         self.arcs[from_state].append(FstArc(to_state, in_label, out_label))
+ 
+     def accept(self, state: int) -> None:
+@@ -357,7 +370,9 @@
+     raise TypeError(f"Unsupported node type: {type(node).__name__}")
+ 
+ 
+-def _word_fragments(node: Node) -> Optional[List[str]]:
++def _word_fragments(
++    node: Node, budget: _ExpansionBudget
++) -> Optional[List[str]]:
+     """Return every space-free string this node can expand to, or ``None`` if it
+     cannot be a single-word fragment (contains whitespace or resolves to list /
+     number-range values that must be tokenized as whole phrases).
+@@ -369,16 +384,18 @@
+     if isinstance(node, LiteralNode):
+         return [node.text]
+     if isinstance(node, OptionalNode):
+-        child = _word_fragments(node.child)
++        child = _word_fragments(node.child, budget)
+         if child is None:
+             return None
++        budget.charge(1 + len(child))
+         return [""] + child
+     if isinstance(node, AlternativesNode):
+         out: List[str] = []
+         for option in node.options:
+-            frags = _word_fragments(option)
++            frags = _word_fragments(option, budget)
+             if frags is None:
+                 return None
++            budget.charge(len(frags))
+             out.extend(frags)
+         return out
+     if isinstance(node, SequenceNode):
+@@ -387,22 +404,26 @@
+             return None
+         result = [""]
+         for part in node.parts:
+-            frags = _word_fragments(part)
++            frags = _word_fragments(part, budget)
+             if frags is None:
+                 return None
++            budget.charge(len(result) * len(frags))
+             result = [prefix + frag for prefix in result for frag in frags]
+         return result
+     # ListRefNode / NumberRangeNode expand to whole phrases, not word fragments.
+     return None
+ 
+ 
+-def _run_word_variants(parts: Sequence[Node]) -> List[str]:
++def _run_word_variants(
++    parts: Sequence[Node], budget: _ExpansionBudget
++) -> List[str]:
+     """Cartesian concatenation of the fragments of a glued run of parts, with
+     duplicates removed (every part must be fragmentable)."""
+     result = [""]
+     for part in parts:
+-        frags = _word_fragments(part)
++        frags = _word_fragments(part, budget)
+         assert frags is not None  # caller guarantees fragmentable parts
++        budget.charge(len(result) * len(frags))
+         result = [prefix + frag for prefix in result for frag in frags]
+ 
+     seen: Set[str] = set()
+@@ -502,7 +523,7 @@
+     return words
+ 
+ 
+-@lru_cache(maxsize=None)
++@lru_cache(maxsize=4_096)
+ def _spellout_words(num: int, locale: str) -> Tuple[str, ...]:
+     """Spell out ``num`` for ``locale`` as a tuple of pronounceable words.
+ 
+@@ -558,17 +579,22 @@
+ 
+ 
+ def _expand_ref(
+-    node: Node, list_values: Mapping[str, Sequence[str]], locale: str
++    node: Node,
++    list_values: Mapping[str, Sequence[str]],
++    locale: str,
++    budget: _ExpansionBudget,
+ ) -> List[Sequence[str]]:
+     if isinstance(node, ListRefNode):
+         if node.name not in list_values:
+             raise KeyError(f"Missing values for list '{node.name}'")
++        budget.charge(len(list_values[node.name]))
+         return [_expand_list_value(v) for v in list_values[node.name]]
+ 
+     if isinstance(node, NumberRangeNode):
+         range_words: List[Sequence[str]] = []
+         for item in node.items:
+             if len(item) == 1:
++                budget.charge(1)
+                 range_words.extend(_spellout_variants(item[0], locale))
+             else:
+                 start, end, step = item
+@@ -577,6 +603,9 @@
+                 else:
+                     step = -abs(step)
+ 
++                # Count the range before allocating or spelling out any values.
++                span, stride = abs(end - start), abs(step)
++                budget.charge(1 + (span + stride - 1) // stride)
+                 for num in range(start, end + step, step):
+                     range_words.extend(_spellout_variants(num, locale))
+ 
+@@ -711,18 +740,19 @@
+             # ("minute[s]"). Subword tokenizers must see each whole word at once,
+             # so expand the pieces into full-word variants and tokenize each
+             # variant as a unit instead of piece by piece.
+-            if _word_fragments(part) is not None:
++            if _word_fragments(part, fst.budget) is not None:
+                 j = i
+                 while (
+                     j + 1 < len(node.parts)
+                     and not node.separators[j]  # no space before the next part
+-                    and _word_fragments(node.parts[j + 1]) is not None
++                    and _word_fragments(node.parts[j + 1], fst.budget) is not None
+                 ):
+                     j += 1
+ 
+                 if j > i:
+                     new_configs: Set[Config] = set()
+-                    for variant in _run_word_variants(node.parts[i : j + 1]):
++                    variants = _run_word_variants(node.parts[i : j + 1], fst.budget)
++                    for variant in variants:
+                         new_configs |= _compile_text_words(
+                             fst,
+                             current,
+@@ -790,7 +820,7 @@
+         # (C*V -> C+V), then collapse its own output so the tail after it is
+         # built once instead of once per value. See _merge_frontier.
+         configs = _merge_frontier(fst, configs)
+-        expansions = _expand_ref(node, list_values, locale)
++        expansions = _expand_ref(node, list_values, locale, fst.budget)
+         out = set()
+         for words in expansions:
+             out |= _compile_text_words(

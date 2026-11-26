@@ -1,8 +1,8 @@
 # Speech-to-Phrase 2.x for Sanctum: speech to text that knows only the
 # sentences it was taught, on plain Debian. It is upstream's Wyoming server
 # from a pinned commit, with Sanctum's entry point (sanctum_server.py) in
-# place of Home Assistant's add-on: no web UI, no Home Assistant, and the
-# sentences come from the core over Wyoming. See README.md.
+# place of Home Assistant's add-on: no web UI or Home Assistant. Clients
+# teach it sentences over Wyoming. See README.md.
 
 FROM debian:trixie-slim
 
@@ -16,6 +16,7 @@ ENV PYTHONUNBUFFERED=1
 # Upstream's add-on folder at a pinned commit: its sources (src/), the
 # recognition library it vendors (lib/), and its requirements.
 ADD https://github.com/OHF-Voice/apps.git#6c2ae7f0dfbde74ad926d15dc865c085d0255c50:speech-to-phrase /usr/src
+COPY bound-grammar-expansion.patch /tmp/bound-grammar-expansion.patch
 
 # The compilers build the library's native module and leave in the same
 # layer, keeping the OpenFST runtime the module links: every shared library
@@ -32,7 +33,10 @@ RUN \
         cmake \
         g++ \
         libfst-dev \
+        patch \
         python3-dev \
+    && patch --batch --fuzz=0 -p1 < /tmp/bound-grammar-expansion.patch \
+    && rm /tmp/bound-grammar-expansion.patch \
     && python3 -m venv "${VIRTUAL_ENV}" \
     && "${VIRTUAL_ENV}/bin/python3" -m pip install --no-cache-dir -r requirements.txt \
     && fst_so="$("${VIRTUAL_ENV}/bin/python3" -c 'import glob, pathlib, speech_to_phrase as s; print(glob.glob(str(pathlib.Path(s.__file__).parent / "_fst*.so"))[0])')" \
@@ -42,7 +46,7 @@ RUN \
            if [ -n "$pkg" ]; then apt-mark manual "$pkg"; kept=$((kept + 1)); fi; \
        done \
     && if [ "$kept" -eq 0 ]; then echo "none of _fst's libraries mapped to a package" >&2; exit 1; fi \
-    && apt-get purge -y --auto-remove cmake g++ libfst-dev python3-dev \
+    && apt-get purge -y --auto-remove cmake g++ libfst-dev patch python3-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /root/.cache \
     && "${VIRTUAL_ENV}/bin/python3" -c "import speech_to_phrase"

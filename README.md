@@ -206,7 +206,7 @@ the MIT licence and download when first needed. The training data for
 [Thorsten](https://huggingface.co/rhasspy/piper-voices/blob/main/de/de_DE/thorsten/medium/MODEL_CARD)
 (German) is under CC0 1.0.
 
-Speech to text runs in Sanctum's own image of
+Sanctum publishes a standalone speech-to-text image of
 [Speech-to-Phrase](deploy/speech-to-phrase/README.md), by the Open Home
 Foundation under the Apache License 2.0. Its English and German models, by
 NVIDIA under CC BY 4.0, download the first time a language is used.
