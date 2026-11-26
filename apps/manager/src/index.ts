@@ -152,6 +152,8 @@ if (config.supervise) {
     dataDir: config.dataDir,
     hostDevDir: config.hostDevDir,
     log,
+    admitCoreService: (name, save) =>
+      capacity.admitService(name, appContainers.held, save),
     onChange: reconcileServices,
     onObserved: (name, before, after) => {
       const entry = serviceChange(name, before, after);

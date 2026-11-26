@@ -55,13 +55,14 @@ export type ServiceDefinition = {
   // What an app needs to know to use the service, besides its broker account,
   // on a host with this much memory, in MB.
   connection?: (hostMemoryMb: number) => Record<string, unknown>;
-  // Where it answers over HTTP: the core reaches it there on the `sanctum`
-  // network, and an app that asks for it on a network shared only with it
-  // (apps/service-networks.ts), since no account limits it.
+  // Where the core reaches it. Apps that ask for an HTTP service reach it
+  // on a network shared only with it (apps/service-networks.ts).
   url?: string;
   // Its image is large: it downloads while the others go on, and the
   // service runs once it's there.
   largeImage?: true;
+  // Publish its endpoint only after Docker's health check passes.
+  readyWhenHealthy?: true;
   // Its data needs no copy before a new version, as models that download
   // again, too large to copy (image-change.ts).
   dataNeedsNoCopy?: true;
@@ -76,6 +77,8 @@ export type ServiceDefinition = {
   // with this much. It isn't a limit unless its spec sets one: one that ran
   // out would take its network down with it.
   memoryMb: number | ((hostMemoryMb: number) => number);
+  // Check that a request from the core fits beside apps and other services.
+  checkMemory?: true;
 };
 
 // In the order they start.
@@ -145,9 +148,12 @@ export const serviceDefinitions: ServiceDefinition[] = [
     forCore: true,
     token: true,
     memoryMb: speechToPhraseMemoryMb,
+    checkMemory: true,
     url: speechToPhraseUrl,
     largeImage: true,
-    // Models download again, and the core teaches it again as it starts.
+    readyWhenHealthy: true,
+    // Models can download again. The service loads its saved grammar at
+    // startup and accepts training requests over Wyoming.
     dataNeedsNoCopy: true,
     dataVolumes: [speechToPhraseData],
     spec: ({ state }): ServiceSpec | NotYet => {

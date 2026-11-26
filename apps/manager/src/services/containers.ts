@@ -27,6 +27,7 @@ export type ServiceSpec = {
   image: string;
   env?: string[];
   cmd?: string[];
+  healthcheck?: ContainerCreateOptions["Healthcheck"];
   volumes?: Array<{ name: string; target: string }>;
   // Host devices, such as a Zigbee coordinator.
   devices?: Array<{ host: string; container: string }>;
@@ -52,6 +53,7 @@ export function serviceContainerOptions(
     Image: spec.image,
     ...(spec.env ? { Env: spec.env } : {}),
     ...(spec.cmd ? { Cmd: spec.cmd } : {}),
+    ...(spec.healthcheck ? { Healthcheck: spec.healthcheck } : {}),
     Labels: managedLabels(service),
     HostConfig: {
       Binds: (spec.volumes ?? []).map(

@@ -114,6 +114,7 @@ describe("in a stack", () => {
     expect(options.HostConfig?.Binds).toEqual([
       `${coreVolumeName}:/data`,
       "sanctum-one-manager-socket:/run/sanctum",
+      "sanctum-one-speech-socket:/run/sanctum-speech:ro",
       "/w/a/dist:/app/a/dist:ro",
       "/w/b/dist:/app/b/dist:ro",
     ]);

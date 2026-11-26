@@ -58,11 +58,8 @@ export type ServiceStatus = {
   neverSetUp?: true;
   image?: string;
   restarts?: number;
-  // Where it answers over HTTP on the `sanctum` network, while it runs.
+  // Where it answers, while it runs.
   url?: string;
-  // The secret it takes from the core, given with its url, for a service
-  // that has one.
-  token?: string;
 };
 
 type Observed = Omit<ServiceStatus, "name" | "apps" | "core">;
@@ -99,14 +96,16 @@ function syncAccounts(draft: ServicesState) {
   }
 }
 
-function observe(container: ContainerInfo, image: string): Observed {
+function observe(container: ContainerInfo, needsHealthCheck?: true): Observed {
   const running = container.State.Running && !container.State.Restarting;
+  const ready =
+    !needsHealthCheck || container.State.Health?.Status === "healthy";
   return {
-    state: running ? "running" : "failed",
+    state: running ? (ready ? "running" : "starting") : "failed",
     ...(running
       ? {}
       : { problem: `It is ${container.State.Status ?? "not running"}` }),
-    image,
+    image: container.Config.Image,
     restarts: container.RestartCount ?? 0,
   };
 }
@@ -123,6 +122,8 @@ export function createServices(options: {
   // The host's memory, in bytes, and its cores, for services' caps.
   totalMemory?: () => number;
   cpus?: () => number;
+  // Checks and saves a new service request in the same turn as app admission.
+  admitCoreService?: (name: string, save: () => Promise<void>) => Promise<void>;
   log: Log;
   // Called after a change, to reconcile soon; resolves once that reconcile
   // has run.
@@ -205,9 +206,8 @@ export function createServices(options: {
     }
   }
 
-  function status(name: string): ServiceStatus {
+  function status(name: string, last = observed.get(name)): ServiceStatus {
     const state = store.current();
-    const last = observed.get(name);
     const current: Observed = wantedServices(state).has(name)
       ? last && last.state !== "off"
         ? last
@@ -216,15 +216,12 @@ export function createServices(options: {
         ? last
         : { state: "off" };
     const url = findService(name)?.url;
-    const token = state.tokens?.[name];
-    const answers = url !== undefined && current.state === "running";
     return {
       name,
       apps: state.apps[name] ?? [],
       ...((state.core ?? []).includes(name) ? { core: true as const } : {}),
       ...current,
-      ...(answers ? { url } : {}),
-      ...(answers && token ? { token } : {}),
+      ...(url !== undefined && current.state === "running" ? { url } : {}),
     };
   }
 
@@ -357,7 +354,7 @@ export function createServices(options: {
       });
     }
     if (isBroker(name)) await joinAppNetworks(docker, container, log);
-    if (definition.url) {
+    if (definition.forApps && definition.url) {
       await syncServiceNetworks(
         docker,
         name,
@@ -367,12 +364,28 @@ export function createServices(options: {
       );
     }
     if (!isMissingImage) await imageChanges.ran(name, wanted.image);
-    observed.set(name, observe(container, container.Config.Image));
+    observed.set(name, observe(container, definition.readyWhenHealthy));
   }
 
   return {
     status,
     list: () => serviceDefinitions.map((definition) => status(definition.name)),
+    async endpoint(name: string) {
+      const definition = findService(name);
+      if (!definition) return undefined;
+      let service = status(name);
+      if (definition.readyWhenHealthy && service.state === "running") {
+        // Docker may have restarted it since the last reconcile.
+        const container = await inspectService(docker, name);
+        service = status(
+          name,
+          container ? observe(container, true) : { state: "starting" },
+        );
+      }
+      const token =
+        service.url && definition.token && store.current().tokens?.[name];
+      return { ...service, ...(token ? { token } : {}) };
+    },
 
     /** The services it keeps running, with their dependencies. */
     wanted: () => wantedServices(store.current()),
@@ -455,15 +468,21 @@ export function createServices(options: {
     // which GET /api/services/:service gives once it runs.
     async wantForCore(name: string) {
       const definition = forCore(name);
-      await store.update((draft) => {
-        draft.core = [...new Set([...(draft.core ?? []), name])].sort();
-        if (definition.token) {
-          draft.tokens = {
-            ...draft.tokens,
-            [name]: draft.tokens?.[name] ?? randomBytes(32).toString("hex"),
-          };
-        }
-      });
+      const save = () =>
+        store.update((draft) => {
+          draft.core = [...new Set([...(draft.core ?? []), name])].sort();
+          if (definition.token) {
+            draft.tokens = {
+              ...draft.tokens,
+              [name]: draft.tokens?.[name] ?? randomBytes(32).toString("hex"),
+            };
+          }
+        });
+      if (definition.checkMemory && options.admitCoreService) {
+        await options.admitCoreService(name, save);
+      } else {
+        await save();
+      }
       void options.onChange?.();
       return { service: status(name) };
     },

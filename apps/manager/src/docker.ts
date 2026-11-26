@@ -29,6 +29,7 @@ export type ContainerInfo = {
     ExitCode?: number;
     OOMKilled?: boolean;
     Error?: string;
+    Health?: { Status: string };
   };
   Config: {
     Image: string;

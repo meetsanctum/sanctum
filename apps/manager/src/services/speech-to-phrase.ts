@@ -1,21 +1,20 @@
+import {
+  socketGroupId,
+  speechSocketDirectory,
+  speechSocketVolumeName,
+} from "../core-container.js";
 import type { ServiceSpec } from "./containers.js";
 import { stacked } from "../stack.js";
 
 // Speech-to-Phrase on the host, Sanctum's own image (deploy/speech-to-phrase):
-// it turns what a smart speaker heard into words, knowing only the sentences
-// the core teaches it. It speaks Wyoming over TCP and keeps its models, its
-// grammar and its last lesson in a data volume of its own, downloading a
-// language's model the first time it is taught one.
-//
-// Only the core reaches it, on the `sanctum` network, over which it
-// downloads models too. Teaching it needs a token the manager makes once and
-// gives the container and the core, so nothing else on that network can
-// change what it hears.
+// it recognizes sentences from its saved grammar or a training request.
+// The core reaches Wyoming through a shared Unix socket. The service uses
+// the network to download models and keeps them with its grammar in /data.
 
 export const speechToPhraseImage =
   "ghcr.io/meetsanctum/sanctum-speech-to-phrase:2.2.0";
-const port = 10300;
-export const speechToPhraseUrl = `tcp://${stacked("sanctum-speech-to-phrase")}:${port}`;
+const socketPath = `${speechSocketDirectory}/wyoming.sock`;
+export const speechToPhraseUrl = `unix://${socketPath}`;
 export const speechToPhraseData = stacked("sanctum-speech-to-phrase-data");
 
 /**
@@ -27,9 +26,32 @@ export const speechToPhraseMemoryMb = 2_200;
 export function speechToPhraseSpec(token: string): ServiceSpec {
   return {
     image: speechToPhraseImage,
-    // The image's command listens on every address at this port, keeps its
-    // data in /data and ends speech by its own voice detector.
+    // The core's socket group can connect through its read-only mount.
+    cmd: [
+      "sh",
+      "-ec",
+      `chgrp ${socketGroupId} ${speechSocketDirectory}; chmod 2750 ${speechSocketDirectory}; umask 007; exec "$@"`,
+      "speech-to-phrase",
+      "python3",
+      "/usr/src/sanctum_server.py",
+      "--uri",
+      speechToPhraseUrl,
+    ],
+    // The listener opens after the service restores the grammar.
+    healthcheck: {
+      Test: [
+        "CMD",
+        "python3",
+        "-c",
+        "import socket, sys; socket.socket(socket.AF_UNIX).connect(sys.argv[1])",
+        socketPath,
+      ],
+      StartPeriod: 120_000_000_000,
+    },
     env: [`SANCTUM_TRAIN_TOKEN=${token}`],
-    volumes: [{ name: speechToPhraseData, target: "/data" }],
+    volumes: [
+      { name: speechToPhraseData, target: "/data" },
+      { name: speechSocketVolumeName, target: speechSocketDirectory },
+    ],
   };
 }
