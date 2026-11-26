@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import type { LucideIcon } from "lucide-react";
 import {
+  startTransition,
   useEffect,
   useEffectEvent,
   useId,
@@ -81,8 +82,27 @@ export function SwipePages(props: {
     selectedIndex >= 0
       ? selectedIndex
       : Math.min(chosen.index, pages.length - 1);
-  const [dx, setDx] = useState<number | null>(null);
   const swipe = useRef<Swipe | null>(null);
+  // A swipe moves the pages straight away, by each page's own style, for
+  // each move of the finger: drawing them again, or a value or selector
+  // reaching every element on every page, would have a weak device look
+  // at all of them again each time. While a finger moves them each page
+  // is a layer of its own, so the device moves what it drew; when it lets
+  // go they slide to their places.
+  const cell = useRef<HTMLDivElement>(null);
+  const sections = useRef<(HTMLElement | null)[]>([]);
+  const follow = (dx: number | null) => {
+    const element = cell.current;
+    if (!element) return;
+    if (dx === null) delete element.dataset.swiping;
+    else element.dataset.swiping = "";
+    for (const section of sections.current) {
+      if (!section) continue;
+      section.style.translate = dx === null ? "" : `${dx}px`;
+      section.style.transition = dx === null ? "" : "none";
+      section.style.willChange = dx === null ? "" : "transform";
+    }
+  };
   const swiped = useRef(false);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   const tabRow = useRef<HTMLDivElement>(null);
@@ -109,8 +129,11 @@ export function SwipePages(props: {
     };
   }, [drawsAll]);
 
+  // What the page change starts around the pages, such as a device's
+  // detail taking the page's colour, waits while they slide, so a slow
+  // device starts sliding them at once.
   useEffect(() => {
-    if (pageId !== undefined) announcePage(pageId);
+    if (pageId !== undefined) startTransition(() => announcePage(pageId));
   }, [pageId]);
 
   // The current tab scrolls into view, clear of the fade, however the page
@@ -170,11 +193,11 @@ export function SwipePages(props: {
     // Past the first or last page it follows a third as far.
     const edge =
       (page === 0 && across > 0) || (page === pages.length - 1 && across < 0);
-    setDx(edge ? across / 3 : across);
+    follow(edge ? across / 3 : across);
   };
   const finish = (across: number) => {
     swipe.current = null;
-    setDx(null);
+    follow(null);
     if (across < -turnAfter) setPage(Math.min(pages.length - 1, page + 1));
     else if (across > turnAfter) setPage(Math.max(0, page - 1));
   };
@@ -254,14 +277,18 @@ export function SwipePages(props: {
         )}
       >
         {/* The pages share one cell, the room above the tabs, each moved
-            aside by its distance from the page on show. */}
+            aside by its distance from the page on show, and a swipe moves
+            them all by its own. */}
         <div
-          data-swiping={dx === null ? undefined : ""}
-          className="group grid h-full grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)]"
+          ref={cell}
+          className="grid h-full grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)]"
         >
           {pages.map((each, index) => (
             <section
               key={each.id}
+              ref={(element) => {
+                sections.current[index] = element;
+              }}
               id={`${id}-${each.id}`}
               role={pages.length > 1 ? "tabpanel" : undefined}
               aria-label={pages.length > 1 ? undefined : each.label}
@@ -271,9 +298,9 @@ export function SwipePages(props: {
               // Only the page on show can be reached.
               inert={index !== page}
               style={{
-                transform: `translateX(calc(${(index - page) * 100}% + ${dx ?? 0}px))`,
+                transform: `translateX(${(index - page) * 100}%)`,
               }}
-              className="col-start-1 row-start-1 min-h-0 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-data-swiping:transition-none motion-reduce:transition-none"
+              className="col-start-1 row-start-1 min-h-0 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
             >
               {(drawsAll || index === page) && (
                 <ScrollArea type="scroll" className={pageScroll}>
