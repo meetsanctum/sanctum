@@ -543,21 +543,6 @@ describe("Switches' cards", () => {
     expect(cards().map(said)).toEqual([["Switches", "1 on"]]);
   });
 
-  it("count offline plugs and plugs with no state as not known", async () => {
-    devices = [
-      offline(asPlug("tv-plug", true)),
-      asPlug("fan-plug", null),
-      asPlug("desk-plug", false),
-      plug,
-    ];
-    await show("switches");
-
-    expect(cards().map(said)).toEqual([
-      ["Plugs", "2 not known"],
-      ["Switches", "1 on"],
-    ]);
-  });
-
   it("say Off while the plug is off and follow it live", async () => {
     devices = [asPlug("tv-plug", false)];
     await show("switches");

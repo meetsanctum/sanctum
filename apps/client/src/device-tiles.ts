@@ -48,7 +48,6 @@ import { motionText } from "./motion";
 // heard from" (maintenance.ts), not what it said days ago.
 
 const quiet = "Not heard from";
-const unknownControlStatus = "Unknown";
 
 export const tileKey = (device: string, capability: string) =>
   `${device}/${capability}`;
@@ -124,7 +123,7 @@ function tileOf(
     return { ...base, status: offline(device), disabled: true };
   }
   if (!capability.state) {
-    return { ...base, status: unknownControlStatus };
+    return { ...base, status: "Unknown" };
   }
   const { on } = capability.state;
   if (capability.kind === "light") {
@@ -692,8 +691,7 @@ const switchSummaryTypes = [
 
 /**
  * Switches' summary: for each type the home's switches are shown as, how
- * many are on, how many are not known when none is on, or "Off" when
- * all are known to be off.
+ * many are on, or "Off" while none is, as Home's status tile says.
  */
 export function switchesSummary(
   tiles: readonly Tile[],
@@ -706,15 +704,6 @@ export function switchesSummary(
         tile.kind === "switch" &&
         (typeOf.get(tile.deviceId) === "plug") === (type === "plug"),
     );
-    if (own.length === 0) return [];
-
-    let on = 0;
-    let unknown = 0;
-    for (const tile of own) {
-      if (tile.on) on++;
-      else if (tile.disabled || tile.status === unknownControlStatus) unknown++;
-    }
-    const status = on ? `${on} on` : unknown ? `${unknown} not known` : "Off";
-    return [{ type, title, status }];
+    return own.length > 0 ? [{ type, title, status: onMeta(own) }] : [];
   });
 }
