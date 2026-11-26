@@ -135,9 +135,9 @@ async function show(element: React.ReactElement) {
   await act(async () => live.refresh());
 }
 
-// Each floor's heading, then its rooms' headings, in order.
+// Floors, rooms and their subheadings in order.
 const outline = () =>
-  [...container.querySelectorAll("h2, h3")].map(
+  [...container.querySelectorAll("h2, h3, h4")].map(
     (each) => `${each.tagName.toLowerCase()} ${each.textContent}`,
   );
 const button = (label: string) =>
@@ -206,17 +206,22 @@ describe("rooms by floor", () => {
 });
 
 describe("Home with floors", () => {
-  it("heads the rooms with their floors, then Other rooms, rooms a level down", async () => {
+  it("heads rooms a level below their floor and Devices a level below their room", async () => {
     await show(<HomeHarness />);
     expect(outline()).toEqual([
       "h2 First floor",
       "h3 Bedroom",
+      "h4 Devices",
       "h2 Ground floor",
       "h3 Hall",
+      "h4 Devices",
       "h3 Kitchen",
+      "h4 Devices",
       "h2 Other rooms",
       "h3 Shed",
+      "h4 Devices",
       "h3 No room",
+      "h4 Devices",
     ]);
   });
 
