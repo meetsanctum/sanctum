@@ -599,6 +599,7 @@ describe("re-registering a device", () => {
           readModel: absent,
           cancelModel: absent,
           hostResources: absent,
+          homeClock: absent,
           aiTools: absent,
           callAiTool: absent,
           replyRequest: absent,

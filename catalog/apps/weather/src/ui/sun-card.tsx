@@ -1,9 +1,9 @@
 import type { SunTimes } from "@meetsanctum/app-sdk";
-import { PageSection } from "@meetsanctum/ui-sdk";
+import { PageSection, useHomeClock } from "@meetsanctum/ui-sdk";
 
 import { sunToday } from "../days";
 import { arcPoint, daylightWords, sunArc, sunPath } from "../sun-path";
-import { clock } from "./words";
+import { timeAt } from "./words";
 
 // The sun's day in one card: a dashed arc from sunrise to sunset over the
 // horizon, with a dot where the sun is, filled while it is up and hollow at
@@ -14,13 +14,14 @@ const label = "text-[13px] leading-[18px] font-medium";
 
 export function SunCard(props: { sun: SunTimes; now: Date }) {
   const { sun, now } = props;
-  const today = sunToday(sun, now);
+  const clock = useHomeClock();
+  const today = sunToday(clock, sun, now);
   if (!today) return null;
   const path = sunPath(today, now);
   if (!path) {
     // A polar day or night, or the day one begins or ends.
     const time = (instant: string | null | undefined) =>
-      instant ? clock(instant, sun.timeZone) : "–";
+      instant ? timeAt(clock, instant, sun.timeZone) : "–";
     return (
       <PageSection id="weather-sun" title="Sun">
         <p className="m-0 px-2 py-1.5 text-[15px] leading-[22px]">
@@ -80,11 +81,11 @@ export function SunCard(props: { sun: SunTimes; now: Date }) {
         <div className={`flex justify-between whitespace-nowrap ${label}`}>
           <span>
             <span className="text-muted-foreground">Sunrise</span>{" "}
-            {clock(path.sunrise, sun.timeZone)}
+            {timeAt(clock, path.sunrise, sun.timeZone)}
           </span>
           <span>
             <span className="text-muted-foreground">Sunset</span>{" "}
-            {clock(path.sunset, sun.timeZone)}
+            {timeAt(clock, path.sunset, sun.timeZone)}
           </span>
         </div>
       </div>

@@ -8,7 +8,6 @@ import {
   isEnd,
   isStart,
   lengthOf,
-  minuteIn,
   nextFreeWindow,
   overlaps,
   spanAt,
@@ -122,14 +121,5 @@ describe("a schedule's times", () => {
         { start: 0, end: 600 },
       ]),
     ).toBeNull();
-  });
-
-  it("reads the minute of the day in the home's time zone", () => {
-    const at = new Date("2026-10-30T21:20:00Z");
-    expect(minuteIn(at, "UTC")).toBe(21 * 60 + 20);
-    expect(minuteIn(at, "Europe/Zurich")).toBe(22 * 60 + 20);
-    expect(minuteIn(new Date("2026-10-30T23:10:00Z"), "Europe/Zurich")).toBe(
-      10,
-    );
   });
 });

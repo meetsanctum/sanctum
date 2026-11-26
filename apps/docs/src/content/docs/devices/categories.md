@@ -15,7 +15,7 @@ of part:
 | Environment | `environment` | Sensor parts  | Ranges for temperature and humidity            |
 | Security    | `security`    | Contact parts | A summary of what is open                      |
 | Presence    | `presence`    | Motion parts  | An overview of the last 24 hours, room by room |
-| Switches    | `switches`    | Switch parts  | How many are on                                |
+| Switches    | `switches`    | Switch parts  | How many plugs and other switches are on       |
 | Media       | `media`       | Media parts   | How many TVs, speakers and others are playing  |
 | Buttons     | `buttons`     | Button parts  | Nothing more                                   |
 

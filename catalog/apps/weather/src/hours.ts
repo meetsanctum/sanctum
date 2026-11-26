@@ -1,6 +1,5 @@
 import type { Forecast, ForecastHour } from "@meetsanctum/app-sdk";
-
-import { homeDate } from "./days.js";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 
 // The forecast hour by hour, as Weather's page shows it: the weather now,
 // the hours from this one on, the columns of the next 24 hours and the line
@@ -18,10 +17,15 @@ export function hoursFromNow(forecast: Forecast, now = new Date()) {
 }
 
 /** The forecast's hours from the one it is now to the home's midnight. */
-export function hoursLeftToday(forecast: Forecast, now = new Date()) {
-  const today = homeDate(forecast.timeZone, now);
+export function hoursLeftToday(
+  clock: HomeClock,
+  forecast: Forecast,
+  now = clock.now(),
+) {
+  const there = clock.withTimeZone(forecast.timeZone);
+  const today = there.date(now);
   return hoursFromNow(forecast, now).filter(
-    (hour) => homeDate(forecast.timeZone, new Date(hour.time)) === today,
+    (hour) => there.date(Date.parse(hour.time)) === today,
   );
 }
 
@@ -104,16 +108,16 @@ export type HourColumn = Pick<
  * weather now, so it agrees with what the page says of now.
  */
 export function hourColumns(
+  clock: HomeClock,
   forecast: Forecast,
   options: { count: number; every: number },
-  now = new Date(),
+  now = clock.now(),
 ): HourColumn[] {
   const hours = hoursFromNow(forecast, now)
     .filter((_, index) => index % options.every === 0)
     .slice(0, options.count);
-  const dates = hours.map((hour) =>
-    homeDate(forecast.timeZone, new Date(hour.time)),
-  );
+  const there = clock.withTimeZone(forecast.timeZone);
+  const dates = hours.map((hour) => there.date(Date.parse(hour.time)));
   const current = weatherNow(forecast, now);
   return hours.map((hour, index) => ({
     time: hour.time,

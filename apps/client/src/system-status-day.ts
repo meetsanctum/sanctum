@@ -1,5 +1,4 @@
 import type { TemperatureUnit } from "@meetsanctum/app-sdk";
-import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import { convertTemperature, formatTemperature } from "@meetsanctum/ui-sdk";
 import type { ChartFormat } from "@meetsanctum/ui-sdk/charts";
 import { useEffect, useRef, useState } from "react";
@@ -17,10 +16,7 @@ import {
 // Settings → Status' last 24 hours: how busy the processor was, how warm it
 // ran and how much memory was in use, each 5 minutes' mean as the manager
 // keeps them, carried on to now by what Status reads every 5 seconds, as a
-// sensor's day is by what it reads now; and what each day came to in words,
-// which the chart only illustrates: its mean, its highest and when, since
-// when it was read, where nothing was, and when it was too hot. The words
-// keep to the 5 minutes kept.
+// sensor's day is by what it reads now.
 
 /** Each 5 minutes of the day, as GET /api/system/history answers. */
 export type HostPoint = {
@@ -88,29 +84,16 @@ export function useHostDay(now: number) {
   return { day, failed };
 }
 
-/** One reading's day: its line, and what it came to. */
-export type ReadingDay = {
-  line: DayLine;
-  mean: number | null;
-  highest: { value: number; at: number } | null;
-  // When the readings start, if well after the day did.
-  since: number | null;
-  // The longest stretch without readings.
-  gap: { from: number; to: number } | null;
-  // From the first 5 minutes over the threshold to the end of the last.
-  over: { from: number; to: number } | null;
-};
-
+/** One reading's day as a line, broken where nothing was read. */
 export function readingDay(
   points: readonly HostPoint[],
   key: "usage" | "celsius" | "memoryUsed",
   now: number,
-  threshold?: number,
   // What Status read last, which carries the line to now.
   reading: number | null = null,
   // Only periods covered by a successful history read can be missing.
   through = now,
-): ReadingDay {
+): DayLine {
   const from = now - dayMs;
   const known = points
     .map((point) => ({ start: Date.parse(point.at), value: point[key] }))
@@ -120,15 +103,11 @@ export function readingDay(
     );
   const runs: Point[][] = [];
   let run: Point[] = [];
-  let gap: ReadingDay["gap"] = null;
   let last: number | null = null;
   for (const { start, value } of known) {
     if (last !== null && start - last > fiveMinutes) {
       runs.push(run);
       run = [];
-      if (!gap || start - (last + fiveMinutes) > gap.to - gap.from) {
-        gap = { from: last + fiveMinutes, to: start };
-      }
     }
     run.push({ at: Math.max(from, start + fiveMinutes / 2), value });
     last = start;
@@ -142,10 +121,6 @@ export function readingDay(
     Math.floor((Math.min(now, through) - closesWithinMs) / fiveMinutes) *
     fiveMinutes;
   const missing = last !== null && completedThrough > last + fiveMinutes;
-  if (missing) {
-    const trailing = { from: last! + fiveMinutes, to: completedThrough };
-    if (!gap || trailing.to - trailing.from > gap.to - gap.from) gap = trailing;
-  }
   // What was read now joins the line where the 5 minutes before it were
   // kept; after a stretch without them it stands on its own.
   if (reading !== null && Number.isFinite(reading)) {
@@ -154,84 +129,15 @@ export function readingDay(
     if (latest && !missing) latest.push(point);
     else runs.push([point]);
   }
-  const values = known.map((each) => each.value);
-  const top = known.reduce<(typeof known)[number] | null>(
-    (best, each) => (!best || each.value > best.value ? each : best),
-    null,
-  );
-  const hot =
-    threshold === undefined
-      ? []
-      : known.filter((each) => each.value >= threshold);
-  const first = known[0];
   const drawn = runs.flat().map((point) => point.value);
   return {
-    line: {
-      runs,
-      min: drawn.length ? Math.min(...drawn) : null,
-      max: drawn.length ? Math.max(...drawn) : null,
-    },
-    mean: values.length
-      ? values.reduce((sum, value) => sum + value, 0) / values.length
-      : null,
-    // When the chart's point is: the middle of its 5 minutes.
-    highest: top && { value: top.value, at: top.start + fiveMinutes / 2 },
-    since: first && first.start - from > 3 * fiveMinutes ? first.start : null,
-    gap,
-    over: hot.length
-      ? { from: hot[0]!.start, to: hot.at(-1)!.start + fiveMinutes }
-      : null,
+    runs,
+    min: drawn.length ? Math.min(...drawn) : null,
+    max: drawn.length ? Math.max(...drawn) : null,
   };
 }
 
 const percent = (usage: number) => `${Math.round(usage * 100)}%`;
-
-// What each reading came to, in a line: "4% on average · busiest at 18:10,
-// 62%", with where nothing was read after it.
-function summary(
-  clock: HomeClock,
-  day: ReadingDay,
-  text: (value: number) => string,
-  most: string,
-  lead?: string,
-) {
-  if (day.mean === null || !day.highest) return "Nothing read yet";
-  const since = day.since === null ? "" : ` since ${clock.timeText(day.since)}`;
-  const parts = [
-    lead ?? `${text(day.mean)} on average${since}`,
-    `${most} at ${clock.timeText(day.highest.at)}, ${text(day.highest.value)}`,
-  ];
-  if (day.gap) {
-    parts.push(
-      `no readings from ${clock.timeText(day.gap.from)} to ${clock.timeText(day.gap.to)}`,
-    );
-  }
-  return parts.join(" · ");
-}
-
-export const processorSummary = (clock: HomeClock, day: ReadingDay) =>
-  summary(clock, day, percent, "busiest");
-
-export function temperatureSummary(
-  clock: HomeClock,
-  day: ReadingDay,
-  unit: TemperatureUnit,
-) {
-  const text = (celsius: number) =>
-    formatTemperature(celsius, unit, { whole: true });
-  return summary(
-    clock,
-    day,
-    text,
-    "warmest",
-    day.over
-      ? `Too hot from ${clock.timeText(day.over.from)} to ${clock.timeText(day.over.to)}`
-      : undefined,
-  );
-}
-
-export const memorySummary = (clock: HomeClock, day: ReadingDay) =>
-  summary(clock, day, formatMemory, "most");
 
 // What each reads now, heading its chart: "3% now", "57°C now · normal",
 // "627 MB now".

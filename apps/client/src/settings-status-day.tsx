@@ -5,79 +5,56 @@ import { cn } from "cn";
 import { CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { productName } from "./brand";
 import { Row, Section } from "./components";
 import { hotCelsius, type HostInfo, type HostProblem } from "./system-status";
 import {
   memoryChart,
   memoryNow,
-  memorySummary,
   processorChart,
   processorNow,
-  processorSummary,
   readingDay,
   temperatureChart,
   temperatureNow,
-  temperatureSummary,
   useHostDay,
 } from "./system-status-day";
 
 // Status' last 24 hours: the processor, its temperature and the memory in
 // use, stacked on one time axis as iOS's Battery page stacks its own, so a
-// spike reads across all three at once. Each is headed by what it reads now,
-// as Status read it last, then what its day came to in words; the chart is a
-// sensor's day, drawn in the page's ink. While the day is on its way or
-// can't be read, what each reads now still heads it.
+// spike reads across all three at once. Each is headed by its name, with
+// what it reads now under it, as Status read it last; the chart is a sensor's
+// day, drawn in the page's ink. While the day is on its way or can't be
+// read, what each reads now still heads it.
 
 const chartHeight = 72;
+// Half of the 5 minutes each kept reading stands for.
+const halfOfFive = 150_000;
 const lastDayTitle = "Last 24 Hours";
-
-// A line of what a reading says, in red with a sign where it's a problem.
-function Said(props: {
-  className: string;
-  problem?: boolean;
-  children: string;
-}) {
-  return (
-    <p
-      className={cn(
-        "m-0 flex min-w-0 items-center gap-1 text-muted-foreground tabular-nums",
-        props.className,
-        props.problem && "text-destructive",
-      )}
-    >
-      {props.problem && (
-        <CircleAlert aria-hidden="true" className="size-3.5 shrink-0" />
-      )}
-      {props.children}
-    </p>
-  );
-}
 
 function Reading(props: {
   name: string;
-  // What it reads now, and whether the verdict counts it as a problem.
+  // What it reads now, in red with a sign where the verdict counts it as a
+  // problem.
   now: string | null;
   nowProblem?: boolean;
-  // What its day came to, and whether it was a problem.
-  summary?: string;
-  problem?: boolean;
   children?: ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex flex-col gap-0.5">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
-          <h3 className="m-0 text-sm font-medium">{props.name}</h3>
-          {props.now && (
-            <Said className="text-sm" problem={props.nowProblem}>
-              {props.now}
-            </Said>
-          )}
-        </div>
-        {props.summary && (
-          <Said className="text-[13px] font-medium" problem={props.problem}>
-            {props.summary}
-          </Said>
+        <h3 className="m-0 text-sm font-medium">{props.name}</h3>
+        {props.now && (
+          <p
+            className={cn(
+              "m-0 flex min-w-0 items-center gap-1 text-sm text-muted-foreground tabular-nums",
+              props.nowProblem && "text-destructive",
+            )}
+          >
+            {props.nowProblem && (
+              <CircleAlert aria-hidden="true" className="size-3.5 shrink-0" />
+            )}
+            {props.now}
+          </p>
         )}
       </div>
       {props.children}
@@ -107,10 +84,10 @@ export function LastDaySection(props: {
   };
   if (!day) {
     const shape = failed ? undefined : (
-      <div aria-busy="true" className="flex flex-col gap-2.5">
-        <span className="block h-3 w-2/5 rounded-xs bg-foreground/8" />
-        <span className="block h-18 rounded-xs bg-foreground/8" />
-      </div>
+      <span
+        aria-busy="true"
+        className="block h-18 rounded-xs bg-foreground/8"
+      />
     );
     return (
       <Section id="status-day" title={lastDayTitle}>
@@ -123,7 +100,7 @@ export function LastDaySection(props: {
           {failed && (
             <Row
               title="Not known right now"
-              detail="Shows again once Updates and services answers"
+              detail={`Shows again once ${productName}'s updater answers`}
             />
           )}
         </div>
@@ -131,19 +108,11 @@ export function LastDaySection(props: {
     );
   }
   const { points, through } = day;
-  const usage = readingDay(
-    points,
-    "usage",
-    now,
-    undefined,
-    host.processor.usage,
-    through,
-  );
+  const usage = readingDay(points, "usage", now, host.processor.usage, through);
   const celsius = readingDay(
     points,
     "celsius",
     now,
-    hotCelsius,
     host.processor.celsius,
     through,
   );
@@ -151,13 +120,20 @@ export function LastDaySection(props: {
     points,
     "memoryUsed",
     now,
-    undefined,
     host.memory && host.memory.total - host.memory.available,
     through,
   );
-  const showsTemperature =
-    host.processor.celsius !== null || celsius.mean !== null;
+  const showsTemperature = celsius.max !== null;
   const temperature = temperatureChart(unit);
+  // The hourly averages a screen reader gets can hide a hot five minutes, so
+  // its label says when it was too hot: from the start of the first hot
+  // 5 minutes kept to the end of the last, each drawn at its middle.
+  const hot = celsius.runs
+    .flat()
+    .filter((point) => point.at < now && point.value >= hotCelsius);
+  const temperatureLabel = hot.length
+    ? `Temperature over the last 24 hours. Too hot from ${clock.timeText(hot[0]!.at - halfOfFive)} to ${clock.timeText(hot.at(-1)!.at + halfOfFive)}.`
+    : undefined;
   const total = host.memory?.total;
   const memoryScale = total ? memoryChart(total) : null;
   // The hours show once, under the last chart.
@@ -170,30 +146,30 @@ export function LastDaySection(props: {
   return (
     <Section id="status-day" title={lastDayTitle}>
       <div className="flex flex-col gap-6">
-        <Reading
-          {...heading.processor}
-          summary={processorSummary(clock, usage)}
-        >
-          <LineChart
-            runs={usage.line.runs}
-            now={now}
-            name="Processor in use"
-            height={chartHeight}
-            tone="page"
-            hours={last === "processor"}
-            {...processorChart}
-          />
+        <Reading {...heading.processor}>
+          {usage.runs.length === 0 ? (
+            <p className="m-0 text-sm text-muted-foreground">
+              Nothing read yet
+            </p>
+          ) : (
+            <LineChart
+              runs={usage.runs}
+              now={now}
+              name="Processor in use"
+              height={chartHeight}
+              tone="page"
+              hours={last === "processor"}
+              {...processorChart}
+            />
+          )}
         </Reading>
         {showsTemperature && (
-          <Reading
-            {...heading.temperature}
-            summary={temperatureSummary(clock, celsius, unit)}
-            problem={celsius.over !== null}
-          >
+          <Reading {...heading.temperature}>
             <LineChart
-              runs={celsius.line.runs}
+              runs={celsius.runs}
               now={now}
               name="Temperature"
+              label={temperatureLabel}
               height={chartHeight}
               tone="page"
               hours={last === "temperature"}
@@ -202,9 +178,9 @@ export function LastDaySection(props: {
           </Reading>
         )}
         {memoryScale && (
-          <Reading {...heading.memory} summary={memorySummary(clock, memory)}>
+          <Reading {...heading.memory}>
             <LineChart
-              runs={memory.line.runs}
+              runs={memory.runs}
               now={now}
               name="Memory in use"
               height={chartHeight}

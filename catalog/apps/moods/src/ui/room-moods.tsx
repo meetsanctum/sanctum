@@ -229,7 +229,6 @@ export function RoomMoodsPage(props: PageProps) {
           <ScheduleSection
             schedule={schedule}
             moods={own}
-            timeZone={places.home.timeZone}
             now={now}
             open={(id) =>
               open("scheduled", id ? { room: roomId, id } : { room: roomId })
@@ -239,7 +238,6 @@ export function RoomMoodsPage(props: PageProps) {
             schedule={schedule}
             moods={own}
             lightName={lightName}
-            timeZone={places.home.timeZone}
             now={now}
             onChoose={turnOn}
           />

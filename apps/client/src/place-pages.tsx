@@ -36,6 +36,7 @@ import {
   sectionsByRoom,
   sectionsOfRoom,
   sensorReadings,
+  switchesSummary,
   tilesIn,
   type Reading,
 } from "./device-tiles";
@@ -73,7 +74,8 @@ import { useKeyedHandlers } from "./keyed-handlers";
 // cannot use. A category's page shows its tiles in a section
 // for each room, devices with no room last. Some open with summary cards
 // (summary-cards.tsx), Environment's with the range of each reading across
-// the home, Security's with how many contact sensors are open; Lights'
+// the home, Security's with how many contact sensors are open, Switches'
+// and Media's with how many of each type are on or playing; Lights'
 // opens with its card, how many are on with a switch that turns them off
 // (lights-card.tsx). Presence's opens
 // with its overview, each room's last 24 hours (presence-overview.tsx).
@@ -117,31 +119,21 @@ export const unitOf = (devices: Devices) =>
 // A room's or a category's page has its name in the top bar, as a
 // dashboard and an app's page do, and on a phone opening the page
 // (PageBar). A room's opens with what its sensors read, offline ones left
-// out, its contact sensors and its motion; a category's with its status.
+// out, its contact sensors and its motion; a category's has only its name.
 function PlaceHeader(props: {
   title: string;
-  subtitle?: string;
   /** Its motion in words, last in the line of readings. */
   motion?: string | null;
   /** Its contact sensors in words, before its motion. */
   contact?: PlaceContact | null;
   readings?: Reading[];
 }) {
-  const hasLine =
-    !!props.subtitle ||
-    !!props.motion ||
-    !!props.contact ||
-    !!props.readings?.length;
+  const hasLine = !!props.motion || !!props.contact || !!props.readings?.length;
   if (!hasLine) return <PageBar title={props.title} />;
   return (
     <header className="flex shrink-0 flex-col gap-2.5">
       <PageBar title={props.title} />
       <div className="flex flex-col gap-0.5 empty:hidden">
-        {props.subtitle && (
-          <p className="m-0 text-[13px] leading-[18px] font-medium text-white/65">
-            {props.subtitle}
-          </p>
-        )}
         <PlaceReadings
           motion={props.motion}
           contact={props.contact}
@@ -592,6 +584,18 @@ function mediaCards(tiles: readonly Tile[], devices: Devices): Summary[] {
   }));
 }
 
+// What Switches' page opens with: a card for its plugs and one for its
+// other switches, how many of them are on.
+function switchCards(tiles: readonly Tile[], devices: Devices): Summary[] {
+  return switchesSummary(tiles, devices.devices).map((each) => ({
+    id: each.type,
+    icon: each.type === "plug" ? icons.Plug : icons.ToggleRight,
+    title: each.title,
+    status: each.status,
+    note: null,
+  }));
+}
+
 export function CategoryPage(props: {
   id: string;
   devices: Devices;
@@ -609,12 +613,7 @@ export function CategoryPage(props: {
   const own = tilesIn(category, devices.tiles);
   return (
     <>
-      <PlaceHeader
-        title={category.title}
-        subtitle={
-          category.id === "switches" ? onMeta(own) || undefined : undefined
-        }
-      />
+      <PlaceHeader title={category.title} />
       {category.id === "lights" && own.length > 0 && (
         <div className="flex shrink-0">
           <LightsCard tiles={own} devices={devices} />
@@ -635,6 +634,13 @@ export function CategoryPage(props: {
           label={`${category.title} summary`}
           colour={categoryLooks.security.colour}
           cards={securityCards(own)}
+        />
+      )}
+      {category.id === "switches" && (
+        <SummaryCards
+          label={`${category.title} summary`}
+          colour={categoryLooks.switches.colour}
+          cards={switchCards(own, devices)}
         />
       )}
       {category.id === "media" && (

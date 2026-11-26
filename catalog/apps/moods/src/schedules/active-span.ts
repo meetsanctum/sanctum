@@ -1,4 +1,8 @@
-import { addDays, homeClock, type LocalDate } from "@meetsanctum/app-sdk/clock";
+import {
+  addDays,
+  type HomeClock,
+  type LocalDate,
+} from "@meetsanctum/app-sdk/clock";
 
 import { day, isOvernight, type Span } from "./times.js";
 
@@ -6,10 +10,9 @@ import { day, isOvernight, type Span } from "./times.js";
 export function activeSpan<T extends Span>(
   spans: readonly T[],
   now: Date,
-  timeZone: string,
+  clock: HomeClock,
 ) {
   if (spans.length === 0) return;
-  const clock = homeClock({ timeZone });
   const today = clock.parts(now);
   const at = (date: LocalDate, minute: number) =>
     clock.at(date, Math.floor(minute / 60), minute % 60);

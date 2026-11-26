@@ -15,7 +15,7 @@ import type { PlacesModule } from "../places/places.js";
 
 type Live = {
   people: Pick<People, "list">;
-  places: Pick<PlacesModule, "list" | "location">;
+  places: Pick<PlacesModule, "list" | "location" | "clock">;
   devices: Devices;
   entities: Entities;
 };
@@ -32,6 +32,7 @@ export function createReadSnapshot({
         people: ReturnType<People["list"]>;
         places: ReturnType<PlacesModule["list"]>;
         location: ReturnType<PlacesModule["location"]>;
+        clock: ReturnType<PlacesModule["clock"]>;
         devices: DeviceInfo[];
         deviceKeys: ReadonlyMap<string, ReadonlyMap<string, string>>;
         entities: ReturnType<Entities["list"]>;
@@ -40,6 +41,7 @@ export function createReadSnapshot({
     people: people.list(),
     places: places.list(),
     location: places.location(),
+    clock: places.clock(),
     devices: listedDevices,
     deviceKeys: new Map(
       [...new Set(listedDevices.map(({ driver }) => driver))].map((driver) => [
@@ -55,6 +57,7 @@ export function createReadSnapshot({
     places: {
       list: () => held?.places ?? places.list(),
       location: () => (held ? held.location : places.location()),
+      clock: () => held?.clock ?? places.clock(),
     },
     devices: {
       ...devices,

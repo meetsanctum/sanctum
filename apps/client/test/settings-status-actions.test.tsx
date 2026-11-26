@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 import { homeClock } from "@meetsanctum/app-sdk/clock";
 import type { ClientInfo, PersonInfo } from "@meetsanctum/auth-protocol";
-import { createLiveFeed, TemperatureUnitProvider } from "@meetsanctum/ui-sdk";
+import {
+  createLiveFeed,
+  HomeTimeZoneProvider,
+  TemperatureUnitProvider,
+} from "@meetsanctum/ui-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -137,12 +141,14 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function render() {
+async function render(timeZone?: string) {
   await act(async () => {
     root.render(
-      <TemperatureUnitProvider unit="celsius">
-        <StatusPage apps={statusApps} onDone={() => {}} />
-      </TemperatureUnitProvider>,
+      <HomeTimeZoneProvider timeZone={timeZone}>
+        <TemperatureUnitProvider unit="celsius">
+          <StatusPage apps={statusApps} onDone={() => {}} />
+        </TemperatureUnitProvider>
+      </HomeTimeZoneProvider>,
     );
   });
   // The page's own requests settle.
@@ -220,7 +226,7 @@ describe("restart and shut down", () => {
     );
     await press(buttonIn(dialog()!, "Shut down"));
     expect(sanctum.querySelector('[role="alert"]')?.textContent).toBe(
-      "Couldn't shut downUpdates and services isn't answering. Try again in a minute",
+      "Couldn't shut downSanctum's updater isn't answering. Try again in a minute",
     );
     expect(buttonIn(sanctum, "Restart").disabled).toBe(false);
   });
@@ -288,6 +294,21 @@ describe("free up space", () => {
     });
     expect(storage.querySelector('[role="status"]')?.textContent).toBe(
       "Freed 1.29 GBOnly the version running, the one before and the newest are kept",
+    );
+  });
+
+  it("says when the updater doesn't answer after confirming Free up space", async () => {
+    answers["/api/system/space/free"] = async () => {
+      throw new CoreError(503, "manager_unavailable");
+    };
+    await render();
+    const storage = section("status-storage");
+
+    await press(buttonIn(storage, "Free up space"));
+    await press(buttonIn(dialog()!, "Free up space"));
+
+    expect(storage.querySelector('[role="status"]')?.textContent).toContain(
+      "Sanctum's updater isn't answering. Try again in a minute",
     );
   });
 
@@ -382,37 +403,90 @@ describe("the last 24 hours", () => {
     };
     await act(async () => vi.advanceTimersByTimeAsync(6 * 60_000));
     const day = section("status-day");
-    expect(day.textContent).not.toContain("no readings");
     expect(day.querySelectorAll("polyline")).toHaveLength(4);
 
     // A successful refresh can establish a real gap, including one at the end.
     answers["/api/system/history"] = async () => ({ points });
     await act(async () => vi.advanceTimersByTimeAsync(5 * 60_000));
-    expect(day.textContent).toContain("no readings");
     expect(day.querySelectorAll("polyline")).toHaveLength(0);
   });
 
-  it("heads each chart with what it reads now, then what its day came to", async () => {
-    await render();
+  it("heads each chart with its name and what it reads now, and nothing more", async () => {
+    status.checkedAt = "2026-11-03T18:27:00Z";
+    answers["/api/system/history"] = async () => ({
+      points: [56, 84, 58].map((celsius, index): HostPoint => ({
+        at: `2026-11-03T18:${10 + 5 * index}:00Z`,
+        usage: 0.03 + index / 100,
+        celsius,
+        memoryUsed: 640 * 1024 ** 2,
+      })),
+    });
+    await render("Europe/Zurich");
     const day = section("status-day");
     expect(
-      [...day.querySelectorAll("h3")].map((heading) => heading.textContent),
-    ).toEqual(["Processor", "Temperature", "Memory in use"]);
-    // A day of three readings so far.
-    expect(day.textContent).toMatch(
-      /Processor3% now4% on average since \d\d:\d\d · busiest at \d\d:\d\d, 5%/,
+      [...day.querySelectorAll("h3")].map((heading) => {
+        const header = heading.parentElement!;
+        expect([...header.children].map((child) => child.tagName)).toEqual([
+          "H3",
+          "P",
+        ]);
+        return [...header.children].map((child) => child.textContent);
+      }),
+    ).toEqual([
+      ["Processor", "3% now"],
+      ["Temperature", "58°C now · normal"],
+      ["Memory in use", "627 MB now"],
+    ]);
+    expect(day.textContent).not.toMatch(
+      /on average|busiest|no readings|Too hot from/,
     );
-    expect(day.textContent).toContain("Temperature58°C now · normal");
     expect(
       [...day.querySelectorAll('[role="group"]')].map((chart) =>
         chart.getAttribute("aria-label"),
       ),
     ).toEqual([
       "Processor in use over the last 24 hours",
-      "Temperature over the last 24 hours",
+      "Temperature over the last 24 hours. Too hot from 19:15 to 19:20.",
       "Memory in use over the last 24 hours",
     ]);
   });
+
+  it("explains when there are no processor readings", async () => {
+    status.host!.processor.usage = null;
+    answers["/api/system/history"] = async () => ({ points: [] });
+    await render();
+    const day = section("status-day");
+    expect(day.textContent).toContain("ProcessorNothing read yet");
+    expect(
+      day.querySelector(
+        '[aria-label="Processor in use over the last 24 hours"]',
+      ),
+    ).toBeNull();
+  });
+
+  it.each([
+    { live: null, past: 56, shown: true },
+    { live: 58, past: null, shown: true },
+    { live: null, past: null, shown: false },
+  ])(
+    "shows the temperature chart for live $live and past $past only when there is a reading",
+    async ({ live, past, shown }) => {
+      status.checkedAt = "2026-11-03T18:27:00Z";
+      status.host!.processor.celsius = live;
+      const point: HostPoint = {
+        at: "2026-11-03T18:15:00Z",
+        usage: 0.04,
+        celsius: past,
+        memoryUsed: 640 * 1024 ** 2,
+      };
+      answers["/api/system/history"] = async () => ({ points: [point] });
+      await render();
+      const chart = section("status-day").querySelector(
+        '[role="group"][aria-label="Temperature over the last 24 hours"]',
+      );
+      expect(chart !== null).toBe(shown);
+    },
+  );
 
   it("says what each reads now while its day is on its way", async () => {
     answers["/api/system/history"] = () => new Promise(() => {});
@@ -430,7 +504,7 @@ describe("the last 24 hours", () => {
     };
     await render();
     expect(section("status-day").textContent).toBe(
-      "Last 24 HoursProcessor3% nowTemperature58°C now · normalMemory in use627 MB nowNot known right nowShows again once Updates and services answers",
+      "Last 24 HoursProcessor3% nowTemperature58°C now · normalMemory in use627 MB nowNot known right nowShows again once Sanctum's updater answers",
     );
   });
 });

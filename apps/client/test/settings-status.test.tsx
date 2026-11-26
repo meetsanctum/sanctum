@@ -77,15 +77,10 @@ async function render(
 const section = (id: string) =>
   container.querySelector(`section[aria-labelledby="${id}"]`);
 
-// Each part's name and size, as its row reads.
 const parts = (id: string) =>
-  [...(section(id)?.querySelectorAll("ul > li") ?? [])].map((row) => {
-    const [name, line] = [
-      ...row.querySelectorAll(":scope > span:nth-child(2) > span"),
-    ].map((span) => span.textContent);
-    const size = row.querySelector(":scope > span:last-child")?.textContent;
-    return [name, line ?? null, size];
-  });
+  [...(section(id)?.querySelectorAll("ul > li") ?? [])].map(
+    (row) => row.textContent ?? "",
+  );
 
 // Each reading's name and what it reads now, as its heading says.
 const readings = (id: string) =>
@@ -129,20 +124,16 @@ describe("the Status page", () => {
       "Storage6.92 GB free of 15.1 GB",
     );
     expect(parts("status-storage")).toEqual([
-      ["Dev builds", "Builds to update to, on the dev channel", "1.35 GB"],
-      ["Software", "This version and the one before, to go back to", "1.21 GB"],
-      [
-        "Home's data",
-        "Backups 17.4 MB · devices, history and activity 11.3 MB",
-        "28.7 MB",
-      ],
-      ["Zigbee", null, "330 KB"],
-      ["Moods", null, "180 KB"],
-      ["System and other", "Debian, its swap space and logs", "5.57 GB"],
+      "Dev builds1.35 GB",
+      "Sanctum1.21 GB",
+      "Home's data28.7 MB",
+      "Zigbee330 KB",
+      "Moods180 KB",
+      "System5.57 GB",
     ]);
     const bar = section("status-storage")!.querySelector('[role="img"]')!;
     expect(bar.getAttribute("aria-label")).toBe(
-      "Storage, 6.92 GB free of 15.1 GB: Dev builds 1.35 GB, Software 1.21 GB, Home's data 28.7 MB, Zigbee 330 KB, Moods 180 KB, System and other 5.57 GB",
+      "Storage, 6.92 GB free of 15.1 GB: Dev builds 1.35 GB, Sanctum 1.21 GB, Home's data 28.7 MB, Zigbee 330 KB, Moods 180 KB, System 5.57 GB",
     );
     // In the brand's colours, apps in their own; the free space is the track.
     expect(
@@ -167,17 +158,21 @@ describe("the Status page", () => {
       "Memory7.02 GB free of 7.64 GB",
     );
     expect(parts("status-memory")).toEqual([
-      ["Sanctum", "Moods and Zigbee run inside it", "164 MB"],
-      ["Zigbee", "Talks to your Zigbee devices, for the Zigbee app", "132 MB"],
-      [
-        "Updates and services",
-        "Keeps Sanctum running and up to date",
-        "104 MB",
-      ],
-      ["Dev builds", "Takes the builds pushed to update to", "43.7 MB"],
-      ["Messaging", "Carries messages between Zigbee and Sanctum", "7.82 MB"],
-      ["System and other", "Debian and what it runs", "175 MB"],
+      "Sanctum268 MB",
+      "Zigbee132 MB",
+      "Dev builds43.7 MB",
+      "Messaging7.82 MB",
+      "System175 MB",
     ]);
+  });
+
+  it("leads with the swap name and size when swap is in use", async () => {
+    const status = piStatus();
+    status.host!.memory!.swapUsed = 64 * 1024 ** 2;
+    answer = async () => status;
+    await render();
+
+    expect(parts("status-memory")[0]).toBe("Swap in use64 MB");
   });
 
   describe("with apps that have their own part", () => {
@@ -225,40 +220,86 @@ describe("the Status page", () => {
       { kind: "system", bytes: 312 * mebibyte },
     ];
 
-    it("lists Sanctum's own first, then each app by size, and the system last", async () => {
-      await showMemory(everything, [moods, zigbee, apart(weather)]);
+    it("orders Sanctum by its combined memory, then lists apps by size and the system last", async () => {
+      await showMemory(
+        [
+          ...everything,
+          { kind: "service", service: "piper", bytes: 180 * mebibyte },
+        ],
+        [moods, zigbee, apart(weather)],
+      );
 
       expect(parts("status-memory")).toEqual([
-        ["Sanctum", "Moods and Zigbee run inside it", "148 MB"],
-        [
-          "Updates and services",
-          "Keeps Sanctum running and up to date",
-          "71 MB",
-        ],
-        ["Dev builds", "Takes the builds pushed to update to", "18 MB"],
-        ["Zigbee", "With messaging and Zigbee2MQTT, which it uses", "236 MB"],
-        ["Weather", null, "34 MB"],
-        ["System and other", "Debian and what it runs", "312 MB"],
+        "Sanctum219 MB",
+        "Piper180 MB",
+        "Dev builds18 MB",
+        "Zigbee236 MB",
+        "Weather34 MB",
+        "System312 MB",
       ]);
     });
 
-    it("draws each app in its own colour, and Updates and services in green", async () => {
+    it.each([
+      ["core", "71 MB"],
+      ["manager", "148 MB"],
+    ])(
+      "shows the available Sanctum memory without a %s reading",
+      async (missing, size) => {
+        await showMemory(
+          everything.filter((part) => part.kind !== missing),
+          [moods, zigbee, apart(weather)],
+        );
+
+        expect(
+          parts("status-memory").filter((row) => row.startsWith("Sanctum")),
+        ).toEqual([`Sanctum${size}`]);
+      },
+    );
+
+    it("draws each app in its own colour, and Sanctum with its updater as one", async () => {
       await showMemory(everything, [moods, zigbee, apart(weather)]);
 
       const bar = section("status-memory")!.querySelector('[role="img"]')!;
+      expect(bar.getAttribute("aria-label")).toBe(
+        "Memory, 7.02 GB free of 7.64 GB: Sanctum 219 MB, Dev builds 18 MB, Zigbee 236 MB, Weather 34 MB, System 312 MB",
+      );
+      const segments = [...bar.querySelectorAll("span")];
       expect(
-        [...bar.querySelectorAll("span")].map((span) =>
+        segments.map((span) =>
           span.className.split(" ").find((name) => name.startsWith("bg-")),
         ),
       ).toEqual([
         "bg-purple",
-        "bg-green",
         "bg-pink",
         "bg-gray",
         "bg-cyan",
         "bg-foreground/24",
         "bg-foreground/8",
       ]);
+      const total = piStatus().host!.memory!.total;
+      const width = segments[0]!.style.width;
+      expect(width).toMatch(/%$/);
+      expect(Number.parseFloat(width)).toBeCloseTo(
+        ((219 * mebibyte) / total) * 100,
+        5,
+      );
+    });
+
+    it("names Piper, which Sanctum runs for its speech, in a row of its own", async () => {
+      await showMemory(
+        [
+          ...everything,
+          { kind: "service", service: "piper", bytes: 302 * mebibyte },
+        ],
+        [moods, zigbee, apart(weather)],
+      );
+
+      expect(parts("status-memory")[0]).toBe("Piper302 MB");
+      const bar = section("status-memory")!.querySelector('[role="img"]')!;
+      // A yellow of its own, apart from Natural Light's.
+      const colour = bar.querySelector("span")!.className;
+      expect(colour).toContain("var(--color-yellow)");
+      expect(colour.split(" ")).not.toContain("bg-yellow");
     });
 
     it("shows each app's icon, as Storage does", async () => {
@@ -269,30 +310,6 @@ describe("the Status page", () => {
         row.textContent?.startsWith("Weather"),
       )!;
       expect(weatherRow.querySelector("img, svg")).not.toBeNull();
-    });
-
-    it("says it of one app still inside Sanctum", async () => {
-      await showMemory(everything, [moods, apart(zigbee), apart(weather)]);
-
-      expect(parts("status-memory")[0]).toEqual([
-        "Sanctum",
-        "Moods runs inside it",
-        "148 MB",
-      ]);
-    });
-
-    it("says it's on its own once none are", async () => {
-      await showMemory(everything, [
-        apart(moods),
-        apart(zigbee),
-        apart(weather),
-      ]);
-
-      expect(parts("status-memory")[0]).toEqual([
-        "Sanctum",
-        "On its own; each app has its own part",
-        "148 MB",
-      ]);
     });
   });
 
@@ -376,7 +393,7 @@ describe("the Status page", () => {
     await render();
 
     expect(section("status-sanctum")?.textContent).toBe(
-      "SanctumCan't check right nowUpdates and services isn't answering. It's usually back within a minute, and this fills in by itselfVersiondev-ed4f70b",
+      "SanctumCan't check right nowSanctum's updater isn't answering. It's usually back within a minute, and this fills in by itselfVersiondev-ed4f70b",
     );
     expect(section("status-storage")).toBeNull();
   });

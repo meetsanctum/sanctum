@@ -42,6 +42,8 @@
 // request carries the device's earlier exchanges.
 // 23 lets a smart speaker announce from a core URL, identify the player
 // it uses, and distinguish ordinary playback after the core sees a fetch.
-export const protocolVersion = 23;
+// 24 gives an app the home clock: ctx.clock, the home's time zone and how it
+// writes times.
+export const protocolVersion = 24;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 11;

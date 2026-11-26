@@ -45,7 +45,7 @@ export function createAppLifecycle(options: {
   eventsForApps: EventsForApps;
   contexts: AppContexts;
   people: Pick<People, "list">;
-  places: Pick<PlacesModule, "list" | "location">;
+  places: Pick<PlacesModule, "list" | "location" | "clock">;
   devices: Devices;
   entities: Entities;
   presses: () => Pick<Presses, "endCaptures">;

@@ -50,7 +50,7 @@ function reasonOf(error: unknown) {
   if (code === "busy")
     return "An update or another change is under way. Try again once it has finished";
   if (code === "manager_unavailable") {
-    return "Updates and services isn't answering. Try again in a minute";
+    return `${productName}'s updater isn't answering. Try again in a minute`;
   }
   return `${productName} didn't answer. Try again in a moment`;
 }

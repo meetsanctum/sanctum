@@ -1,21 +1,22 @@
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import { describe, expect, it } from "vitest";
 
-import { daysFromToday, homeDate, temperatureSpans } from "../src/days.js";
+import { dateIn, daysFromToday, temperatureSpans } from "../src/days.js";
 import { forecast, morning } from "./sample.js";
+
+// Each forecast and sun is read in the zone it was fetched in.
+const clock = homeClock();
 
 // The home's days, for Weather's card and its page.
 
 describe("the home's days", () => {
   it("start with its today, whatever the forecast still holds", () => {
-    expect(homeDate("Europe/Zurich", morning)).toBe("2026-10-29");
-    expect(homeDate("Pacific/Auckland", morning)).toBe("2026-10-29");
-    expect(homeDate("Pacific/Honolulu", morning)).toBe("2026-10-28");
-    expect(daysFromToday(forecast, morning).map((day) => day.date)).toEqual([
-      "2026-10-29",
-      "2026-10-30",
-      "2026-10-31",
-      "2026-11-01",
-    ]);
+    expect(dateIn(clock, "Europe/Zurich", morning)).toBe("2026-10-29");
+    expect(dateIn(clock, "Pacific/Auckland", morning)).toBe("2026-10-29");
+    expect(dateIn(clock, "Pacific/Honolulu", morning)).toBe("2026-10-28");
+    expect(
+      daysFromToday(clock, forecast, morning).map((day) => day.date),
+    ).toEqual(["2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01"]);
   });
 });
 

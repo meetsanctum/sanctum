@@ -71,7 +71,7 @@ function message(error: unknown) {
 
 export function createAppContexts(options: {
   people: Pick<People, "list">;
-  places: Pick<PlacesModule, "list" | "location">;
+  places: Pick<PlacesModule, "list" | "location" | "clock">;
   devices: Devices;
   entities: Entities;
   presses: () => Pick<Presses, "press" | "released">;

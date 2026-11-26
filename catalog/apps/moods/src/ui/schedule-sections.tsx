@@ -1,18 +1,27 @@
-import { Button, icons, PageSection, tileIconOf } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  icons,
+  PageSection,
+  tileIconOf,
+  useHomeClock,
+} from "@meetsanctum/ui-sdk";
 import { useEffect, useState, type ReactNode } from "react";
 
 import {
   byStart,
   day,
-  formatMinute,
   holds,
-  minuteIn,
   nextFreeWindow,
   windowsOf,
 } from "../schedules/times.js";
 import type { TurnOnBehaviour } from "../schedules/store.js";
 import type { Mood } from "./mood-draft";
-import { spanWords, turnOnWords } from "./schedule-words";
+import {
+  minuteOfDay,
+  minuteWords,
+  spanWords,
+  turnOnWords,
+} from "./schedule-words";
 import type { RoomSchedule } from "./schedules";
 
 // The Schedule and Turning the lights on sections of Moods' page for a
@@ -66,11 +75,12 @@ export function DayBar(props: {
   minute: number;
 }) {
   const { scheduled, moods, minute } = props;
+  const clock = useHomeClock();
   const summary = scheduled.length
     ? scheduled
         .map(
           (span) =>
-            `${moods.get(span.moodId)?.name ?? "A mood"} ${spanWords(span)}`,
+            `${moods.get(span.moodId)?.name ?? "A mood"} ${spanWords(clock, span)}`,
         )
         .join(", ")
     : "Nothing scheduled";
@@ -78,7 +88,7 @@ export function DayBar(props: {
     <div className="flex flex-col gap-1.5 px-2.5 pt-2.5 pb-3">
       <div
         role="img"
-        aria-label={`${summary}. Now ${formatMinute(minute)}.`}
+        aria-label={`${summary}. Now ${minuteWords(clock, minute)}.`}
         className="relative h-11 overflow-hidden rounded-sm bg-foreground/5"
       >
         {scheduled.flatMap((span) => {
@@ -113,15 +123,17 @@ export function DayBar(props: {
         aria-hidden="true"
         className="relative h-[18px] text-[13px] leading-[18px] text-muted-foreground tabular-nums"
       >
-        <span className="absolute start-0">00:00</span>
+        <span className="absolute start-0">{minuteWords(clock, 0)}</span>
         <span className="absolute start-1/4 -translate-x-1/2 max-sm:hidden">
-          06:00
+          {minuteWords(clock, day / 4)}
         </span>
-        <span className="absolute start-1/2 -translate-x-1/2">12:00</span>
+        <span className="absolute start-1/2 -translate-x-1/2">
+          {minuteWords(clock, day / 2)}
+        </span>
         <span className="absolute start-3/4 -translate-x-1/2 max-sm:hidden">
-          18:00
+          {minuteWords(clock, (day * 3) / 4)}
         </span>
-        <span className="absolute end-0">24:00</span>
+        <span className="absolute end-0">{minuteWords(clock, day)}</span>
       </div>
     </div>
   );
@@ -131,12 +143,12 @@ export function DayBar(props: {
 export function ScheduleSection(props: {
   schedule: RoomSchedule;
   moods: readonly Mood[];
-  timeZone: string;
   now: Date;
   open: (id?: string) => void;
 }) {
   const { schedule, now } = props;
-  const minute = minuteIn(now, props.timeZone);
+  const clock = useHomeClock();
+  const minute = minuteOfDay(clock, now);
   const moods = new Map(props.moods.map((mood) => [mood.id, mood]));
   const scheduled = byStart(schedule.scheduled);
   const free = nextFreeWindow(scheduled);
@@ -159,7 +171,10 @@ export function ScheduleSection(props: {
               <Squircle>
                 <Icon aria-hidden="true" />
               </Squircle>
-              <RowText name={mood?.name ?? "A mood"} line={spanWords(span)} />
+              <RowText
+                name={mood?.name ?? "A mood"}
+                line={spanWords(clock, span)}
+              />
               {holds(span, minute) && (
                 <span className="shrink-0 text-[13px] leading-[18px] font-medium">
                   Now
@@ -189,7 +204,7 @@ export function ScheduleSection(props: {
               props.moods.length === 0
                 ? "Make a mood first"
                 : free
-                  ? `${spanWords(free)} is free`
+                  ? `${spanWords(clock, free)} is free`
                   : "The day is full"
             }
           />
@@ -228,18 +243,18 @@ export function TurnOnSection(props: {
   schedule: RoomSchedule;
   moods: readonly Mood[];
   lightName: (light: { device: string; capability: string }) => string;
-  timeZone: string;
   now: Date;
   onChoose: (turnOn: TurnOnBehaviour) => void;
 }) {
-  const { schedule, now, timeZone } = props;
+  const { schedule, now } = props;
+  const clock = useHomeClock();
   const words = turnOnWords({
     schedule,
     moodNames: new Map(props.moods.map((mood) => [mood.id, mood.name])),
     lightName: props.lightName,
-    minute: minuteIn(now, timeZone),
+    minute: minuteOfDay(clock, now),
     now,
-    timeZone,
+    clock,
   });
   return (
     <div className="flex flex-col gap-2">
