@@ -60,6 +60,12 @@ type Swipe = {
   across: number;
 };
 
+function applyDragStyle(section: HTMLElement, offset: number | null) {
+  section.style.translate = offset === null ? "" : `${offset}px`;
+  section.style.transition = offset === null ? "" : "none";
+  section.style.willChange = offset === null ? "" : "transform";
+}
+
 export function SwipePages(props: {
   label: string;
   pages: SwipePage[];
@@ -91,16 +97,15 @@ export function SwipePages(props: {
   // go they slide to their places.
   const cell = useRef<HTMLDivElement>(null);
   const sections = useRef<(HTMLElement | null)[]>([]);
+  const dragOffset = useRef<number | null>(null);
   const follow = (dx: number | null) => {
+    dragOffset.current = dx;
     const element = cell.current;
     if (!element) return;
     if (dx === null) delete element.dataset.swiping;
     else element.dataset.swiping = "";
     for (const section of sections.current) {
-      if (!section) continue;
-      section.style.translate = dx === null ? "" : `${dx}px`;
-      section.style.transition = dx === null ? "" : "none";
-      section.style.willChange = dx === null ? "" : "transform";
+      if (section) applyDragStyle(section, dx);
     }
   };
   const swiped = useRef(false);
@@ -288,6 +293,9 @@ export function SwipePages(props: {
               key={each.id}
               ref={(element) => {
                 sections.current[index] = element;
+                if (element && dragOffset.current !== null) {
+                  applyDragStyle(element, dragOffset.current);
+                }
               }}
               id={`${id}-${each.id}`}
               role={pages.length > 1 ? "tabpanel" : undefined}

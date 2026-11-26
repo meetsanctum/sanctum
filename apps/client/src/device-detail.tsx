@@ -458,15 +458,25 @@ export function DeviceDetail(props: {
     tint: string | null;
   } | null>(null);
   const selected = selection?.detailKey === detailKey ? selection : null;
-  const page =
-    selected?.page ?? initial ?? (controlTile ? undefined : after[0]?.id);
-  const tint =
-    page === "playing"
-      ? (artwork?.colour ?? (isArtworkMissing ? missingArtworkTint : null))
-      : (selected?.tint ?? null);
-  // The other pages keep the colour they had when they came into view.
+  const openingPage = initial ?? (controlTile ? undefined : after[0]?.id);
+  const page = selected?.page ?? openingPage;
+  const playingTint =
+    artwork?.colour ?? (isArtworkMissing ? missingArtworkTint : null);
+  const tint = page === "playing" ? playingTint : (selected?.tint ?? null);
+  // The other pages keep the colour of the page they came from, even when
+  // several page changes are queued before the detail draws again.
   const onPageChange = (page: string) =>
-    setSelection({ detailKey, page, tint });
+    setSelection((previous) => {
+      const outgoing = previous?.detailKey === detailKey ? previous : null;
+      return {
+        detailKey,
+        page,
+        tint:
+          (outgoing?.page ?? openingPage) === "playing"
+            ? playingTint
+            : (outgoing?.tint ?? null),
+      };
+    });
   const detailPages = after.map((each) => ({
     ...each,
     content: (

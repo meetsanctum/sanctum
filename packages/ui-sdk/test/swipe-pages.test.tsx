@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { Sun } from "lucide-react";
-import { act } from "react";
+import { act, Suspense, use, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -31,19 +31,18 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function renderTwoPages() {
+function pagesNamed(labels: string[]) {
+  return labels.map((label) => ({
+    id: label.toLowerCase(),
+    label,
+    icon: Sun,
+    content: <div>{label}</div>,
+  }));
+}
+
+async function renderPages(labels = ["First", "Second"]) {
   await act(async () => {
-    root.render(
-      <SwipePages
-        label="Device"
-        pages={["First", "Second"].map((label) => ({
-          id: label.toLowerCase(),
-          label,
-          icon: Sun,
-          content: <div>{label}</div>,
-        }))}
-      />,
-    );
+    root.render(<SwipePages label="Device" pages={pagesNamed(labels)} />);
   });
   return container.querySelector<HTMLElement>(
     "[data-slot=swipe-page-content]",
@@ -66,8 +65,18 @@ const currentPage = () =>
     .querySelector('[role=tab][aria-selected="true"]')
     ?.getAttribute("aria-label");
 
+function expectDragStyles(offset: number | null, count = 2) {
+  const panels = container.querySelectorAll<HTMLElement>("[role=tabpanel]");
+  expect(panels).toHaveLength(count);
+  for (const panel of panels) {
+    expect(panel.style.translate).toBe(offset === null ? "" : `${offset}px`);
+    expect(panel.style.transition).toBe(offset === null ? "" : "none");
+    expect(panel.style.willChange).toBe(offset === null ? "" : "transform");
+  }
+}
+
 it("leaves sideways scrollbar drags with the scrollbar until release", async () => {
-  await renderTwoPages();
+  await renderPages();
   const viewport = container.querySelector<HTMLElement>(
     "[data-slot=scroll-area-viewport]",
   )!;
@@ -95,7 +104,7 @@ it("leaves sideways scrollbar drags with the scrollbar until release", async () 
 });
 
 it("keeps a finger's swipe when the touched element's capture ends", async () => {
-  const touched = await renderTwoPages();
+  const touched = await renderPages();
   await act(async () => {
     pointer(touched, "pointerdown", 300);
     pointer(touched, "pointermove", 280);
@@ -106,16 +115,19 @@ it("keeps a finger's swipe when the touched element's capture ends", async () =>
     // takes capture, that element loses it and the event bubbles up.
     pointer(touched, "lostpointercapture", 280);
     pointer(surface, "pointermove", 200);
-    pointer(surface, "pointerup", 200);
   });
+  expectDragStyles(-100);
 
+  await act(async () => pointer(surface, "pointerup", 200));
   expect(currentPage()).toBe("Second");
+  expect(container.querySelector("[data-swiping]")).toBeNull();
+  expectDragStyles(null);
 });
 
 it.each(["pointercancel", "lostpointercapture"])(
   "ends a swipe at its last move on %s",
   async (event) => {
-    const touched = await renderTwoPages();
+    const touched = await renderPages();
     for (const [x, page] of [
       [260, "First"],
       [200, "Second"],
@@ -125,15 +137,74 @@ it.each(["pointercancel", "lostpointercapture"])(
         pointer(touched, "pointermove", 280);
       });
       const surface = container.querySelector("[data-swiping]")!.parentElement!;
-      await act(async () => {
-        pointer(surface, "pointermove", x);
-        pointer(surface, event, 0);
-      });
+      await act(async () => pointer(surface, "pointermove", x));
+      expectDragStyles(x - 300);
+
+      await act(async () => pointer(surface, event, 0));
       expect(currentPage()).toBe(page);
       expect(container.querySelector("[data-swiping]")).toBeNull();
+      expectDragStyles(null);
     }
   },
 );
+
+it("gives a page added during a swipe the current drag offset", async () => {
+  const touched = await renderPages();
+  await act(async () => {
+    pointer(touched, "pointerdown", 300);
+    pointer(touched, "pointermove", 200);
+  });
+  await renderPages(["First", "New", "Second"]);
+  expectDragStyles(-100, 3);
+
+  await act(async () => pointer(touched, "pointerup", 200));
+  expect(currentPage()).toBe("New");
+  expectDragStyles(null, 3);
+});
+
+it("shows the selected page while its parent update is pending", async () => {
+  let resolve!: () => void;
+  const ready = new Promise<void>((done) => {
+    resolve = done;
+  });
+  function Parent() {
+    const [page, setPage] = useState("first");
+    if (page === "second") use(ready);
+    return (
+      <div data-parent-page={page}>
+        <SwipePages
+          label="Device"
+          pages={pagesNamed(["First", "Second"])}
+          onPageChange={setPage}
+        />
+      </div>
+    );
+  }
+  await act(async () => {
+    root.render(
+      <Suspense fallback={<p>Loading</p>}>
+        <Parent />
+      </Suspense>,
+    );
+  });
+
+  const tab = container.querySelector<HTMLButtonElement>(
+    '[role="tab"][aria-label="Second"]',
+  )!;
+  await act(async () => tab.click());
+
+  expect(container.textContent).not.toContain("Loading");
+  expect(currentPage()).toBe("Second");
+  expect(
+    container.querySelector(
+      "[role=tabpanel]:not([inert]) [data-slot=swipe-page-content]",
+    )?.textContent,
+  ).toBe("Second");
+  expect(container.querySelector("[data-parent-page=first]")).not.toBeNull();
+
+  await act(async () => resolve());
+  expect(container.querySelector("[data-parent-page=second]")).not.toBeNull();
+});
 
 it("scrolls tabs too many for the width to keep the current one in view", async () => {
   // Eight 44 px tabs 20 px apart, after 24 px of room, in a 360 px row.
@@ -240,7 +311,7 @@ it.each(["swipe", "tab"])(
   async (input) => {
     vi.useFakeTimers();
     try {
-      const first = await renderTwoPages();
+      const first = await renderPages();
       const content = () => [
         ...container.querySelectorAll("[data-slot=swipe-page-content]"),
       ];
