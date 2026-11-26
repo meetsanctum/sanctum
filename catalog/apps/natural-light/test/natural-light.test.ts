@@ -667,7 +667,8 @@ describe("natural light", () => {
       expect.objectContaining({
         id: "naturalLight.room",
         entityType: "naturalLight.room",
-        kind: "buttons",
+        kind: "tiles",
+        order: 100,
         press: { action: "naturalLight.bringRoom" },
       }),
     ]);

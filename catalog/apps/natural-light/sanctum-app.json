@@ -1,7 +1,7 @@
 {
   "id": "sanctum.natural-light",
   "name": "Natural Light",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "core": "^2.0.0",
   "protocol": 26,
   "summary": "Lights that follow the colour of daylight through the day.",
@@ -978,8 +978,8 @@
         "id": "naturalLight.room",
         "title": "Natural Light",
         "entityType": "naturalLight.room",
-        "kind": "buttons",
-        "order": 200,
+        "kind": "tiles",
+        "order": 100,
         "press": {
           "action": "naturalLight.bringRoom"
         },
