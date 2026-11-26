@@ -41,6 +41,10 @@ export default defineConfig({
           items: [{ autogenerate: { directory: "apps" } }],
         },
         {
+          label: "Screens",
+          items: [{ autogenerate: { directory: "screens" } }],
+        },
+        {
           label: "AI agents",
           items: [{ autogenerate: { directory: "ai-agents" } }],
         },
