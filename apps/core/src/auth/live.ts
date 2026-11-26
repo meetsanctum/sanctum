@@ -60,7 +60,7 @@ export function createConnections(options: { now?: () => Date } = {}) {
     },
 
     // Since when a client has been connected: its oldest connection still
-    // open, for Settings → Status' Connected now.
+    // open, for Settings → System's Connected now.
     connectedSince(clientId: string) {
       let since: Date | null = null;
       for (const connection of open.values()) {

@@ -43,6 +43,7 @@ import { createAppLifecycle } from "./lifecycle.js";
 import type { NetFetch } from "./net.js";
 import { createAppServices, type ServiceManager } from "./services.js";
 import type { Blobs } from "../blobs/blobs.js";
+import type { Listening } from "../speech/listening.js";
 import type { AppSecrets } from "./secrets.js";
 import type { AppSettingsStore } from "./settings.js";
 import { createSupervisor, type AppContainerManager } from "./supervisor.js";
@@ -102,6 +103,8 @@ export function createAppHost(options: {
   secrets: AppSecrets;
   // The pictures drivers hand over, in the core's memory.
   blobs: Blobs;
+  // Smart speakers' runs (speech/listening.ts).
+  listening?: Listening;
   // What the manager found on the home's network (discovery/sightings.ts).
   sightings?: () => readonly Sighting[];
   grants: AppGrants;
@@ -193,6 +196,7 @@ export function createAppHost(options: {
   // neither end the core's timer nor prevent the driver's container stopping.
   function markDriverOffline(entry: InstalledApp) {
     if (!entry.manifest.driver) return;
+    options.listening?.driverStopped(entry.app.id);
     try {
       options.devices.markDriverOffline(entry.app.id);
     } catch (error) {

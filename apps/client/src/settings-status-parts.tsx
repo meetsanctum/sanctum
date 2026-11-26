@@ -15,10 +15,11 @@ import {
   type StoragePart,
 } from "./system-status";
 
-// Status' Storage and Memory: a bar of what fills each, 16 px with 2 px
+// System's Storage and Memory: a bar of what fills each, 16 px with 2 px
 // between its parts and the free space its track, then a row for each part
-// with its swatch or its app's icon and its size. Storage ends with Free up
-// space (settings-status-space.tsx).
+// with its swatch or its app's icon and its size. Each hint says what is used
+// of the whole, as the bar fills. Storage ends with Free up space
+// (settings-status-space.tsx).
 
 // The app colours by their plain names, for each app's part of the bar.
 const colourOf: Record<string, string> = {
@@ -32,7 +33,7 @@ const colourOf: Record<string, string> = {
   graphite: "bg-gray",
 };
 
-// The services' colours, as Status shows them. Piper's yellow leans a
+// The services' colours, as System shows them. Piper's yellow leans a
 // little to green, so it stays apart from Natural Light's beside it.
 const serviceColours: Record<string, string> = {
   zigbee2mqtt: "bg-gray",
@@ -250,7 +251,8 @@ export function StorageSection(props: {
   const { storage } = props.host;
   if (!storage) return null;
   const parts = storageParts(storage.parts, props.apps);
-  const hint = `${formatBytes(storage.free)} free of ${formatBytes(storage.total)}`;
+  const used = storage.used ?? storage.total - storage.free;
+  const hint = `${formatBytes(used)} of ${formatBytes(storage.total)} used`;
   return (
     <Section
       id="status-storage"
@@ -282,7 +284,7 @@ export function MemorySection(props: {
   if (!memory) return null;
   const parts = memoryParts(memory.parts, props.apps);
   const short = props.problems.some((each) => each.kind === "memory");
-  const hint = `${formatMemory(memory.available)} free of ${formatMemory(memory.total)}`;
+  const hint = `${formatMemory(memory.total - memory.available)} of ${formatMemory(memory.total)} used`;
   return (
     <Section id="status-memory" title="Memory" hint={hint} problem={short}>
       <Bar

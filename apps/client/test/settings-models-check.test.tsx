@@ -105,6 +105,9 @@ describe("A source's check in the dialog", () => {
     expect(text()).toContain("Added to your sources");
     expect(text()).toContain("Asking it one short question");
     expect(text()).toContain("This takes a few seconds.");
+    expect(text()).toContain(
+      "If you close this, the check carries on. AI Models shows any problems it finds.",
+    );
     await click(button("Close"));
     expect(onClose).toHaveBeenCalledOnce();
   });

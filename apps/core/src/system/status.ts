@@ -5,7 +5,7 @@ import type { Channel, HostHistory, HostStatus } from "../manager-answers.js";
 import { ManagerRefusal, ManagerUnavailable } from "../manager.js";
 import { relay } from "./errors.js";
 
-// Settings → Status: what the host is and how it is doing, for every client.
+// Settings → System: what the host is and how it is doing, for every client.
 // The manager reports the host; the core adds what only it knows, the space
 // its own data and each app's take, and works out what needs someone, the
 // one rule Settings' Needs attention and the dashboard's Attention tile
@@ -73,7 +73,12 @@ export type SystemStatus = {
       swapUsed: number;
       parts: MemoryPart[];
     } | null;
-    storage: { total: number; free: number; parts: StoragePart[] } | null;
+    storage: {
+      total: number;
+      used: number;
+      free: number;
+      parts: StoragePart[];
+    } | null;
     processor: HostStatus["processor"];
     power: HostStatus["power"];
     network: HostStatus["network"];
@@ -251,7 +256,7 @@ function memoryParts(
 }
 
 function storageParts(
-  storage: NonNullable<HostStatus["storage"]>,
+  storage: NonNullable<HostStatus["storage"]> & { used: number },
   data: { home: number; apps: Map<string, number> },
   appIds: readonly string[],
 ) {
@@ -286,7 +291,7 @@ function storageParts(
   const counted = parts.reduce((sum, part) => sum + part.bytes, 0);
   parts.push({
     kind: "system",
-    bytes: Math.max(0, storage.total - storage.free - counted),
+    bytes: Math.max(0, storage.used - counted),
   });
   return parts;
 }
@@ -326,6 +331,11 @@ export function createStatus(options: {
       }
       const appIds = options.appIds();
       const data = await dataSizes(options.dataDir, appIds);
+      const disk = host.storage;
+      const storage = disk && {
+        ...disk,
+        used: disk.used ?? disk.total - disk.free,
+      };
       return {
         checkedAt: checkedAt.toISOString(),
         version: options.version,
@@ -343,10 +353,11 @@ export function createStatus(options: {
             swapUsed: host.memory.swapTotal - host.memory.swapFree,
             parts: memoryParts(host.memory, appIds),
           },
-          storage: host.storage && {
-            total: host.storage.total,
-            free: host.storage.free,
-            parts: storageParts(host.storage, data, appIds),
+          storage: storage && {
+            total: storage.total,
+            used: storage.used,
+            free: storage.free,
+            parts: storageParts(storage, data, appIds),
           },
           processor: host.processor,
           power: host.power,

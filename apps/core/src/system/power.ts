@@ -1,7 +1,7 @@
 import type { ChangedBy, RecordActivity } from "../activity/activity.js";
 import { relay, SystemError } from "./errors.js";
 
-// Restart and Shut down, from Settings → Status. The manager does it a
+// Restart and Shut down, from Settings → System. The manager does it a
 // moment after it answers, so the core tells every client first: their
 // screens then say Restarting or Sanctum is off rather than Reconnecting.
 // Each request goes in the activity log.

@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { attentionTile } from "../src/attention";
 import { coreJson } from "../src/core-fetch";
-import { StatusPage, StatusRow } from "../src/settings-status";
+import { SanctumAttentionRow, SystemPage } from "../src/settings-status";
 import {
   fineText,
   formatBytes,
@@ -27,7 +27,7 @@ import { piStatus, statusApps } from "./system-status-fixtures";
 // The device's own zone, which the expectations here are worked out in.
 const clock = homeClock();
 
-// Settings → Status: the verdict first, then Sanctum with its processor and
+// Settings → System: the verdict first, then Sanctum with its processor and
 // power supply, its storage and memory with what fills them, what each reading
 // of the last 24 hours reads now and the network, from GET /api/system/status
 // every 5 seconds.
@@ -36,6 +36,10 @@ vi.mock("../src/core-fetch", async (original) => ({
   ...(await original<typeof import("../src/core-fetch")>()),
   coreJson: vi.fn(),
 }));
+
+// The core away, so the page's Updates asks nothing of it here
+// (settings-updates.test.tsx covers them).
+const offline = { state: "offline" } as const;
 
 let root: Root;
 let container: HTMLDivElement;
@@ -68,7 +72,12 @@ async function render(
   await act(async () => {
     root.render(
       <TemperatureUnitProvider unit={unit}>
-        <StatusPage apps={apps} onDone={() => {}} />
+        <SystemPage
+          apps={apps}
+          core={offline}
+          onUpdating={() => {}}
+          onDone={() => {}}
+        />
       </TemperatureUnitProvider>,
     );
   });
@@ -95,7 +104,7 @@ const facts = (id: string) =>
     fact.querySelector("dd")?.textContent,
   ]);
 
-describe("the Status page", () => {
+describe("the System page", () => {
   it("leads with a green check while everything's running, then what Sanctum is", async () => {
     await render();
 
@@ -111,7 +120,6 @@ describe("the Status page", () => {
       ["Model", "Raspberry Pi 4 Model B, 8 GB"],
       ["Processor", "4 cores at 1.8 GHz"],
       ["Power supply", "Enough power"],
-      ["Version", "dev-ed4f70b · Dev channel"],
       ["Operating system", "Debian 13 (trixie), 64-bit"],
       ["Running for", "4 days, 21 hours"],
     ]);
@@ -121,7 +129,7 @@ describe("the Status page", () => {
     await render();
 
     expect(section("status-storage")?.textContent).toContain(
-      "Storage6.92 GB free of 15.1 GB",
+      "Storage7.65 GB of 15.1 GB used",
     );
     expect(parts("status-storage")).toEqual([
       "Dev builds1.35 GB",
@@ -129,11 +137,11 @@ describe("the Status page", () => {
       "Home's data28.7 MB",
       "Zigbee330 KB",
       "Moods180 KB",
-      "System5.57 GB",
+      "System5.07 GB",
     ]);
     const bar = section("status-storage")!.querySelector('[role="img"]')!;
     expect(bar.getAttribute("aria-label")).toBe(
-      "Storage, 6.92 GB free of 15.1 GB: Dev builds 1.35 GB, Sanctum 1.21 GB, Home's data 28.7 MB, Zigbee 330 KB, Moods 180 KB, System 5.57 GB",
+      "Storage, 7.65 GB of 15.1 GB used: Dev builds 1.35 GB, Sanctum 1.21 GB, Home's data 28.7 MB, Zigbee 330 KB, Moods 180 KB, System 5.07 GB",
     );
     // In the brand's colours, apps in their own; the free space is the track.
     expect(
@@ -151,11 +159,22 @@ describe("the Status page", () => {
     ]);
   });
 
+  it("estimates the occupied space when an older core only reports available space", async () => {
+    const status = piStatus();
+    delete status.host!.storage!.used;
+    answer = async () => status;
+    await render();
+
+    expect(section("status-storage")?.textContent).toContain(
+      "Storage8.15 GB of 15.1 GB used",
+    );
+  });
+
   it("says what holds the memory, the system last", async () => {
     await render();
 
     expect(section("status-memory")?.textContent).toContain(
-      "Memory7.02 GB free of 7.64 GB",
+      "Memory627 MB of 7.64 GB used",
     );
     expect(parts("status-memory")).toEqual([
       "Sanctum268 MB",
@@ -261,7 +280,7 @@ describe("the Status page", () => {
 
       const bar = section("status-memory")!.querySelector('[role="img"]')!;
       expect(bar.getAttribute("aria-label")).toBe(
-        "Memory, 7.02 GB free of 7.64 GB: Sanctum 219 MB, Dev builds 18 MB, Zigbee 236 MB, Weather 34 MB, System 312 MB",
+        "Memory, 627 MB of 7.64 GB used: Sanctum 219 MB, Dev builds 18 MB, Zigbee 236 MB, Weather 34 MB, System 312 MB",
       );
       const segments = [...bar.querySelectorAll("span")];
       expect(
@@ -393,7 +412,7 @@ describe("the Status page", () => {
     await render();
 
     expect(section("status-sanctum")?.textContent).toBe(
-      "SanctumCan't check right nowSanctum's updater isn't answering. It's usually back within a minute, and this fills in by itselfVersiondev-ed4f70b",
+      "SanctumCan't check right nowSanctum's updater isn't answering. It's usually back within a minute, and this fills in by itself",
     );
     expect(section("status-storage")).toBeNull();
   });
@@ -477,26 +496,22 @@ describe("the Status page", () => {
     expect(container.textContent).toContain("Can't check right now");
     expect(container.textContent).not.toContain("Everything's running");
     expect(section("status-storage")).toBeNull();
-
-    await act(async () =>
-      root.render(<StatusRow status={piStatus()} failed onOpen={() => {}} />),
-    );
-    const row = container.querySelector("button")!;
-    expect(row.textContent).toContain("Can't check right now");
-    expect(row.getAttribute("aria-label")).toContain("can't check right now");
   });
 
-  it("says Checking on System's row, to a screen reader too, while the first answer is on its way", async () => {
+  it("names Sanctum's first problem in Needs attention, opening System", async () => {
     await act(async () =>
       root.render(
-        <StatusRow status={undefined} failed={false} onOpen={() => {}} />,
+        <SanctumAttentionRow
+          status={piStatus({ problems: [{ kind: "clock" }] })}
+          onOpen={() => {}}
+        />,
       ),
     );
 
     const row = container.querySelector("button")!;
-    expect(row.textContent).toBe("StatusChecking…");
+    expect(row.textContent).toBe("SanctumClock not synchronised");
     expect(row.getAttribute("aria-label")).toBe(
-      "Status: checking. Opens Status",
+      "Sanctum: Clock not synchronised. Opens System",
     );
   });
 });
@@ -639,7 +654,7 @@ describe("the dashboard's Attention tile", () => {
     lastLowAt: "2026-11-02T18:40:00Z",
   };
 
-  it("names what is wrong above and how below, and opens Status, while only Sanctum needs someone", () => {
+  it("names what is wrong above and how below, and opens System, while only Sanctum needs someone", () => {
     expect(attentionTile([], [power])).toEqual({
       title: "Power",
       value: "Too weak",

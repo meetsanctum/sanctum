@@ -47,10 +47,20 @@ const plugWords = /\b(plugs?|outlets?|sockets?)\b/i;
 // ESPHome's voice assistant feature flag: the device listens for requests.
 const voiceAssistantFlag = 1 << 0;
 
+// And that it streams its microphone over the API connection.
+const apiAudioFlag = 1 << 2;
+
 /** Whether a device says it has a voice assistant. */
 export const hasVoiceAssistant = (
   info: Pick<Session["info"], "voiceAssistantFeatureFlags">,
 ) => ((info.voiceAssistantFeatureFlags ?? 0) & voiceAssistantFlag) !== 0;
+
+/** Whether its voice assistant can stream its microphone over the API. */
+export const streamsOverApi = (
+  info: Pick<Session["info"], "voiceAssistantFeatureFlags">,
+) =>
+  hasVoiceAssistant(info) &&
+  ((info.voiceAssistantFeatureFlags ?? 0) & apiAudioFlag) !== 0;
 
 /**
  * What a device is. A device with microphones, its `audio` part, is a smart

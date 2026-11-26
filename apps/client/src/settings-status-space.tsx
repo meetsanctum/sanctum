@@ -1,7 +1,7 @@
 import { Button } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { Check, CircleAlert, LoaderCircle } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { productName } from "./brand";
 import {
@@ -17,11 +17,11 @@ import { CoreError, coreJson } from "./core-fetch";
 import { formatBytes, serviceNames } from "./system-status";
 import { everyWhileShown } from "./while-shown";
 
-// Free up space, the Storage card's last row on Status: what it would free
+// Free up space, the Storage card's last row on System: what it would free
 // and what goes, asked first, naming what stays: the version running, the
 // one before it, which a rollback needs, and on the dev channel the newest
-// build. It then says so in place, with what the disk freed, until Status
-// closes. With nothing to free the row says so, its button dimmed.
+// build. It then says so in place, with what the disk freed. With nothing
+// to free the row says so, its button dimmed.
 
 /** What GET /api/system/space answers. */
 export type SpacePlan = {
@@ -110,43 +110,62 @@ function reasonOf(error: unknown) {
   return `${productName} didn't answer. Try again in a moment`;
 }
 
-/** What Free up space would do, asked when Status opens and again after it frees. */
-export function useSpace() {
-  const [state, setState] = useState<State>({ at: "counting" });
-  const count = useCallback(async () => {
-    try {
-      const plan = await coreJson<SpacePlan>("/api/system/space");
-      setState((current) =>
-        current.at === "freed" || current.at === "freeing"
-          ? current
-          : { at: "counted", plan },
-      );
-    } catch {
-      setState((current) =>
-        current.at === "counting" ? { at: "unknown" } : current,
-      );
-    }
-  }, []);
-  useEffect(() => void count(), [count]);
+/** What Free up space would do, counted on opening and after an update. */
+export function useSpace(updating: boolean, ended: string | undefined) {
+  const [result, setResult] = useState<{
+    ended: string | undefined;
+    state: State;
+  }>();
+  const [cleanupRevision, setCleanupRevision] = useState(0);
+  const state: State =
+    !updating && result && result.ended === ended
+      ? result.state
+      : { at: "counting" };
+
   useEffect(() => {
-    if (state.at !== "unknown") return;
-    const stopPolling = everyWhileShown(5_000, () => void count());
-    return () => stopPolling();
-  }, [count, state.at]);
+    if (updating) return;
+    let isCurrent = true;
+    let stopRetrying: (() => void) | undefined;
+    const count = async () => {
+      try {
+        const plan = await coreJson<SpacePlan>("/api/system/space");
+        if (!isCurrent) return;
+        setResult({ ended, state: { at: "counted", plan } });
+        isCurrent = false;
+        stopRetrying?.();
+      } catch {
+        if (!isCurrent) return;
+        setResult({ ended, state: { at: "unknown" } });
+        stopRetrying ??= everyWhileShown(5_000, () => void count());
+      }
+    };
+    void count();
+    return () => {
+      isCurrent = false;
+      stopRetrying?.();
+    };
+  }, [updating, ended]);
 
   const free = async (plan: SpacePlan) => {
-    setState({ at: "freeing", plan });
+    const request = { ended, state: { at: "freeing", plan } } as const;
+    setResult(request);
+    let next: State;
     try {
       const { freed } = await coreJson<{ freed: number | null }>(
         "/api/system/space/free",
         { method: "POST" },
       );
-      setState({ at: "freed", plan, freed });
+      next = { at: "freed", plan, freed };
     } catch (error) {
-      setState({ at: "failed", plan, reason: reasonOf(error) });
+      next = { at: "failed", plan, reason: reasonOf(error) };
     }
+    setResult((current) =>
+      current === request ? { ended, state: next } : current,
+    );
+    // The registry may have removed some builds even if cleanup failed.
+    setCleanupRevision((revision) => revision + 1);
   };
-  return { state, free };
+  return { state, free, cleanupRevision };
 }
 
 export type Space = ReturnType<typeof useSpace>;
@@ -158,23 +177,30 @@ export const hasSpaceToFree = ({ state }: Space) =>
 /** Free up space as a button, asked first: the row's, and the fix of storage almost full. */
 export function FreeUpButton(props: { space: Space }) {
   const { state, free } = props.space;
-  const [asking, setAsking] = useState(false);
-  const plan = "plan" in state ? state.plan : null;
+  const [plan, setPlan] = useState<SpacePlan>();
   const canFree = hasSpaceToFree(props.space);
+  const canConfirm = canFree && "plan" in state && state.plan === plan;
   return (
     <>
       <Button
         variant="outline"
         disabled={!canFree}
         className="shrink-0"
-        onClick={() => setAsking(true)}
+        onClick={() => {
+          if ("plan" in state) setPlan(state.plan);
+        }}
       >
         {state.at === "freeing" && (
           <LoaderCircle aria-hidden="true" className="animate-spin" />
         )}
         Free up space
       </Button>
-      <Dialog open={asking} onOpenChange={setAsking}>
+      <Dialog
+        open={plan !== undefined}
+        onOpenChange={(open) => {
+          if (!open) setPlan(undefined);
+        }}
+      >
         <DialogContent showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>
@@ -189,9 +215,11 @@ export function FreeUpButton(props: { space: Space }) {
               <Button variant="outline">Cancel</Button>
             </DialogClose>
             <Button
+              disabled={!canConfirm}
               onClick={() => {
-                setAsking(false);
-                if (plan) void free(plan);
+                if (!canConfirm || !plan) return;
+                setPlan(undefined);
+                void free(plan);
               }}
             >
               Free up space

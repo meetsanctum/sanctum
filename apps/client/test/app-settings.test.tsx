@@ -326,11 +326,11 @@ describe("an app's settings page", () => {
     );
   });
 
-  it("says when it isn't running, and opens Status, where Restart is", async () => {
+  it("says when it isn't running, and opens System, where Restart is", async () => {
     await show({ ...moods, state: "stopped" });
 
     expect(text()).toContain("Moods isn't running");
-    await act(async () => button("Open Status").click());
+    await act(async () => button("Open System").click());
     expect(openedStatus).toBe(1);
   });
 

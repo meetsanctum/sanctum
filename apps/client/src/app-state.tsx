@@ -368,7 +368,7 @@ export function AppNotice(props: {
   } else if (app.state === "stopped") {
     action = (
       <Button variant="outline" onClick={props.openStatus}>
-        Open Status
+        Open System
       </Button>
     );
   } else if (props.openSettings) {

@@ -169,7 +169,7 @@ describe("Needs attention", () => {
 
     expect(container.textContent).toContain("2 apps and 1 device");
     expect(rows()).toEqual([
-      "ZigbeeNot running: restart Sanctum to start itOpen Status",
+      "ZigbeeNot running: restart Sanctum to start itOpen System",
       "MoodsPaused: it needs “Control your lights”Open settings",
       "Office lampOffline: check it's switched on and in range · Office · Hue White ambianceCheck connection",
     ]);
@@ -177,7 +177,7 @@ describe("Needs attention", () => {
     expect(rowOf("Zigbee").querySelector(".text-destructive")).not.toBeNull();
     expect(rowOf("Moods").querySelector(".text-destructive")).toBeNull();
 
-    await act(async () => buttonIn(rowOf("Zigbee"), "Open Status").click());
+    await act(async () => buttonIn(rowOf("Zigbee"), "Open System").click());
     await act(async () => buttonIn(rowOf("Moods"), "Open settings").click());
     expect(opened).toEqual(["status", "sanctum.moods"]);
   });

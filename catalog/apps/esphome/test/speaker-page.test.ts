@@ -72,6 +72,7 @@ describe("a smart speaker's page", () => {
         muteSwitch: true,
         announces: true,
         announcementPlayer: "media-media_player",
+        listens: true,
       },
     });
   });
@@ -273,6 +274,7 @@ describe("a smart speaker's page", () => {
         muteSwitch: false,
         announces: true,
         announcementPlayer: "media-media_player",
+        listens: false,
       },
     });
     device.wake();

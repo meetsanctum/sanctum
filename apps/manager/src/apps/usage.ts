@@ -16,7 +16,7 @@ export type AppUsage = {
   memoryBytes: number | null;
   // A percentage of one core, which is what its limit of half of one is in.
   processor: number | null;
-  // What its image takes on the disk, as Status' Storage counts it.
+  // What its image takes on the disk, as System's Storage counts it.
   dataBytes: number | null;
 };
 

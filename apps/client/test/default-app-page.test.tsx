@@ -112,7 +112,7 @@ describe("an app's default page", () => {
     vi.mocked(coreJson).mockResolvedValue({ summary: null, driver: null });
     await show({ ...example, state: "stopped" });
     expect(container.textContent).toContain("Example Devices isn't running");
-    expect(button("Open Status")).toBeDefined();
+    expect(button("Open System")).toBeDefined();
     expect(container.textContent).not.toContain("What it does");
   });
 

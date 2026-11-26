@@ -13,7 +13,7 @@ import type { CoreStatus } from "../src/core-status";
 import { goneWithinMs, useGoing, type Going } from "../src/power-notice";
 import type { StoredHost } from "../src/shell";
 
-// A restart or shutdown someone asked for on Status: every screen hears of
+// A restart or shutdown someone asked for on System: every screen hears of
 // it, and its veil says Restarting, Shutting down or Sanctum is off until
 // Sanctum is back, or stops waiting if it never went.
 

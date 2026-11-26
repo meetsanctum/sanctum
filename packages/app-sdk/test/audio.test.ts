@@ -17,13 +17,18 @@ import {
 // wake word, and the one command that mutes or unmutes them.
 
 describe("a smart speaker's microphones", () => {
-  it("can't be muted unless its driver says so", () => {
+  it("can't be muted, announce or listen unless its driver says so", () => {
     expect(
       capabilityRegistration.parse({ id: "audio", kind: "audio" }),
     ).toEqual({
       id: "audio",
       kind: "audio",
-      features: { mutes: false, muteSwitch: false, announces: false },
+      features: {
+        mutes: false,
+        muteSwitch: false,
+        announces: false,
+        listens: false,
+      },
     });
     expect(audio.supports(audio.features.parse({}), { muted: true })).toBe(
       false,

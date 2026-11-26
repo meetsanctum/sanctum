@@ -32,6 +32,7 @@ export function piStatus(changes: Partial<SystemStatus> = {}): SystemStatus {
       },
       storage: {
         total: 15_072_243_712,
+        used: 7_654_955_776,
         free: 6_917_287_936,
         parts: [
           { kind: "devBuilds", bytes: 1_349_000_000 },
@@ -44,7 +45,7 @@ export function piStatus(changes: Partial<SystemStatus> = {}): SystemStatus {
           },
           { kind: "app", app: "sanctum.zigbee", bytes: 330_000 },
           { kind: "app", app: "sanctum.moods", bytes: 180_000 },
-          { kind: "system", bytes: 5_569_955_776 },
+          { kind: "system", bytes: 5_069_745_776 },
         ],
       },
       processor: { cores: 4, usage: 0.03, mhz: 1800, celsius: 57.5 },

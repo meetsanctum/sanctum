@@ -3,7 +3,7 @@ import { cpus, hostname, networkInterfaces } from "node:os";
 import { join } from "node:path";
 
 // What the host's kernel says about it, as the manager's container sees it
-// (Settings → Status). /proc and /sys are the host's, apart from the device
+// (Settings → System). /proc and /sys are the host's, apart from the device
 // tree, which Docker masks, and the manager shares the host's network. Each
 // reading is null where this host can't say, as on a machine that isn't a
 // Raspberry Pi.
@@ -200,12 +200,14 @@ export function createHostReadings(
       return alarm === null ? null : alarm !== 0;
     },
 
-    // The disk a folder is on: its size and what is free for its files.
+    // The disk a folder is on: its size, occupied space and space available
+    // for its files. Reserved free blocks are unoccupied but unavailable.
     async disk(folder: string) {
       try {
         const stats = await statfs(folder);
         return {
           total: stats.blocks * stats.bsize,
+          used: (stats.blocks - stats.bfree) * stats.bsize,
           free: stats.bavail * stats.bsize,
         };
       } catch {

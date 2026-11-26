@@ -21,6 +21,7 @@ describe("a device's entities", () => {
     );
     const player = entity({ type: "media_player", key: maxDeviceCapabilities });
     const { mapping } = describeSession({
+      encrypted: true,
       info: { voiceAssistantFeatureFlags: 1 },
       entities: [...switches, player],
     });

@@ -96,6 +96,10 @@ function emptyHome(manifest: StaticManifest): PeerCalls {
       throw new ActionError("no_turn");
     },
     replyRequest: notFound,
+    openListen: notFound,
+    sendListen: notFound,
+    readListen: notFound,
+    closeListen: notFound,
     homeClock: async () => ({ timeZone: "UTC", hourCycle: "24h" }),
     hostResources: async () => ({
       processor: { name: null, cores: 4, matrixInstructions: null },

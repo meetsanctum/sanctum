@@ -173,18 +173,17 @@ describe("Settings' pages", () => {
     );
   });
 
-  it("name the page under them on Back, as Status does over System", async () => {
+  it("keep how Sanctum is doing and its updates on one System page, with Back to Settings", async () => {
     await openFromOverview("Settings");
     await openArea("System");
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('main button[aria-label^="Status:"]')!
-        .click();
-    });
 
-    expect(pageTitle()).toBe("Status");
-    await act(async () => backTo("System")!.click());
     expect(pageTitle()).toBe("System");
+    expect(
+      container.querySelector('section[aria-labelledby="status-sanctum"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('section[aria-labelledby="status-updates"]'),
+    ).not.toBeNull();
     await act(async () => backTo("Settings")!.click());
     expect(pageTitle()).toBe("Settings");
   });

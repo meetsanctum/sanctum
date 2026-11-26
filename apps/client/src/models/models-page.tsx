@@ -11,7 +11,6 @@ import {
   useHomeClock,
 } from "@meetsanctum/ui-sdk";
 import {
-  Check,
   CircleAlert,
   Cloud,
   Cpu,
@@ -75,7 +74,7 @@ import {
 // can run instead (no-model.tsx). Every client sees and changes the same.
 
 type Editing = {
-  action: "rename" | "model" | "key" | "remove";
+  action: "check" | "rename" | "model" | "key" | "remove";
   source: ModelSourceInfo;
   trigger: HTMLButtonElement | null;
 };
@@ -132,7 +131,6 @@ export function ModelsPage(props: {
       source={source}
       isActing={isActing}
       onUse={() => void act(`/api/models/sources/${source.id}/use`)}
-      onCheck={() => void act(`/api/models/sources/${source.id}/check`)}
       onEdit={(action, trigger) => setEditing({ source, action, trigger })}
       onOpenOllama={
         hasOllamaPage && props.onOpenApp
@@ -169,7 +167,7 @@ export function ModelsPage(props: {
         page={props.page}
       >
         {hasFailed && (
-          // As Status says it: the page asks again on its own.
+          // As System says it: the page asks again on its own.
           <p
             role="status"
             className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground"
@@ -257,12 +255,6 @@ function CheckStatus(props: { source: ModelSourceInfo }) {
       role="status"
       className="m-0 flex items-start gap-2 text-[13px] leading-[18px] font-medium"
     >
-      {line.tone === "good" && (
-        <Check
-          aria-hidden="true"
-          className="mt-px size-4 shrink-0 text-(--leaf-text)"
-        />
-      )}
       {line.tone === "problem" && (
         <CircleAlert
           aria-hidden="true"
@@ -280,7 +272,6 @@ function SourceRow(props: {
   source: ModelSourceInfo;
   isActing: boolean;
   onUse: () => void;
-  onCheck: () => void;
   onEdit: (
     action: Editing["action"],
     trigger: HTMLButtonElement | null,
@@ -344,7 +335,7 @@ function SourceRow(props: {
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem
               disabled={source.checking}
-              onSelect={props.onCheck}
+              onSelect={() => props.onEdit("check", menuButton.current)}
             >
               <RefreshCw />
               Check again
@@ -401,14 +392,16 @@ function SourceRow(props: {
 }
 
 const editTitles: Record<Editing["action"], (name: string) => string> = {
+  check: () => "Check again",
   rename: () => "Rename this computer",
   model: () => "Change model",
   key: () => "Replace key",
   remove: (name) => `Remove ${name}?`,
 };
 
-// Renaming a computer, changing a source's model or a provider's key, or
-// removing a source after saying what that does.
+// Checking a source again, renaming a computer, changing a source's model or
+// a provider's key, or removing a source after saying what that does. A
+// check, and the check a new model or key runs, is followed to its result.
 function EditSource(props: {
   editing?: Editing;
   // The home's sources as the page has them, for the check a change runs.
@@ -431,6 +424,7 @@ function EditSource(props: {
   // A new model or key is checked: the dialog follows it to its result.
   const [checked, setChecked] = useState<string>();
   const { start, cancel } = useAuthAttempt();
+  const { onDone } = props;
   const action = editing?.action;
 
   useEffect(() => {
@@ -447,6 +441,33 @@ function EditSource(props: {
     setWorking(false);
     setChecked(undefined);
     const opened = props.editing;
+    if (opened?.action === "check") {
+      // Asked at once: the dialog follows the check from its start.
+      // It gives up after ten seconds, as the page's other actions do, so
+      // the dialog never waits on a core that doesn't answer.
+      const controller = new AbortController();
+      const signal = AbortSignal.any([
+        controller.signal,
+        AbortSignal.timeout(10_000),
+      ]);
+      setWorking(true);
+      void coreJson<ModelsResponse>(
+        `/api/models/sources/${opened.source.id}/check`,
+        { method: "POST", signal },
+      )
+        .then((info) => {
+          if (controller.signal.aborted) return;
+          onDone(info);
+          setWorking(false);
+          setChecked(opened.source.id);
+        })
+        .catch(() => {
+          if (controller.signal.aborted) return;
+          setWorking(false);
+          setProblem("Couldn't start the check. Try again.");
+        });
+      return () => controller.abort();
+    }
     if (opened?.action !== "model") return;
     // Listed again, as a model may have been pulled since; a provider's
     // list needs its key, which only the core holds.
@@ -470,7 +491,7 @@ function EditSource(props: {
         if (!signal.aborted) setProblem("That did not work. Try again.");
       });
     return () => controller.abort();
-  }, [props.editing, cancel]);
+  }, [props.editing, cancel, onDone]);
 
   const close = () => {
     cancel();
@@ -545,16 +566,40 @@ function EditSource(props: {
           else props.onFocusFallback();
         }}
       >
-        {checked ? (
+        {checked || (action === "check" && working && source) ? (
           <SourceCheck
-            source={props.info.sources.find((each) => each.id === checked)}
+            source={
+              checked
+                ? props.info.sources.find((each) => each.id === checked)
+                : source && { ...source, checking: true }
+            }
             inUse={props.info.sources.find(
-              (each) => each.inUse && each.id !== checked,
+              (each) => each.inUse && each.id !== source?.id,
             )}
-            done={action === "key" ? "Key replaced" : "Model changed"}
+            done={
+              action === "key"
+                ? "Key replaced"
+                : action === "model"
+                  ? "Model changed"
+                  : undefined
+            }
             onClose={close}
             onChanged={props.onDone}
           />
+        ) : action === "check" ? (
+          <div className="flex flex-col gap-5">
+            <DialogHeader>
+              <DialogTitle>Check again</DialogTitle>
+            </DialogHeader>
+            {problem && (
+              <p role="alert" className="m-0 text-sm text-destructive">
+                {problem}
+              </p>
+            )}
+            <DialogFooter>
+              <Button onClick={close}>Done</Button>
+            </DialogFooter>
+          </div>
         ) : (
           <form onSubmit={submit} className="flex flex-col gap-5">
             <DialogHeader>

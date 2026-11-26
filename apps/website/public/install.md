@@ -175,7 +175,7 @@ Privacy & Security → Local Network allows Sanctum. On the machine,
 `sudo docker ps` lists `sanctum-manager` and `sanctum-core` when Sanctum
 runs. A firewall on the machine has to let in UDP port 5353 and TCP port 4100.
 
-**Zigbee does not start.** In the app, Settings → System → Status says what
+**Zigbee does not start.** In the app, Settings → System says what
 is missing. If it asks for the stick's adapter type, list the sticks the
 machine sees:
 

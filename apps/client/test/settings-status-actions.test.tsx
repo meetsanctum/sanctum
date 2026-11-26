@@ -11,9 +11,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CoreError, coreJson } from "../src/core-fetch";
+import type { CoreStatus } from "../src/core-status";
 import { clientDetail } from "../src/settings-clients";
 import { useGoing, type Going } from "../src/power-notice";
-import { StatusPage } from "../src/settings-status";
+import { SystemPage } from "../src/settings-status";
 import type { SpacePlan } from "../src/settings-status-space";
 import type { SystemStatus } from "../src/system-status";
 import type { HostPoint } from "../src/system-status-day";
@@ -42,6 +43,13 @@ const plan: SpacePlan = {
     newest: "dev-1040943",
   },
 };
+
+const builds = [
+  { version: "dev-1040943" },
+  { version: "dev-ed4f70b" },
+  { version: "dev-b7df8ce" },
+  { version: "dev-older" },
+];
 
 const client = (changes: Partial<ClientInfo>): ClientInfo => ({
   id: "mac",
@@ -101,6 +109,11 @@ beforeEach(() => {
       channel: "dev",
       update: null,
     }),
+    "/api/system/update/versions": async () => ({
+      channel: "dev",
+      versions: builds,
+    }),
+    "/api/system/restore": async () => ({ restore: null }),
     "/api/auth/clients": async () => [
       client({ current: true, connectedSince: today("09:00") }),
       client({
@@ -139,12 +152,21 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function render(timeZone?: string) {
+// The core away, so the page's Updates asks nothing of it here.
+const offline = { state: "offline" } as const;
+const online = { state: "online", version: "dev-ed4f70b" } as const;
+
+async function render(timeZone?: string, core: CoreStatus = offline) {
   await act(async () => {
     root.render(
       <HomeTimeZoneProvider timeZone={timeZone}>
         <TemperatureUnitProvider unit="celsius">
-          <StatusPage apps={statusApps} onDone={() => {}} />
+          <SystemPage
+            apps={statusApps}
+            core={core}
+            onUpdating={() => {}}
+            onDone={() => {}}
+          />
         </TemperatureUnitProvider>
       </HomeTimeZoneProvider>,
     );
@@ -168,6 +190,14 @@ async function press(button: HTMLButtonElement) {
   await act(async () => {});
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 describe("restart and shut down", () => {
   it("shows the power notice from the POST even without a live broadcast", async () => {
     const live = createLiveFeed();
@@ -175,8 +205,10 @@ describe("restart and shut down", () => {
     function Screen() {
       going = useGoing(live, "online");
       return (
-        <StatusPage
+        <SystemPage
           apps={statusApps}
+          core={offline}
+          onUpdating={() => {}}
           onDone={() => {}}
           onPowerAccepted={(action) =>
             live.publish({ type: "system", going: action })
@@ -245,7 +277,7 @@ describe("restart and shut down", () => {
         log: [],
       },
     });
-    await render();
+    await render(undefined, online);
     const sanctum = section("status-sanctum");
     expect(sanctum.textContent).toContain(
       "Restart and Shut down wait until the update has finished",
@@ -256,6 +288,83 @@ describe("restart and shut down", () => {
 });
 
 describe("free up space", () => {
+  it("waits for a fresh cleanup plan after an update", async () => {
+    vi.useFakeTimers();
+    await render(undefined, online);
+    const storage = section("status-storage");
+    await press(buttonIn(storage, "Free up space"));
+    expect(dialog()?.textContent).toContain("dev-b7df8ce before it");
+
+    const refreshed = deferred<SpacePlan>();
+    answers["/api/system/space"] = () => refreshed.promise;
+    answers["/api/system/update"] = async (): Promise<UpdateStatus> => ({
+      version: "dev-1040943",
+      channel: "dev",
+      update: {
+        id: "u1",
+        version: "dev-1040943",
+        from: "dev-ed4f70b",
+        startedAt: "2026-11-02T22:00:00Z",
+        finishedAt: "2026-11-02T22:02:00Z",
+        step: "done",
+        outcome: "updated",
+        error: null,
+        log: [],
+      },
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(buttonIn(dialog()!, "Free up space").disabled).toBe(true);
+    await press(buttonIn(dialog()!, "Cancel"));
+    expect(buttonIn(storage, "Free up space").disabled).toBe(true);
+
+    await act(async () =>
+      refreshed.resolve({
+        ...plan,
+        keeps: { running: "dev-1040943", before: "dev-ed4f70b", newest: null },
+      }),
+    );
+    await press(buttonIn(storage, "Free up space"));
+    expect(dialog()?.textContent).toContain("dev-ed4f70b before it");
+    expect(dialog()?.textContent).not.toContain("dev-b7df8ce");
+    expect(buttonIn(dialog()!, "Free up space").disabled).toBe(false);
+  });
+
+  it("drops a chosen build that cleanup removed before allowing another update", async () => {
+    await render(undefined, online);
+    const updates = section("status-updates");
+    const buildsRow = () =>
+      [...updates.querySelectorAll("button")].find((button) =>
+        button.textContent?.startsWith("Builds"),
+      )!;
+    await press(buildsRow());
+    await act(async () =>
+      updates
+        .querySelector<HTMLInputElement>('input[value="dev-older"]')!
+        .click(),
+    );
+    await press(buildsRow());
+    expect(buttonIn(updates, "Update to dev-older").disabled).toBe(false);
+
+    const freed = deferred<{ freed: number }>();
+    const refreshed = deferred<{
+      channel: string;
+      versions: typeof builds;
+    }>();
+    answers["/api/system/space/free"] = () => freed.promise;
+    answers["/api/system/update/versions"] = () => refreshed.promise;
+    await press(buttonIn(section("status-storage"), "Free up space"));
+    await press(buttonIn(dialog()!, "Free up space"));
+    expect(buttonIn(updates, "Update to dev-older").disabled).toBe(true);
+    await act(async () => freed.resolve({ freed: 100 }));
+    expect(buttonIn(updates, "Update to dev-older").disabled).toBe(true);
+
+    await act(async () =>
+      refreshed.resolve({ channel: "dev", versions: builds.slice(0, 3) }),
+    );
+    expect(buildsRow().textContent).toBe("Buildsdev-1040943 chosen · 3 builds");
+    expect(buttonIn(updates, "Update to dev-1040943").disabled).toBe(false);
+  });
+
   it("retries when the manager could not count old versions on opening", async () => {
     vi.useFakeTimers();
     answers["/api/system/space"] = async () => {
@@ -333,6 +442,29 @@ describe("free up space", () => {
     const verdict = section("status-sanctum").querySelector('[role="status"]')!;
     expect(buttonIn(verdict, "Free up space")).toBeDefined();
   });
+});
+
+it("shows a restore notice while host status is loading", async () => {
+  const hostStatus = deferred<SystemStatus>();
+  answers["/api/system/status"] = () => hostStatus.promise;
+  answers["/api/system/restore"] = async () => ({
+    restore: { restoredAt: "2026-11-02T22:00:00Z", backupAt: null },
+  });
+  await render(undefined, online);
+  const sanctum = section("status-sanctum");
+  expect(sanctum.querySelector('[aria-busy="true"]')).not.toBeNull();
+  expect(sanctum.textContent).toContain(
+    "Restored from a backup. All devices were signed out.",
+  );
+
+  await act(async () => hostStatus.resolve(status));
+  expect(sanctum.querySelector('[aria-busy="true"]')).toBeNull();
+  expect(sanctum.textContent).toContain("Restored from a backup.");
+  expect(
+    vi
+      .mocked(coreJson)
+      .mock.calls.filter(([path]) => path === "/api/system/restore"),
+  ).toHaveLength(1);
 });
 
 describe("the last 24 hours", () => {

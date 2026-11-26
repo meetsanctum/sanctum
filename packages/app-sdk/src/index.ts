@@ -75,6 +75,7 @@ export * from "./entities.js";
 export * from "./firmware.js";
 export * from "./history.js";
 export * from "./lights.js";
+export * from "./listening.js";
 export * from "./live.js";
 export * from "./media.js";
 export * from "./models.js";

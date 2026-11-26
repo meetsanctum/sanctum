@@ -183,6 +183,12 @@ beforeEach(() => {
       ];
       return info() as never;
     }
+    if (path === "/api/models/sources/mac/check" && method === "POST") {
+      page.sources = page.sources.map((source) =>
+        source.id === "mac" ? { ...source, checking: true } : source,
+      );
+      return info() as never;
+    }
     if (path === "/api/models/sources/mac/models") {
       return {
         found: true,

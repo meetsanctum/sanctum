@@ -289,7 +289,7 @@ describe("two stacks on one Docker", () => {
     300_000,
   );
 
-  it("reports only its own containers in Status", async () => {
+  it("reports only its own containers in System", async () => {
     const { body } = await one.api("GET", "/api/host/status");
     const { memory } = body as {
       memory: { containers: Array<{ role: string }> };

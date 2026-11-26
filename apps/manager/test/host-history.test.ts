@@ -8,7 +8,7 @@ import { createHostReadings } from "../src/host/readings.js";
 import { createHostStatus } from "../src/host/status.js";
 import { createServer } from "../src/server.js";
 
-// Settings → Status' last 24 hours: each 5 minutes' mean of the samples the
+// Settings → System's last 24 hours: each 5 minutes' mean of the samples the
 // manager takes every 10 seconds, kept across its restarts.
 
 const servers: ReturnType<typeof createServer>[] = [];
