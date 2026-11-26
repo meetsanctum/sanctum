@@ -301,7 +301,7 @@ function DevicesHeading(props: { id: string; level: 2 | 3; children: string }) {
   return (
     <Heading
       id={props.id}
-      className="m-0 text-[13px] leading-[18px] font-medium text-white/65"
+      className="m-0 text-[13px] leading-[18px] font-medium text-(--tile-secondary)"
     >
       {props.children}
     </Heading>
