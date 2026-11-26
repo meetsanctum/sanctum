@@ -276,11 +276,11 @@ function Updates(props: {
     );
   }
 
-  // The core that answers runs the new version, and the manager is away:
-  // it is replacing itself, the last step.
   // The last update, ended before this screen opened.
   const lastUpdate =
     update && !running && update.id !== followed ? update : undefined;
+  // The core that answers runs the new version, and the manager is away:
+  // it is replacing itself, the last step.
   const step: UpdateStep =
     update && running && isWaiting && coreVersion === update.version
       ? "finish"
