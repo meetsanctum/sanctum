@@ -117,7 +117,7 @@ describe("the Status page", () => {
     ]);
   });
 
-  it("says what takes the space: named parts by size, then apps, with the system last", async () => {
+  it("says what takes the space: Sanctum's parts by size, each app with its icon, the system last", async () => {
     await render();
 
     expect(section("status-storage")?.textContent).toContain(
@@ -125,15 +125,15 @@ describe("the Status page", () => {
     );
     expect(parts("status-storage")).toEqual([
       "Dev builds1.35 GB",
-      "Software1.21 GB",
+      "Sanctum1.21 GB",
       "Home's data28.7 MB",
       "Zigbee330 KB",
       "Moods180 KB",
-      "System and other5.57 GB",
+      "System5.57 GB",
     ]);
     const bar = section("status-storage")!.querySelector('[role="img"]')!;
     expect(bar.getAttribute("aria-label")).toBe(
-      "Storage, 6.92 GB free of 15.1 GB: Dev builds 1.35 GB, Software 1.21 GB, Home's data 28.7 MB, Zigbee 330 KB, Moods 180 KB, System and other 5.57 GB",
+      "Storage, 6.92 GB free of 15.1 GB: Dev builds 1.35 GB, Sanctum 1.21 GB, Home's data 28.7 MB, Zigbee 330 KB, Moods 180 KB, System 5.57 GB",
     );
     // In the brand's colours, apps in their own; the free space is the track.
     expect(
@@ -162,7 +162,7 @@ describe("the Status page", () => {
       "Zigbee132 MB",
       "Dev builds43.7 MB",
       "Messaging7.82 MB",
-      "System and other175 MB",
+      "System175 MB",
     ]);
   });
 
@@ -235,7 +235,7 @@ describe("the Status page", () => {
         "Dev builds18 MB",
         "Zigbee236 MB",
         "Weather34 MB",
-        "System and other312 MB",
+        "System312 MB",
       ]);
     });
 
@@ -261,7 +261,7 @@ describe("the Status page", () => {
 
       const bar = section("status-memory")!.querySelector('[role="img"]')!;
       expect(bar.getAttribute("aria-label")).toBe(
-        "Memory, 7.02 GB free of 7.64 GB: Sanctum 219 MB, Dev builds 18 MB, Zigbee 236 MB, Weather 34 MB, System and other 312 MB",
+        "Memory, 7.02 GB free of 7.64 GB: Sanctum 219 MB, Dev builds 18 MB, Zigbee 236 MB, Weather 34 MB, System 312 MB",
       );
       const segments = [...bar.querySelectorAll("span")];
       expect(

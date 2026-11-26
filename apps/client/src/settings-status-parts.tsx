@@ -127,10 +127,12 @@ function storageParts(parts: StoragePart[], apps: readonly AppInfo[]): Part[] {
           colour: "bg-pink",
         });
         break;
+      // The images and the apps' packages: on a host that runs Sanctum
+      // they are Sanctum's, so the household sees them as Sanctum.
       case "software":
         named.push({
           key: "software",
-          name: "Software",
+          name: productName,
           bytes: part.bytes,
           colour: "bg-purple",
         });
@@ -157,7 +159,7 @@ function storageParts(parts: StoragePart[], apps: readonly AppInfo[]): Part[] {
       case "system":
         system = {
           key: "system",
-          name: "System and other",
+          name: "System",
           bytes: part.bytes,
           colour: systemColour,
         };
@@ -222,7 +224,7 @@ function memoryParts(parts: MemoryPart[], apps: readonly AppInfo[]): Part[] {
       case "system":
         system = {
           key: "system",
-          name: "System and other",
+          name: "System",
           bytes: part.bytes,
           colour: systemColour,
         };
