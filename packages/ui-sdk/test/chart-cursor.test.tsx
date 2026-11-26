@@ -209,8 +209,9 @@ describe("a chart's cursor", () => {
     ).toBe("true");
     // A tap with no move pins as anywhere else.
     const shown = container.querySelector(
-      '[role="tabpanel"]:not([inert]) [role="group"]',
+      '[role="tabpanel"][id$="-second"] [role="group"]',
     )!;
+    expect(shown.closest("[inert]")).toBeNull();
     await pointer("pointerdown", dayX(3), "touch", shown);
     await pointer("pointerup", dayX(3), "touch", shown);
     await click(dayX(3), shown);

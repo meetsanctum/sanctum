@@ -15,6 +15,7 @@ import {
 } from "react";
 
 import { ScrollArea } from "./components/ui/scroll-area";
+import { isMotionReduced } from "./reduce-motion";
 
 // Pages side by side: a finger swipes between them, and so does a mouse;
 // along the bottom a tab for each, an icon with a dot under the current one,
@@ -28,6 +29,10 @@ import { ScrollArea } from "./components/ui/scroll-area";
 // turn the page, in px.
 const swipeAfter = 10;
 const turnAfter = 60;
+// How long the pages slide to their places, in ms, and how: their
+// duration-300 and ease-[cubic-bezier(0.22,1,0.36,1)].
+const slide = 300;
+const slideEase = "cubic-bezier(0.22,1,0.36,1)";
 // How far the tabs fade out at the sides, and the room kept for it either
 // side of them, in px.
 const tabsFade = 24;
@@ -108,7 +113,21 @@ export function SwipePages(props: {
   const cell = useRef<HTMLDivElement>(null);
   const sections = useRef<(HTMLElement | null)[]>([]);
   const dragOffset = useRef<number | null>(null);
+  // Under Reduce motion the pages change in place, but those a finger or a
+  // mouse swiped slide on to their places when it lets go, as its own
+  // movement carried on: stopping them where it left them would have the
+  // page jump.
+  const glide = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const endGlide = () => {
+    clearTimeout(glide.current);
+    glide.current = undefined;
+    for (const section of sections.current) {
+      if (section) section.style.transition = "";
+    }
+  };
+  useEffect(() => () => clearTimeout(glide.current), []);
   const follow = (dx: number | null) => {
+    if (glide.current !== undefined) endGlide();
     dragOffset.current = dx;
     const element = cell.current;
     if (!element) return;
@@ -128,9 +147,27 @@ export function SwipePages(props: {
   // so what opens draws only what is seen first: on a slow tablet a
   // device's history and activity cost as much as the rest together.
   const [drawsAll, setDrawsAll] = useState(false);
+  // The page the pages slide away from stays reachable until they have
+  // slid, while the one they slide to is reachable at once, so a tap on it
+  // lands there: making a page unreachable has every element on it looked
+  // at again, which on a slow device would hold the slide back.
+  const [leaving, setLeaving] = useState<string>();
+  useEffect(() => {
+    if (leaving === undefined) return;
+    const later = setTimeout(() => setLeaving(undefined), slide);
+    return () => clearTimeout(later);
+  }, [leaving, page]);
   const setPage = (index: number) => {
-    if (index !== page) setDrawsAll(true);
+    if (index !== page) {
+      setDrawsAll(true);
+      const slides = !isMotionReduced() || glide.current !== undefined;
+      setLeaving(slides ? pages[page]?.id : undefined);
+    }
     setChosen({ id: pages[index]?.id, index });
+  };
+  const selectTab = (index: number) => {
+    if (glide.current !== undefined) endGlide();
+    setPage(index);
   };
   useEffect(() => {
     if (drawsAll) return;
@@ -152,18 +189,41 @@ export function SwipePages(props: {
   }, [pageId]);
 
   // The current tab scrolls into view, clear of the fade, however the page
-  // was chosen: a swipe, a click or a key.
-  useEffect(() => {
+  // was chosen: a swipe, a click or a key. Only tabs too many for the width
+  // are measured for it, as the row's size says when it changes: measuring
+  // as the page changes would have a slow device lay the detail out before
+  // the pages start to slide.
+  const tabsOverflow = useRef(false);
+  const showTab = useEffectEvent(() => {
     const row = tabRow.current;
     const tab = tabs.current[page];
-    if (!row || !tab) return;
+    if (!row || !tab || !tabsOverflow.current) return;
     const start = tab.offsetLeft - tabsFade;
     const end = tab.offsetLeft + tab.offsetWidth + tabsFade;
     if (start < row.scrollLeft) row.scrollLeft = start;
     else if (end > row.scrollLeft + row.clientWidth) {
       row.scrollLeft = end - row.clientWidth;
     }
-  }, [page]);
+  });
+  useEffect(() => showTab(), [page]);
+  const hasTabs = pages.length > 1;
+  useEffect(() => {
+    const row = tabRow.current;
+    if (!hasTabs || !row) return;
+    // Without a way to hear of the row's size, every page change measures.
+    if (typeof ResizeObserver === "undefined") {
+      tabsOverflow.current = true;
+      showTab();
+      return;
+    }
+    const resized = new ResizeObserver(() => {
+      tabsOverflow.current = row.scrollWidth > row.clientWidth;
+      showTab();
+    });
+    resized.observe(row);
+    if (row.firstElementChild) resized.observe(row.firstElementChild);
+    return () => resized.disconnect();
+  }, [hasTabs]);
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.isPrimary === false) return;
@@ -210,20 +270,26 @@ export function SwipePages(props: {
       (page === 0 && across > 0) || (page === pages.length - 1 && across < 0);
     follow(edge ? across / 3 : across);
   };
-  const finish = (across: number) => {
+  const finish = (at: Swipe, across: number) => {
     swipe.current = null;
+    if (!at.active) return;
     follow(null);
+    if (isMotionReduced()) {
+      for (const section of sections.current) {
+        if (!section) continue;
+        section.style.transition = ["transform", "translate"]
+          .map((property) => `${property} ${slide}ms ${slideEase}`)
+          .join(", ");
+      }
+      glide.current = setTimeout(endGlide, slide);
+    }
     if (across < -turnAfter) setPage(Math.min(pages.length - 1, page + 1));
     else if (across > turnAfter) setPage(Math.max(0, page - 1));
   };
   const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
     const at = swipe.current;
     if (!at || at.pointerId !== event.pointerId) return;
-    if (!at.active) {
-      swipe.current = null;
-      return;
-    }
-    finish(event.clientX - at.x);
+    finish(at, event.clientX - at.x);
   };
   const onPointerCancel = (event: PointerEvent<HTMLDivElement>) => {
     const at = swipe.current;
@@ -232,7 +298,7 @@ export function SwipePages(props: {
     // once it is under way comes from around the page, such as a host app
     // that reports a lifted finger as cancelled: it ends where the last
     // move left it.
-    finish(at.active ? at.across : 0);
+    finish(at, at.across);
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -248,7 +314,7 @@ export function SwipePages(props: {
               : null;
     if (next === null || next < 0 || next >= pages.length) return;
     event.preventDefault();
-    setPage(next);
+    selectTab(next);
     tabs.current[next]?.focus();
   };
 
@@ -313,8 +379,9 @@ export function SwipePages(props: {
               aria-labelledby={
                 pages.length > 1 ? `${id}-${each.id}-tab` : undefined
               }
-              // Only the page on show can be reached.
-              inert={index !== page}
+              // Only the page on show can be reached, and the one left
+              // until the pages have slid.
+              inert={index !== page && each.id !== leaving}
               style={{
                 transform: `translateX(${(index - page) * 100}%)`,
               }}
@@ -373,7 +440,7 @@ export function SwipePages(props: {
                   aria-selected={current}
                   aria-controls={`${id}-${each.id}`}
                   tabIndex={current ? 0 : -1}
-                  onClick={() => setPage(index)}
+                  onClick={() => selectTab(index)}
                   className="group relative grid size-11 place-items-center rounded-full text-white/45 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 aria-selected:text-white"
                 >
                   <Icon aria-hidden="true" className="size-5" />

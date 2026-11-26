@@ -689,6 +689,15 @@ describe("a light with a button and a temperature sensor", () => {
 
     expect(tabs()).toContainEqual(["Motion", "false"]);
     expect(tabs()).toContainEqual(["Readings", "true"]);
+    const selectedTab = dialog().querySelector(
+      '[role="tab"][aria-selected="true"]',
+    )!;
+    const reachable = [
+      ...dialog().querySelectorAll('[role="tabpanel"]:not([inert])'),
+    ];
+    expect(reachable.map((page) => page.id)).toEqual([
+      selectedTab.getAttribute("aria-controls"),
+    ]);
   });
 
   it("opens a button's Activity when no app provides its page", async () => {
