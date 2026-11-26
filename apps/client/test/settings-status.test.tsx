@@ -275,6 +275,20 @@ describe("the Status page", () => {
       );
     });
 
+    it("names Piper, which Sanctum runs for its speech, in a row of its own", async () => {
+      await showMemory(
+        [
+          ...everything,
+          { kind: "service", service: "piper", bytes: 302 * mebibyte },
+        ],
+        [moods, zigbee, apart(weather)],
+      );
+
+      expect(parts("status-memory")[0]).toBe("Piper302 MB");
+      const bar = section("status-memory")!.querySelector('[role="img"]')!;
+      expect(bar.querySelector("span")?.className).toContain("bg-yellow");
+    });
+
     it("shows each app's icon, as Storage does", async () => {
       await showMemory(everything, [moods, zigbee, apart(weather)]);
 

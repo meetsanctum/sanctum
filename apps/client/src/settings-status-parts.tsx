@@ -37,6 +37,7 @@ const serviceColours: Record<string, string> = {
   zigbee2mqtt: "bg-gray",
   mosquitto: "bg-orange",
   ollama: "bg-purple",
+  piper: "bg-yellow",
 };
 
 const systemColour = "bg-foreground/24";

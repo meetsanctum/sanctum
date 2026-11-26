@@ -151,6 +151,7 @@ export const serviceNames: Record<string, string> = {
   zigbee2mqtt: "Zigbee",
   mosquitto: "Messaging",
   ollama: "Ollama",
+  piper: "Piper",
 };
 
 export const serviceName = (service: string) =>
