@@ -28,14 +28,23 @@ import {
 import { coreJson } from "../core-fetch";
 import { AddSanctum, ollamaAppId } from "./add-sanctum";
 import type { ModelsResponse } from "./data";
-import { problemText, providerNames, sizeText } from "./words";
+import {
+  availablePlaces,
+  placeDetails,
+  placeNames,
+  placePrivacy,
+  problemText,
+  providerNames,
+  sizeText,
+  type Place,
+} from "./words";
 
 // Adding a source of the home's AI model: first where it runs, then Ollama
 // on Sanctum (add-sanctum.tsx), a computer's address, which Sanctum looks at
 // for Ollama and its models, or a provider's key, which Sanctum checks and
 // lists the models of. Adding it runs a check, whose answer the page shows.
 
-type Where = "sanctum" | "computer" | "provider";
+type Where = Place;
 type Found = { models: ModelChoice[]; address?: string };
 
 const help = "m-0 text-[13px] leading-[18px] text-muted-foreground";
@@ -46,9 +55,6 @@ const providerOptions = modelProviders.map((value) => ({
   value,
   label: providerNames[value],
 }));
-const providerList = new Intl.ListFormat("en-GB", {
-  type: "disjunction",
-}).format(providerOptions.map(({ label }) => label));
 
 export function AddSource(props: {
   open: boolean;
@@ -58,13 +64,16 @@ export function AddSource(props: {
   // The home's apps, as the shell has them, for whether Ollama is there.
   apps: readonly AppInfo[];
   supportsSanctum: boolean;
+  // Where to start, when the page already asked where it runs; otherwise
+  // the dialog asks first.
+  start?: Where;
   onAppAdded?: (app: AppInfo) => void;
   // Opens an app's page, as Ollama's.
   onOpenApp?: (appId: string) => void;
 }) {
   const [step, setStep] = useState<"where" | Where>("where");
-  const { supportsSanctum } = props;
-  const defaultSource = supportsSanctum ? "sanctum" : "computer";
+  const places = availablePlaces(props.supportsSanctum);
+  const defaultSource = places[0];
   const [where, setWhere] = useState<Where>(defaultSource);
   const [address, setAddress] = useState("");
   const [computer, setComputer] = useState("");
@@ -86,8 +95,8 @@ export function AddSource(props: {
   useEffect(() => {
     if (!props.open) return;
     cancel();
-    setStep("where");
-    setWhere(defaultSource);
+    setStep(props.start ?? "where");
+    setWhere(props.start ?? defaultSource);
     setAddress("");
     setComputer("");
     setProvider("openrouter");
@@ -97,7 +106,7 @@ export function AddSource(props: {
     setProblem(undefined);
     setLooking(false);
     setAdding(false);
-  }, [props.open, defaultSource, cancel]);
+  }, [props.open, props.start, defaultSource, cancel]);
 
   // What was found is for what was typed: typing again asks again.
   const forget = () => {
@@ -248,66 +257,31 @@ export function AddSource(props: {
             <DialogHeader>
               <DialogTitle>Add a source</DialogTitle>
               <DialogDescription>
-                Where your home's AI model runs. You can add more than one and
-                choose which is in use.
+                Choose where your home's AI model runs. If you add more than
+                one, you choose which one is in use.
               </DialogDescription>
             </DialogHeader>
             <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
               <legend className="sr-only">Where it runs</legend>
-              {supportsSanctum && (
-                <label className={choice}>
+              {places.map((place) => (
+                <label key={place} className={choice}>
                   <input
                     type="radio"
                     name="where"
-                    checked={where === "sanctum"}
-                    onChange={() => setWhere("sanctum")}
+                    checked={where === place}
+                    onChange={() => setWhere(place)}
                     className="mt-0.5 size-4 shrink-0 accent-primary"
                   />
                   <span className="flex flex-col gap-0.5 leading-tight">
                     <span className="text-sm font-medium">
-                      On {productName}
+                      {placeNames[place]}
                     </span>
                     <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
-                      With the Ollama app. Your data never leaves your home.
+                      {placeDetails[place]} {placePrivacy[place]}.
                     </span>
                   </span>
                 </label>
-              )}
-              <label className={choice}>
-                <input
-                  type="radio"
-                  name="where"
-                  checked={where === "computer"}
-                  onChange={() => setWhere("computer")}
-                  className="mt-0.5 size-4 shrink-0 accent-primary"
-                />
-                <span className="flex flex-col gap-0.5 leading-tight">
-                  <span className="text-sm font-medium">
-                    On a computer in your home
-                  </span>
-                  <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
-                    A Mac or PC that runs a local model with Ollama.
-                  </span>
-                </span>
-              </label>
-              <label className={choice}>
-                <input
-                  type="radio"
-                  name="where"
-                  checked={where === "provider"}
-                  onChange={() => setWhere("provider")}
-                  className="mt-0.5 size-4 shrink-0 accent-primary"
-                />
-                <span className="flex flex-col gap-0.5 leading-tight">
-                  <span className="text-sm font-medium">
-                    With an AI provider
-                  </span>
-                  <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
-                    {providerList}, with your own API key. Faster, but what's
-                    asked leaves your home.
-                  </span>
-                </span>
-              </label>
+              ))}
             </fieldset>
             <DialogFooter>
               <Button

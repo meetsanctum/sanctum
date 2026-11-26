@@ -132,6 +132,9 @@ const buttonVariants = cva(
         // slider, such as a volume's + over its −: 96 px wide, each half
         // 144 px tall, rounded at its own end only.
         step: "h-36 w-24 rounded-none border-0 first:rounded-t-2xl last:rounded-b-2xl [&_svg:not([class*='size-'])]:size-7",
+        // A small card among others, its icon with its words, which lay
+        // themselves out, such as a place in Settings to start from.
+        card: "h-auto w-full justify-start rounded-md p-3.5 text-start font-normal whitespace-normal",
         // A card of its own, its words centred over what it leads to.
         choice:
           "h-auto min-h-77 w-full flex-col justify-start gap-0 rounded-lg px-5.5 pt-8 pb-5.5 text-center font-normal whitespace-normal",
