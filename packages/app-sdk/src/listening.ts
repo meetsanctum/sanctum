@@ -36,7 +36,7 @@ export const listenReadWaitMs = 5_000;
 
 /** Why the core doesn't take a run: the speaker shows it was declined. */
 export const listenRefusals = [
-  // No audio handler is active.
+  // Nothing on Sanctum hears runs.
   "off",
   // Too many runs in the home at once.
   "limited",
