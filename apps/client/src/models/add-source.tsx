@@ -264,8 +264,8 @@ export function AddSource(props: {
     <div className="flex flex-col gap-1 rounded-md bg-card px-4 py-3">
       <span className="text-sm font-medium">Adding it runs a check</span>
       <p className={cardLine}>
-        {productName} asks the model one short question to see whether it
-        answers and requests a test tool.
+        {productName} asks the model one short question to see that it answers
+        and can use your home's tools.
       </p>
       {step === "provider" && (
         <p className={cardLine}>

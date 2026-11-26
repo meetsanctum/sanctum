@@ -114,12 +114,12 @@ describe("A source's check in the dialog", () => {
     expect(text()).toContain("This can take a minute while the model loads.");
   });
 
-  it("is ready as the home's AI model once it requested the test tool", async () => {
+  it("is ready as the home's AI model once it used the tool", async () => {
     await showCheck({ ...added, inUse: true }, undefined);
     expect(text()).toContain("OpenAI: GPT-5 Mini is ready");
     expect(text()).toContain("It's now your home's AI model.");
     expect(text()).toContain(
-      "It answered in 1.2 s and requested the test tool.",
+      "It answered in 1.2 s and used your home's tools.",
     );
     expect(text()).toContain("The check used 312 tokens");
     expect(button("Use it now")).toBeUndefined();
@@ -130,7 +130,7 @@ describe("A source's check in the dialog", () => {
     const { onChanged } = await showCheck(added);
     expect(text()).toContain("Your home still uses Qwen3 8B on Office Mac.");
     expect(text()).toContain(
-      "Switching to this source runs another check and may incur token charges.",
+      "Use it now checks it again, which uses a few hundred tokens.",
     );
     await click(button("Use it now"));
     expect(coreJson).toHaveBeenCalledWith(
@@ -154,9 +154,7 @@ describe("A source's check in the dialog", () => {
     expect(text()).toContain("OpenAI: GPT-5 Mini didn't answer");
     expect(text()).toContain("OpenRouter took too long to answer.");
     expect(text()).toContain("The check used no tokens");
-    expect(text()).toContain(
-      "Checking again sends a new question and may incur token charges.",
-    );
+    expect(text()).toContain("Checking it again uses a few hundred tokens.");
     await click(button("Check again"));
     expect(coreJson).toHaveBeenCalledWith(
       "/api/models/sources/added/check",

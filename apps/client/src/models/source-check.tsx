@@ -146,7 +146,7 @@ export function SourceCheck(props: {
               aria-hidden="true"
               className="mx-0.5 size-3 rounded-full border-[1.5px] border-current opacity-70"
             />
-            Seeing whether it requests the test tool
+            Seeing whether it uses the tool
           </li>
         </ol>
         <p className={help}>
@@ -176,9 +176,7 @@ export function SourceCheck(props: {
       "It stays in your sources.",
     ];
     if (!inHome(source)) {
-      lines.push(
-        "Checking again sends a new question and may incur token charges.",
-      );
+      lines.push("Checking it again uses a few hundred tokens.");
     }
     return (
       <Result
@@ -215,7 +213,7 @@ export function SourceCheck(props: {
         badge={<TriangleAlert className="size-6 text-(--sun-text)" />}
         title={`${source.modelName} may not work well`}
         lines={[
-          "It answered without requesting the test tool, so it may have trouble acting on your devices.",
+          "It answered, but didn't use your home's tools, so it may not act on your devices.",
           "A model that supports tools works better.",
         ]}
         tokens={tokens}
@@ -240,14 +238,11 @@ export function SourceCheck(props: {
       : props.inUse
         ? `Your home still uses ${sourceName(props.inUse)}.`
         : "No source is in use.",
-    `It answered in ${seconds} s and requested the test tool.`,
+    `It answered in ${seconds} s and used your home's tools.`,
   ];
-  if (!source.inUse) {
-    lines.push(
-      inHome(source)
-        ? "Switching to this source runs another check."
-        : "Switching to this source runs another check and may incur token charges.",
-    );
+  // Use it now checks it again, which a provider charges for.
+  if (!source.inUse && !inHome(source)) {
+    lines.push("Use it now checks it again, which uses a few hundred tokens.");
   }
   return (
     <Result

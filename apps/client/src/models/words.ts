@@ -179,12 +179,12 @@ export function checkLine(
   switch (check.outcome) {
     case "answered":
       return {
-        text: `Answered in ${((check.firstWordMs ?? 0) / 1000).toFixed(1)} s and requested the test tool · ${checked}`,
+        text: `Answered in ${((check.firstWordMs ?? 0) / 1000).toFixed(1)} s and used the tool · ${checked}`,
         tone: "good",
       };
     case "noTool":
       return {
-        text: "Answered without requesting the test tool and may have trouble acting on your devices",
+        text: "Answered, but may not use your home's AI tools well or act on your devices",
         tone: "plain",
       };
     case "failed":
