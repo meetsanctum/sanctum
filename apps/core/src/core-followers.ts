@@ -12,7 +12,7 @@ import type { History } from "./history/history.js";
 import type { createLiveUpdates } from "./live-updates.js";
 import type { Speech } from "./speech/speech.js";
 import { hasListeningPart } from "./speech/hearing.js";
-import { moodEntityType, type Learning } from "./speech/learning.js";
+import type { Learning } from "./speech/learning.js";
 import type { Workflows } from "./workflows/workflows.js";
 
 // The core's event followers, in delivery order. Handlers call through so
@@ -77,12 +77,6 @@ export function setCoreFollowers(
           list.map(({ name }) => name).sort(),
         );
       if (!isDeepStrictEqual(names(before), names(after))) learning.changed();
-    },
-    "entity.changed": ({ before, after }) => {
-      const previous =
-        before?.type === moodEntityType ? before.name : undefined;
-      const next = after?.type === moodEntityType ? after.name : undefined;
-      if (previous !== next) learning.changed();
     },
   };
   eventBus.setFollowers([

@@ -5,11 +5,10 @@ import {
 } from "@meetsanctum/app-sdk";
 
 import type { AgentsCanUse } from "../agents/can-use.js";
-import type { Entities } from "../entities/entities.js";
 import type { ManagerClient } from "../manager.js";
 import { createAnnouncements } from "./announcements.js";
 import { assembleHearing, hasListeningPart } from "./hearing.js";
-import { createLearning, moodEntityType } from "./learning.js";
+import { createLearning } from "./learning.js";
 import { createSpeech, speechLanguages, speechService } from "./speech.js";
 import { spokenPhrases } from "./spoken.js";
 
@@ -33,7 +32,6 @@ export function assembleSpeakerAudio(
     },
   options: Pick<HearingOptions, "devices" | "places" | "apps" | "record"> & {
     canUse: Pick<AgentsCanUse, "areaOn">;
-    entities: Pick<Entities, "list">;
   },
 ) {
   const { manager } = config;
@@ -64,9 +62,8 @@ export function assembleSpeakerAudio(
                   device.capabilities.some((part) => part.kind === "light"),
                 )
                 .map((device) => device.name),
-              mood: options.entities
-                .list({ type: moodEntityType })
-                .map((mood) => mood.name),
+              // A standard mood type will name the home's moods.
+              mood: [],
             };
           },
           language,

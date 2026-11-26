@@ -19,9 +19,6 @@ export const reasonMaxLength = 80;
 /** When it is asked stays as short as a reason. */
 export const askedMaxLength = 60;
 
-/** Lets a driver submit its speakers' audio as Assistant requests. */
-export const speechListenPermission = "speech.listen";
-
 export const permissionRequestSchema = z
   .strictObject({
     id: z.string().min(1),
@@ -51,12 +48,7 @@ export const permissionRequestSchema = z
   .refine((request) => !request.needed || request.startsOn === undefined, {
     message: "a permission the app needs is granted already",
     path: ["startsOn"],
-  })
-  .refine(
-    ({ id, needed, startsOn }) =>
-      id !== speechListenPermission || (!needed && !startsOn),
-    { message: "Listening needs an explicit household grant", path: ["id"] },
-  );
+  });
 
 /** One permission an app asks for, as its definition declares it. */
 export type PermissionRequest = z.input<typeof permissionRequestSchema>;

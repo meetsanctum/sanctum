@@ -477,7 +477,6 @@ export async function createModules(
   } = assembleSpeakerAudio(options, {
     canUse: agentsCanUse,
     devices,
-    entities,
     places,
     apps: () => apps,
     record: activity.for("devices"),

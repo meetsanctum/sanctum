@@ -2,15 +2,12 @@ import {
   aiAssistantPermission,
   assistantAppId,
   defineApp,
-  defineEntityType,
   registerPermission,
-  speechListenPermission,
   type AppContext,
   type ListenStep,
   type VoiceRun,
 } from "@meetsanctum/app-sdk";
 import { expect, it, vi } from "vitest";
-import { z } from "zod";
 
 import { base, running, useCleanUps } from "./app-apart-support.js";
 import { fakeManager } from "./manager-support.js";
@@ -51,19 +48,12 @@ it("teaches the Assistant's sentences and hears a speaker's words with them", as
     },
   });
   let driverCtx: AppContext | undefined;
-  const mood = defineEntityType({
-    id: "moods.mood",
-    title: "Mood",
-    state: z.object({}),
-  });
   const driver = defineApp({
     ...base,
     id: "sanctum.example",
     permissions: [
       { id: registerPermission, reason: "To register devices.", needed: true },
-      { id: speechListenPermission, reason: "To send voice requests." },
     ],
-    provides: { entities: [mood] },
     actions: [],
     start: async (ctx) => {
       driverCtx = ctx;
@@ -151,14 +141,6 @@ it("teaches the Assistant's sentences and hears a speaker's words with them", as
 
     const wake = () =>
       driverCtx!.audio.listen("speaker", { wakeWord: "Okay Nabu" });
-    await expect(wake()).rejects.toThrow(speechListenPermission);
-    const grant = await post(
-      core,
-      "/api/apps/sanctum.example/permissions/update",
-      { permission: speechListenPermission, granted: true },
-      home,
-    );
-    expect(grant.statusCode).toBe(200);
     const run = (await vi.waitFor(async () => {
       const opened = await wake();
       expect(opened.accepted).toBe(true);
@@ -200,17 +182,6 @@ it("teaches the Assistant's sentences and hears a speaker's words with them", as
     // Wait for the rename on its own so another change can't hide a missed event.
     await vi.waitFor(() =>
       expect(stp.lessons.at(-1)).toMatchObject({ lists: { room: ["Study"] } }),
-    );
-    await driverCtx!.entities.publish({
-      type: mood.id,
-      key: "evening",
-      name: "Evening",
-      state: {},
-    });
-    await vi.waitFor(() =>
-      expect(stp.lessons.at(-1)).toMatchObject({
-        lists: { mood: ["Evening"] },
-      }),
     );
 
     const reportMute = (muted: boolean) =>

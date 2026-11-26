@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  permissionIcons,
-  permissionRequestSchema,
-  permissionWords,
-  speechListenPermission,
-} from "../src/index.js";
+import { permissionIcons, permissionWords } from "../src/index.js";
 
 // How Sanctum names each permission, the same for every app, before the
 // app's own reason.
@@ -35,22 +30,6 @@ describe("a permission's words", () => {
       icon: "radio-tower",
     });
     expect(permissionWords("services:redis").title).toBe("Use redis");
-  });
-
-  it("requires an explicit grant to send a speaker's voice requests", () => {
-    const permission = {
-      id: speechListenPermission,
-      reason: "To send voice requests.",
-    };
-    expect(permissionRequestSchema.safeParse(permission).success).toBe(true);
-    expect(
-      permissionRequestSchema.safeParse({ ...permission, needed: true })
-        .success,
-    ).toBe(false);
-    expect(
-      permissionRequestSchema.safeParse({ ...permission, startsOn: true })
-        .success,
-    ).toBe(false);
   });
 
   it("keeps the id of one it doesn't know", () => {

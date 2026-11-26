@@ -21,7 +21,6 @@ import { train, transcribe, type Lesson } from "./words.js";
 
 /** The service the manager runs for it. */
 export const wordsService = "speech-to-phrase";
-export const moodEntityType = "moods.mood";
 
 /** How long after the last change it retrains. */
 export const retrainAfterMs = 60_000;

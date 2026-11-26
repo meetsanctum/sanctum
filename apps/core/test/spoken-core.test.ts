@@ -4,7 +4,6 @@ import {
   assistantAppId,
   defineApp,
   registerPermission,
-  speechListenPermission,
   type AppContext,
   type AssistantRequestCall,
   type ListenStep,
@@ -64,7 +63,6 @@ it("answers a smart speaker's request through the Assistant, for the speaker, in
     id: "sanctum.example",
     permissions: [
       { id: registerPermission, reason: "To register the test devices." },
-      { id: speechListenPermission, reason: "To send voice requests." },
     ],
     actions: [],
     start: async (ctx) => {

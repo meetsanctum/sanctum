@@ -121,7 +121,7 @@ export type ListenClose = z.infer<typeof listenCloseSchema>;
 
 /** The calls a run makes, as CoreCalls has them. */
 export type ListenCalls = {
-  /** Opens a run for its speaker with `devices.register` and `speech.listen`. */
+  /** Opens a run for one of the driver's smart speakers; needs `devices.register`. */
   openListen(open: ListenOpen): Promise<ListenOpened>;
   /** Hands the core a run's next sound. */
   sendListen(send: ListenSend): Promise<void>;
