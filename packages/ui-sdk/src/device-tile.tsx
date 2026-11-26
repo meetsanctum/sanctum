@@ -20,7 +20,6 @@ import {
   useState,
 } from "react";
 
-import { Button } from "./components/ui/button";
 import { useShowFailed } from "./show-failed";
 import { contactIcon } from "./contact-icons";
 import type { Tile } from "./tiles";
@@ -271,10 +270,8 @@ export const DeviceTile = memo(function DeviceTile(props: {
 
   return (
     <div className="relative col-span-3 flex min-w-0 rounded-lg has-[input:focus-visible]:ring-3 has-[input:focus-visible]:ring-ring/50">
-      <Button
+      <button
         ref={surface}
-        variant="device-tile"
-        size="device-tile"
         type="button"
         aria-pressed={onOpen || !switches ? undefined : on}
         aria-haspopup={onOpen ? "dialog" : undefined}
@@ -296,7 +293,7 @@ export const DeviceTile = memo(function DeviceTile(props: {
             ? ({ "--tile-colour": tile.colour } as CSSProperties)
             : undefined
         }
-        className="group relative flex flex-1"
+        className="group relative flex min-w-0 flex-1 items-center gap-3 overflow-hidden rounded-lg bg-(--tile) px-3.5 py-3 text-left text-(--tile-ink) frosted outline-none select-none focus-visible:ring-3 focus-visible:ring-ring/50 data-offline:opacity-50 data-[look=lit]:bg-(--tile-colour) data-[look=lit]:text-(--carbon) data-[look=on]:bg-(--tile-on) data-[look=on]:text-(--tile-on-ink) [touch-action:pan-y]"
       >
         {canDim && look === "lit" && level !== undefined && (
           <span
@@ -328,11 +325,9 @@ export const DeviceTile = memo(function DeviceTile(props: {
             {status}
           </span>
         </span>
-      </Button>
+      </button>
       {iconSwitches && (
-        <Button
-          variant="device-tile-toggle"
-          size="device-tile-toggle"
+        <button
           type="button"
           aria-label={playbackLabel ?? label}
           aria-pressed={plays ? undefined : on}
@@ -342,7 +337,7 @@ export const DeviceTile = memo(function DeviceTile(props: {
           onClick={(event) => {
             if (tapped(event.nativeEvent)) props.onToggle(tile);
           }}
-          className="absolute top-1/2 left-3.5 -translate-y-1/2"
+          className={`absolute top-1/2 left-3.5 -translate-y-1/2 text-(--tile-ink) outline-none select-none hover:ring-2 hover:ring-current/35 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 disabled:hover:ring-0 data-[look=lit]:text-(--carbon) data-[look=on]:text-(--tile-on-ink) [touch-action:pan-y] ${iconLook}`}
         >
           <Icon
             aria-hidden="true"
@@ -350,7 +345,7 @@ export const DeviceTile = memo(function DeviceTile(props: {
             // Play and pause read as solid shapes, as on any player.
             fill={plays ? "currentColor" : "none"}
           />
-        </Button>
+        </button>
       )}
       {canDim && (
         <input
