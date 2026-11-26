@@ -200,12 +200,14 @@ export function createHostReadings(
       return alarm === null ? null : alarm !== 0;
     },
 
-    // The disk a folder is on: its size and what is free for its files.
+    // The disk a folder is on: its size, occupied space and space available
+    // for its files. Reserved free blocks are unoccupied but unavailable.
     async disk(folder: string) {
       try {
         const stats = await statfs(folder);
         return {
           total: stats.blocks * stats.bsize,
+          used: (stats.blocks - stats.bfree) * stats.bsize,
           free: stats.bavail * stats.bsize,
         };
       } catch {

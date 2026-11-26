@@ -62,6 +62,7 @@ export type HostStatus = {
   memory: (MemoryReading & { containers: ContainerMemory[] }) | null;
   storage: {
     total: number;
+    used: number;
     free: number;
     // Every image's layers, counted once.
     software: number | null;

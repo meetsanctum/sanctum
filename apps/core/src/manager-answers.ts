@@ -97,6 +97,8 @@ export const hostStatus = z.object({
   storage: z
     .object({
       total: z.number(),
+      // An older manager only says how much space is available to write.
+      used: z.number().optional(),
       free: z.number(),
       software: z.number().nullable(),
       devBuilds: z.number().nullable(),

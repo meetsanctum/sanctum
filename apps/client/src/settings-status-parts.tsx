@@ -251,7 +251,8 @@ export function StorageSection(props: {
   const { storage } = props.host;
   if (!storage) return null;
   const parts = storageParts(storage.parts, props.apps);
-  const hint = `${formatBytes(storage.total - storage.free)} of ${formatBytes(storage.total)} used`;
+  const used = storage.used ?? storage.total - storage.free;
+  const hint = `${formatBytes(used)} of ${formatBytes(storage.total)} used`;
   return (
     <Section
       id="status-storage"

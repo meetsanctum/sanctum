@@ -121,7 +121,7 @@ describe("the Status page", () => {
     await render();
 
     expect(section("status-storage")?.textContent).toContain(
-      "Storage8.15 GB of 15.1 GB used",
+      "Storage7.65 GB of 15.1 GB used",
     );
     expect(parts("status-storage")).toEqual([
       "Dev builds1.35 GB",
@@ -129,11 +129,11 @@ describe("the Status page", () => {
       "Home's data28.7 MB",
       "Zigbee330 KB",
       "Moods180 KB",
-      "System5.57 GB",
+      "System5.07 GB",
     ]);
     const bar = section("status-storage")!.querySelector('[role="img"]')!;
     expect(bar.getAttribute("aria-label")).toBe(
-      "Storage, 8.15 GB of 15.1 GB used: Dev builds 1.35 GB, Sanctum 1.21 GB, Home's data 28.7 MB, Zigbee 330 KB, Moods 180 KB, System 5.57 GB",
+      "Storage, 7.65 GB of 15.1 GB used: Dev builds 1.35 GB, Sanctum 1.21 GB, Home's data 28.7 MB, Zigbee 330 KB, Moods 180 KB, System 5.07 GB",
     );
     // In the brand's colours, apps in their own; the free space is the track.
     expect(
@@ -149,6 +149,17 @@ describe("the Status page", () => {
       "bg-foreground/24",
       "bg-foreground/8",
     ]);
+  });
+
+  it("estimates the occupied space when an older core only reports available space", async () => {
+    const status = piStatus();
+    delete status.host!.storage!.used;
+    answer = async () => status;
+    await render();
+
+    expect(section("status-storage")?.textContent).toContain(
+      "Storage8.15 GB of 15.1 GB used",
+    );
   });
 
   it("says what holds the memory, the system last", async () => {

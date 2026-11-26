@@ -51,7 +51,13 @@ export type HostInfo = {
     swapUsed: number;
     parts: MemoryPart[];
   } | null;
-  storage: { total: number; free: number; parts: StoragePart[] } | null;
+  storage: {
+    total: number;
+    // An older core only says how much space is available to write.
+    used?: number;
+    free: number;
+    parts: StoragePart[];
+  } | null;
   processor: {
     cores: number;
     usage: number | null;
