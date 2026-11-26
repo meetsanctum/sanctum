@@ -43,6 +43,9 @@ afterEach(async () => {
 });
 
 const text = () => document.body.textContent ?? "";
+const currentStep = () =>
+  document.querySelector('[aria-current="step"]')?.textContent;
+const elapse = (ms: number) => act(async () => vi.advanceTimersByTimeAsync(ms));
 const button = (name: string) =>
   [...document.querySelectorAll("button")].find(
     (candidate) => candidate.textContent === name,
@@ -116,43 +119,71 @@ describe("A source's check in the dialog", () => {
   it("keeps each step on screen for two seconds, however fast the answer", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
-      const render = (source: ModelSourceInfo) =>
-        act(async () =>
-          root.render(
-            <Dialog open>
-              <DialogContent>
-                <SourceCheck
-                  source={source}
-                  inUse={mac}
-                  done="Added to your sources"
-                  onClose={() => {}}
-                  onChanged={() => {}}
-                />
-              </DialogContent>
-            </Dialog>,
-          ),
-        );
-      const current = () =>
-        document.querySelector('[aria-current="step"]')?.textContent;
-      await render({ ...added, checking: true });
-      expect(current()).toBe("Asking it one short question");
+      await showCheck({ ...added, checking: true });
+      expect(currentStep()).toBe("Asking it one short question");
       // The answer is in at once: asking still has its two seconds.
-      await render(added);
-      expect(current()).toBe("Asking it one short question");
-      await act(async () => vi.advanceTimersByTimeAsync(2_000));
+      await showCheck(added);
+      expect(text()).not.toContain("the check carries on");
+      await elapse(1_999);
+      expect(currentStep()).toBe("Asking it one short question");
+      await elapse(1);
       expect(text()).toContain("Asked it one short question");
-      expect(current()).toBe("Seeing whether it uses the tool");
-      await act(async () => vi.advanceTimersByTimeAsync(1_900));
-      expect(current()).toBe("Seeing whether it uses the tool");
-      await act(async () => vi.advanceTimersByTimeAsync(100));
+      expect(currentStep()).toBe("Seeing whether it uses the tool");
+      expect(text()).not.toContain("the check carries on");
+      await elapse(1_999);
+      expect(currentStep()).toBe("Seeing whether it uses the tool");
+      await elapse(1);
       expect(text()).toContain("GPT-5 Mini is ready");
 
       // A slow answer keeps asking for as long as it takes.
-      await render({ ...added, checking: true });
-      await act(async () => vi.advanceTimersByTimeAsync(10_000));
-      expect(current()).toBe("Asking it one short question");
-      await render(added);
-      expect(current()).toBe("Seeing whether it uses the tool");
+      await showCheck({ ...added, checking: true });
+      await elapse(10_000);
+      expect(currentStep()).toBe("Asking it one short question");
+      await showCheck(added);
+      expect(currentStep()).toBe("Seeing whether it uses the tool");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("starts a new check at asking while the previous tool step is visible", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await showCheck({ ...added, checking: true });
+      await showCheck(added);
+      await elapse(2_000);
+      expect(currentStep()).toBe("Seeing whether it uses the tool");
+      await elapse(1_000);
+
+      await showCheck({ ...added, checking: true });
+      expect(currentStep()).toBe("Asking it one short question");
+      await showCheck(added);
+      await elapse(1_999);
+      expect(currentStep()).toBe("Asking it one short question");
+      await elapse(1);
+      expect(currentStep()).toBe("Seeing whether it uses the tool");
+      await elapse(1_999);
+      expect(currentStep()).toBe("Seeing whether it uses the tool");
+      await elapse(1);
+      expect(text()).toContain("GPT-5 Mini is ready");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows a check that failed before asking without a tool step", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await showCheck({ ...mac, checking: true });
+      await showCheck({
+        ...mac,
+        check: { at: added.check!.at, outcome: "failed", problem: "model" },
+      });
+      await elapse(1_999);
+      expect(currentStep()).toBe("Asking it one short question");
+      await elapse(1);
+      expect(currentStep()).toBeUndefined();
+      expect(text()).toContain("That model isn't there any more.");
     } finally {
       vi.useRealTimers();
     }
@@ -176,7 +207,11 @@ describe("A source's check in the dialog", () => {
     const { onChanged } = await showCheck(added);
     // Where the other one runs, as it's somewhere else.
     expect(text()).toContain("Your home still uses Qwen3 8B on Office Mac.");
-    expect(text()).not.toContain("tokens again");
+    expect(text()).toContain("Answered in 1.2 s · used 312 tokens");
+    expect(text()).not.toContain("uses a few hundred tokens");
+    expect(text()).toContain(
+      "If the last check was at least 5 minutes ago, switching checks it again and OpenRouter can charge for the tokens.",
+    );
     await click(button("Switch to GPT-5 Mini"));
     expect(coreJson).toHaveBeenCalledWith(
       "/api/models/sources/added/use",
@@ -203,6 +238,31 @@ describe("A source's check in the dialog", () => {
     expect(text()).not.toContain("Added to your sources");
   });
 
+  it("names another model from the same provider by its own name", async () => {
+    await showCheck(added, {
+      ...router,
+      model: "anthropic/claude-haiku-4.5",
+      modelName: "Anthropic: Claude Haiku 4.5",
+      inUse: true,
+    });
+    expect(text()).toContain("Your home still uses Claude Haiku 4.5.");
+    expect(button("Switch to GPT-5 Mini")).toBeDefined();
+  });
+
+  it("keeps the makers when two models from the same provider share their own name", async () => {
+    await showCheck(
+      { ...added, modelName: "Maker A: Model X" },
+      {
+        ...router,
+        model: "maker-b/model-x",
+        modelName: "Maker B: Model X",
+        inUse: true,
+      },
+    );
+    expect(text()).toContain("Your home still uses Maker B: Model X.");
+    expect(button("Switch to Maker A: Model X")).toBeDefined();
+  });
+
   it("says why it didn't answer, and checks again", async () => {
     vi.mocked(coreJson).mockResolvedValue({ sources: [], apps: [] });
     await showCheck({
@@ -216,8 +276,10 @@ describe("A source's check in the dialog", () => {
     });
     expect(text()).toContain("GPT-5 Mini didn't answer");
     expect(text()).toContain("OpenRouter took too long to answer.");
-    // Nothing used, nothing to say.
-    expect(text()).not.toContain("tokens");
+    expect(text()).not.toContain("Used 0 tokens");
+    expect(text()).toContain(
+      "Checking again uses tokens that OpenRouter can charge for.",
+    );
     await click(button("Check again"));
     expect(coreJson).toHaveBeenCalledWith(
       "/api/models/sources/added/check",
@@ -229,6 +291,9 @@ describe("A source's check in the dialog", () => {
     vi.mocked(coreJson).mockResolvedValue({ sources: [], apps: [] });
     await showCheck({ ...added, check: undefined });
     expect(text()).toContain("The check didn't finish");
+    expect(text()).toContain(
+      "Checking again uses tokens that OpenRouter can charge for.",
+    );
     expect(text()).not.toContain("Asking it one short question");
     await click(button("Check again"));
     expect(coreJson).toHaveBeenCalledWith(
@@ -269,6 +334,7 @@ describe("A source's check in the dialog", () => {
     expect(text()).toContain(
       "Ollama refused the check. The model may not support tools.",
     );
+    expect(text()).not.toContain("tokens");
   });
 
   it("leaves out the token count when usage is unavailable", async () => {
@@ -278,7 +344,7 @@ describe("A source's check in the dialog", () => {
     });
     expect(text()).toContain("is ready");
     expect(text()).toContain("Answered in 1.2 s");
-    expect(text()).not.toContain("tokens");
+    expect(text()).not.toMatch(/used \d+ tokens?/i);
   });
 
   it("offers another model when it answered without the tool", async () => {

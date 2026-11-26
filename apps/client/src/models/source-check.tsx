@@ -6,7 +6,13 @@ import type {
 } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
 import { Check, CircleAlert, CircleCheck, TriangleAlert } from "lucide-react";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 
 import { useAuthAttempt } from "../auth/use-auth-attempt";
 import {
@@ -62,27 +68,36 @@ export function factsText(check: ModelCheck) {
 const inHome = (source: ModelSourceInfo) =>
   source.kind === "sanctum" || source.kind === "computer";
 
-// Paces the steps: asking for as long as the check runs and at least two
-// seconds, then seeing for two more, then the result.
-function useSteps(running: boolean) {
-  const [step, setStep] = useState<Step>(running ? "asking" : "idle");
-  const [hasAsked, setHasAsked] = useState(false);
-  if (running && (step === "idle" || step === "done")) {
-    setStep("asking");
-    setHasAsked(false);
+// Asking stays on screen for at least two seconds each time a check starts.
+// Only a check that got an answer shows the tool step.
+function useSteps(running: boolean, answered: boolean) {
+  const [wasRunning, setWasRunning] = useState(running);
+  const [progress, setProgress] = useState<{ step: Step; elapsed?: boolean }>({
+    step: running ? "asking" : "idle",
+  });
+  if (wasRunning !== running) {
+    setWasRunning(running);
+    if (running) setProgress({ step: "asking" });
   }
-  if (step === "asking" && hasAsked && !running) setStep("seeing");
+  if (progress.step === "asking" && progress.elapsed && !running) {
+    setProgress({ step: answered ? "seeing" : "done" });
+  }
   useEffect(() => {
-    if (step !== "asking" || hasAsked) return;
-    const timer = setTimeout(() => setHasAsked(true), stepMs);
+    if (
+      progress.elapsed ||
+      (progress.step !== "asking" && progress.step !== "seeing")
+    )
+      return;
+    const timer = setTimeout(() => {
+      setProgress(
+        progress.step === "asking"
+          ? { step: "asking", elapsed: true }
+          : { step: "done" },
+      );
+    }, stepMs);
     return () => clearTimeout(timer);
-  }, [step, hasAsked]);
-  useEffect(() => {
-    if (step !== "seeing") return;
-    const timer = setTimeout(() => setStep("done"), stepMs);
-    return () => clearTimeout(timer);
-  }, [step]);
-  return step;
+  }, [progress]);
+  return progress.step;
 }
 
 export function SourceCheck(props: {
@@ -96,13 +111,18 @@ export function SourceCheck(props: {
   onChanged: (info: ModelsResponse) => void;
 }) {
   const { source } = props;
+  const check = source?.check;
+  const costId = useId();
   const [shown, setShown] = useState<Shown>({ kind: "check" });
   const [acting, setActing] = useState(false);
   const [failedAction, setFailedAction] = useState<CheckAction>();
   // What was done before the check that's under way: the dialog's own
   // change, or a switch; Check again has nothing before it.
   const [done, setDone] = useState<string | undefined>(props.done);
-  const step = useSteps(!!source?.checking);
+  const step = useSteps(
+    !!source?.checking,
+    !!check && check.outcome !== "failed",
+  );
 
   // The switch and Check again answer with the whole list, as the page's
   // own buttons do.
@@ -147,7 +167,9 @@ export function SourceCheck(props: {
   }
 
   const name = ownName(source);
-  const check = source.check;
+  const kind = source.kind;
+  const provider =
+    kind === "sanctum" || kind === "computer" ? undefined : providerNames[kind];
   if (source.checking || step === "asking" || step === "seeing") {
     const isSeeing = step === "seeing";
     return (
@@ -182,13 +204,15 @@ export function SourceCheck(props: {
             </li>
           )}
         </ol>
-        <p className={help}>
-          {inHome(source)
-            ? "This can take a minute while the model loads."
-            : "This takes a few seconds."}{" "}
-          If you close this, the check carries on. AI Models shows any problems
-          it finds.
-        </p>
+        {source.checking && (
+          <p className={help}>
+            {inHome(source)
+              ? "This can take a minute while the model loads."
+              : "This takes a few seconds."}{" "}
+            If you close this, the check carries on. AI Models shows any
+            problems it finds.
+          </p>
+        )}
       </Result>
     );
   }
@@ -216,12 +240,22 @@ export function SourceCheck(props: {
             <Button variant="outline" onClick={props.onClose}>
               Done
             </Button>
-            <Button disabled={acting} onClick={() => void act("check")}>
+            <Button
+              aria-describedby={provider ? costId : undefined}
+              disabled={acting}
+              onClick={() => void act("check")}
+            >
               Check again
             </Button>
           </>
         }
-      />
+      >
+        {provider && (
+          <p id={costId} className={help}>
+            Checking again uses tokens that {provider} can charge for.
+          </p>
+        )}
+      </Result>
     );
   }
 
@@ -246,10 +280,12 @@ export function SourceCheck(props: {
     );
   }
 
+  const switchName = ownName(source, props.inUse);
+  const switchCost = !source.inUse && provider;
   return (
     <Result
       badge={<CircleCheck className="size-6.5 text-(--leaf-text)" />}
-      title={`${name} is ready`}
+      title={`${switchName} is ready`}
       line={
         source.inUse
           ? "It's now your home's AI model."
@@ -266,18 +302,28 @@ export function SourceCheck(props: {
       footer={
         <>
           {!source.inUse && (
-            <Button
-              variant="outline"
-              disabled={acting}
-              onClick={() => void act("use")}
-            >
-              Switch to {name}
-            </Button>
+            <div className="grid min-w-0 grid-cols-1">
+              <Button
+                variant="outline"
+                aria-describedby={switchCost ? costId : undefined}
+                disabled={acting}
+                onClick={() => void act("use")}
+              >
+                <span className="truncate">Switch to {switchName}</span>
+              </Button>
+            </div>
           )}
           <Button onClick={props.onClose}>Done</Button>
         </>
       }
-    />
+    >
+      {switchCost && (
+        <p id={costId} className={help}>
+          If the last check was at least 5 minutes ago, switching checks it
+          again and {switchCost} can charge for the tokens.
+        </p>
+      )}
+    </Result>
   );
 }
 
@@ -315,7 +361,7 @@ function Result(props: {
   footer: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-w-0 flex-col gap-6">
       <div
         role="status"
         className="flex flex-col items-center gap-3.5 pt-3 text-center"
@@ -329,11 +375,11 @@ function Result(props: {
           </span>
         )}
         <DialogHeader className="items-center gap-1.5 text-center">
-          <DialogTitle className="text-[17px] leading-6 text-balance">
+          <DialogTitle className="text-[17px] leading-6 text-balance wrap-anywhere">
             {props.title}
           </DialogTitle>
           {props.line && (
-            <DialogDescription className="text-sm text-pretty text-foreground">
+            <DialogDescription className="text-sm text-pretty wrap-anywhere text-foreground">
               {props.line}
             </DialogDescription>
           )}

@@ -84,9 +84,27 @@ export function makerOf(modelName: string) {
     : { name: modelName };
 }
 
-/** A model by its own name, as the model list shows it: "Claude Sonnet 5.5". */
-export const ownName = (source: ModelSourceInfo) =>
-  makerOf(source.modelName).name;
+function samePlace(a: ModelSourceInfo, b: ModelSourceInfo) {
+  return (
+    a.kind === b.kind && (a.kind !== "computer" || a.address === b.address)
+  );
+}
+
+/** A model by its own name, with its maker if it shares that name. */
+export function ownName(source: ModelSourceInfo, beside?: ModelSourceInfo) {
+  const name = makerOf(source.modelName).name;
+  if (
+    beside &&
+    samePlace(source, beside) &&
+    source.model !== beside.model &&
+    name === makerOf(beside.modelName).name
+  ) {
+    return source.modelName === beside.modelName
+      ? `${source.modelName} (${source.model})`
+      : source.modelName;
+  }
+  return name;
+}
 
 /**
  * Another source beside one being talked about: by its own name, with where
@@ -94,10 +112,7 @@ export const ownName = (source: ModelSourceInfo) =>
  * provider's model.
  */
 export function otherName(other: ModelSourceInfo, beside: ModelSourceInfo) {
-  const samePlace =
-    other.kind === beside.kind &&
-    (other.kind !== "computer" || other.address === beside.address);
-  if (samePlace) return ownName(other);
+  if (samePlace(other, beside)) return ownName(other, beside);
   return sourceName({ ...other, modelName: ownName(other) });
 }
 

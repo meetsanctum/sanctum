@@ -510,11 +510,12 @@ export function createModels(
     cancelWatch();
     downSince = undefined;
     if (before) left(before.id);
-    // A check that answered moments ago still holds: switching to it right
-    // after doesn't ask again, which a provider would charge for. The watch
-    // goes on asking whether it answers.
+    // Reuse a recent provider answer to avoid another billed question. An
+    // Ollama check also verifies that the selected model is still local.
     const check = row.check;
     const isFresh =
+      row.kind !== "computer" &&
+      row.kind !== "sanctum" &&
       check?.outcome === "answered" &&
       now().getTime() - Date.parse(check.at) < freshCheckMs;
     if (isFresh) void watchInUse();

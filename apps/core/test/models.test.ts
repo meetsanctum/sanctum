@@ -50,6 +50,18 @@ const addOfficeMac = (core: TestCore, token: string, model = "qwen3:8b") =>
     { token },
   );
 
+const addOpenRouter = (core: TestCore, token: string, sources: FakeSources) =>
+  post(
+    core,
+    "/api/models/sources",
+    {
+      kind: "openrouter",
+      key: sources.openRouter.key,
+      model: "openai/gpt-5-mini",
+    },
+    { token },
+  );
+
 describe("AI models", () => {
   it("finds Ollama on a computer in the home and lists its models", async () => {
     const { core, token, sources } = await home();
@@ -278,38 +290,97 @@ describe("AI models", () => {
     ).toEqual([false, true]);
   });
 
-  it("doesn't check again when switching right after a check that answered", async () => {
+  it.each([
+    { age: 5 * 60_000 - 1, extra: 0 },
+    { age: 5 * 60_000, extra: 1 },
+  ])(
+    "asks $extra more provider questions when switching $age ms after a successful check",
+    async ({ age, extra }) => {
+      const { core, token, sources } = await home();
+      await addOfficeMac(core, token);
+      const fetch = sources.fetchers.internet;
+      sources.fetchers.internet = async (input, init) => {
+        if (new URL(String(input)).pathname.endsWith("/chat/completions")) {
+          core.advance(20_000);
+        }
+        return fetch(input, init);
+      };
+      await addOpenRouter(core, token, sources);
+      const [, router] = (await checked(core)).sources;
+      expect(router!.check).toMatchObject({
+        at: core.now().toISOString(),
+        outcome: "answered",
+      });
+      const asked = sources.chats.length;
+
+      core.advance(age);
+      await post(core, `/api/models/sources/${router!.id}/use`, {}, { token });
+      const switched = await checked(core);
+      expect(switched.sources[1]).toMatchObject({ inUse: true });
+      expect(sources.chats).toHaveLength(asked + extra);
+    },
+  );
+
+  it("checks a provider again when its recent answer did not use the tool", async () => {
     const { core, token, sources } = await home();
     await addOfficeMac(core, token);
-    await post(
-      core,
-      "/api/models/sources",
-      {
-        kind: "openrouter",
-        key: sources.openRouter.key,
-        model: "openai/gpt-5-mini",
-      },
-      { token },
-    );
-    const [mac, router] = (await checked(core)).sources;
+    sources.openRouter.answer = { callsTool: false };
+    await addOpenRouter(core, token, sources);
+    const [, router] = (await checked(core)).sources;
+    expect(router!.check?.outcome).toBe("noTool");
     const asked = sources.chats.length;
 
+    sources.openRouter.answer = { callsTool: true };
     await post(core, `/api/models/sources/${router!.id}/use`, {}, { token });
-    const switched = await checked(core);
-    expect(switched.sources[1]).toMatchObject({ inUse: true });
-    expect(sources.chats).toHaveLength(asked);
-
-    // An older answer is checked again on the way in.
-    core.db
-      .update(modelSources)
-      .set({
-        check: { ...mac!.check!, at: "2000-01-01T00:00:00.000Z" },
-      })
-      .where(eq(modelSources.id, mac!.id))
-      .run();
-    await post(core, `/api/models/sources/${mac!.id}/use`, {}, { token });
-    await checked(core);
+    expect((await checked(core)).sources[1]).toMatchObject({
+      inUse: true,
+      check: { outcome: "answered" },
+    });
     expect(sources.chats).toHaveLength(asked + 1);
+  });
+
+  it("checks provider availability immediately when reusing a recent answer", async () => {
+    const { core, token, sources } = await home();
+    await addOfficeMac(core, token);
+    await addOpenRouter(core, token, sources);
+    const [, router] = (await checked(core)).sources;
+    expect(router!.check?.outcome).toBe("answered");
+    const unreachable = vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    });
+    sources.fetchers.internet = unreachable;
+
+    await post(core, `/api/models/sources/${router!.id}/use`, {}, { token });
+    await vi.waitFor(() => {
+      expect(core.models.info().sources[1]).toMatchObject({
+        inUse: true,
+        downSince: core.now().toISOString(),
+        check: router!.check,
+      });
+    });
+    expect(unreachable).toHaveBeenCalledExactlyOnceWith(
+      "https://openrouter.ai/api/v1/key",
+      expect.anything(),
+    );
+  });
+
+  it("checks that a recently checked Ollama model is still available before asking it", async () => {
+    const { core, token, sources } = await home();
+    await addOpenRouter(core, token, sources);
+    await addOfficeMac(core, token);
+    const [, mac] = (await checked(core)).sources;
+    expect(mac!.check?.outcome).toBe("answered");
+    const asked = sources.chats.length;
+
+    sources.ollama.models = sources.ollama.models.filter(
+      (model) => model.name !== mac!.model,
+    );
+    await post(core, `/api/models/sources/${mac!.id}/use`, {}, { token });
+    expect((await checked(core)).sources[1]).toMatchObject({
+      inUse: true,
+      check: { outcome: "failed", problem: "model" },
+    });
+    expect(sources.chats).toHaveLength(asked);
   });
 
   it("replaces a key that no longer opens", async () => {

@@ -95,7 +95,7 @@ export async function checkSource(options: {
   }
   return {
     check: {
-      at,
+      at: options.now().toISOString(),
       outcome: usedTool ? "answered" : "noTool",
       ...(firstWordMs === undefined ? {} : { firstWordMs }),
       tokens: reported,
