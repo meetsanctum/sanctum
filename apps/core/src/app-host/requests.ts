@@ -5,6 +5,7 @@ import {
   turnLimits,
   type Actor,
   type AssistantRequest,
+  type AssistantRequestInput,
   type RequestContext,
   type RequestReply,
 } from "@meetsanctum/app-sdk";
@@ -13,6 +14,7 @@ import type { ActivityAuthor } from "../activity/activity.js";
 import type { TurnOpener } from "../agents/assistants.js";
 import { createAgentLimiter } from "../agents/limits.js";
 import type { Turn } from "../models/turns.js";
+import { appStateOf } from "./app-info.js";
 import type { ToolRecorder } from "./contexts.js";
 import { ActionCallError, TimedOut, withTimeout } from "./errors.js";
 import type { InstalledApp } from "./installed.js";
@@ -45,9 +47,12 @@ type Run = {
   // Its handler is done, by itself or as its turn ended.
   finished: boolean;
   exchange?: Exchange;
+  discarded?: true;
+  previous?: Run;
   // Its tool calls under way.
   tools: Set<Promise<void>>;
-  // Settles once its slot is free and it has left `runs`.
+  settling?: Promise<void>;
+  // Settles once its slot is free.
   done: Promise<void>;
 };
 
@@ -115,7 +120,10 @@ export function createRequests(options: {
   }
 
   function canAnswer(entry: InstalledApp) {
+    const state = appStateOf(entry);
     return (
+      state !== "off" &&
+      state !== "paused" &&
       entry.app.requests !== undefined &&
       entry.granted.includes(aiAssistantPermission)
     );
@@ -132,15 +140,14 @@ export function createRequests(options: {
     run.steering.abort(reason);
   }
 
-  // What a newer request waits for: the older one's tool calls, for up to
-  // 2 s, and its slot.
-  async function settled(run: Run) {
-    if (run.tools.size > 0) {
+  // A newer request gives the older one's tools up to 2 s to settle.
+  function toolsSettled(run: Run) {
+    return (run.settling ??= (async () => {
+      if (run.tools.size === 0) return;
       const { waited, clear } = delay(settleWithinMs);
       await Promise.race([Promise.allSettled([...run.tools]), waited]);
       clear();
-    }
-    await run.done;
+    })());
   }
 
   function dispatch(
@@ -157,7 +164,7 @@ export function createRequests(options: {
     const { signal } = run.steering;
     const turn = options.turnFor(entry, request.who);
     let resolveReply!: (answer: RequestReply | null) => void;
-    let rejectReply!: (error: ActionCallError) => void;
+    let rejectReply!: (error: unknown) => void;
     const replied = new Promise<RequestReply | null>((resolve, reject) => {
       resolveReply = resolve;
       rejectReply = reject;
@@ -219,6 +226,7 @@ export function createRequests(options: {
 
     function finish(failure?: { error: unknown }) {
       const error = failure?.error;
+      const interrupted = signal.aborted;
       run.finished = true;
       run.ended = true;
       if (error instanceof TimedOut) {
@@ -229,18 +237,21 @@ export function createRequests(options: {
       } catch {
         options.log(`apps: ${assistantAppId} could not close a request's turn`);
       } finally {
-        if (error instanceof ActionCallError && error.code === "unavailable") {
+        if (
+          (error instanceof ActionCallError && error.code === "unavailable") ||
+          (failure && opener.kind === "device" && !interrupted)
+        ) {
           rejectReply(error);
         } else {
           resolveReply(null);
-          if (
-            failure &&
-            !isActionError(error) &&
-            !(error instanceof ActionCallError)
-          ) {
-            const reason = error instanceof TimedOut ? "timed out" : "failed";
-            options.log(`apps: ${assistantAppId} request ${reason}`);
-          }
+        }
+        if (
+          failure &&
+          !isActionError(error) &&
+          !(error instanceof ActionCallError)
+        ) {
+          const reason = error instanceof TimedOut ? "timed out" : "failed";
+          options.log(`apps: ${assistantAppId} request ${reason}`);
         }
       }
     }
@@ -284,8 +295,10 @@ export function createRequests(options: {
      * goes.
      */
     forget(key: string) {
-      const run = runs.get(key);
-      if (run) endRun(run, new ActionCallError("turn_ended"));
+      for (let run = runs.get(key); run; run = run.previous) {
+        run.discarded = true;
+        endRun(run, new ActionCallError("turn_ended"));
+      }
       windows.drop(key);
     },
 
@@ -303,16 +316,19 @@ export function createRequests(options: {
     /**
      * Runs a request for whoever asked, and resolves with the Assistant's
      * reply, or null when it gave none or a newer request from the same
-     * client or speaker took over; `unavailable` when it's off.
+     * client or speaker took over. A failure before a spoken reply is
+     * handed back to the speaker, and an unavailable Assistant fails either.
      */
     async ask(request: {
       actor: TurnOpener;
       // Its client's id, or its smart speaker's device id.
       key: string;
       who: ActivityAuthor;
-      asked: Omit<AssistantRequest, "earlier">;
+      asked: AssistantRequestInput;
       // Checks, just before it runs, that whoever asked may still.
       check?: () => void;
+      // A speaker stopped or a newer wake took over before the next ask.
+      signal?: AbortSignal;
     }): Promise<RequestReply | null> {
       if (closed) throw new ActionCallError("unavailable");
       const entry = installed.get(assistantAppId);
@@ -334,12 +350,21 @@ export function createRequests(options: {
       };
       const { signal } = run.steering;
       const previous = runs.get(device);
+      run.previous = previous;
       runs.set(device, run);
+      const interrupt = () => endRun(run, new ActionCallError("turn_ended"));
+      request.signal?.addEventListener("abort", interrupt, { once: true });
+      if (request.signal?.aborted) interrupt();
       let slot: { done: () => void } | undefined;
       let dispatched = false;
       const leave = () => {
         slot?.done();
-        if (runs.get(device) === run) runs.delete(device);
+        request.signal?.removeEventListener("abort", interrupt);
+        const remove = () => {
+          if (runs.get(device) === run) runs.delete(device);
+        };
+        if (run.tools.size > 0) void toolsSettled(run).then(remove);
+        else remove();
         release();
       };
 
@@ -348,7 +373,7 @@ export function createRequests(options: {
         const reason: unknown = signal.reason;
         if (!(reason instanceof ActionCallError)) throw reason;
         if (reason.code !== "turn_ended") throw reason;
-        if (generation === historyGeneration) {
+        if (!run.discarded && generation === historyGeneration) {
           windows.begin(
             device,
             entry.runId,
@@ -361,7 +386,9 @@ export function createRequests(options: {
       try {
         if (previous) {
           endRun(previous, new ActionCallError("turn_ended"));
-          await settled(previous);
+          await toolsSettled(previous);
+          await previous.done;
+          run.previous = undefined;
         }
         if (signal.aborted) return steeredFirst();
         const admitted = limiter.begin(device);

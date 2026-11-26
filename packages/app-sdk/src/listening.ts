@@ -2,6 +2,9 @@ import { z } from "zod";
 
 import { deviceKey } from "./devices.js";
 
+/** Allows a driver to send a speaker's requests to the Assistant. */
+export const spokenRequestsPermission = "devices.listen";
+
 // Listening: a smart speaker's request, as its driver hands it to the core.
 // When the speaker hears its wake word, or its button is pressed, the
 // driver opens a run with ctx.audio.listen() before it lets the speaker
@@ -121,7 +124,7 @@ export type ListenClose = z.infer<typeof listenCloseSchema>;
 
 /** The calls a run makes, as CoreCalls has them. */
 export type ListenCalls = {
-  /** Opens a run for one of the driver's smart speakers; needs `devices.register`. */
+  /** Opens a run for the driver's speaker with both device registration and listening granted. */
   openListen(open: ListenOpen): Promise<ListenOpened>;
   /** Hands the core a run's next sound. */
   sendListen(send: ListenSend): Promise<void>;

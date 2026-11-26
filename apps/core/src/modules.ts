@@ -659,6 +659,7 @@ export async function createModules(
     manager: options.manager,
     devices,
     areaOn: () => agentsCanUse.areaOn(announcePermission),
+    hears: () => Boolean(options.transcriber?.()),
     log,
   });
   const agentTools: AgentTools = assembleAgentTools(agentAccess, {

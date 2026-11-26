@@ -9,8 +9,7 @@ import { synthesize, type SpeechAudio } from "./wyoming.js";
 // What Sanctum says out loud, in the home's one voice per language. Piper,
 // a service the manager runs, turns the words into speech; the core encodes
 // it and serves it to the smart speaker that plays it (announcements.ts).
-// Piper runs only while a smart speaker in the home can announce and AI
-// agents may speak on them, so a home without one pays nothing for it.
+// Piper runs when the home can use announcements or spoken replies.
 
 /** The voices Sanctum speaks in, each trained on recordings free to use. */
 export const voices = {
@@ -27,6 +26,8 @@ export const speechService = "piper";
 const speechIdleMs = 30_000;
 /** Leave time to answer before the connector's 60-second request timeout. */
 const dispatchWithinMs = 50_000;
+/** Allow the driver to report that the reply played before ending the run. */
+const replyPlaybackGraceMs = 5_000;
 /** How often to look for the service while it starts, and for how long. */
 const startingEveryMs = 10_000;
 const startingForMs = 15 * 60_000;
@@ -89,6 +90,8 @@ export function createSpeech(options: {
   };
   // Whether AI agents may speak on smart speakers.
   areaOn: () => boolean;
+  // Whether speech recognition is available for new requests.
+  hears?: () => boolean;
   // The port speakers fetch announcements on, as the host publishes it.
   publishedPort: number;
   // The success chime a confirmation plays on a smart speaker, kept ready;
@@ -102,6 +105,8 @@ export function createSpeech(options: {
 }) {
   const now = options.now ?? Date.now;
   const announcers = new Set<string>();
+  const listeners = new Set<string>();
+  let replying = 0;
   let desired: boolean | null = null;
   let changing: AbortController | null = null;
   let warming: AbortController | null = null;
@@ -164,13 +169,13 @@ export function createSpeech(options: {
             });
             // Only the voice's loading counts, not what it says.
             while (!(await spoken.next()).done);
-            failed.delete(language);
             for (const phrase of keptPhrases) {
               if (phrase.language !== language || signal.aborted) continue;
               // Saying it keeps it.
               const saying = said(at, phrase.text, language, signal);
               while (!(await saying.next()).done);
             }
+            failed.delete(language);
           } catch (error) {
             if (signal.aborted) return;
             failed.set(language, error);
@@ -233,8 +238,9 @@ export function createSpeech(options: {
     if (!running) return;
     const want =
       options.announcements.port() !== null &&
-      options.areaOn() &&
-      announcers.size > 0;
+      ((options.areaOn() && announcers.size > 0) ||
+        (options.hears?.() === true && listeners.size > 0) ||
+        replying > 0);
     if (want === desired) return;
     desired = want;
     warming?.abort();
@@ -253,6 +259,7 @@ export function createSpeech(options: {
       language: SpeechLanguage;
       beforeTelling?: () => void;
       onSynthesisStarted?: () => void;
+      signal?: AbortSignal;
     },
     how: {
       finishing: boolean;
@@ -260,6 +267,7 @@ export function createSpeech(options: {
       sound?: readonly SpeechAudio[];
       tell: (url: string) => Promise<void>;
       onFetched?: (url: string) => Promise<void>;
+      playbackGraceMs?: number;
     },
   ) {
     const dispatchBy = now() + dispatchWithinMs;
@@ -269,6 +277,7 @@ export function createSpeech(options: {
       );
     const unavailable = () =>
       new SpeechUnavailable("Speech isn't running on Sanctum right now");
+    input.signal?.throwIfAborted();
     if (!running || options.announcements.port() === null) throw unavailable();
     const { sound } = how;
     const [at, network] = await Promise.all([
@@ -276,6 +285,7 @@ export function createSpeech(options: {
       hostNetwork(),
     ]);
     const listenerPort = options.announcements.port();
+    input.signal?.throwIfAborted();
     if (!running || listenerPort === null || (!at && !sound) || !network) {
       throw unavailable();
     }
@@ -294,12 +304,18 @@ export function createSpeech(options: {
         if (address?.value === network) address = null;
       },
       how.onFetched,
-      { finishing: how.finishing },
+      { finishing: how.finishing, playbackGraceMs: how.playbackGraceMs },
+    );
+    const withdraw = () => announcement.withdraw();
+    input.signal?.addEventListener("abort", withdraw, { once: true });
+    void announcement.playback.then(() =>
+      input.signal?.removeEventListener("abort", withdraw),
     );
     const tell = async () => {
       // The speaker needs a playable frame, and those ahead of it must have
       // finished, before the driver gets the address.
       const playable = (await announcement.ready) && (await announcement.turn);
+      input.signal?.throwIfAborted();
       if (!how.finishing && !options.areaOn()) throw new SpeechSwitchedOff();
       if (playable) {
         if (now() >= dispatchBy) throw waitExpired();
@@ -361,24 +377,45 @@ export function createSpeech(options: {
     })();
   }
 
+  function updateSpeaker(id: string, device: DeviceInfo | null) {
+    const announces = Boolean(announcementCapability(device));
+    const listens =
+      device?.capabilities.some(
+        (part) => part.kind === "audio" && part.features.listens,
+      ) ?? false;
+    if (announces === announcers.has(id) && listens === listeners.has(id))
+      return false;
+    if (announces) announcers.add(id);
+    else announcers.delete(id);
+    if (listens) listeners.add(id);
+    else listeners.delete(id);
+    return true;
+  }
+
   return {
     start() {
       if (running) return;
       running = true;
       announcers.clear();
+      listeners.clear();
       for (const device of options.devices.list()) {
-        if (announcementCapability(device)) announcers.add(device.id);
+        updateSpeaker(device.id, device);
       }
       reconcile();
     },
 
     deviceChanged(change: DeviceChange) {
-      const had = announcers.has(change.id);
-      const has = Boolean(announcementCapability(change.after));
-      if (had === has) return;
-      if (has) announcers.add(change.id);
-      else announcers.delete(change.id);
+      if (updateSpeaker(change.id, change.after)) reconcile();
+    },
+
+    /** Keeps Piper available through a request's last reply. */
+    keepRepliesReady() {
+      replying++;
       reconcile();
+      return () => {
+        replying--;
+        reconcile();
+      };
     },
 
     areaChanged() {
@@ -412,6 +449,7 @@ export function createSpeech(options: {
       beforeTelling?: () => void;
       onSynthesisStarted?: () => void;
       onDelivery?: (fetched: boolean) => void;
+      signal?: AbortSignal;
     }) {
       const how = {
         finishing: input.finishing === true,
@@ -434,8 +472,11 @@ export function createSpeech(options: {
       };
       const chime = input.confirmation ? options.chime : undefined;
       const announcement = chime
-        ? await prepare(input, { ...how, sound: chime }).catch(() =>
-            prepare(input, how),
+        ? await prepare(input, { ...how, sound: chime }).catch(
+            (error: unknown) => {
+              if (input.signal?.aborted) throw error;
+              return prepare(input, how);
+            },
           )
         : await prepare(input, how);
       const onDelivery = input.onDelivery;
@@ -468,24 +509,33 @@ export function createSpeech(options: {
       // plays in their place, or they're said where it can't.
       confirmation?: boolean;
       signal?: AbortSignal;
+      onPlayback?: (finished: boolean) => void;
     }): Promise<string> {
       let told = "";
       const tell = async (url: string) => {
         input.signal?.throwIfAborted();
         told = url;
       };
+      const how = {
+        finishing: true,
+        tell,
+        playbackGraceMs: replyPlaybackGraceMs,
+      };
       const chime = input.confirmation ? options.chime : undefined;
       const announcement = chime
-        ? await prepare(input, { finishing: true, sound: chime, tell }).catch(
+        ? await prepare(input, { ...how, sound: chime }).catch(
             (error: unknown) => {
               if (input.signal?.aborted) throw error;
-              return prepare(input, { finishing: true, tell });
+              return prepare(input, how);
             },
           )
-        : await prepare(input, { finishing: true, tell });
-      input.signal?.addEventListener("abort", () => announcement.withdraw(), {
-        once: true,
-      });
+        : await prepare(input, how);
+      const onPlayback = input.onPlayback;
+      if (onPlayback) {
+        void announcement.playback.then((outcome) => {
+          if (outcome !== "withdrawn") onPlayback(outcome === "finished");
+        });
+      }
       return told;
     },
 

@@ -8,6 +8,7 @@ import type { CapabilityKind } from "./devices.js";
 import { lanRange } from "./lan.js";
 import { modelsUsePermission } from "./models.js";
 import { turnOnType } from "./lights.js";
+import { spokenRequestsPermission } from "./listening.js";
 import { forecastType, sunType } from "./weather.js";
 
 // How Sanctum names each permission, the same for every app: a permission's
@@ -123,6 +124,11 @@ const fixed: Record<string, PermissionWords> = {
     title: "Bring devices into your home",
     detail: null,
     icon: "square-plus",
+  },
+  [spokenRequestsPermission]: {
+    title: "Send voice requests to the Assistant",
+    detail: "The Assistant can use the tools your home has enabled for it",
+    icon: "mic",
   },
   "workflows.manage": {
     title: "Keep its own automations",

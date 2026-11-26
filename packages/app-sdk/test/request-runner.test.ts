@@ -1,8 +1,31 @@
 import { expect, it, vi } from "vitest";
 
-import { assistantAppId, defineApp } from "../src/index.js";
+import {
+  assistantAppId,
+  assistantRequestSchema,
+  defineApp,
+} from "../src/index.js";
 import type { CallBody, Outcome } from "../src/protocol.js";
 import { createCallHost } from "../src/runner-calls.js";
+
+it("accepts a room only on a speaker request", () => {
+  const request = { text: "Hello", language: "en", earlier: [] };
+  const room = { id: "office", name: "Office" };
+  expect(
+    assistantRequestSchema.safeParse({
+      ...request,
+      room,
+      from: { kind: "client", name: "Tablet" },
+    }).success,
+  ).toBe(false);
+  expect(
+    assistantRequestSchema.safeParse({
+      ...request,
+      room,
+      from: { kind: "speaker", name: "Speaker" },
+    }).success,
+  ).toBe(true);
+});
 
 it("runs the Assistant's method and sends its reply without opening app storage", async () => {
   const app = defineApp({

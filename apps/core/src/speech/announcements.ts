@@ -57,6 +57,7 @@ const streamIdleMs = 35_000;
 const fetchNoticeMs = 250;
 
 type Delivery = "fetched" | "failed" | "withdrawn";
+type Playback = "finished" | "failed" | "withdrawn";
 
 type Announcement = {
   device: string;
@@ -81,6 +82,8 @@ type Announcement = {
   onFetched?: () => Promise<void>;
   // A request's reply, said whether or not AI agents may speak.
   finishing: boolean;
+  playbackGraceMs: number;
+  complete(outcome: Playback): void;
 };
 
 export class AnnouncementRefused extends Error {
@@ -154,10 +157,7 @@ export function createAnnouncements(options: {
     socket.once("close", () => removePending(socket));
   });
 
-  function end(
-    announcement: Announcement,
-    outcome: "failed" | "withdrawn" = "withdrawn",
-  ) {
+  function end(announcement: Announcement, outcome: Playback = "withdrawn") {
     if (announcement.ended) return;
     announcement.ended = true;
     count--;
@@ -167,7 +167,8 @@ export function createAnnouncements(options: {
     byPath.delete(announcement.path);
     announcement.ready(false);
     announcement.turn(false);
-    announcement.delivery(outcome);
+    if (outcome !== "finished") announcement.delivery(outcome);
+    announcement.complete(outcome);
     const queue = byDevice.get(announcement.device) ?? [];
     const at = queue.indexOf(announcement);
     if (at !== -1) queue.splice(at, 1);
@@ -214,7 +215,7 @@ export function createAnnouncements(options: {
     response.setTimeout(streamIdleMs, () => response.destroy());
     response.once("close", () => {
       announcement.listeners.delete(flush);
-      if (!response.writableFinished) end(announcement);
+      if (!response.writableFinished) end(announcement, "failed");
     });
     const startStream = () => {
       if (response.destroyed) return;
@@ -230,8 +231,8 @@ export function createAnnouncements(options: {
         const clipMs = (announcement.samples / announcement.rate) * 1_000;
         const remainingMs = Math.max(0, startedAt + clipMs - performance.now());
         announcement.release = setTimeout(
-          () => end(announcement),
-          remainingMs + 1_000,
+          () => end(announcement, "finished"),
+          remainingMs + announcement.playbackGraceMs,
         );
       });
       response.writeHead(200, {
@@ -276,7 +277,10 @@ export function createAnnouncements(options: {
       speech: (signal: AbortSignal) => AsyncIterable<SpeechAudio>,
       onUnfetched?: () => void,
       onFetched?: (url: string) => Promise<void>,
-      { finishing = false }: { finishing?: boolean } = {},
+      {
+        finishing = false,
+        playbackGraceMs = 1_000,
+      }: { finishing?: boolean; playbackGraceMs?: number } = {},
     ) {
       const queue = byDevice.get(device) ?? [];
       if (queue.length >= maxPerSpeaker) throw new AnnouncementRefused("busy");
@@ -291,6 +295,8 @@ export function createAnnouncements(options: {
       const delivery = new Promise<Delivery>(
         (resolve) => (delivered = resolve),
       );
+      let complete!: (outcome: Playback) => void;
+      const playback = new Promise<Playback>((resolve) => (complete = resolve));
       const announcement: Announcement = {
         device,
         path,
@@ -312,6 +318,8 @@ export function createAnnouncements(options: {
         onUnfetched,
         onFetched: onFetched && (() => onFetched(url)),
         finishing,
+        playbackGraceMs,
+        complete,
       };
       byPath.set(path, announcement);
       queue.push(announcement);
@@ -376,6 +384,7 @@ export function createAnnouncements(options: {
          */
         turn,
         delivery,
+        playback,
         /** Withdraws it, as when its speaker couldn't be told. */
         withdraw: () => end(announcement),
         /** Whether its speaker has fetched it. */

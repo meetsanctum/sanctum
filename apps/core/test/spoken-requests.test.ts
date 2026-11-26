@@ -26,6 +26,9 @@ function setup(
   options: {
     answers?: boolean;
     heard?: string | null;
+    transcript?: Promise<string | null>;
+    prepare?: (text: string, signal?: AbortSignal) => Promise<void>;
+    beforeDispatch?: () => Promise<void>;
     speakers?: Record<string, Speaker>;
   } = {},
 ) {
@@ -44,9 +47,14 @@ function setup(
   const speakers: Record<string, Speaker> = options.speakers ?? {
     "device:speaker": {
       name: "Office Speaker",
+      capability: "audio",
       room: { id: "office", name: "Office" },
     },
-    "device:kitchen": { name: "Kitchen Speaker", room: null },
+    "device:kitchen": {
+      name: "Kitchen Speaker",
+      room: null,
+      capability: "audio",
+    },
   };
   const spoken = createSpokenRequests({
     // Listens to a chunk of sound, then has heard what the test says.
@@ -54,6 +62,7 @@ function setup(
       for await (const _chunk of run.sound) {
         run.stopListening();
       }
+      if (options.transcript) return options.transcript;
       return options.heard === undefined
         ? "turn off the lights"
         : options.heard;
@@ -74,11 +83,17 @@ function setup(
       forget: (key) => void forgotten.push(key),
     },
     speech: () => ({
-      reply: async ({ text, confirmation }) => {
+      reply: async ({ text, confirmation, signal }) => {
         replied.push({ text, ...(confirmation ? { confirmation } : {}) });
+        await options.prepare?.(text, signal);
+        signal?.throwIfAborted();
         return `http://192.168.1.2:4180/a/${encodeURIComponent(text)}.flac`;
       },
-      speak: async (input) => void spokenLate.push(input),
+      speak: async (input) => {
+        await options.beforeDispatch?.();
+        input.beforeTelling();
+        spokenLate.push(input);
+      },
     }),
     record: (entry) => void recorded.push(entry),
     log: () => {},
@@ -86,8 +101,8 @@ function setup(
   const listening = createListening({
     idFor: (by, key) => (by === driver ? `device:${key}` : null),
     listens: () => true,
-    hearer: (device) => spoken.hearer(device),
-    refused: (device, refusal) => spoken.refused(device, refusal),
+    hearer: spoken.hearer,
+    refused: spoken.refused,
     log: () => {},
   });
 
@@ -256,6 +271,7 @@ describe("a smart speaker's request", () => {
     await until(() => asked.length === 1);
     const second = await wake();
     if (!second.accepted) throw new Error(second.refusal);
+    expect(asked[0]!.request.signal?.aborted).toBe(true);
     await until(() => asked.length === 2);
 
     expect(steps(first.run).at(-1)).toEqual({
@@ -274,24 +290,29 @@ describe("a smart speaker's request", () => {
   });
 
   it("says one moment after five seconds, then the reply on the speaker", async () => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    const transcript = deferredResult<string>();
     const { wake, asked, listening, until, spokenLate, recorded, steps } =
-      setup();
+      setup({ transcript: transcript.promise });
     const opened = await wake();
     if (!opened.accepted) throw new Error(opened.refusal);
-    await until(() => asked.length === 1);
 
-    await vi.advanceTimersByTimeAsync(oneMomentAfterMs);
-    await until(() => kinds(steps(opened.run)).includes("reply"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(kinds(steps(opened.run))).toEqual(["stopped"]);
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(kinds(steps(opened.run))).toEqual(["stopped"]);
+    await vi.advanceTimersByTimeAsync(1);
     expect(steps(opened.run).at(-1)).toMatchObject({
       step: "reply",
       text: "One moment",
     });
     listening.close(driver, { run: opened.run, end: "played" });
 
+    transcript.resolve("turn off the lights");
+    await until(() => asked.length === 1);
     asked[0]!.answer.resolve({ text: "Turned off the Office lights" });
     await until(() => spokenLate.length === 1);
-    expect(spokenLate[0]).toEqual({
+    expect(spokenLate[0]).toMatchObject({
       device: "device:speaker",
       text: "Turned off the Office lights",
       language: "en",
@@ -301,9 +322,67 @@ describe("a smart speaker's request", () => {
     await until(() => requestLines(recorded).length === 1);
     expect(requestLines(recorded)[0]).toMatchObject({
       outcome: "ok",
-      detail: { lateReplyMs: expect.any(Number) },
+      detail: {
+        lateReplyMs: expect.any(Number),
+        replyReadyMs: null,
+        finishedPlayingMs: null,
+      },
     });
   });
+
+  it("withdraws a reply that is still being prepared at five seconds", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    const pending = deferredResult<void>();
+    const prepare = vi.fn(async (text: string, _signal?: AbortSignal) => {
+      if (text === "Done") await pending.promise;
+    });
+    const { wake, asked, steps, listening, spokenLate } = setup({ prepare });
+    const opened = await wake();
+    if (!opened.accepted) throw new Error(opened.refusal);
+    await vi.advanceTimersByTimeAsync(0);
+    asked[0]!.answer.resolve({ text: "Done" });
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(kinds(steps(opened.run))).not.toContain("reply");
+    await vi.advanceTimersByTimeAsync(1);
+    expect(prepare.mock.calls[0]?.[1]?.aborted).toBe(true);
+    expect(steps(opened.run).at(-1)).toMatchObject({
+      step: "reply",
+      text: "One moment",
+    });
+    pending.resolve();
+    listening.close(driver, { run: opened.run, end: "done" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(spokenLate[0]).toMatchObject({ text: "Done" });
+  });
+
+  it.each([false, true])(
+    "records a late reply that never dispatched as failed (taken over: %s)",
+    async (takeover) => {
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+      const dispatch = deferredResult<void>();
+      const beforeDispatch = vi.fn(async () => {
+        await dispatch.promise;
+        if (!takeover) throw new Error("The speaker didn't take the reply");
+      });
+      const { wake, asked, listening, recorded, spokenLate } = setup({
+        beforeDispatch,
+      });
+      const opened = await wake();
+      if (!opened.accepted) throw new Error(opened.refusal);
+      await vi.advanceTimersByTimeAsync(oneMomentAfterMs);
+      listening.close(driver, { run: opened.run, end: "played" });
+      asked[0]!.answer.resolve({ text: "Done" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(beforeDispatch).toHaveBeenCalledOnce();
+      if (takeover) await wake();
+      dispatch.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(spokenLate).toEqual([]);
+      expect(requestLines(recorded)).toMatchObject([
+        { outcome: "failed", reason: takeover ? "turn_ended" : "unavailable" },
+      ]);
+    },
+  );
 
   it("drops the answer after one moment once the speaker is asked again", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -363,6 +442,7 @@ describe("a smart speaker's request", () => {
         reason: "assistant_off",
         subjectId: "device:speaker",
         actor: "sanctum",
+        detail: { capability: "audio", capabilityKind: "audio" },
       },
     ]);
 
@@ -377,5 +457,21 @@ describe("a smart speaker's request", () => {
     ).toMatchObject([{ reason: "limited" }]);
     void full;
     expect(asked).toEqual([]);
+  });
+
+  it("bounds refusal logging by driver and across the home", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    const { wake, recorded, spoken } = setup({ answers: false });
+    for (let i = 0; i < 10; i++) {
+      expect(await wake()).toEqual({ accepted: false, refusal: "off" });
+    }
+    expect(recorded).toHaveLength(1);
+    for (let i = 0; i < 10; i++) {
+      spoken.refused("device:kitchen", "limited", `driver:${i}`);
+    }
+    expect(recorded).toHaveLength(4);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await wake();
+    expect(recorded).toHaveLength(5);
   });
 });

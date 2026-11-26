@@ -3,6 +3,7 @@ import {
   defineDevicePage,
   discoverPermission,
   lanPermission,
+  spokenRequestsPermission,
 } from "@meetsanctum/app-sdk";
 import { createDriver, type Driver, type DriverOptions } from "./driver.js";
 import type { SpeakerChange } from "./speaker.js";
@@ -57,7 +58,7 @@ export function createEsphomeApp(options: DriverOptions = {}) {
     // playing them isn't the player's own. 0.11.0: a smart speaker that
     // streams its microphone listens: its requests go to the core, which
     // takes or declines each, and the driver shows the core's steps on it.
-    version: "0.11.0",
+    version: "0.11.1",
     core: "^2.0.0",
     summary:
       "Brings your ESPHome lights, plugs, sensors, buttons and speakers into your home.",
@@ -69,6 +70,10 @@ export function createEsphomeApp(options: DriverOptions = {}) {
         id: "devices.register",
         reason: "To add your ESPHome devices and keep their state.",
         needed: true,
+      },
+      {
+        id: spokenRequestsPermission,
+        reason: "To send requests from your ESPHome speakers to the Assistant.",
       },
       {
         id: discoverPermission(esphomeService),

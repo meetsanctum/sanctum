@@ -46,9 +46,8 @@
 // writes times.
 // 25 lets a smart speaker's driver hand the core its microphone: a run it
 // opens with ctx.audio.listen, its sound, and the steps the core tells it.
-// 26 lets a smart speaker ask: a request says where it was asked from and
-// in which room, in place of the client's name, and a reply may be a
-// confirmation, which a speaker plays as its success chime.
+// 26 replaces the client's name with the request's origin and optional
+// speaker room. A reply may carry a confirmation flag.
 export const protocolVersion = 26;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 11;

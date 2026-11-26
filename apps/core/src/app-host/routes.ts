@@ -1,5 +1,5 @@
 import {
-  assistantRequestSchema,
+  assistantPromptSchema,
   type AppGoBack,
   type AppRunning,
   type AppInfo,
@@ -96,9 +96,7 @@ import type { AppHost } from "./host.js";
 
 const appParams = z.object({ appId: z.string().min(1).max(128) });
 
-const askBody = assistantRequestSchema
-  .pick({ text: true, language: true })
-  .partial({ language: true });
+const askBody = assistantPromptSchema.partial({ language: true });
 const params = appParams.extend({ actionId: z.string().min(1).max(128) });
 const turnOff = z.strictObject({ off: z.boolean() });
 const confirmedId = z.string().min(1).max(64);

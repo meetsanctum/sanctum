@@ -4,8 +4,8 @@ import { z } from "zod";
 // core opens a turn for it and hands it to Sanctum's Assistant, the
 // household's one AI assistant, whose `requests` handler answers with
 // `request.reply()`. Only that app may declare one: the core refuses it from
-// any other. A spoken request reaches it as words, as a typed one does: the
-// core hears the sound and says the reply.
+// any other. Where speech recognition is available, a spoken request reaches
+// it as words and the reply can be played on the speaker.
 //
 // Each client or smart speaker someone asks from is a conversation of its
 // own. A newer request from the same one takes over from one still running:
@@ -52,8 +52,10 @@ export type EarlierExchange = {
 };
 
 /** Where a request was asked: on a smart speaker or a client, by its name. */
-export type RequestFrom = {
-  kind: "speaker" | "client";
+export type RequestFrom<
+  Kind extends "speaker" | "client" = "speaker" | "client",
+> = {
+  kind: Kind;
   /** Such as Office Speaker or Kitchen Tablet. */
   name: string;
 };
@@ -61,17 +63,24 @@ export type RequestFrom = {
 /** A room of the home, by the core's id and its name. */
 export type RequestRoom = { id: string; name: string };
 
-/** What a request carries to the Assistant. */
-export type AssistantRequest = {
+/** A request before the core adds its earlier exchanges. */
+export type AssistantRequestInput = {
   text: string;
   language: RequestLanguage;
-  /**
-   * The room it was asked in: a smart speaker's room in Devices, or null on
-   * a client or a speaker in no room. "The lights" means this room's; a
-   * request that names a room means that one.
-   */
-  room: RequestRoom | null;
-  from: RequestFrom;
+} & (
+  | { from: RequestFrom<"client">; room: null }
+  | {
+      from: RequestFrom<"speaker">;
+      /**
+       * The speaker's room in Devices, or null if it is unassigned.
+       * A request for "the lights" means this room's unless it names another.
+       */
+      room: RequestRoom | null;
+    }
+);
+
+/** What a request carries to the Assistant. */
+export type AssistantRequest = AssistantRequestInput & {
   /** The last exchanges where it was asked, up to 6 and 32 KB, oldest first. */
   earlier: EarlierExchange[];
 };
@@ -79,9 +88,8 @@ export type AssistantRequest = {
 /**
  * The Assistant's answer to a request, in words. Words that only confirm an
  * action that worked, such as "Turned off the Office lights", are a
- * `confirmation`: a client shows them, and a smart speaker plays its success
- * chime in their place, or says them where it can't. It changes nothing
- * else: the turn ends as it would without.
+ * `confirmation`: a client shows them, and where spoken replies are available
+ * a speaker can play a success chime in their place.
  */
 export type RequestReply = { text: string; confirmation?: boolean };
 
@@ -131,16 +139,25 @@ export const earlierExchangeSchema = z.strictObject({
 
 const nameSchema = z.string().min(1).max(128);
 
-export const assistantRequestSchema = z.strictObject({
+export const assistantPromptSchema = z.strictObject({
   text: z.string().trim().min(1).max(requestTextMaxLength),
   language: z.enum(requestLanguages),
-  room: z.strictObject({ id: nameSchema, name: nameSchema }).nullable(),
-  from: z.strictObject({
-    kind: z.enum(["speaker", "client"]),
-    name: nameSchema,
-  }),
+});
+
+const requestWordsSchema = assistantPromptSchema.extend({
   earlier: z.array(earlierExchangeSchema).max(6),
-}) satisfies z.ZodType<AssistantRequest>;
+});
+
+export const assistantRequestSchema = z.union([
+  requestWordsSchema.extend({
+    room: z.null(),
+    from: z.strictObject({ kind: z.literal("client"), name: nameSchema }),
+  }),
+  requestWordsSchema.extend({
+    room: z.strictObject({ id: nameSchema, name: nameSchema }).nullable(),
+    from: z.strictObject({ kind: z.literal("speaker"), name: nameSchema }),
+  }),
+]) satisfies z.ZodType<AssistantRequest>;
 
 /** A request as a runner before protocol 26 takes it, by the client's name. */
 export type EarlierAssistantRequest = Omit<

@@ -2,6 +2,7 @@ import {
   assistantAppId,
   requestTextMaxLength,
   type AssistantRequest,
+  type AssistantRequestInput,
   type ListenRefusal,
   type RequestLanguage,
   type RequestReply,
@@ -9,8 +10,14 @@ import {
 
 import type { ActivityAuthor, NewActivityEntry } from "../activity/activity.js";
 import type { TurnOpener } from "../agents/assistants.js";
+import { minuteWindows } from "../agents/limits.js";
 import { ActionCallError } from "../app-host/errors.js";
-import type { Hearer, HeardRun, RunMoments } from "./listening.js";
+import {
+  listeningRunMs,
+  type Hearer,
+  type HeardRun,
+  type RunMoments,
+} from "./listening.js";
 
 // A smart speaker someone asks: its run (listening.ts) becomes a request to
 // Sanctum's Assistant, opened by the core for the speaker, never by an app.
@@ -55,13 +62,17 @@ export type Transcriber = (run: {
 /** A smart speaker as a request names it. */
 export type Speaker = {
   name: string;
+  capability: string;
   room: AssistantRequest["room"];
 };
 
 // Why a run was refused, as Activity says it.
 type Declined = "assistant_off" | "no_speech_to_text" | ListenRefusal;
 
-type Asking = { run: HeardRun };
+type Asking = { run: HeardRun; cancel: AbortController };
+type Answer =
+  | { empty: "nothing-heard" | "not-understood" }
+  | { reply: RequestReply | null };
 
 function delay(ms: number) {
   let timer: NodeJS.Timeout | undefined;
@@ -106,19 +117,22 @@ export function createSpokenRequests(options: {
       actor: TurnOpener;
       key: string;
       who: ActivityAuthor;
-      asked: Omit<AssistantRequest, "earlier">;
+      asked: AssistantRequestInput;
       check?: () => void;
+      signal?: AbortSignal;
     }): Promise<RequestReply | null>;
     forget(key: string): void;
   };
   speech: () =>
     | {
+        keepRepliesReady?(): () => void;
         reply(input: {
           device: string;
           text: string;
           language: RequestLanguage;
           confirmation?: boolean;
           signal?: AbortSignal;
+          onPlayback?: (finished: boolean) => void;
         }): Promise<string>;
         speak(input: {
           device: string;
@@ -127,6 +141,8 @@ export function createSpokenRequests(options: {
           actor: { kind: "app"; id: string };
           finishing: true;
           confirmation?: boolean;
+          beforeTelling: () => void;
+          signal: AbortSignal;
         }): Promise<unknown>;
       }
     | undefined;
@@ -138,19 +154,34 @@ export function createSpokenRequests(options: {
   // Each speaker's request, from its run's acceptance until its reply is
   // told or dropped.
   const asking = new Map<string, Asking>();
+  const logRefusal = minuteWindows(
+    { agentPerMinute: 1, homePerMinute: 4 },
+    now,
+  );
+
+  function isCurrent({ run, cancel }: Asking) {
+    return (
+      !cancel.signal.aborted &&
+      asking.get(run.device)?.run === run &&
+      options.drives(run.driver, run.device)
+    );
+  }
 
   function actsFor(device: string) {
     const request = asking.get(device);
-    return request !== undefined && options.drives(request.run.driver, device);
+    return request !== undefined && isCurrent(request);
   }
 
-  function declined(device: string, why: Declined) {
+  function declined(device: string, why: Declined, driver: string) {
+    const capability = options.speaker(device)?.capability;
+    if (!capability || logRefusal(driver) !== undefined) return;
     options.record({
       action: "device.declined",
       outcome: "refused",
       reason: why,
       subjectId: device,
       actor: "sanctum",
+      detail: { capability, capabilityKind: "audio" },
     });
   }
 
@@ -158,8 +189,10 @@ export function createSpokenRequests(options: {
     request: Asking,
     speaker: Speaker,
     outcome: { ok: true; late?: number } | { ok: false; reason: string },
+    handedOff = false,
   ) {
     const { run } = request;
+    const moments = sinceHeard(run.moments);
     options.record({
       action: "device.request",
       outcome: outcome.ok ? "ok" : "failed",
@@ -168,7 +201,10 @@ export function createSpokenRequests(options: {
       actor: `speaker:${run.device}`,
       clientName: speaker.name,
       detail: {
-        ...sinceHeard(run.moments),
+        capability: speaker.capability,
+        capabilityKind: "audio",
+        ...moments,
+        ...(handedOff ? { replyReadyMs: null, finishedPlayingMs: null } : {}),
         ...(outcome.ok && outcome.late !== undefined
           ? { lateReplyMs: outcome.late }
           : {}),
@@ -182,7 +218,7 @@ export function createSpokenRequests(options: {
     reply: RequestReply,
     language: RequestLanguage,
   ) {
-    if (asking.get(request.run.device) !== request) return false;
+    if (!isCurrent(request)) return false;
     const speech = options.speech();
     if (!speech) return false;
     try {
@@ -192,43 +228,53 @@ export function createSpokenRequests(options: {
         language,
         actor: { kind: "app", id: assistantAppId },
         finishing: true,
+        signal: request.cancel.signal,
+        beforeTelling: () => {
+          if (!isCurrent(request)) throw new ActionCallError("turn_ended");
+        },
         ...(reply.confirmation ? { confirmation: true } : {}),
       });
       return true;
     } catch (error) {
-      options.log(
-        `speech: a smart speaker's late reply wasn't said (${error instanceof Error ? error.message : String(error)})`,
-      );
+      if (isCurrent(request)) {
+        options.log(
+          `speech: a smart speaker's late reply wasn't said (${error instanceof Error ? error.message : String(error)})`,
+        );
+      }
       return false;
     }
   }
 
-  // The run's reply, said on its speaker, or false when it couldn't be: a
-  // confirmation as the success chime where it can.
-  async function sayInRun(
+  // Prepares audio without handing it to the driver. A reply that misses
+  // its deadline can be withdrawn while it synthesizes or waits its turn.
+  async function prepareReply(
     run: HeardRun,
     reply: RequestReply,
     language: RequestLanguage,
+    signal: AbortSignal,
+    placeholder = false,
   ) {
     const speech = options.speech();
-    if (!speech) return false;
+    if (!speech) return null;
     try {
-      const url = await speech.reply({
+      return await speech.reply({
         device: run.device,
         text: reply.text,
         language,
         ...(reply.confirmation ? { confirmation: true } : {}),
-        signal: run.signal,
+        signal,
+        onPlayback(finished) {
+          if (finished || placeholder) run.done();
+          else run.fail("failed");
+        },
       });
-      run.reply(url, reply.text);
-      return true;
     } catch (error) {
-      if (!run.signal.aborted) {
+      if (!signal.aborted) {
         options.log(
           `speech: a smart speaker's reply wasn't said (${error instanceof Error ? error.message : String(error)})`,
         );
       }
-      return false;
+      return null;
     }
   }
 
@@ -239,29 +285,59 @@ export function createSpokenRequests(options: {
       run.fail("failed");
       return;
     }
-    const request: Asking = { run };
+    asking.get(key)?.cancel.abort();
+    const request: Asking = { run, cancel: new AbortController() };
     asking.set(key, request);
+    const releaseSpeech = options.speech()?.keepRepliesReady?.();
     const language = options.language();
-    const leave = () => {
-      if (asking.get(key) === request) asking.delete(key);
+    const { signal } = request.cancel;
+    const runEnded = ended(run.signal);
+    const interrupted = ended(signal).then(() => "ended" as const);
+    const preparing = new AbortController();
+    let handingOff = false;
+    let asked = false;
+    const finishedNormally = () =>
+      run.ended === "played" || run.ended === "done";
+    const onRunEnd = () => {
+      if (!handingOff || !finishedNormally()) request.cancel.abort();
     };
+    run.signal.addEventListener("abort", onRunEnd, { once: true });
+    let wait: ReturnType<typeof delay> | undefined;
+    const transcriptionLimit = delay(listeningRunMs);
     try {
-      const text = await transcriber({
-        sound: run.sound,
-        stopListening: () => run.stopListening(),
-        language,
-        signal: run.signal,
+      const deadline = run.stopped.then(() => {
+        if (run.signal.aborted) return "ended" as const;
+        const stopped = run.moments.stoppedListening ?? now();
+        wait = delay(Math.max(0, stopped + oneMomentAfterMs - now()));
+        return wait.waited.then(() => "late" as const);
       });
-      run.stopListening();
-      if (run.signal.aborted) return;
-      const words = text?.trim().slice(0, requestTextMaxLength).trim();
-      if (!words) {
-        run.fail(text === null ? "nothing-heard" : "not-understood");
-        return;
-      }
-      run.heard(words);
-      const answered = options.requests
-        .ask({
+      const answer = async (): Promise<Answer> => {
+        // The acknowledgement can close the listening run before these
+        // words are ready. Transcription still has the original run limit.
+        const transcription = new AbortController();
+        const text = await Promise.race([
+          transcriber({
+            sound: run.sound,
+            stopListening: () => run.stopListening(),
+            language,
+            signal: AbortSignal.any([signal, transcription.signal]),
+          }),
+          transcriptionLimit.waited.then(() => {
+            const error = new ActionCallError("timeout");
+            transcription.abort(error);
+            throw error;
+          }),
+        ]).finally(transcriptionLimit.clear);
+        signal.throwIfAborted();
+        run.stopListening();
+        const words = text?.trim().slice(0, requestTextMaxLength).trim();
+        if (!words)
+          return {
+            empty: text === null ? "nothing-heard" : "not-understood",
+          } as const;
+        if (!handingOff) run.heard(words);
+        asked = true;
+        const reply = await options.requests.ask({
           actor: { kind: "device", id: key },
           key,
           who: { actor: `speaker:${key}`, clientName: speaker.name },
@@ -272,70 +348,121 @@ export function createSpokenRequests(options: {
             from: { kind: "speaker", name: speaker.name },
           },
           check: () => {
-            if (!actsFor(key)) throw new ActionCallError("unavailable");
+            if (!isCurrent(request)) throw new ActionCallError("unavailable");
           },
-        })
-        .then(
-          (reply) => ({ reply }),
-          (error: unknown) => ({ error }),
+          signal,
+        });
+        return { reply };
+      };
+      const answered = answer().catch((error: unknown) => ({ error }));
+      const prepared = answered.then(async (result) => {
+        if (!("reply" in result) || !result.reply || preparing.signal.aborted)
+          return result;
+        const url = await prepareReply(
+          run,
+          result.reply,
+          language,
+          AbortSignal.any([run.signal, preparing.signal]),
         );
-      // Five seconds from when listening stopped, hearing the words included.
-      const stopped = run.moments.stoppedListening ?? now();
-      const wait = delay(Math.max(0, stopped + oneMomentAfterMs - now()));
-      const first = await Promise.race([
-        answered,
-        wait.waited.then(() => "late" as const),
-        ended(run.signal).then(() => "ended" as const),
-      ]);
-      wait.clear();
-      // A newer run on the speaker, its removal or its driver stopping
-      // ended it: nothing is left to tell it.
-      if (first === "ended") {
-        recorded(request, speaker, { ok: false, reason: "turn_ended" });
+        return { ...result, url };
+      });
+      const first = await Promise.race([prepared, deadline, interrupted]);
+      wait?.clear();
+      if (first === "ended" || signal.aborted) {
+        if (asked)
+          recorded(request, speaker, { ok: false, reason: "turn_ended" });
         return;
       }
 
       if (first !== "late") {
+        if ("empty" in first) {
+          run.fail(first.empty);
+          return;
+        }
         if ("error" in first) {
-          run.fail("failed");
           recorded(request, speaker, { ok: false, reason: reasonOf(first) });
+          run.fail("failed");
           return;
         }
-        const said =
-          first.reply !== null && (await sayInRun(run, first.reply, language));
-        if (first.reply !== null && !said) {
-          if (!run.signal.aborted) run.fail("failed");
-          recorded(request, speaker, { ok: false, reason: "unavailable" });
-          return;
+        if (first.reply) {
+          if (!("url" in first) || !first.url) {
+            recorded(request, speaker, { ok: false, reason: "unavailable" });
+            run.fail("failed");
+            return;
+          }
+          run.reply(first.url, first.reply.text);
+        } else {
+          run.done();
         }
-        if (!said) run.done();
-        await ended(run.signal);
-        recorded(request, speaker, { ok: true });
+        await runEnded;
+        recorded(
+          request,
+          speaker,
+          finishedNormally()
+            ? { ok: true }
+            : {
+                ok: false,
+                reason:
+                  asking.get(key) === request && run.ended === null
+                    ? "unavailable"
+                    : "turn_ended",
+              },
+        );
         return;
       }
 
       // Too slow: "One moment" ends the run, and the reply follows.
+      handingOff = true;
+      preparing.abort();
       const oneMoment = { text: spokenPhrases.oneMoment[language] };
-      if (!(await sayInRun(run, oneMoment, language))) {
-        run.done();
-      }
-      const later = await answered;
-      const late = now() - run.moments.heard;
-      const lateReply =
-        "error" in later
-          ? { text: spokenPhrases.failed[language] }
-          : later.reply;
-      if (lateReply) await sayLate(request, lateReply, language);
-      if (!run.signal.aborted) await ended(run.signal);
-      recorded(
-        request,
-        speaker,
-        "error" in later
-          ? { ok: false, reason: reasonOf(later) }
-          : { ok: true, late },
+      const placeholder = await prepareReply(
+        run,
+        oneMoment,
+        language,
+        run.signal,
+        true,
       );
+      if (placeholder) run.reply(placeholder, oneMoment.text);
+      else run.done();
+      const later = await Promise.race([answered, interrupted]);
+      await runEnded;
+      if (later === "ended" || signal.aborted) {
+        if (asked)
+          recorded(request, speaker, { ok: false, reason: "turn_ended" }, true);
+      } else if ("error" in later) {
+        await sayLate(
+          request,
+          { text: spokenPhrases.failed[language] },
+          language,
+        );
+        recorded(
+          request,
+          speaker,
+          { ok: false, reason: reasonOf(later) },
+          true,
+        );
+      } else if ("reply" in later && later.reply) {
+        const said = await sayLate(request, later.reply, language);
+        recorded(
+          request,
+          speaker,
+          said
+            ? { ok: true, late: now() - run.moments.heard }
+            : {
+                ok: false,
+                reason: signal.aborted ? "turn_ended" : "unavailable",
+              },
+          true,
+        );
+      } else if ("reply" in later) {
+        recorded(request, speaker, { ok: true }, true);
+      }
     } finally {
-      leave();
+      wait?.clear();
+      transcriptionLimit.clear();
+      run.signal.removeEventListener("abort", onRunEnd);
+      if (asking.get(key) === request) asking.delete(key);
+      releaseSpeech?.();
     }
   }
 
@@ -343,28 +470,28 @@ export function createSpokenRequests(options: {
     /**
      * What hears a smart speaker's run: refused while the Assistant is off,
      * nothing hears words, or the speaker asked too often in the last
-     * minute, each with a line in Activity.
+     * minute. Refusals are logged within a separate Activity limit.
      */
-    hearer(device: string): Hearer | ListenRefusal {
+    hearer(device: string, driver: string): Hearer | ListenRefusal {
       if (!options.requests.answers()) {
-        declined(device, "assistant_off");
+        declined(device, "assistant_off", driver);
         return "off";
       }
       const transcriber = options.transcriber();
       if (!transcriber) {
-        declined(device, "no_speech_to_text");
+        declined(device, "no_speech_to_text", driver);
         return "off";
       }
       if (!options.requests.hasRoom(device)) {
-        declined(device, "limited");
+        declined(device, "limited", driver);
         return "limited";
       }
       return (run) => hear(run, transcriber);
     },
 
     /** A run the core refused on its own account. */
-    refused(device: string, refusal: ListenRefusal) {
-      declined(device, refusal);
+    refused(device: string, refusal: ListenRefusal, driver: string) {
+      declined(device, refusal, driver);
     },
 
     /** Whether the Assistant may act for the speaker: its request lasts. */
@@ -372,8 +499,18 @@ export function createSpokenRequests(options: {
 
     /** A smart speaker went: its request ends, and its window goes. */
     deviceGone(device: string) {
-      asking.delete(device);
       options.requests.forget(device);
+      asking.get(device)?.cancel.abort();
+    },
+
+    driverStopped(driver: string) {
+      for (const request of asking.values()) {
+        if (request.run.driver === driver) request.cancel.abort();
+      }
+    },
+
+    stop() {
+      for (const request of asking.values()) request.cancel.abort();
     },
   };
 }

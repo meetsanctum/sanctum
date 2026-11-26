@@ -190,7 +190,7 @@ describe("an entry's words", () => {
           lateReplyMs: 9_100,
         },
       }).detail,
-    ).toBe("Listened 2.1 s, answered after 9.1 s, played 0.6 s");
+    ).toBe("Listened 2.1 s, answered after 9.1 s");
     expect(asked({ outcome: "failed", reason: "turn_ended" }).title).toBe(
       "Office Speaker stopped a request for a newer one",
     );
@@ -208,8 +208,8 @@ describe("an entry's words", () => {
         "device",
       ),
     ).toEqual({
-      title: "Heard its wake word, but the Assistant is off",
-      detail: "",
+      title: "Declined a voice request",
+      detail: "The Assistant is off",
       problem: false,
     });
   });

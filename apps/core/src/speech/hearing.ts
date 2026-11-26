@@ -1,4 +1,7 @@
-import type { RequestLanguage } from "@meetsanctum/app-sdk";
+import {
+  spokenRequestsPermission,
+  type RequestLanguage,
+} from "@meetsanctum/app-sdk";
 
 import type { NewActivityEntry } from "../activity/activity.js";
 import type { AppHost } from "../app-host/host.js";
@@ -12,10 +15,8 @@ import { createSpokenRequests, type Transcriber } from "./spoken.js";
 // word (listening.ts), and the requests someone makes of them (spoken.ts).
 
 function listens(device: ReturnType<Devices["get"]>) {
-  return (
-    device?.capabilities.some(
-      (part) => part.kind === "audio" && part.features.listens,
-    ) ?? false
+  return device?.capabilities.find(
+    (part) => part.kind === "audio" && part.features.listens,
   );
 }
 
@@ -24,7 +25,7 @@ export function assembleHearing(options: {
   places: Pick<PlacesModule, "list">;
   apps: () => AppHost;
   speech: () => Speech | undefined;
-  // What hears words in a run's sound: none yet, so every run is refused.
+  // The core declines runs when no transcriber is available.
   transcriber?: () => Transcriber | null;
   language?: () => RequestLanguage;
   record: (entry: NewActivityEntry) => void;
@@ -37,18 +38,23 @@ export function assembleHearing(options: {
     language: options.language ?? (() => "en"),
     speaker(id) {
       const device = devices.get(id);
-      if (!device) return null;
+      const capability = listens(device);
+      if (!device || !capability) return null;
       const room =
         device.roomId === null
           ? undefined
           : places.list().rooms.find((each) => each.id === device.roomId);
       return {
         name: device.name,
+        capability: capability.id,
         room: room ? { id: room.id, name: room.name } : null,
       };
     },
     drives: (driver, id) =>
-      devices.get(id)?.driver === driver && apps().isRunning(driver),
+      devices.get(id)?.driver === driver &&
+      apps().isRunning(driver) &&
+      (apps().holds(driver)?.granted.includes(spokenRequestsPermission) ??
+        false),
     requests: {
       answers: () => apps().answersRequests(),
       hasRoom: (key) => apps().hasRequestRoom(key),
@@ -62,15 +68,23 @@ export function assembleHearing(options: {
   });
   const listening = createListening({
     idFor: (driver, key) => devices.idFor(driver, key),
-    listens: (id) => listens(devices.get(id)),
-    hearer: (id) => spoken.hearer(id),
-    refused: (id, refusal) => spoken.refused(id, refusal),
+    listens: (id) => Boolean(listens(devices.get(id))),
+    hearer: spoken.hearer,
+    refused: spoken.refused,
     now: options.now,
     log,
   });
   return {
     listening: {
       ...listening,
+      driverStopped(driver: string) {
+        listening.driverStopped(driver);
+        spoken.driverStopped(driver);
+      },
+      stop() {
+        listening.stop();
+        spoken.stop();
+      },
       /** A device went: its run and its request end. */
       deviceGone(id: string) {
         listening.deviceGone(id);
@@ -79,6 +93,6 @@ export function assembleHearing(options: {
     },
     spoken,
     /** Whether a device is a smart speaker that listens. */
-    isSpeaker: (id: string) => listens(devices.get(id)),
+    isSpeaker: (id: string) => Boolean(listens(devices.get(id))),
   };
 }

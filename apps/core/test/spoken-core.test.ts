@@ -1,8 +1,10 @@
 import {
   aiAssistantPermission,
+  announcePermission,
   assistantAppId,
   defineApp,
   registerPermission,
+  spokenRequestsPermission,
   type AppContext,
   type AssistantRequestCall,
   type ListenStep,
@@ -30,6 +32,7 @@ it("answers a smart speaker's request through the Assistant, for the speaker, in
     permissions: [{ id: aiAssistantPermission, reason: "To do what you ask." }],
     actions: [],
     async requests(ctx, request) {
+      if (asked.length > 0) throw new Error("Could not answer");
       const { reply: _reply, signal: _signal, ...words } = request;
       asked.push(words);
       // Its tools act for the speaker while its request lasts.
@@ -51,7 +54,10 @@ it("answers a smart speaker's request through the Assistant, for the speaker, in
   const driver = defineApp({
     ...base,
     id: "sanctum.example",
-    permissions: [{ id: registerPermission, reason: "For the test." }],
+    permissions: [
+      { id: registerPermission, reason: "To register the test devices." },
+      { id: spokenRequestsPermission, reason: "To send voice requests." },
+    ],
     actions: [],
     start: async (ctx) => {
       driverCtx = ctx;
@@ -94,7 +100,8 @@ it("answers a smart speaker's request through the Assistant, for the speaker, in
   try {
     const { manager } = fakeManager();
     const hostStatus = await manager.hostStatus();
-    manager.serviceUrl = async () => serviceUrl;
+    let piperRunning = false;
+    manager.serviceUrl = async () => (piperRunning ? serviceUrl : null);
     manager.hostStatus = async () => ({
       ...hostStatus,
       network: {
@@ -106,8 +113,12 @@ it("answers a smart speaker's request through the Assistant, for the speaker, in
         speedMbps: null,
       },
     });
-    manager.wantServiceForCore = vi.fn(async () => {});
-    manager.releaseServiceForCore = vi.fn(async () => {});
+    manager.wantServiceForCore = vi.fn(async () => {
+      piperRunning = true;
+    });
+    manager.releaseServiceForCore = vi.fn(async () => {
+      piperRunning = false;
+    });
     const core = await testCore({
       manager,
       speakerPort: 0,
@@ -124,6 +135,14 @@ it("answers a smart speaker's request through the Assistant, for the speaker, in
     const maya = await claimed(core);
     await running(core, assistantAppId);
     await running(core, "sanctum.example");
+    const announcements = await post(
+      core,
+      "/api/agents/can-use/area",
+      { id: announcePermission, on: false },
+      maya,
+    );
+    expect(announcements.statusCode).toBe(200);
+    await vi.waitFor(() => expect(piperRunning).toBe(true));
     const speaker = core.devices
       .list()
       .find((device) => device.type === "smart-speaker")!;
@@ -138,9 +157,23 @@ it("answers a smart speaker's request through the Assistant, for the speaker, in
       maya,
     );
 
-    const run = (await driverCtx!.audio.listen("speaker", {
-      wakeWord: "Okay Nabu",
-    })) as VoiceRun;
+    const wake = () =>
+      driverCtx!.audio.listen("speaker", {
+        wakeWord: "Okay Nabu",
+      });
+    expect(await wake()).toEqual({ accepted: false, refusal: "off" });
+    const grant = await post(
+      core,
+      "/api/apps/sanctum.example/permissions/update",
+      {
+        permission: spokenRequestsPermission,
+        granted: true,
+      },
+      maya,
+    );
+    expect(grant.statusCode).toBeLessThan(300);
+
+    const run = (await wake()) as VoiceRun;
     expect(run.accepted).toBe(true);
     run.send(new Uint8Array(3_200));
     const steps: ListenStep[] = [];
@@ -164,7 +197,11 @@ it("answers a smart speaker's request through the Assistant, for the speaker, in
     const audio = await fetch(reply.url);
     expect(audio.headers.get("content-type")).toBe("audio/flac");
     await audio.arrayBuffer();
-    await run.close("played");
+    // The core finishes the run after the audio without a playback report.
+    const finished: ListenStep[] = [];
+    for await (const step of run.steps()) finished.push(step);
+    expect(finished.at(-1)).toEqual({ step: "done" });
+    expect(finished.some((step) => step.step === "error")).toBe(false);
 
     await vi.waitFor(() =>
       expect(
@@ -175,6 +212,11 @@ it("answers a smart speaker's request through the Assistant, for the speaker, in
         outcome: "ok",
         subjectId: speaker.id,
         clientName: "Office Speaker",
+        detail: {
+          capability: "audio",
+          capabilityKind: "audio",
+          finishedPlayingMs: null,
+        },
       }),
     );
     // Its tool's call is the Assistant's, asked from the speaker.
@@ -188,7 +230,21 @@ it("answers a smart speaker's request through the Assistant, for the speaker, in
         askedBy: { kind: "speaker", id: speaker.id, name: "Office Speaker" },
       });
     }
+
+    const failed = await wake();
+    if (!failed.accepted) throw new Error(failed.refusal);
+    failed.send(new Uint8Array(3_200));
+    const failedSteps: ListenStep[] = [];
+    for await (const step of failed.steps()) failedSteps.push(step);
+    expect(failedSteps).toContainEqual({ step: "error", error: "failed" });
+    expect(core.activity.recent()).toContainEqual(
+      expect.objectContaining({
+        action: "device.request",
+        outcome: "failed",
+        reason: "failed",
+      }),
+    );
   } finally {
     server.close();
   }
-});
+}, 12_000);

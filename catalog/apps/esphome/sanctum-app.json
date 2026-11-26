@@ -1,7 +1,7 @@
 {
   "id": "sanctum.esphome",
   "name": "ESPHome",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "core": "^2.0.0",
   "protocol": 26,
   "summary": "Brings your ESPHome lights, plugs, sensors, buttons and speakers into your home.",
@@ -75,6 +75,13 @@
       "id": "devices.register",
       "reason": "To add your ESPHome devices and keep their state.",
       "needed": true,
+      "asked": null,
+      "startsOn": false
+    },
+    {
+      "id": "devices.listen",
+      "reason": "To send requests from your ESPHome speakers to the Assistant.",
+      "needed": false,
       "asked": null,
       "startsOn": false
     },

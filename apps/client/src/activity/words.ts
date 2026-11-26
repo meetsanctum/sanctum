@@ -287,7 +287,7 @@ function requestMomentWords(detail: ActivityInfo["detail"]) {
   else if (ready !== null && stopped !== null) {
     parts.push(`answered in ${seconds(ready - stopped)}`);
   }
-  if (played !== null && ready !== null) {
+  if (late === null && played !== null && ready !== null) {
     parts.push(`played ${seconds(played - ready)}`);
   }
   return parts.join(", ");
@@ -296,13 +296,13 @@ function requestMomentWords(detail: ActivityInfo["detail"]) {
 function declinedWords(reason: string | null) {
   switch (reason) {
     case "assistant_off":
-      return "the Assistant is off";
+      return "The Assistant is off";
     case "no_speech_to_text":
-      return "speech recognition isn't running";
+      return "Speech recognition isn't running";
     case "limited":
-      return "it had too many requests in the last minute";
+      return "It had too many requests in the last minute";
     default:
-      return "it couldn't listen just then";
+      return "It couldn't listen just then";
   }
 }
 
@@ -352,7 +352,7 @@ function deviceEntry(
     // Nothing went wrong: the speaker was told no, and why.
     case "device.declined":
       return {
-        ...said(`Heard its wake word, but ${declinedWords(entry.reason)}`, ""),
+        ...said("Declined a voice request", declinedWords(entry.reason)),
         problem: false,
       };
     case "device.offline":

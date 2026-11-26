@@ -101,24 +101,18 @@ export function apartApp(
       ? {
           requests: async (
             ctx: RequestContext,
-            {
-              text,
-              language,
-              room,
-              from,
-              earlier,
-              signal,
-            }: AssistantRequestCall,
+            { reply: _reply, signal, ...request }: AssistantRequestCall,
           ) => {
             // An older runner's schema takes no more than it knows: the
             // client's name, by which a speaker is named too, and no earlier
             // exchanges before 22.
+            const { text, language, from, earlier } = request;
             const asked = { text, language, clientName: from.name };
             const body: OutboundCallBody =
               manifest.protocol >= roomFrom
                 ? {
                     kind: "request",
-                    request: { text, language, room, from, earlier },
+                    request,
                   }
                 : {
                     kind: "request",

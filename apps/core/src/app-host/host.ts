@@ -1,5 +1,6 @@
 import {
   aiAssistantPermission,
+  spokenRequestsPermission,
   type AppGoBack,
   type AppRunning,
   type AppSettings,
@@ -311,6 +312,9 @@ export function createAppHost(options: {
     onPermission(entry, permission, granted) {
       if (!granted && permission === aiAssistantPermission) {
         requests.stopped(entry);
+      }
+      if (!granted && permission === spokenRequestsPermission) {
+        options.listening?.driverStopped(entry.app.id);
       }
       runChoices.onPermission(entry, permission, granted);
     },

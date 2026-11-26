@@ -1,8 +1,9 @@
 import {
   aiAssistantPermission,
   assistantAppId,
-  assistantRequestSchema,
   defineApp,
+  earlierExchangeSchema,
+  requestLanguages,
   toStaticManifest,
 } from "@meetsanctum/app-sdk";
 import { manifestDigest } from "@meetsanctum/app-sdk/package";
@@ -18,13 +19,19 @@ import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import { base, cleanUps, running, useCleanUps } from "./app-apart-support.js";
 import { claimed, post, testCore } from "./support.js";
 
 useCleanUps();
 
-it("keeps a protocol 21 Assistant connected across a takeover", async () => {
+it.each([21, 25])(
+  "keeps a protocol %i Assistant connected across a takeover",
+  checkTakeover,
+);
+
+async function checkTakeover(protocol: number) {
   const app = defineApp({
     ...base,
     id: assistantAppId,
@@ -39,7 +46,6 @@ it("keeps a protocol 21 Assistant connected across a takeover", async () => {
     actions: [],
     async requests() {},
   });
-  const protocol = 21;
   const manifest = { ...toStaticManifest(app), protocol };
   const digest = manifestDigest(JSON.stringify(manifest));
   const folder = await mkdtemp(join(tmpdir(), "sanctum-apart-"));
@@ -47,7 +53,10 @@ it("keeps a protocol 21 Assistant connected across a takeover", async () => {
   const core = await testCore({
     appSockets: folder,
     apart: [
-      { apart: { manifest, digest, folder: "1.0.0+test" }, origin: "official" },
+      {
+        apart: { manifest, digest, folder: "1.0.0+test" },
+        origin: "official",
+      },
     ],
   });
   cleanUps.push(() => core.apps.close());
@@ -94,11 +103,16 @@ it("keeps a protocol 21 Assistant connected across a takeover", async () => {
     heard
       .filter((message) => message.type === "call")
       .filter((message) => message.body.kind === "request");
-  // What a protocol 21 runner takes: the client's name, no room, no
-  // earlier exchanges.
-  const legacyRequestSchema = assistantRequestSchema
-    .omit({ earlier: true, room: true, from: true })
-    .extend({ clientName: assistantRequestSchema.shape.from.shape.name });
+  // Both runners take the client's name. Protocol 25 also takes history.
+  const legacy = z.strictObject({
+    text: z.string(),
+    language: z.enum(requestLanguages),
+    clientName: z.string().min(1),
+  });
+  const legacyRequestSchema =
+    protocol === 21
+      ? legacy
+      : legacy.extend({ earlier: z.array(earlierExchangeSchema) });
 
   const first = ask("First");
   await vi.waitFor(() => expect(requests()).toHaveLength(1));
@@ -108,8 +122,17 @@ it("keeps a protocol 21 Assistant connected across a takeover", async () => {
   if (older?.body.kind !== "request" || newer?.body.kind !== "request") {
     throw new Error("Expected two Assistant requests");
   }
-  expect(legacyRequestSchema.parse(older.body.request).text).toBe("First");
-  expect(legacyRequestSchema.parse(newer.body.request).text).toBe("Second");
+  const firstRequest = legacyRequestSchema.parse(older.body.request);
+  const secondRequest = legacyRequestSchema.parse(newer.body.request);
+  expect(firstRequest.text).toBe("First");
+  expect(secondRequest.text).toBe("Second");
+  expect(secondRequest.clientName).toBe(firstRequest.clientName);
+  if (protocol === 25) {
+    expect(firstRequest).toMatchObject({ earlier: [] });
+    expect(secondRequest).toMatchObject({
+      earlier: [{ asked: "First", reply: null, cutOff: true }],
+    });
+  }
   expect((await first).json()).toEqual({ reply: null });
 
   say({
@@ -149,8 +172,8 @@ it("keeps a protocol 21 Assistant connected across a takeover", async () => {
       outcome: { ok: false, message: "turn_ended" },
     }),
   );
-  expect(heard.some((message) => message.type === "end")).toBe(false);
+  expect(heard.some((message) => message.type === "end")).toBe(protocol === 25);
   expect(socket.destroyed).toBe(false);
   say({ type: "answer", call: older.id, outcome: { ok: true } });
   say({ type: "answer", call: newer.id, outcome: { ok: true } });
-});
+}

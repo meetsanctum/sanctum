@@ -11,6 +11,7 @@ export function assembleSpeech(options: {
     >;
   devices: Parameters<typeof createSpeech>[0]["devices"];
   areaOn: () => boolean;
+  hears?: () => boolean;
   log: (message: string) => void;
 }) {
   const { speaker, manager, devices, areaOn, log } = options;
@@ -33,6 +34,8 @@ export function assembleSpeech(options: {
           },
           devices,
           areaOn,
+          hears: options.hears,
+          chime: [successChime()],
           publishedPort: speaker.publishedPort,
           keptPhrases: Object.values(spokenPhrases).flatMap((phrase) =>
             speechLanguages.map((language) => ({
@@ -77,4 +80,19 @@ export function assembleSpeech(options: {
       await announcements?.stop();
     },
   };
+}
+
+// Two soft, rising notes with fades to avoid clicks at their edges.
+function successChime() {
+  const rate = 22_050;
+  const noteLength = Math.round(rate * 0.14);
+  const samples = new Int16Array(noteLength * 2);
+  for (const [note, frequency] of [660, 880].entries()) {
+    for (let i = 0; i < noteLength; i++) {
+      const fade = Math.sin((Math.PI * i) / noteLength) ** 2;
+      const wave = Math.sin((2 * Math.PI * frequency * i) / rate);
+      samples[note * noteLength + i] = Math.round(4_000 * fade * wave);
+    }
+  }
+  return { rate, samples };
 }
