@@ -221,6 +221,7 @@ describe("Home with floors", () => {
       "h3 Shed",
       "h4 Devices",
       "h3 No room",
+      "h4 Devices",
     ]);
   });
 

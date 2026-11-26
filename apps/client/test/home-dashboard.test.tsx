@@ -310,13 +310,13 @@ describe("Home", () => {
           ["Devices", "Desk strip", "Lamp"],
         ],
       },
-      { heading: "No room", groups: [["On Home", "Loose lamp"]] },
+      { heading: "No room", groups: [["Devices", "Loose lamp"]] },
     ]);
-    // Only the office has a row above its devices, so only it heads them,
-    // a level under the room's name.
+    // Each room's devices, No room's too, under Devices, a level under the
+    // room's name.
     expect(
       [...container.querySelectorAll("h3")].map((each) => each.textContent),
-    ).toEqual(["Devices"]);
+    ).toEqual(["Devices", "Devices"]);
     const office = container.querySelector(
       'section[aria-labelledby="home-office"]',
     )!;
@@ -338,7 +338,7 @@ describe("Home", () => {
     expect(container.textContent).not.toContain("Kettle");
   });
 
-  it("keeps the On Home label for a room with pinned devices and no row", async () => {
+  it("heads a room's devices on Home when it has no row", async () => {
     devices.push(
       device("attic-plug", "Attic plug", "attic", [
         capability("switch", "power", {}, { on: false }),
@@ -349,7 +349,7 @@ describe("Home", () => {
 
     expect(sections().find((section) => section.heading === "Attic")).toEqual({
       heading: "Attic",
-      groups: [["On Home", "Attic plug"]],
+      groups: [["Devices", "Attic plug"]],
     });
     const attic = container.querySelector(
       'section[aria-labelledby="home-attic"]',
@@ -358,7 +358,7 @@ describe("Home", () => {
       [...attic.querySelectorAll("h1, h2, h3, h4, h5, h6")].map(
         (each) => each.textContent,
       ),
-    ).toEqual(["Attic"]);
+    ).toEqual(["Attic", "Devices"]);
   });
 
   it("lays each room out in full first, then skips it while off screen", async () => {
