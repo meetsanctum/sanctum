@@ -1,11 +1,7 @@
-import type {
-  ClientInfo,
-  DrawingSwitches,
-  Me,
-} from "@meetsanctum/auth-protocol";
+import type { Me } from "@meetsanctum/auth-protocol";
 import { useEffect } from "react";
 
-import { chooseDrawing } from "./effects";
+import { chooseDrawing, type DrawingChoices } from "./effects";
 import { getShell } from "./shell";
 
 // Reduce effects and Reduce motion for this client, as set on any client
@@ -14,16 +10,6 @@ import { getShell } from "./shell";
 // paired draw as set too.
 
 const preferenceKey = "drawing";
-
-/** Reads the switches, or the explicit On choices from an older core. */
-export function drawingSwitches(client: ClientInfo): DrawingSwitches {
-  return (
-    client.drawing ?? {
-      reduceEffects: client.reduceEffects === "on",
-      reduceMotion: client.reduceMotion === "on",
-    }
-  );
-}
 
 /** The copy this device keeps, applied as soon as it is read. */
 export async function followStoredDrawing() {
@@ -50,11 +36,14 @@ export async function followStoredDrawing() {
 
 /** Draws as Me says, and keeps a copy. */
 export function useDrawing(me: Me | undefined) {
-  const { reduceEffects, reduceMotion } = me ? drawingSwitches(me.client) : {};
+  const reduceEffects = me?.client.reduceEffects;
+  const reduceMotion = me?.client.reduceMotion;
 
   useEffect(() => {
-    if (reduceEffects === undefined || reduceMotion === undefined) return;
-    const choices = { reduceEffects, reduceMotion };
+    // A core from before the two were switches says something else.
+    if (typeof reduceEffects !== "boolean") return;
+    if (typeof reduceMotion !== "boolean") return;
+    const choices: DrawingChoices = { reduceEffects, reduceMotion };
     chooseDrawing(choices);
     void getShell()
       .preferences.set(preferenceKey, JSON.stringify(choices))

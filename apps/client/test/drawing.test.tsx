@@ -30,11 +30,8 @@ const client: ClientInfo = {
   lastSeenAt: null,
   connectedSince: null,
   current: true,
-  drawing: { reduceEffects: false, reduceMotion: false },
-  reduceEffects: "off",
-  reduceMotion: "off",
-  drawingRevision: 0,
-  drawn: null,
+  reduceEffects: false,
+  reduceMotion: false,
 };
 
 const me = (changes: Partial<ClientInfo>): Me => ({
@@ -92,11 +89,7 @@ it("draws as Me says and keeps a copy", async () => {
   expect(stored.has("drawing")).toBe(false);
 
   await act(async () =>
-    root.render(
-      <Probe
-        me={me({ drawing: { reduceEffects: true, reduceMotion: true } })}
-      />,
-    ),
+    root.render(<Probe me={me({ reduceEffects: true, reduceMotion: true })} />),
   );
   expect(html()).toMatchObject({ effects: "reduced", motion: "reduced" });
   expect(JSON.parse(stored.get("drawing")!)).toEqual({
@@ -106,9 +99,7 @@ it("draws as Me says and keeps a copy", async () => {
 
   await act(async () =>
     root.render(
-      <Probe
-        me={me({ drawing: { reduceEffects: true, reduceMotion: false } })}
-      />,
+      <Probe me={me({ reduceEffects: true, reduceMotion: false })} />,
     ),
   );
   expect(html()).toMatchObject({ effects: "reduced" });
@@ -120,24 +111,13 @@ it("draws as Me says and keeps a copy", async () => {
   await act(async () => root.unmount());
 });
 
-it("draws with explicit On choices from an older core", async () => {
+it("leaves the look as it is where Me says something other than on or off", async () => {
   const root = createRoot(document.createElement("div"));
+  const old = { reduceEffects: "automatic", reduceMotion: "automatic" };
   await act(async () =>
-    root.render(
-      <Probe
-        me={me({
-          drawing: undefined,
-          reduceEffects: "automatic",
-          reduceMotion: "on",
-        })}
-      />,
-    ),
+    root.render(<Probe me={me(old as unknown as Partial<ClientInfo>)} />),
   );
   expect(html().effects).toBeUndefined();
-  expect(html().motion).toBe("reduced");
-  expect(JSON.parse(stored.get("drawing")!)).toEqual({
-    reduceEffects: false,
-    reduceMotion: true,
-  });
+  expect(stored.has("drawing")).toBe(false);
   await act(async () => root.unmount());
 });

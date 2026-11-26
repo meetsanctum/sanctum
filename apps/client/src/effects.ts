@@ -1,5 +1,3 @@
-import type { DrawingSwitches } from "@meetsanctum/auth-protocol";
-
 // Reduce effects and Reduce motion: this device draws the same screens more
 // plainly, without live blur where the screen says data-effects="reduced" on
 // <html>, and without movement where it says data-motion="reduced"
@@ -11,7 +9,10 @@ import type { DrawingSwitches } from "@meetsanctum/auth-protocol";
 // either on. Development and display benchmark builds can use `?effects=`
 // and `?motion=` in the page's address to see either look on any device.
 
-const off: DrawingSwitches = { reduceEffects: false, reduceMotion: false };
+/** Whether this client draws with Reduce effects and with Reduce motion. */
+export type DrawingChoices = { reduceEffects: boolean; reduceMotion: boolean };
+
+const off: DrawingChoices = { reduceEffects: false, reduceMotion: false };
 
 // "reduced" or "regular", as the page's address asks, else as it is set.
 function drawn(asked: string | null | undefined, on: boolean) {
@@ -54,7 +55,7 @@ export function followEffects(
 }
 
 /** Draws with these settings from now on. */
-export function chooseDrawing(choices: DrawingSwitches) {
+export function chooseDrawing(choices: DrawingChoices) {
   if (
     choices.reduceEffects === chosen.reduceEffects &&
     choices.reduceMotion === chosen.reduceMotion

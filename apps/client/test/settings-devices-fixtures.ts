@@ -106,9 +106,6 @@ export const macbook = {
   lastSeenAt: "2026-10-28T11:59:30Z",
   connectedSince: null,
   current: true,
-  drawing: { reduceEffects: false, reduceMotion: false },
-  reduceEffects: "off",
-  reduceMotion: "off",
-  drawingRevision: 0,
-  drawn: null,
+  reduceEffects: false,
+  reduceMotion: false,
 } as const;

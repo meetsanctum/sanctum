@@ -101,7 +101,8 @@ it("applies drawing choices from a live notice, reading only Me", async () => {
     let me = {
       client: {
         id: host.clientId,
-        drawing: { reduceEffects: false, reduceMotion: false },
+        reduceEffects: false,
+        reduceMotion: false,
       },
       person: null,
     };
@@ -114,10 +115,7 @@ it("applies drawing choices from a live notice, reading only Me", async () => {
 
     me = {
       ...me,
-      client: {
-        ...me.client,
-        drawing: { ...me.client.drawing, reduceMotion: true },
-      },
+      client: { ...me.client, reduceMotion: true },
     };
     await act(async () => receive({ type: "client" }));
 

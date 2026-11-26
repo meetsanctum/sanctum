@@ -30,11 +30,8 @@ const maya: Me = {
     lastSeenAt: null,
     connectedSince: null,
     current: true,
-    drawing: { reduceEffects: false, reduceMotion: false },
-    reduceEffects: "off",
-    reduceMotion: "off",
-    drawingRevision: 0,
-    drawn: null,
+    reduceEffects: false,
+    reduceMotion: false,
   },
   person: { id: "maya", name: "Maya", avatar: null, colour: "#c5cdac" },
 };
@@ -45,11 +42,8 @@ const tablet: ClientInfo = {
   kind: "shared",
   personId: null,
   current: false,
-  drawing: { reduceEffects: false, reduceMotion: false },
-  reduceEffects: "off",
-  reduceMotion: "off",
-  drawingRevision: 0,
-  drawn: null,
+  reduceEffects: false,
+  reduceMotion: false,
 };
 
 const home: Places = {

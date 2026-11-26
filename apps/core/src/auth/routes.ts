@@ -1,6 +1,5 @@
 import {
   keyStretching,
-  legacyDrawingChoices,
   platforms,
   type AgentInfo,
   type AgentSetupStarted,
@@ -65,10 +64,6 @@ const clientName = z.string().trim().min(1).max(60);
 const newClient = z.object({ name: clientName, platform: z.enum(platforms) });
 const username = z.string().max(64);
 const stretching = z.number().int().min(1).max(keyStretching.version);
-const drawingSwitch = z
-  .union([z.boolean(), z.enum(legacyDrawingChoices)])
-  .transform((choice) => choice === true || choice === "on")
-  .optional();
 
 const schemas = {
   claimStart: z.object({
@@ -96,15 +91,9 @@ const schemas = {
   revoke: z.object({ id }) satisfies z.ZodType<RevokeClient>,
   drawing: z.object({
     id,
-    reduceEffects: drawingSwitch,
-    reduceMotion: drawingSwitch,
-  }) satisfies z.ZodType<SetClientDrawing, unknown>,
-  drawn: z.object({
-    effects: z.enum(["regular", "reduced"]),
-    motion: z.enum(["regular", "reduced"]),
-    slowDevice: z.boolean(),
-    drawingRevision: z.number().int().nonnegative(),
-  }),
+    reduceEffects: z.boolean().optional(),
+    reduceMotion: z.boolean().optional(),
+  }) satisfies z.ZodType<SetClientDrawing>,
   setLoginStart: z.object({
     personId: id,
     username,
@@ -321,12 +310,6 @@ export async function registerAuth(
       parse(schemas.drawing, request.body),
     ),
   );
-  // Clients with three-way choices still report how they draw. The saved
-  // switches determine what the core publishes for the client.
-  app.post("/api/auth/me/drawn", async (request, reply) => {
-    parse(schemas.drawn, request.body);
-    return reply.code(204).send();
-  });
   app.post("/api/auth/clients/revoke", async (request, reply) => {
     clients.revoke(principal(request), parse(schemas.revoke, request.body));
     return reply.code(204).send();

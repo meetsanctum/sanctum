@@ -1,9 +1,4 @@
-import type {
-  ClientInfo,
-  LegacyDrawingChoice,
-  LegacySetClientDrawing,
-  SetClientDrawing,
-} from "@meetsanctum/auth-protocol";
+import type { ClientInfo, SetClientDrawing } from "@meetsanctum/auth-protocol";
 import { Button, Switch } from "@meetsanctum/ui-sdk";
 import { useId, useLayoutEffect, useRef, useState } from "react";
 
@@ -17,7 +12,6 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import { coreJson } from "./core-fetch";
-import { drawingSwitches } from "./drawing";
 
 // Settings → Clients → a client's Effects and motion: Reduce effects and
 // Reduce motion for that client, each a switch of its own, applied as set.
@@ -27,26 +21,21 @@ const label = "text-[13px] leading-[18px] font-medium text-muted-foreground";
 
 /** What a client's row says it draws with, where something is reduced. */
 export function drawnText(client: ClientInfo) {
-  const { reduceEffects, reduceMotion } = drawingSwitches(client);
-  if (reduceEffects && reduceMotion) {
+  if (client.reduceEffects && client.reduceMotion) {
     return "Reduced effects and motion";
   }
-  if (reduceEffects) return "Reduced effects";
-  if (reduceMotion) return "Reduced motion";
+  if (client.reduceEffects) return "Reduced effects";
+  if (client.reduceMotion) return "Reduced motion";
   return null;
 }
 
 type DrawingChange = Omit<SetClientDrawing, "id">;
 
-function legacyChoice(on?: boolean): LegacyDrawingChoice | undefined {
-  if (on === undefined) return undefined;
-  return on ? "on" : "off";
-}
-
 export function ClientDrawing(props: {
   /** The client whose drawing is open, as Clients last read it. */
   client?: ClientInfo;
   onClose: () => void;
+  /** Reads the clients again once a change is saved. */
   onChanged: () => Promise<void>;
 }) {
   // What the dialog showed stays while it closes.
@@ -73,10 +62,8 @@ export function ClientDrawing(props: {
   }, [openId]);
 
   const draft = pending?.opening === opening.current ? pending : undefined;
-  const switches = client && drawingSwitches(client);
-  const effects =
-    draft?.change.reduceEffects ?? switches?.reduceEffects ?? false;
-  const motion = draft?.change.reduceMotion ?? switches?.reduceMotion ?? false;
+  const effects = draft?.change.reduceEffects ?? client?.reduceEffects ?? false;
+  const motion = draft?.change.reduceMotion ?? client?.reduceMotion ?? false;
 
   // One save at a time, so they reach the core in order; a press while one
   // is on its way is let go. The switches stay enabled, so focus stays.
@@ -87,17 +74,12 @@ export function ClientDrawing(props: {
     setPending({ opening: opened, change });
     setProblem(undefined);
     try {
-      const json: SetClientDrawing | LegacySetClientDrawing = client?.drawing
-        ? { id: openId, ...change }
-        : {
-            id: openId,
-            reduceEffects: legacyChoice(change.reduceEffects),
-            reduceMotion: legacyChoice(change.reduceMotion),
-          };
       await coreJson("/api/auth/clients/drawing", {
         method: "POST",
-        json,
+        json: { id: openId, ...change } satisfies SetClientDrawing,
       });
+      // Clients read afresh, since a read that ended while this was on its
+      // way can already hold a newer change from another client.
       await props.onChanged();
     } catch {
       if (opening.current === opened) {
