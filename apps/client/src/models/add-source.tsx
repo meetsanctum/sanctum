@@ -26,7 +26,7 @@ import { ModelPicker } from "./model-picker";
 import { SourceCheck } from "./source-check";
 import {
   availablePlaces,
-  checkTokensText,
+  checkCostText,
   placeDetails,
   placeNames,
   placePrivacy,
@@ -271,10 +271,7 @@ export function AddSource(props: {
         and can use your home's tools.
       </p>
       {step === "provider" && (
-        <p className={cardLine}>
-          It uses {checkTokensText}, which {providerNames[provider]} charges
-          for.
-        </p>
+        <p className={cardLine}>{checkCostText(provider)}</p>
       )}
       {step === "provider" && provider === "openrouter" && (
         <p className={cardLine}>

@@ -228,11 +228,10 @@ export function checkLine(
   }
 }
 
-/**
- * What a check can use at a provider: the question is short, and the
- * answer stops at 1,024 tokens, which a model that thinks first can reach.
- */
-export const checkTokensText = "up to about 1,000 tokens";
+/** The check requests a limit of 1,024 output tokens. */
+export function checkCostText(provider: ModelProvider) {
+  return `${providerNames[provider]} charges for the check's input tokens and up to about 1,000 output tokens.`;
+}
 
 /** A model's download, such as 5.2 GB. */
 export function sizeText(bytes: number) {
