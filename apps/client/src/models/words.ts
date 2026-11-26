@@ -139,7 +139,9 @@ export function checkProblemText(
 }
 
 /**
- * What the saved source says in its row while a check runs or needs attention.
+ * What a source's row says of its check: while one runs, or when the last
+ * one needs attention. A check that went well says nothing here; the dialog
+ * that ran it said how it went.
  */
 export function checkLine(
   clock: HomeClock,

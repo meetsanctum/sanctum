@@ -45,33 +45,29 @@ async function finishCheck(id: string, tokens: number) {
 }
 
 describe("AI model source dialogs", () => {
-  it("briefly confirms a successful check started from the source menu", async () => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    try {
-      await show();
-      const status = () =>
-        page.container.querySelector('#settings-models li [role="status"]')
-          ?.textContent;
-      expect(status()).toBeUndefined();
+  it("follows Check again from a source's menu to its result", async () => {
+    await show();
+    const status = () =>
+      document.querySelector('#settings-models li [role="status"]')
+        ?.textContent;
+    // A check that went well leaves the row quiet.
+    expect(status()).toBeUndefined();
 
-      await selectMenuItem("Check again");
-      expect(page.requests).toContainEqual([
-        "POST",
-        "/api/models/sources/mac/check",
-        undefined,
-      ]);
-      expect(status()).toBe("Checking: asking it a short question");
+    await selectMenuItem("Check again");
+    expect(page.requests).toContainEqual([
+      "POST",
+      "/api/models/sources/mac/check",
+      undefined,
+    ]);
+    expect(dialog()?.textContent).toContain("Checking Qwen3 8B");
+    expect(dialog()?.textContent).not.toContain("Added to your sources");
 
-      await finishCheck(mac.id, 147);
-      expect(status()).toBe("Answered and used the tool");
-
-      await act(async () => vi.advanceTimersByTimeAsync(5_000));
-      expect(status()).toBeUndefined();
-      await act(async () => live.refresh());
-      expect(status()).toBeUndefined();
-    } finally {
-      vi.useRealTimers();
-    }
+    await finishCheck(mac.id, 147);
+    expect(dialog()?.textContent).toContain("Qwen3 8B is ready");
+    expect(dialog()?.textContent).toContain("The check used 147 tokens");
+    await click(button("Done"));
+    expect(dialog()).toBeNull();
+    expect(status()).toBeUndefined();
   });
 
   it("starts Add a source at the place chosen, and gives focus back to it", async () => {

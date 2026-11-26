@@ -23,7 +23,6 @@ import {
   Trash2,
 } from "lucide-react";
 import {
-  useCallback,
   useEffect,
   useId,
   useRef,
@@ -67,7 +66,7 @@ import {
 } from "./words";
 
 // Settings → AI models: the sources of the home's AI model, the one in use
-// first, then the others with Use, each with its check status and a
+// first, then the others with Use, each with how its last check went and a
 // menu to check it again, rename it, change its model or key, or remove it;
 // then the tokens used and the apps that use it (usage.tsx). Add a source
 // adds Ollama on Sanctum, or looks at a computer's address or a provider's
@@ -75,18 +74,10 @@ import {
 // can run instead (no-model.tsx). Every client sees and changes the same.
 
 type Editing = {
-  action: "rename" | "model" | "key" | "remove";
+  action: "check" | "rename" | "model" | "key" | "remove";
   source: ModelSourceInfo;
   trigger: HTMLButtonElement | null;
 };
-
-type Recheck = { previousAt: string | undefined; confirmedAt?: string };
-type SettleRecheck = (
-  id: string,
-  recheck: Recheck,
-  confirmedAt?: string,
-) => void;
-const confirmationMs = 5_000;
 
 export function ModelsPage(props: {
   live: LiveFeed;
@@ -105,7 +96,6 @@ export function ModelsPage(props: {
   const opener = useRef<HTMLButtonElement>(null);
   const [editing, setEditing] = useState<Editing>();
   const [isActing, setIsActing] = useState(false);
-  const [rechecks, setRechecks] = useState(() => new Map<string, Recheck>());
   const addButton = useRef<HTMLButtonElement>(null);
   const firstChoice = useRef<HTMLButtonElement>(null);
   const supportsSanctum = info?.usage !== undefined;
@@ -119,43 +109,16 @@ export function ModelsPage(props: {
   const focusAddSource = () =>
     (addButton.current ?? firstChoice.current)?.focus();
 
-  const settleRecheck = useCallback<SettleRecheck>(
-    (id, recheck, confirmedAt) => {
-      setRechecks((current) => {
-        if (current.get(id) !== recheck) return current;
-        const next = new Map(current);
-        if (confirmedAt === undefined) next.delete(id);
-        else next.set(id, { ...recheck, confirmedAt });
-        return next;
-      });
-    },
-    [],
-  );
-
-  const act = async (action: "use" | "check", source: ModelSourceInfo) => {
+  const act = async (path: string) => {
     if (isActing) return;
     setIsActing(true);
     try {
-      const next = await coreJson<ModelsResponse>(
-        `/api/models/sources/${source.id}/${action}`,
-        {
+      answered(
+        await coreJson<ModelsResponse>(path, {
           method: "POST",
           signal: AbortSignal.timeout(10_000),
-        },
+        }),
       );
-      if (action === "check") {
-        const started = next.sources.find((each) => each.id === source.id);
-        if (started) {
-          // While a check runs, the core still reports its previous result.
-          const previousAt = started.checking
-            ? started.check?.at
-            : source.check?.at;
-          setRechecks((current) =>
-            new Map(current).set(source.id, { previousAt }),
-          );
-        }
-      }
-      answered(next);
     } catch {
       void refresh();
     } finally {
@@ -167,10 +130,7 @@ export function ModelsPage(props: {
       key={source.id}
       source={source}
       isActing={isActing}
-      recheck={rechecks.get(source.id)}
-      settleRecheck={settleRecheck}
-      onUse={() => void act("use", source)}
-      onCheck={() => void act("check", source)}
+      onUse={() => void act(`/api/models/sources/${source.id}/use`)}
       onEdit={(action, trigger) => setEditing({ source, action, trigger })}
       onOpenOllama={
         hasOllamaPage && props.onOpenApp
@@ -286,40 +246,9 @@ export function ModelsPage(props: {
   );
 }
 
-function CheckStatus({
-  source,
-  recheck,
-  settleRecheck,
-}: {
-  source: ModelSourceInfo;
-  recheck?: Recheck;
-  settleRecheck: SettleRecheck;
-}) {
+function CheckStatus(props: { source: ModelSourceInfo }) {
   const clock = useHomeClock();
-  const { id, check, checking } = source;
-  const answeredAt = check?.outcome === "answered" ? check.at : undefined;
-  const confirmedAt = recheck?.confirmedAt;
-  const newAnswer = answeredAt !== recheck?.previousAt ? answeredAt : undefined;
-  useEffect(() => {
-    if (recheck && !checking && confirmedAt === undefined) {
-      settleRecheck(id, recheck, newAnswer);
-    }
-  }, [id, recheck, confirmedAt, checking, newAnswer, settleRecheck]);
-  useEffect(() => {
-    if (!recheck || confirmedAt === undefined) return;
-    const timer = setTimeout(() => settleRecheck(id, recheck), confirmationMs);
-    return () => clearTimeout(timer);
-  }, [id, recheck, confirmedAt, settleRecheck]);
-
-  const showConfirmation =
-    recheck &&
-    answeredAt !== undefined &&
-    answeredAt === (confirmedAt ?? newAnswer);
-  const line =
-    checkLine(clock, source) ??
-    (showConfirmation
-      ? { text: "Answered and used the tool", tone: "plain" }
-      : undefined);
+  const line = checkLine(clock, props.source);
   if (!line) return null;
   return (
     <p
@@ -342,10 +271,7 @@ function CheckStatus({
 function SourceRow(props: {
   source: ModelSourceInfo;
   isActing: boolean;
-  recheck?: Recheck;
-  settleRecheck: SettleRecheck;
   onUse: () => void;
-  onCheck: () => void;
   onEdit: (
     action: Editing["action"],
     trigger: HTMLButtonElement | null,
@@ -409,7 +335,7 @@ function SourceRow(props: {
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem
               disabled={source.checking}
-              onSelect={props.onCheck}
+              onSelect={() => props.onEdit("check", menuButton.current)}
             >
               <RefreshCw />
               Check again
@@ -446,11 +372,7 @@ function SourceRow(props: {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <CheckStatus
-        source={source}
-        recheck={props.recheck}
-        settleRecheck={props.settleRecheck}
-      />
+      <CheckStatus source={source} />
       {source.inUse && source.kind === "sanctum" && (
         <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
           Ollama keeps this model loaded, so the first question after a restart
@@ -470,14 +392,16 @@ function SourceRow(props: {
 }
 
 const editTitles: Record<Editing["action"], (name: string) => string> = {
+  check: () => "Check again",
   rename: () => "Rename this computer",
   model: () => "Change model",
   key: () => "Replace key",
   remove: (name) => `Remove ${name}?`,
 };
 
-// Renaming a computer, changing a source's model or a provider's key, or
-// removing a source after saying what that does.
+// Checking a source again, renaming a computer, changing a source's model or
+// a provider's key, or removing a source after saying what that does. A
+// check, and the check a new model or key runs, is followed to its result.
 function EditSource(props: {
   editing?: Editing;
   // The home's sources as the page has them, for the check a change runs.
@@ -500,6 +424,7 @@ function EditSource(props: {
   // A new model or key is checked: the dialog follows it to its result.
   const [checked, setChecked] = useState<string>();
   const { start, cancel } = useAuthAttempt();
+  const { onDone } = props;
   const action = editing?.action;
 
   useEffect(() => {
@@ -516,6 +441,28 @@ function EditSource(props: {
     setWorking(false);
     setChecked(undefined);
     const opened = props.editing;
+    if (opened?.action === "check") {
+      // Asked at once: the dialog follows the check from its start.
+      const controller = new AbortController();
+      const { signal } = controller;
+      setWorking(true);
+      void coreJson<ModelsResponse>(
+        `/api/models/sources/${opened.source.id}/check`,
+        { method: "POST", signal },
+      )
+        .then((info) => {
+          if (signal.aborted) return;
+          onDone(info);
+          setWorking(false);
+          setChecked(opened.source.id);
+        })
+        .catch(() => {
+          if (signal.aborted) return;
+          setWorking(false);
+          setProblem("Couldn't start the check. Try again.");
+        });
+      return () => controller.abort();
+    }
     if (opened?.action !== "model") return;
     // Listed again, as a model may have been pulled since; a provider's
     // list needs its key, which only the core holds.
@@ -539,7 +486,7 @@ function EditSource(props: {
         if (!signal.aborted) setProblem("That did not work. Try again.");
       });
     return () => controller.abort();
-  }, [props.editing, cancel]);
+  }, [props.editing, cancel, onDone]);
 
   const close = () => {
     cancel();
@@ -614,16 +561,40 @@ function EditSource(props: {
           else props.onFocusFallback();
         }}
       >
-        {checked ? (
+        {checked || (action === "check" && working && source) ? (
           <SourceCheck
-            source={props.info.sources.find((each) => each.id === checked)}
+            source={
+              checked
+                ? props.info.sources.find((each) => each.id === checked)
+                : source && { ...source, checking: true }
+            }
             inUse={props.info.sources.find(
-              (each) => each.inUse && each.id !== checked,
+              (each) => each.inUse && each.id !== source?.id,
             )}
-            done={action === "key" ? "Key replaced" : "Model changed"}
+            done={
+              action === "key"
+                ? "Key replaced"
+                : action === "model"
+                  ? "Model changed"
+                  : undefined
+            }
             onClose={close}
             onChanged={props.onDone}
           />
+        ) : action === "check" ? (
+          <div className="flex flex-col gap-5">
+            <DialogHeader>
+              <DialogTitle>Check again</DialogTitle>
+            </DialogHeader>
+            {problem && (
+              <p role="alert" className="m-0 text-sm text-destructive">
+                {problem}
+              </p>
+            )}
+            <DialogFooter>
+              <Button onClick={close}>Done</Button>
+            </DialogFooter>
+          </div>
         ) : (
           <form onSubmit={submit} className="flex flex-col gap-5">
             <DialogHeader>
