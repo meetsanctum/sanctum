@@ -12,6 +12,17 @@
 /** Whether this client draws with Reduce effects and with Reduce motion. */
 export type DrawingChoices = { reduceEffects: boolean; reduceMotion: boolean };
 
+export function isDrawingChoices(value: unknown): value is DrawingChoices {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "reduceEffects" in value &&
+    typeof value.reduceEffects === "boolean" &&
+    "reduceMotion" in value &&
+    typeof value.reduceMotion === "boolean"
+  );
+}
+
 const off: DrawingChoices = { reduceEffects: false, reduceMotion: false };
 
 // "reduced" or "regular", as the page's address asks, else as it is set.

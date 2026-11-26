@@ -1,7 +1,7 @@
 import type { Me } from "@meetsanctum/auth-protocol";
 import { useEffect } from "react";
 
-import { chooseDrawing, type DrawingChoices } from "./effects";
+import { chooseDrawing, isDrawingChoices } from "./effects";
 import { getShell } from "./shell";
 
 // Reduce effects and Reduce motion for this client, as set on any client
@@ -18,19 +18,7 @@ export async function followStoredDrawing() {
     const stored = await getShell().preferences.get(preferenceKey);
     if (drawingFromMe) return;
     const choices: unknown = stored && JSON.parse(stored);
-    if (
-      typeof choices === "object" &&
-      choices !== null &&
-      "reduceEffects" in choices &&
-      "reduceMotion" in choices &&
-      typeof choices.reduceEffects === "boolean" &&
-      typeof choices.reduceMotion === "boolean"
-    ) {
-      chooseDrawing({
-        reduceEffects: choices.reduceEffects,
-        reduceMotion: choices.reduceMotion,
-      });
-    }
+    if (isDrawingChoices(choices)) chooseDrawing(choices);
   } catch {
     // A copy it can't read is left to Me.
   }
@@ -43,10 +31,9 @@ export function useDrawing(me: Me | undefined) {
 
   useEffect(() => {
     // A core from before the two were switches says something else.
-    if (typeof reduceEffects !== "boolean") return;
-    if (typeof reduceMotion !== "boolean") return;
+    const choices = { reduceEffects, reduceMotion };
+    if (!isDrawingChoices(choices)) return;
     drawingFromMe = true;
-    const choices: DrawingChoices = { reduceEffects, reduceMotion };
     chooseDrawing(choices);
     void getShell()
       .preferences.set(preferenceKey, JSON.stringify(choices))

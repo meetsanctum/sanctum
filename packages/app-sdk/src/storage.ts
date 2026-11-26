@@ -56,10 +56,15 @@ function countKnownMigrations(
 // Applies the migrations this build has and the database lacks, all in one
 // transaction, recording them in the same table as Drizzle's migrator does.
 // `name` begins its errors, such as "The core's database".
+// Optional data steps run inside that transaction alongside the schema changes.
 export function migrateDatabase(
   sqlite: Database.Database,
   folder: string,
   name: string,
+  data?: {
+    before: (migrationTime: number) => void;
+    after: (migrationTime: number) => void;
+  },
 ) {
   // Foreign keys can only be switched off between transactions.
   if (sqlite.inTransaction) {
@@ -97,9 +102,11 @@ export function migrateDatabase(
           "INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)",
         );
         for (const migration of pending) {
+          data?.before(migration.folderMillis);
           for (const statement of migration.sql) {
             sqlite.prepare(statement).run();
           }
+          data?.after(migration.folderMillis);
           record.run(migration.hash, migration.folderMillis);
         }
         // With foreign keys off, nothing else notices a migration leaving

@@ -162,6 +162,7 @@ describe("clients", () => {
     expect(await me()).toMatchObject({
       reduceEffects: false,
       reduceMotion: false,
+      drawingRevision: 0,
     });
 
     const set = await post(
@@ -175,6 +176,7 @@ describe("clients", () => {
       id: display.id,
       reduceEffects: true,
       reduceMotion: false,
+      drawingRevision: 1,
       current: false,
     });
     expect(heard).toEqual([{ type: "client" }]);
@@ -200,7 +202,11 @@ describe("clients", () => {
     ).json();
     expect(
       listed.find((client: { id: string }) => client.id === display.id),
-    ).toMatchObject({ reduceEffects: false, reduceMotion: true });
+    ).toMatchObject({
+      reduceEffects: false,
+      reduceMotion: true,
+      drawingRevision: 3,
+    });
     expect(heard).toHaveLength(3);
 
     const motionOff = await post(
@@ -213,16 +219,18 @@ describe("clients", () => {
     expect(motionOff.json()).toMatchObject({
       reduceEffects: false,
       reduceMotion: false,
+      drawingRevision: 4,
     });
     expect(heard).toHaveLength(4);
 
     // The same again tells it nothing.
-    await post(
+    const unchanged = await post(
       core,
       "/api/auth/clients/drawing",
       { id: display.id, reduceMotion: false },
       { token: claim.token },
     );
+    expect(unchanged.json()).toMatchObject({ drawingRevision: 4 });
     expect(heard).toHaveLength(4);
   });
 

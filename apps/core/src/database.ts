@@ -8,6 +8,8 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { migrateDrawingChoices } from "./auth/drawing-migration.js";
+
 // The core's own database: one SQLite file in its data volume for People,
 // Auth and the core's other modules. Apps keep their own files. The manager
 // copies the whole volume before an update, with the core stopped, and puts
@@ -61,6 +63,7 @@ export function openCoreDatabase(
       sqlite,
       options.migrationsFolder ?? migrationsFolder,
       "The core's database",
+      migrateDrawingChoices(sqlite),
     );
     const db = drizzle({ client: sqlite });
     return { db, close: () => sqlite.close() };
