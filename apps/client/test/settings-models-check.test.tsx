@@ -111,6 +111,31 @@ async function showCheck(
 }
 
 describe("A source's check in the dialog", () => {
+  it.each([
+    {
+      source: {
+        ...mac,
+        kind: "sanctum",
+        computer: undefined,
+        address: undefined,
+      },
+      icon: "cpu",
+    },
+    { source: mac, icon: "laptop" },
+    { source: router, icon: "cloud" },
+  ] as const)(
+    "shows only the source icon above the steps for $source.kind",
+    async ({ source, icon }) => {
+      await showCheck({ ...source, checking: true });
+
+      const headerIcons = document.querySelectorAll(
+        '[role="dialog"] [role="status"] svg:not(ol svg)',
+      );
+      expect(headerIcons).toHaveLength(1);
+      expect(headerIcons[0]?.classList).toContain(`lucide-${icon}`);
+    },
+  );
+
   it("says what it's doing while the check runs, and that closing is fine", async () => {
     const { onClose } = await showCheck({ ...added, checking: true });
     // The model by its own name, as the model list shows it.
