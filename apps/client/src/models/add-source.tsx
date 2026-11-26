@@ -5,14 +5,8 @@ import {
   type ModelSourceLook,
   type AppInfo,
 } from "@meetsanctum/app-sdk";
-import {
-  Button,
-  Input,
-  NativeSelect,
-  NativeSelectOption,
-  SegmentedControl,
-} from "@meetsanctum/ui-sdk";
-import { Check } from "lucide-react";
+import { Button, Input, SegmentedControl } from "@meetsanctum/ui-sdk";
+import { CircleCheck } from "lucide-react";
 import { useEffect, useId, useState, type FormEvent } from "react";
 
 import { useAuthAttempt } from "../auth/use-auth-attempt";
@@ -27,7 +21,9 @@ import {
 } from "../components/ui/dialog";
 import { coreJson } from "../core-fetch";
 import { AddSanctum, ollamaAppId } from "./add-sanctum";
-import type { ModelsResponse } from "./data";
+import type { AddSourceResponse, ModelsResponse } from "./data";
+import { ModelPicker } from "./model-picker";
+import { SourceCheck } from "./source-check";
 import {
   availablePlaces,
   placeDetails,
@@ -35,20 +31,22 @@ import {
   placePrivacy,
   problemText,
   providerNames,
-  sizeText,
   type Place,
 } from "./words";
 
 // Adding a source of the home's AI model: first where it runs, then Ollama
 // on Sanctum (add-sanctum.tsx), a computer's address, which Sanctum looks at
 // for Ollama and its models, or a provider's key, which Sanctum checks and
-// lists the models of. Adding it runs a check, whose answer the page shows.
+// lists the models of. Adding it runs a check, which the dialog follows to
+// its result (source-check.tsx), with the tokens it used.
 
 type Where = Place;
 type Found = { models: ModelChoice[]; address?: string };
 
 const help = "m-0 text-[13px] leading-[18px] text-muted-foreground";
 const fieldLabel = "text-[13px] font-medium";
+const cardLine =
+  "m-0 text-[13px] leading-[18px] font-medium text-muted-foreground";
 const choice =
   "flex cursor-pointer items-start gap-3 rounded-md border-2 border-transparent bg-card px-4 py-3 has-checked:border-primary has-checked:bg-background has-focus-visible:ring-3 has-focus-visible:ring-ring/50";
 const providerOptions = modelProviders.map((value) => ({
@@ -58,6 +56,9 @@ const providerOptions = modelProviders.map((value) => ({
 
 export function AddSource(props: {
   open: boolean;
+  // The home's sources as the page has them, which its answers keep up to
+  // date while a check runs.
+  info: ModelsResponse;
   onOpenChange: (open: boolean) => void;
   onAdded: (info: ModelsResponse) => void;
   onCloseAutoFocus: () => void;
@@ -84,7 +85,12 @@ export function AddSource(props: {
   const [problem, setProblem] = useState<string>();
   const [looking, setLooking] = useState(false);
   const [adding, setAdding] = useState(false);
+  // The source just added, whose check the dialog follows.
+  const [added, setAdded] = useState<string>();
   const { start, cancel } = useAuthAttempt();
+  const canAdd =
+    model !== "" &&
+    found?.models.some((choice) => choice.id === model) === true;
   const ids = {
     address: useId(),
     computer: useId(),
@@ -106,6 +112,7 @@ export function AddSource(props: {
     setProblem(undefined);
     setLooking(false);
     setAdding(false);
+    setAdded(undefined);
   }, [props.open, props.start, defaultSource, cancel]);
 
   // What was found is for what was typed: typing again asks again.
@@ -134,6 +141,13 @@ export function AddSource(props: {
             : { kind, key: key.trim() },
       });
       if (signal.aborted) return;
+      setModel((selected) =>
+        selected &&
+        answer.found &&
+        answer.models.some((choice) => choice.id === selected)
+          ? selected
+          : "",
+      );
       if (!answer.found) {
         setProblem(
           problemText(answer.problem, {
@@ -149,7 +163,6 @@ export function AddSource(props: {
         );
       } else {
         setFound({ models: answer.models, address: answer.address });
-        setModel(answer.models[0]!.id);
       }
     } catch {
       if (!signal.aborted) setProblem("That did not work. Try again.");
@@ -158,15 +171,32 @@ export function AddSource(props: {
     }
   };
 
+  // The dialog stays open on the new source's check, which its id finds in
+  // the page's answers.
+  const showCheck = (info: AddSourceResponse, before: ReadonlySet<string>) => {
+    let id = info.addedSourceId;
+    if (id === undefined) {
+      const unfamiliar = info.sources.filter(
+        (source) => !before.has(source.id),
+      );
+      if (unfamiliar.length === 1) id = unfamiliar[0]?.id;
+    }
+    props.onAdded(info);
+    setAdding(false);
+    if (id) setAdded(id);
+    else props.onOpenChange(false);
+  };
+
   const add = async (event: FormEvent) => {
     event.preventDefault();
-    if (!found || !model || adding) return;
+    if (!found || !canAdd || adding) return;
     if (step === "computer" && !computer.trim()) return;
+    const before = new Set(props.info.sources.map((source) => source.id));
     const signal = start();
     setAdding(true);
     setProblem(undefined);
     try {
-      const info = await coreJson<ModelsResponse>("/api/models/sources", {
+      const info = await coreJson<AddSourceResponse>("/api/models/sources", {
         method: "POST",
         signal,
         json:
@@ -180,8 +210,7 @@ export function AddSource(props: {
             : { kind: provider, key: key.trim(), model },
       });
       signal.throwIfAborted();
-      props.onAdded(info);
-      props.onOpenChange(false);
+      showCheck(info, before);
     } catch {
       if (signal.aborted) return;
       setProblem("That did not work. Try again.");
@@ -189,17 +218,22 @@ export function AddSource(props: {
     }
   };
 
+  const count = (models: number) =>
+    models === 1 ? "1 model" : `${models} models`;
+  // What the check found, under the field it checked: where the eye is
+  // after pressing Check.
   const status = found && (
-    <p
-      role="status"
-      className="m-0 flex items-center gap-2 text-sm font-medium"
-    >
-      <Check aria-hidden="true" className="size-4 text-(--leaf-text)" />
+    <p role="status" className="m-0 flex items-start gap-2 text-sm font-medium">
+      <CircleCheck
+        aria-hidden="true"
+        className="mt-px size-4.5 shrink-0 fill-(--leaf-text) text-background"
+      />
       {step === "computer"
-        ? `Found Ollama at ${found.address}, with ${found.models.length === 1 ? "1 model" : `${found.models.length} models`}`
-        : "The key works"}
+        ? `Found Ollama at ${found.address}, with ${count(found.models.length)}.`
+        : `The key works. It can use ${count(found.models.length)}.`}
     </p>
   );
+  const foundEdge = found ? "border-(--leaf-text)/60" : undefined;
   const problemLine = problem && (
     <p role="alert" className="m-0 text-sm text-destructive">
       {problem}
@@ -210,26 +244,51 @@ export function AddSource(props: {
       <label htmlFor={ids.model} className={fieldLabel}>
         Model
       </label>
-      <NativeSelect
+      <ModelPicker
         id={ids.model}
+        aria-describedby={`${ids.model}-help`}
+        models={found.models}
         value={model}
+        onChange={setModel}
         disabled={adding}
-        onChange={(event) => setModel(event.target.value)}
-        className="w-full"
-      >
-        {found.models.map((each) => (
-          <NativeSelectOption key={each.id} value={each.id}>
-            {each.size ? `${each.name} · ${sizeText(each.size)}` : each.name}
-          </NativeSelectOption>
-        ))}
-      </NativeSelect>
-      <p className={help}>
+      />
+      <p id={`${ids.model}-help`} className={help}>
         {step === "computer"
           ? "For another model, run ollama pull on that computer, then check again."
-          : `The models your key can use at ${providerNames[provider]}.`}
+          : "Choose one that can use tools, so it can act on your devices."}
       </p>
     </div>
   );
+  // What pressing Add and check does, and what it costs, right above it.
+  const checkCard = (
+    <div className="flex flex-col gap-1 rounded-md bg-card px-4 py-3">
+      <span className="text-sm font-medium">Adding it runs a check</span>
+      <p className={cardLine}>
+        {productName} asks the model one short question to see that it answers
+        and can use your home's tools.
+      </p>
+      {step === "provider" && (
+        <p className={cardLine}>
+          It uses a few hundred tokens, and {providerNames[provider]} charges
+          for them.
+        </p>
+      )}
+      {step === "provider" && provider === "openrouter" && (
+        <p className={cardLine}>
+          OpenRouter passes the question to the company behind the model.
+        </p>
+      )}
+      {step === "provider" && provider === "anthropic" && (
+        <p className={cardLine}>
+          Anthropic keeps the start of a conversation for a few minutes to
+          answer faster.
+        </p>
+      )}
+    </div>
+  );
+  const addedSource = added
+    ? props.info.sources.find((source) => source.id === added)
+    : undefined;
 
   const setOpen = (open: boolean) => {
     if (adding) return;
@@ -246,7 +305,19 @@ export function AddSource(props: {
           props.onCloseAutoFocus();
         }}
       >
-        {step === "where" && (
+        {added ? (
+          <SourceCheck
+            source={addedSource}
+            inUse={props.info.sources.find(
+              (source) => source.inUse && source.id !== added,
+            )}
+            done="Added to your sources"
+            onClose={() => props.onOpenChange(false)}
+            onChanged={props.onAdded}
+          />
+        ) : null}
+
+        {!added && step === "where" && (
           <form
             className="flex flex-col gap-5"
             onSubmit={(event) => {
@@ -296,14 +367,16 @@ export function AddSource(props: {
           </form>
         )}
 
-        {step === "sanctum" && (
+        {!added && step === "sanctum" && (
           <AddSanctum
             apps={props.apps}
             onBack={() => setStep("where")}
-            onAdded={(info) => {
-              props.onAdded(info);
-              props.onOpenChange(false);
-            }}
+            onAdded={(info) =>
+              showCheck(
+                info,
+                new Set(props.info.sources.map((source) => source.id)),
+              )
+            }
             onAppAdded={(app) => props.onAppAdded?.(app)}
             onOpenOllama={
               props.onOpenApp &&
@@ -317,10 +390,10 @@ export function AddSource(props: {
           />
         )}
 
-        {step === "computer" && (
+        {!added && step === "computer" && (
           <form className="flex flex-col gap-5" onSubmit={add}>
             <DialogHeader>
-              <DialogTitle>A computer in your home</DialogTitle>
+              <DialogTitle>Add a computer in your home</DialogTitle>
               <DialogDescription>
                 Install Ollama on that computer and let it listen on your
                 network, then enter its address.
@@ -341,6 +414,7 @@ export function AddSource(props: {
                   autoFocus
                   aria-describedby={`${ids.address}-help`}
                   aria-invalid={!!problem && !found}
+                  className={foundEdge}
                   onChange={(event) => {
                     setAddress(event.target.value);
                     forget();
@@ -361,12 +435,12 @@ export function AddSource(props: {
                   {problem && !found ? "Check again" : "Check"}
                 </Button>
               </div>
+              {status}
               <p id={`${ids.address}-help`} className={help}>
                 An address on your network, such as 192.168.1.40. Port 11434,
                 unless you changed it there: add it as 192.168.1.40:11500.
               </p>
             </div>
-            {status}
             {found && (
               <div className="flex flex-col gap-1.5">
                 <label htmlFor={ids.computer} className={fieldLabel}>
@@ -384,6 +458,7 @@ export function AddSource(props: {
               </div>
             )}
             {models}
+            {checkCard}
             {problemLine}
             <DialogFooter>
               <Button
@@ -399,7 +474,7 @@ export function AddSource(props: {
               </Button>
               <Button
                 type="submit"
-                disabled={!found || !model || !computer.trim() || adding}
+                disabled={!canAdd || !computer.trim() || adding}
               >
                 Add and check
               </Button>
@@ -407,12 +482,13 @@ export function AddSource(props: {
           </form>
         )}
 
-        {step === "provider" && (
+        {!added && step === "provider" && (
           <form className="flex flex-col gap-5" onSubmit={add}>
             <DialogHeader>
-              <DialogTitle>An AI provider</DialogTitle>
+              <DialogTitle>Add an AI provider</DialogTitle>
               <DialogDescription>
-                {productName} keeps the key sealed and never shows it again.
+                Your home's AI model runs at the provider, with your own API
+                key.
               </DialogDescription>
             </DialogHeader>
             <SegmentedControl
@@ -442,7 +518,9 @@ export function AddSource(props: {
                   maxLength={512}
                   disabled={adding}
                   autoFocus
+                  aria-describedby={`${ids.key}-help`}
                   aria-invalid={!!problem && !found}
+                  className={foundEdge}
                   onChange={(event) => {
                     setKey(event.target.value);
                     forget();
@@ -463,25 +541,15 @@ export function AddSource(props: {
                   Check key
                 </Button>
               </div>
-              <p className={help}>
-                From your account at {providerNames[provider]}. Any limit on
-                what it spends is set there.
+              {status}
+              <p id={`${ids.key}-help`} className={help}>
+                Create one in your {providerNames[provider]} account, where you
+                can also set a spending limit. {productName} stores it encrypted
+                and never shows it again.
               </p>
             </div>
-            {status}
             {models}
-            <div className="flex flex-col gap-1 rounded-md bg-card px-4 py-3">
-              <span className="text-sm font-medium">
-                What goes to {providerNames[provider]}
-              </span>
-              <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
-                A short test question and the description of a test tool.
-                {provider === "openrouter" &&
-                  " OpenRouter passes it to the company behind the model."}
-                {provider === "anthropic" &&
-                  " Anthropic keeps the start of a conversation for a few minutes to answer faster."}
-              </p>
-            </div>
+            {checkCard}
             {problemLine}
             <DialogFooter>
               <Button
@@ -495,7 +563,7 @@ export function AddSource(props: {
               >
                 Back
               </Button>
-              <Button type="submit" disabled={!found || !model || adding}>
+              <Button type="submit" disabled={!canAdd || adding}>
                 Add and check
               </Button>
             </DialogFooter>

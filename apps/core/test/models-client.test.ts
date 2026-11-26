@@ -420,6 +420,40 @@ describe("the client", () => {
     });
   });
 
+  it.each([
+    {
+      finish: "",
+      outcome: "failed",
+      tokens: undefined,
+    },
+    {
+      finish:
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+      outcome: "noTool",
+      tokens: undefined,
+    },
+    {
+      finish:
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\ndata: {"choices":[],"usage":{"prompt_tokens":0,"completion_tokens":0}}\n\ndata: [DONE]\n\n',
+      outcome: "noTool",
+      tokens: 0,
+    },
+  ])(
+    "reports $tokens tokens for a check that ends with $outcome",
+    async ({ finish, outcome, tokens }) => {
+      const result = await checkSource({
+        endpoint: endpoint(
+          'data: {"choices":[{"delta":{"content":"Once"}}]}\n\n' + finish,
+        ),
+        model: "qwen3:8b",
+        inHome: true,
+        now: () => new Date(),
+      });
+      expect(result.check.outcome).toBe(outcome);
+      expect(result.check.tokens).toBe(tokens);
+    },
+  );
+
   it("names a key that's refused", async () => {
     const failed = ask("{}", 401).catch((error: unknown) => error);
     await expect(failed).resolves.toBeInstanceOf(ModelError);
