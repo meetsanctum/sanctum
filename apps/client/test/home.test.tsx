@@ -129,6 +129,21 @@ describe("navigation", () => {
     expect(pageTitle()).toBe("Kitchen");
   });
 
+  it("starts the next room's page at the top, not where the last was left", async () => {
+    homeData.rooms = [
+      ...homeData.rooms,
+      { id: "bedroom", name: "Bedroom", floorId: null },
+    ];
+    await refresh();
+    await openKitchen();
+    container.querySelector("main")!.scrollTop = 250;
+
+    await choose("Bedroom");
+
+    expect(pageTitle()).toBe("Bedroom");
+    expect(container.querySelector("main")!.scrollTop).toBe(0);
+  });
+
   it("keeps a room's page when Moods goes: rooms are the shell's", async () => {
     await openKitchen();
     homeData.installed = [];
@@ -606,6 +621,15 @@ describe("the home's dashboards", () => {
     expect(
       (await dashboardItems()).map((item) => item.getAttribute("aria-current")),
     ).toEqual([null, "page"]);
+  });
+
+  it("starts the next dashboard at the top, not where the last was left", async () => {
+    container.querySelector("main")!.scrollTop = 250;
+
+    await choose("Night");
+
+    expect(title()).toBe("Night");
+    expect(container.querySelector("main")!.scrollTop).toBe(0);
   });
 
   it("marks none in the sidebar while another page is on show", async () => {

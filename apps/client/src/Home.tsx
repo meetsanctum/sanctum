@@ -13,6 +13,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -403,6 +404,12 @@ function HomeScreen(
     if (!onDashboard || dashboard?.kind !== "home") setEditingHome(false);
   }, [onDashboard, dashboard?.kind]);
   const settings = useSettingsNavigation(routes, setRoutes, installed);
+  // Each page and dashboard starts at its top, before it is drawn, not
+  // where the one before it was left.
+  const scrollArea = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    if (scrollArea.current) scrollArea.current.scrollTop = 0;
+  }, [route, dashboard?.id]);
   const openAutomations = () =>
     setRoutes([{ app: automationsApp.id, page: "main", params: {} }]);
   // Somewhere new from the sidebar, which takes the floating one away.
@@ -543,7 +550,7 @@ function HomeScreen(
                 />
                 <PageBarSlot.Provider value={pageSlot}>
                   <main
-                    ref={settings.scrollArea}
+                    ref={scrollArea}
                     className={`page${appPage ? " app-page" : ""}`}
                   >
                     <HomePage
