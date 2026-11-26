@@ -138,6 +138,24 @@ describe("A source's check in the dialog", () => {
       expect.objectContaining({ method: "POST" }),
     );
     expect(onChanged).toHaveBeenCalledOnce();
+    // Its check says what came before it, not the addition.
+    await act(async () =>
+      root.render(
+        <Dialog open>
+          <DialogContent>
+            <SourceCheck
+              source={{ ...added, inUse: true, checking: true }}
+              inUse={undefined}
+              done="Added to your sources"
+              onClose={() => {}}
+              onChanged={() => {}}
+            />
+          </DialogContent>
+        </Dialog>,
+      ),
+    );
+    expect(text()).toContain("Now your home's AI model");
+    expect(text()).not.toContain("Added to your sources");
   });
 
   it("says why it didn't answer, and checks again", async () => {

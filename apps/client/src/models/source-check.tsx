@@ -67,6 +67,9 @@ export function SourceCheck(props: {
   const [shown, setShown] = useState<Shown>({ kind: "check" });
   const [acting, setActing] = useState(false);
   const [failedAction, setFailedAction] = useState<CheckAction>();
+  // What was done before the check that's under way: the dialog's own
+  // change, or Use it now; Check again has nothing before it.
+  const [done, setDone] = useState<string | undefined>(props.done);
 
   // Use it now and Check again answer with the whole list, as the page's
   // own buttons do.
@@ -75,15 +78,12 @@ export function SourceCheck(props: {
     setActing(true);
     setFailedAction(undefined);
     try {
-      props.onChanged(
-        await coreJson<ModelsResponse>(
-          `/api/models/sources/${source.id}/${action}`,
-          {
-            method: "POST",
-            signal: AbortSignal.timeout(10_000),
-          },
-        ),
+      const info = await coreJson<ModelsResponse>(
+        `/api/models/sources/${source.id}/${action}`,
+        { method: "POST", signal: AbortSignal.timeout(10_000) },
       );
+      setDone(action === "use" ? "Now your home's AI model" : undefined);
+      props.onChanged(info);
     } catch {
       setFailedAction(action);
     } finally {
@@ -129,10 +129,12 @@ export function SourceCheck(props: {
           aria-label="Steps"
           className="m-0 flex w-full list-none flex-col gap-2 rounded-md bg-card px-4 py-3 text-start text-sm font-medium"
         >
-          <li className="flex items-center gap-2.5">
-            <Check aria-hidden="true" className="size-4 text-(--leaf-text)" />
-            {props.done}
-          </li>
+          {done && (
+            <li className="flex items-center gap-2.5">
+              <Check aria-hidden="true" className="size-4 text-(--leaf-text)" />
+              {done}
+            </li>
+          )}
           <li className="flex items-center gap-2.5" aria-current="step">
             {/* The knot above shows it's under way; one loader at a time. */}
             <span
