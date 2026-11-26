@@ -6,6 +6,7 @@ import { ClaimHost } from "./auth/ClaimHost";
 import { PairDevice } from "./auth/PairDevice";
 import { replaceClient, selectHost } from "./auth/session";
 import { SignIn } from "./auth/SignIn";
+import { WhoUses } from "./auth/WhoUses";
 import { onTokenInvalid } from "./core-fetch";
 import { Home } from "./Home";
 import { getShell, type FoundHost, type StoredHost } from "./shell";
@@ -17,6 +18,7 @@ type View =
   | { name: "starting" }
   | { name: "choose"; notice?: string }
   | { name: "claim"; host: FoundHost }
+  | { name: "who"; host: FoundHost }
   | { name: "sign-in"; host: FoundHost; recheck?: StoredHost }
   | { name: "pair"; host: FoundHost; recheck?: StoredHost }
   | { name: "home"; host: StoredHost }
@@ -25,6 +27,7 @@ type View =
 const views = new Set([
   "choose",
   "claim",
+  "who",
   "sign-in",
   "pair",
   "home",
@@ -114,7 +117,7 @@ export function App() {
   }, [changedHome, changedUrl]);
 
   const choose = useCallback((host: FoundHost) => {
-    setView(host.claimed ? { name: "sign-in", host } : { name: "claim", host });
+    setView(host.claimed ? { name: "who", host } : { name: "claim", host });
   }, []);
   const back = useCallback(() => setView({ name: "choose" }), []);
   const home = useCallback(
@@ -134,18 +137,32 @@ export function App() {
       return <ChooseHost notice={view.notice} onChoose={choose} />;
     case "claim":
       return <ClaimHost host={view.host} onBack={back} onClaimed={home} />;
+    case "who": {
+      const { host } = view;
+      return (
+        <WhoUses
+          host={host}
+          onBack={back}
+          onPersonal={() => setView({ name: "sign-in", host })}
+          onShared={() => setView({ name: "pair", host })}
+        />
+      );
+    }
     case "sign-in": {
       const { host, recheck } = view;
       return (
         <SignIn
           host={host}
           recheck={recheck}
-          onBack={recheck ? () => changed(recheck, host.url, host) : back}
+          onBack={
+            recheck
+              ? () => changed(recheck, host.url, host)
+              : () => setView({ name: "who", host })
+          }
           onSignedIn={(stored) => {
             if (recheck) void replaceClient(recheck, stored);
             home(stored);
           }}
-          onShared={() => setView({ name: "pair", host, recheck })}
           onForgotten={back}
         />
       );
@@ -158,9 +175,9 @@ export function App() {
           recheck={recheck}
           onForgotten={back}
           onBack={
-            recheck?.kind === "shared"
+            recheck
               ? () => changed(recheck, host.url, host)
-              : () => setView({ name: "sign-in", host, recheck })
+              : () => setView({ name: "who", host })
           }
           onPaired={home}
         />

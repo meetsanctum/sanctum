@@ -122,8 +122,8 @@ allow it. That is how the app finds your home.
 
 ## 5. Set up your home
 
-1. Open Sanctum. Under **Choose your home** it lists **New home, ready to set
-   up**, with the machine's address. Choose **Set up**.
+1. Open Sanctum. Under **Choose your home** it lists **New home**, ready to
+   set up. Choose it.
 2. Enter your name, a colour, a username and a password, and choose **Set
    up**. You are the first person in the home.
 3. The dashboard opens on **Set up your home**, three steps in any order:
@@ -144,7 +144,9 @@ allow it. That is how the app finds your home.
 Set your home up soon after installing. Until someone has, anyone on your
 network who opens the app can.
 
-On another Mac, the app lists your home with **Sign in**. A person signs in
-with their own username and password; a Mac the household shares chooses
-**This is a shared device** and is approved from a device that is already
-in.
+On another Mac, the app lists your home by its name. Choose it, and Sanctum
+asks **Who uses this device?** A person's own Mac chooses **Just me** and
+signs in with their username and password. A Mac the household shares
+chooses **Everyone at home**: it shows a code, and someone approves it from
+a device that is already in, under Settings → Clients → **Add a shared
+device**.

@@ -135,7 +135,7 @@ describe("a home restored onto another host", () => {
     // restored host.
     await act(async () => certificateFailed(host.url, "changed"));
     expect(container.textContent).toContain(
-      "This home's security certificate changed",
+      "Maya's home’s security certificate changed",
     );
     await act(async () =>
       publish([

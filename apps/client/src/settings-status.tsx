@@ -14,6 +14,7 @@ import { useEffect, type ReactNode } from "react";
 
 import { productName } from "./brand";
 import { Section, SettingsPageBar } from "./components";
+import { Skeleton } from "./components/ui/skeleton";
 import {
   connectionText,
   fineDetail,
@@ -331,17 +332,17 @@ function NetworkSection(props: { host: HostInfo }) {
 
 // The rows' shapes, at once, while the first answer is on its way: Sanctum's
 // above Updates, and Storage's under it.
-const shape = "block h-3 rounded-xs bg-foreground/8";
+const shape = "h-3 rounded-xs";
 
 function SanctumLoading() {
   return (
     <div aria-busy="true" className="flex flex-col gap-3">
       <span className="flex items-center gap-3">
-        <span className="size-6 shrink-0 rounded-full bg-foreground/8" />
-        <span className={cn(shape, "w-2/5")} />
+        <Skeleton className="size-6 shrink-0 rounded-full" />
+        <Skeleton className={cn(shape, "w-2/5")} />
       </span>
       {["w-1/3", "w-1/4", "w-2/5", "w-1/5", "w-1/2"].map((width) => (
-        <span key={width} className={cn(shape, width)} />
+        <Skeleton key={width} className={cn(shape, width)} />
       ))}
     </div>
   );
@@ -351,9 +352,9 @@ function StorageLoading() {
   return (
     <Section id="status-storage" title="Storage">
       <div aria-busy="true" className="flex flex-col gap-3">
-        <span className="block h-4 rounded-xs bg-foreground/8" />
-        <span className={cn(shape, "w-1/3")} />
-        <span className={cn(shape, "w-1/4")} />
+        <Skeleton className="h-4 rounded-xs" />
+        <Skeleton className={cn(shape, "w-1/3")} />
+        <Skeleton className={cn(shape, "w-1/4")} />
       </div>
     </Section>
   );

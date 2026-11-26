@@ -236,7 +236,7 @@ describe("a shared device's pairing screen", () => {
     ).not.toBeNull();
     expect(container.textContent).toContain("Waiting for approval");
     expect(container.textContent).toContain(
-      "open Settings → Clients on a device that’s already connected to this home",
+      "On a device that’s already connected to Maya's home, open Settings → Clients.",
     );
     expect(requests).toEqual([
       expect.objectContaining({
@@ -497,7 +497,7 @@ describe("a shared device's pairing screen", () => {
     expect(shownCode()).toBeNull();
     expect(requests).toHaveLength(2);
     expect(container.textContent).toContain(
-      "Several codes didn’t match, so this device stopped answering.",
+      "A wrong code was entered too many times, so this device stopped showing one.",
     );
 
     const button = [...container.querySelectorAll("button")].find(

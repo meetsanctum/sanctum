@@ -191,11 +191,6 @@ The brand is not open source:
   the desktop app's icon and the brand's photos. You may use them unmodified
   to build and run Sanctum, and for little else without asking.
 
-Files from others keep their own licences, as the backdrops in
-`apps/client/src/backdrops` do: photos from Unsplash under the
-[Unsplash License](https://unsplash.com/license), credited in
-[their README](apps/client/src/backdrops/README.md).
-
 The services the manager runs on the host, such as Zigbee2MQTT, Mosquitto,
 Ollama and Piper, are their makers' images under their own licences, which
 Sanctum runs as they are; Piper is under the GPL 3.0. The

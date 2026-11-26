@@ -93,9 +93,9 @@ What is under which licence, and what neither covers, is in
   carry permissive licences (MIT, BSD, ISC, Apache-2.0 and the like).
 - Brand files (logos, app icons, the brand's photos) live only in
   `assets/brand`: code imports them from `@meetsanctum/brand`, and
-  `packages/` and `catalog/apps/` hold none. Files from others, such as the
-  Unsplash backdrops, keep their licences and credits in a README beside
-  them, listed in the README's Licences.
+  `packages/` and `catalog/apps/` hold none. Files from others keep their
+  licences and credits in a README beside them, listed in the README's
+  Licences.
 
 ## Working Rules
 
@@ -139,7 +139,7 @@ What is under which licence, and what neither covers, is in
   (tiles, widgets, the floating sidebar and veils) and for the sheet of the
   screens before it.
 - Carbon and White are the only background colours apart from a dashboard's
-  own, the blurred backdrop of the screens before it, the green or red of a
+  own, the Graphite backdrop of the screens before it, the green or red of a
   card that says a device was added or failed to join, and an app's colours
   on its default page. A dashboard's background shows only behind
   dashboards and room and category pages; apps' pages are full bleed Carbon

@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 
 import { productName } from "./brand";
 import { Row, Section } from "./components";
+import { Skeleton } from "./components/ui/skeleton";
 import { hotCelsius, type HostInfo, type HostProblem } from "./system-status";
 import {
   memoryChart,
@@ -84,9 +85,10 @@ export function LastDaySection(props: {
   };
   if (!day) {
     const shape = failed ? undefined : (
-      <span
+      <Skeleton
+        aria-hidden={false}
         aria-busy="true"
-        className="block h-18 rounded-xs bg-foreground/8"
+        className="h-18 rounded-xs"
       />
     );
     return (

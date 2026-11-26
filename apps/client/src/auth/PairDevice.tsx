@@ -1,5 +1,4 @@
 import {
-  formatPairingCode,
   pairingExchangesPerRequest,
   pairingQrText,
   type NewClient,
@@ -8,9 +7,11 @@ import {
   type PairRequested,
 } from "@meetsanctum/auth-protocol";
 import { Button } from "@meetsanctum/ui-sdk";
+import { cn } from "cn";
+import { CircleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { Sheet } from "../components";
+import { Skeleton } from "../components/ui/skeleton";
 import { CoreError } from "../core-fetch";
 import { QrCode } from "../qr-code";
 import { getShell, type FoundHost, type StoredHost } from "../shell";
@@ -26,7 +27,9 @@ import {
   waitForPairingPoll,
   type ShownCode,
 } from "./pairing";
+import { PairingCode } from "./pairing-code";
 import { rememberSignIn } from "./session";
+import { Sheet, SheetActions, SheetProblem, SheetStatus } from "./sheet";
 
 const pollMs = 2_000;
 const retryMaxMs = 15_000;
@@ -42,9 +45,9 @@ const answersInAll = 2 * pairingExchangesPerRequest;
 const answerGapMs = 5_000;
 const usedUpPauseMs = 30_000;
 
-// "This is a shared device": nobody signs in here. The device shows a QR
-// code and its display code until someone types the code on another of the
-// home's devices. The host then runs an exchange with this device that only
+// A shared device, "Everyone at home": nobody signs in here. The device
+// shows its code, with a QR code that holds it, until someone types the code
+// on another of the home's devices. The host then runs an exchange with this device that only
 // finishes for the code it shows, bound to the certificate it sees, so a
 // finished exchange means this device reached the home whose device typed
 // the code. Someone approves it there, and the device collects its token
@@ -255,54 +258,39 @@ export function PairDevice(props: {
     return () => controller.abort();
   }, [host, onPaired, round]);
 
+  const status = stopped
+    ? "A wrong code was entered too many times, so this device stopped showing one."
+    : problem;
+
   return (
     <Sheet
-      title={`Pair with ${host.name}`}
-      onBack={props.onBack}
-      intro={
-        <>
-          <p className="muted">
-            To approve this device, open Settings → Clients on a device that’s
-            already connected to this home. Choose Add a shared device, then
-            enter this code.
-          </p>
-          <p
-            className={problem || stopped ? "problem" : "notice"}
-            role="status"
-          >
-            {stopped
-              ? "Several codes didn’t match, so this device stopped answering."
-              : (problem ??
-                (shown ? "Waiting for approval…" : "Getting a code…"))}
-          </p>
-          {stopped && (
-            <Button
-              type="button"
-              className="self-start"
-              onClick={() => {
-                setStopped(false);
-                setShown(undefined);
-                // The previous request can still count against the address
-                // cap until it expires.
-                setRound((current) => current + 1);
-              }}
-            >
-              Show a new code
-            </Button>
-          )}
-          {props.recheck && props.onForgotten && isAnotherHome && (
-            <ChooseAnotherHome
-              host={props.recheck}
-              onForgotten={props.onForgotten}
-              variant="link"
-            />
-          )}
-        </>
-      }
+      wide
+      title={`Add this device to ${host.name}`}
+      subtitle="Nobody signs in here. Someone approves it from another device."
+      back={{ onBack: props.onBack }}
     >
-      <div className="flex flex-col items-center gap-3" aria-live="polite">
-        {shown && !stopped ? (
-          <>
+      {stopped ? (
+        <div className="flex flex-col items-center gap-4 py-4">
+          <SheetProblem>{status}</SheetProblem>
+          <Button
+            variant="default"
+            size="lg"
+            type="button"
+            onClick={() => {
+              setStopped(false);
+              setShown(undefined);
+              // The previous request can still count against the address
+              // cap until it expires.
+              setRound((current) => current + 1);
+            }}
+          >
+            Show a new code
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-5">
+          <PairingCode code={shown?.code} />
+          {shown ? (
             <QrCode
               text={pairingQrText({
                 hostId: host.id,
@@ -310,16 +298,70 @@ export function PairDevice(props: {
                 code: shown.code,
               })}
               label="Pairing QR code"
-              className="size-[220px] rounded-sm"
+              className="size-33 rounded-md"
             />
-            <strong className="text-[32px] leading-10 font-light tabular-nums">
-              {formatPairingCode(shown.code)}
-            </strong>
-          </>
-        ) : (
-          <span className="block size-[220px] rounded-sm bg-foreground/6" />
+          ) : (
+            <Skeleton className="size-33 rounded-md" />
+          )}
+        </div>
+      )}
+      <ol
+        className={cn(
+          "m-0 grid list-none gap-x-5 gap-y-3.5 p-0 sm:grid-cols-3",
+          stopped && "opacity-55",
         )}
-      </div>
+      >
+        {[
+          <>
+            On a device that’s already connected to {host.name}, open{" "}
+            <strong className="font-semibold">Settings → Clients</strong>.
+          </>,
+          <>
+            Choose{" "}
+            <strong className="font-semibold">Add a shared device</strong>.
+          </>,
+          <>Enter the code shown here, then approve this device.</>,
+        ].map((step, index) => (
+          <li
+            key={index}
+            className="flex items-start gap-3 text-[15px] leading-[21px]"
+          >
+            <span
+              aria-hidden="true"
+              className="flex size-6 shrink-0 items-center justify-center rounded-full bg-foreground/11 text-[13px] font-semibold"
+            >
+              {index + 1}
+            </span>
+            <span>{step}</span>
+          </li>
+        ))}
+      </ol>
+      {!stopped &&
+        (status ? (
+          <p
+            role="status"
+            className="m-0 flex items-start justify-center gap-2 text-center text-sm leading-5 text-destructive"
+          >
+            <CircleAlert
+              aria-hidden="true"
+              className="mt-0.5 size-4 shrink-0"
+            />
+            {status}
+          </p>
+        ) : (
+          <SheetStatus>
+            {shown ? "Waiting for approval…" : "Getting a code…"}
+          </SheetStatus>
+        ))}
+      {props.recheck && props.onForgotten && isAnotherHome && (
+        <SheetActions>
+          <ChooseAnotherHome
+            host={props.recheck}
+            onForgotten={props.onForgotten}
+            variant="link"
+          />
+        </SheetActions>
+      )}
     </Sheet>
   );
 }

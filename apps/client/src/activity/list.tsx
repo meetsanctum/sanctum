@@ -27,6 +27,7 @@ import { memo, useId, useState } from "react";
 import { AppIcon } from "../app-icon";
 import { productName } from "../brand";
 import { Avatar } from "../components";
+import { Skeleton } from "../components/ui/skeleton";
 import type { ActivityState, Folded } from "./data";
 import { activityWords, type RoomNames, type Where } from "./words";
 import { automationsApp } from "../system-apps";
@@ -191,15 +192,12 @@ export function ActivitySkeleton() {
     >
       {[62, 48, 56].map((width) => (
         <div key={width} className="flex min-h-9 items-center gap-3">
-          <span className="size-8 shrink-0 rounded-full bg-foreground/8" />
+          <Skeleton className="size-8 shrink-0 rounded-full" />
           <span className="flex flex-1 flex-col gap-1.5">
-            <span
-              className="h-3 rounded-sm bg-foreground/8"
-              style={{ width: `${width}%` }}
-            />
-            <span className="h-2.5 w-1/4 rounded-sm bg-foreground/8" />
+            <Skeleton className="h-3" style={{ width: `${width}%` }} />
+            <Skeleton className="h-2.5 w-1/4" />
           </span>
-          <span className="h-2.5 w-9 rounded-sm bg-foreground/8" />
+          <Skeleton className="h-2.5 w-9" />
         </div>
       ))}
     </div>

@@ -1,12 +1,20 @@
 import { Button } from "@meetsanctum/ui-sdk";
-import { useEffect, useState, type FormEvent } from "react";
+import { TriangleAlert } from "lucide-react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 
-import { Field, Sheet } from "../components";
 import { ChooseAnotherHome } from "../connection-veil";
 import { getShell, type FoundHost, type StoredHost } from "../shell";
 import { checkHost, signIn, SignInError } from "./device";
 import { problemText } from "./messages";
 import { rememberSignIn } from "./session";
+import {
+  Busy,
+  Sheet,
+  SheetActions,
+  SheetField,
+  SheetNote,
+  SheetProblem,
+} from "./sheet";
 import { useAuthAttempt } from "./use-auth-attempt";
 
 // Whether the shell stores the token securely; undefined while asking.
@@ -18,30 +26,29 @@ export function useSecureStorage() {
   return secure;
 }
 
-// Says when the token will be saved unencrypted. The shell answers after the
-// screen shows, so the notice is in a polite live region that is there from
-// the start; it takes no room in the sheet until it has something to say.
+// Says when the token will be saved unencrypted, before anyone types. The
+// shell answers after the screen shows, so the note is in a polite live
+// region that is there from the start; it takes no room until it has
+// something to say.
 export function StorageNotice(props: { secure: boolean | undefined }) {
   return (
     <div role="status" className="contents">
       {props.secure === false && (
-        <p className="notice">
-          This computer has no secure storage, so your sign-in will be saved
+        <SheetNote icon={TriangleAlert}>
+          This device can’t store your sign-in securely, so it’s saved
           unencrypted.
-        </p>
+        </SheetNote>
       )}
     </div>
   );
 }
 
-// Signing in on a personal device. The password is checked on this device,
+// Signing in on a personal device. The password never leaves the device,
 // and the sign-in proves the host.
 export function SignIn(props: {
   host: FoundHost;
   onBack: () => void;
   onSignedIn: (host: StoredHost) => void;
-  // Nobody signs in on a shared device: another device approves it.
-  onShared: () => void;
   // The stored host whose certificate changed, when this checks it again,
   // and what follows once it is forgotten.
   recheck?: StoredHost;
@@ -56,10 +63,14 @@ export function SignIn(props: {
   const [working, setWorking] = useState(false);
   const secure = useSecureStorage();
   const attempt = useAuthAttempt();
+  const problemId = useId();
+  // A wrong username or password is about both fields, which then say so.
+  const [fieldsWrong, setFieldsWrong] = useState(false);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setProblem(undefined);
+    setFieldsWrong(false);
     setIsAnotherHome(false);
     setWorking(true);
     const signal = attempt.start();
@@ -86,6 +97,10 @@ export function SignIn(props: {
     } catch (error) {
       if (signal.aborted) return;
       setProblem(problemText(error));
+      setFieldsWrong(
+        error instanceof SignInError &&
+          error.code === "wrong_username_or_password",
+      );
       setIsAnotherHome(
         error instanceof SignInError && error.code === "another_host",
       );
@@ -96,64 +111,55 @@ export function SignIn(props: {
   return (
     <Sheet
       title={`Sign in to ${props.host.name}`}
-      onBack={() => {
-        attempt.cancel();
-        props.onBack();
+      subtitle="Your password never leaves this device."
+      back={{
+        onBack: () => {
+          attempt.cancel();
+          props.onBack();
+        },
       }}
-      intro={<StorageNotice secure={secure} />}
     >
-      <form className="form" onSubmit={submit}>
-        <Field
+      <form className="flex flex-col gap-4" onSubmit={submit}>
+        <SheetField
           label="Username"
           value={username}
           onChange={(event) => setUsername(event.target.value)}
           autoComplete="username"
           autoCapitalize="none"
           spellCheck={false}
+          problemId={fieldsWrong ? problemId : undefined}
           required
         />
-        <Field
+        <SheetField
           label="Password"
           type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           autoComplete="current-password"
+          problemId={fieldsWrong ? problemId : undefined}
           required
         />
-        {problem && (
-          <p className="problem" role="alert">
-            {problem}
-          </p>
-        )}
-        <Button
-          variant="default"
-          size="lg"
-          type="submit"
-          className="mt-1"
-          disabled={working}
-        >
-          {working ? "Signing in…" : "Sign in"}
-        </Button>
+        {problem && <SheetProblem id={problemId}>{problem}</SheetProblem>}
+        <StorageNotice secure={secure} />
+        <SheetActions>
+          <Button
+            variant="default"
+            size="lg"
+            type="submit"
+            className="mt-2 w-full"
+            disabled={working}
+          >
+            {working ? <Busy>Signing in…</Busy> : "Sign in"}
+          </Button>
+          {props.recheck && props.onForgotten && isAnotherHome && (
+            <ChooseAnotherHome
+              host={props.recheck}
+              onForgotten={props.onForgotten}
+              variant="link"
+            />
+          )}
+        </SheetActions>
       </form>
-      {props.recheck && props.onForgotten && isAnotherHome && (
-        <ChooseAnotherHome
-          host={props.recheck}
-          onForgotten={props.onForgotten}
-          variant="link"
-        />
-      )}
-      <Button
-        type="button"
-        variant="link"
-        size="inline"
-        className="self-start"
-        onClick={() => {
-          attempt.cancel();
-          props.onShared();
-        }}
-      >
-        This is a shared device
-      </Button>
     </Sheet>
   );
 }

@@ -1,12 +1,11 @@
+import { CircleCheck, House, Plus, Wifi } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { productName } from "../brand";
-import { Sheet } from "../components";
 import { coreBaseUrl } from "../core-url";
-import { KnotLoader } from "../knot-loader";
 import { getShell, type FoundHost } from "../shell";
 import { hostStatus } from "./device";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Sheet, SheetRow, SheetRowsLoading, SheetStatus } from "./sheet";
 
 // The hosts on the home network. Nobody types an address: the shell browses
 // for them, and a plain browser in development uses the core it was pointed
@@ -25,11 +24,14 @@ function useHosts() {
         window.clearTimeout(timer);
       };
     }
-    let current = true;
+    // Without discovery, the one core is asked again every few seconds
+    // until it answers, so "Still looking…" is true here too.
+    const controller = new AbortController();
+    let retry: number | undefined;
     const url = coreBaseUrl();
-    hostStatus(url)
-      .then((status) => {
-        if (current) {
+    const ask = () => {
+      hostStatus(url, controller.signal)
+        .then((status) => {
           setHosts([
             {
               id: status.hostId,
@@ -39,12 +41,17 @@ function useHosts() {
               url,
             },
           ]);
-        }
-      })
-      .catch(() => undefined)
-      .finally(() => current && setSearched(true));
+        })
+        .catch(() => {
+          if (controller.signal.aborted) return;
+          setSearched(true);
+          retry = window.setTimeout(ask, 5_000);
+        });
+    };
+    ask();
     return () => {
-      current = false;
+      controller.abort();
+      window.clearTimeout(retry);
       window.clearTimeout(timer);
     };
   }, []);
@@ -52,62 +59,98 @@ function useHosts() {
   return { hosts, searched };
 }
 
+// What a home's row says under its name. A home that is set up needs
+// nothing more, and its address names the machine, so it shows only where
+// two homes share a name and something has to tell them apart.
+function detailOf(host: FoundHost, hosts: readonly FoundHost[]) {
+  if (!host.claimed) {
+    return "Ready to set up";
+  }
+  const namesake = hosts.some(
+    (other) => other !== host && other.claimed && other.name === host.name,
+  );
+  return namesake ? new URL(host.url).hostname : undefined;
+}
+
+// What to check while nothing answers: things people can see and change,
+// not in any order.
+const checks = [
+  "This device is on your home Wi‑Fi, not a guest network.",
+  `${productName} is switched on and connected to the same network.`,
+  "Your router lets devices see each other. Some routers call blocking this “client isolation”.",
+];
+
 export function ChooseHost(props: {
   notice?: string;
   onChoose: (host: FoundHost) => void;
 }) {
   const { hosts, searched } = useHosts();
 
-  return (
-    <Sheet
-      title="Choose your home"
-      intro={
-        props.notice && (
-          <p className="notice" role="status">
-            {props.notice}
-          </p>
-        )
-      }
-    >
-      {hosts.length > 0 ? (
-        <ul className="rows">
-          {hosts.map((host) => (
-            <li key={host.id}>
-              <Button
-                variant="row"
-                size="row"
-                type="button"
-                className="-mx-2.5 w-[calc(100%+20px)] justify-between"
-                onClick={() => props.onChoose(host)}
-              >
-                <span className="row-main">
-                  <strong>
-                    {host.claimed ? host.name : "New home, ready to set up"}
-                  </strong>
-                  <span className="row-detail">
-                    {new URL(host.url).hostname}
-                  </span>
-                </span>
-                <span className="row-action">
-                  {host.claimed ? "Sign in" : "Set up"}
-                </span>
-              </Button>
+  if (hosts.length === 0 && searched) {
+    return (
+      <Sheet
+        glyph={Wifi}
+        title="No home found yet"
+        subtitle="It shows up here as soon as this device finds it. In the meantime, check these."
+      >
+        <ul className="m-0 flex list-none flex-col gap-3 p-0">
+          {checks.map((check) => (
+            <li
+              key={check}
+              className="flex items-start gap-3 text-[15px] leading-[21px]"
+            >
+              <CircleCheck
+                aria-hidden="true"
+                className="mt-px size-5 shrink-0 text-muted-foreground"
+                strokeWidth={1.75}
+              />
+              {check}
             </li>
           ))}
         </ul>
-      ) : searched ? (
-        <div className="empty">
-          <p>No home found on this network.</p>
-          <p className="muted">
-            Check that this device is on your home Wi-Fi, not a guest network,
-            and that your router lets devices find each other.
+        <SheetStatus>Still looking…</SheetStatus>
+      </Sheet>
+    );
+  }
+
+  return (
+    <Sheet
+      glyph={House}
+      title="Choose your home"
+      subtitle="Homes on this network."
+    >
+      {props.notice && (
+        <p
+          role="status"
+          className="-mt-2 mb-0 text-center text-[15px] leading-[21px] text-balance"
+        >
+          {props.notice}
+        </p>
+      )}
+      {hosts.length > 0 ? (
+        <>
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+            {hosts.map((host) => (
+              <li key={host.id}>
+                <SheetRow
+                  icon={host.claimed ? House : Plus}
+                  name={host.claimed ? host.name : "New home"}
+                  detail={detailOf(host, hosts)}
+                  onClick={() => props.onChoose(host)}
+                />
+              </li>
+            ))}
+          </ul>
+          <p className="m-0 text-center text-[13px] leading-[18px] text-balance text-muted-foreground">
+            Don’t see your home? Check that this device is on your home Wi‑Fi,
+            not a guest network.
           </p>
-        </div>
+        </>
       ) : (
-        <div className="flex items-center gap-3" role="status">
-          <KnotLoader className="size-7 shrink-0 text-(--secondary)" />
-          <p className="muted">Looking for your home…</p>
-        </div>
+        <>
+          <SheetRowsLoading />
+          <SheetStatus>Looking for homes…</SheetStatus>
+        </>
       )}
     </Sheet>
   );
