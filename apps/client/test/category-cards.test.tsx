@@ -23,7 +23,8 @@ import {
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
 // What a category's page opens with: Lights' card and its switch, a
-// button for each room's lights, Environment's cards and Security's.
+// button for each room's lights, Environment's cards, Security's and
+// Switches'.
 
 let root: Root;
 let container: HTMLDivElement;
@@ -486,10 +487,74 @@ describe("Security's card", () => {
   });
 });
 
-describe("Switches' page", () => {
-  it("has no card: it keeps the line under its name", async () => {
+describe("Switches' cards", () => {
+  const relay = plug.capabilities.find((each) => each.kind === "switch")!;
+  const asPlug = (id: string, on: boolean | null): DeviceInfo => {
+    const state = on === null ? null : { on };
+    return {
+      ...plug,
+      id,
+      type: "plug",
+      capabilities: [{ ...relay, state, observed: state }],
+    };
+  };
+
+  it("say how many are on, as Home's status tile in Ember, with no line under the name", async () => {
     await show("switches");
-    expect(cards()).toEqual([]);
-    expect(container.querySelector("header p")?.textContent).toBe("1 on");
+
+    expect(cards().map(said)).toEqual([["Switches", "1 on"]]);
+    expect(white(card()!)).toBe(false);
+    expect(iconColour(card()!)).toBe("var(--ember-text)");
+    expect(card()!.querySelector("button, a")).toBeNull();
+    expect(container.querySelector("header p")).toBeNull();
+  });
+
+  it("are one for the plugs and one for the other switches, each only where the home has one", async () => {
+    devices = [
+      { ...plug, capabilities: [relay, { ...relay, id: "second" }] },
+      asPlug("tv-plug", false),
+      asPlug("fan-plug", true),
+      asPlug("desk-plug", null),
+    ];
+    await show("switches");
+
+    expect(cards().map(said)).toEqual([
+      ["Plugs", "1 on"],
+      ["Switches", "2 on"],
+    ]);
+    const glyphs = ["plug", "toggle-right"];
+    expect(
+      cards().map((each, index) =>
+        each
+          .querySelector("svg")!
+          .classList.contains(`lucide-${glyphs[index]}`),
+      ),
+    ).toEqual([true, true]);
+
+    devices = devices.filter((each) => each.id !== "plug");
+    await show("switches");
+    expect(cards().map(said)).toEqual([["Plugs", "1 on"]]);
+  });
+
+  it("count a light's switch relay in Switches", async () => {
+    devices = [{ ...lamp, capabilities: [...lamp.capabilities, relay] }];
+    await show("switches");
+
+    expect(cards().map(said)).toEqual([["Switches", "1 on"]]);
+  });
+
+  it("say Off while the plug is off and follow it live", async () => {
+    devices = [asPlug("tv-plug", false)];
+    await show("switches");
+    expect(cards().map(said)).toEqual([["Plugs", "Off"]]);
+
+    await act(async () => {
+      live.publish({
+        type: "device",
+        id: "tv-plug",
+        device: asPlug("tv-plug", true),
+      });
+    });
+    expect(cards().map(said)).toEqual([["Plugs", "1 on"]]);
   });
 });
