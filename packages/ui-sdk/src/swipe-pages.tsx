@@ -67,6 +67,7 @@ const pageScroll = cn(
 
 type Swipe = {
   pointerId: number;
+  pointerType: string;
   x: number;
   y: number;
   active: boolean;
@@ -103,17 +104,6 @@ export function SwipePages(props: {
     selectedIndex >= 0
       ? selectedIndex
       : Math.min(chosen.index, pages.length - 1);
-  // The page that can be reached follows the one on show once the pages
-  // have slid there: making a page reachable or not has every element on
-  // it looked at again, which on a slow device would hold the slide back.
-  const [settled, setSettled] = useState(page);
-  useEffect(() => {
-    if (settled === page) return;
-    const slides = !isMotionReduced() || glide.current !== undefined;
-    const later = setTimeout(() => setSettled(page), slides ? slide : 0);
-    return () => clearTimeout(later);
-  }, [page, settled]);
-  const reachable = settled < pages.length ? settled : page;
   const swipe = useRef<Swipe | null>(null);
   // A swipe moves the pages straight away, by each page's own style, for
   // each move of the finger: drawing them again, or a value or selector
@@ -162,6 +152,10 @@ export function SwipePages(props: {
     if (index !== page) setDrawsAll(true);
     setChosen({ id: pages[index]?.id, index });
   };
+  const selectTab = (index: number) => {
+    if (glide.current !== undefined) endGlide();
+    setPage(index);
+  };
   useEffect(() => {
     if (drawsAll) return;
     let later: ReturnType<typeof setTimeout> | undefined;
@@ -206,6 +200,7 @@ export function SwipePages(props: {
     // Without a way to hear of the row's size, every page change measures.
     if (typeof ResizeObserver === "undefined") {
       tabsOverflow.current = true;
+      showTab();
       return;
     }
     const resized = new ResizeObserver(() => {
@@ -232,6 +227,7 @@ export function SwipePages(props: {
     }
     swipe.current = {
       pointerId: event.pointerId,
+      pointerType: event.pointerType,
       x: event.clientX,
       y: event.clientY,
       active: false,
@@ -262,10 +258,11 @@ export function SwipePages(props: {
       (page === 0 && across > 0) || (page === pages.length - 1 && across < 0);
     follow(edge ? across / 3 : across);
   };
-  const finish = (across: number) => {
+  const finish = (at: Swipe, across: number) => {
     swipe.current = null;
+    if (!at.active) return;
     follow(null);
-    if (isMotionReduced()) {
+    if (at.pointerType === "touch" && isMotionReduced()) {
       for (const section of sections.current) {
         if (!section) continue;
         section.style.transition = ["transform", "translate"]
@@ -280,11 +277,7 @@ export function SwipePages(props: {
   const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
     const at = swipe.current;
     if (!at || at.pointerId !== event.pointerId) return;
-    if (!at.active) {
-      swipe.current = null;
-      return;
-    }
-    finish(event.clientX - at.x);
+    finish(at, event.clientX - at.x);
   };
   const onPointerCancel = (event: PointerEvent<HTMLDivElement>) => {
     const at = swipe.current;
@@ -293,7 +286,7 @@ export function SwipePages(props: {
     // once it is under way comes from around the page, such as a host app
     // that reports a lifted finger as cancelled: it ends where the last
     // move left it.
-    finish(at.active ? at.across : 0);
+    finish(at, at.across);
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -309,7 +302,7 @@ export function SwipePages(props: {
               : null;
     if (next === null || next < 0 || next >= pages.length) return;
     event.preventDefault();
-    setPage(next);
+    selectTab(next);
     tabs.current[next]?.focus();
   };
 
@@ -375,7 +368,7 @@ export function SwipePages(props: {
                 pages.length > 1 ? `${id}-${each.id}-tab` : undefined
               }
               // Only the page on show can be reached.
-              inert={index !== reachable}
+              inert={index !== page}
               style={{
                 transform: `translateX(${(index - page) * 100}%)`,
               }}
@@ -434,7 +427,7 @@ export function SwipePages(props: {
                   aria-selected={current}
                   aria-controls={`${id}-${each.id}`}
                   tabIndex={current ? 0 : -1}
-                  onClick={() => setPage(index)}
+                  onClick={() => selectTab(index)}
                   className="group relative grid size-11 place-items-center rounded-full text-white/45 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 aria-selected:text-white"
                 >
                   <Icon aria-hidden="true" className="size-5" />
