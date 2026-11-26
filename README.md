@@ -195,3 +195,13 @@ Files from others keep their own licences, as the backdrops in
 `apps/client/src/backdrops` do: photos from Unsplash under the
 [Unsplash License](https://unsplash.com/license), credited in
 [their README](apps/client/src/backdrops/README.md).
+
+The services the manager runs on the host, such as Zigbee2MQTT, Mosquitto,
+Ollama and Piper, are their makers' images under their own licences, which
+Sanctum runs as they are; Piper is under the GPL 3.0. The
+[Piper voice models](https://huggingface.co/rhasspy/piper-voices) are under
+the MIT licence and download when first needed. The training data for
+[Norman](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/norman/medium/MODEL_CARD)
+(English) is public-domain LibriVox recordings. The training data for
+[Thorsten](https://huggingface.co/rhasspy/piper-voices/blob/main/de/de_DE/thorsten/medium/MODEL_CARD)
+(German) is under CC0 1.0.

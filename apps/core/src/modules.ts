@@ -1,4 +1,5 @@
 import {
+  announcePermission,
   answersTo,
   modelsUsePermission,
   shownQuestions,
@@ -38,6 +39,7 @@ import { createAppVersions } from "./app-host/versions.js";
 import { createAppSecrets, createSealer } from "./app-host/secrets.js";
 import { createAppSettings } from "./app-host/settings.js";
 import { createAuth, loginRule } from "./auth/auth.js";
+import { assembleSpeech } from "./speech/assembly.js";
 import type { Limits } from "./auth/limits.js";
 import { setCoreFollowers } from "./core-followers.js";
 import { createDashboards } from "./dashboards/dashboards.js";
@@ -69,11 +71,7 @@ import { createPages } from "./pages/pages.js";
 import { createPeople } from "./people/people.js";
 import { createPins } from "./pins/pins.js";
 import { createPlaces } from "./places/places.js";
-import { createPower, type PowerManager } from "./system/power.js";
-import { createRestores } from "./system/restore.js";
-import { createSpace, type SpaceManager } from "./system/space.js";
-import { createStatus, type StatusManager } from "./system/status.js";
-import { createUpdates, type UpdateManager } from "./system/updates.js";
+import { assembleSystem, type SystemManager } from "./system/assembly.js";
 import type { SunDays } from "./workflows/jobs.js";
 import { createWorkflows } from "./workflows/workflows.js";
 
@@ -99,11 +97,8 @@ export async function createModules(
     manager: ServiceManager &
       AppContainerManager &
       AppUpdateManager &
-      UpdateManager &
-      StatusManager &
-      Pick<ManagerClient, "hostResources" | "serviceUrl"> &
-      PowerManager &
-      SpaceManager & {
+      SystemManager &
+      Pick<ManagerClient, "hostResources" | "serviceUrl"> & {
         // The manager's audit after an entry (activity/manager-audit.ts);
         // tests may leave it out.
         audit?: (after: number) => Promise<ManagerAudit>;
@@ -124,7 +119,14 @@ export async function createModules(
         appCapacity?: ManagerClient["appCapacity"];
         reserveForApp?: ManagerClient["reserveForApp"];
         releaseAppReservation?: ManagerClient["releaseAppReservation"];
+        // Running the speech service for the core itself (speech/speech.ts);
+        // tests may leave them out.
+        wantServiceForCore?: ManagerClient["wantServiceForCore"];
+        releaseServiceForCore?: ManagerClient["releaseServiceForCore"];
       };
+    // Where smart speakers fetch announcements; none, and nothing is said
+    // out loud, in a core that doesn't listen.
+    speaker?: { host: string; port: number; publishedPort: number };
     // The apps this core's image ships, once the core has read them.
     shippedApps?: () => readonly string[];
     // Installs and starts an app the household just added, from the package
@@ -203,47 +205,24 @@ export async function createModules(
     limits: options.limits,
     now,
   });
-  // A restore from a backup signs every device out before the core serves
-  // anyone.
-  const record = activity.for("system");
-  const restores = createRestores(db, {
+  const system = assembleSystem(db, {
+    manager: options.manager,
     dataDir: options.dataDir,
+    version: options.version,
+    record: activity.for("system"),
     signOutEveryone: auth.signOutEveryone,
-    record,
+    appIds: () => apps.list().map((app) => app.id),
+    announce: (going) => live.system(going),
     log,
-    now: now ?? (() => new Date()),
+    now,
   });
-  restores.applyMarker();
-  const system = {
-    restores,
-    updates: createUpdates({
-      manager: options.manager,
-      version: options.version,
-      record,
-    }),
-    // The host's status, and the space each installed app's data takes.
-    status: createStatus({
-      manager: options.manager,
-      dataDir: options.dataDir,
-      version: options.version,
-      appIds: () => apps.list().map((app) => app.id),
-      now,
-    }),
-    // Restart and Shut down, which every client hears of first.
-    power: createPower({
-      manager: options.manager,
-      record,
-      announce: (going) => live.system(going),
-    }),
-    space: createSpace({ manager: options.manager, record }),
-    record,
-  };
   const agentAccess = createAgentAccess(db, {
     activity,
     auth,
     apps: () => apps,
     tools: () => agentTools,
     commandLimits: options.agentCommandLimits,
+    onAreaChanged: () => speech?.areaChanged(),
     now,
   });
   const { canUse: agentsCanUse, checkAgentCommand } = agentAccess;
@@ -656,6 +635,13 @@ export async function createModules(
     dashboard: (id) =>
       dashboards.list().find((dashboard) => dashboard.id === id)?.name ?? null,
   });
+  const { speech, startSpeech, stopSpeech } = assembleSpeech({
+    speaker: options.speaker,
+    manager: options.manager,
+    devices,
+    areaOn: () => agentsCanUse.areaOn(announcePermission),
+    log,
+  });
   const agentTools: AgentTools = assembleAgentTools(agentAccess, {
     apps,
     places,
@@ -665,6 +651,7 @@ export async function createModules(
     activity,
     activityViews,
     history,
+    speech,
     now,
   });
   // Live clients hear of a committed entry and the entries it adds to.
@@ -691,6 +678,7 @@ export async function createModules(
     live,
     motion,
     pairing,
+    speech,
     workflows,
   });
 
@@ -707,6 +695,7 @@ export async function createModules(
   // firmware's deadlines are the last that change a device, so the bus closes
   // after them, and history then records that nothing is known from then on.
   const stoppingSteps = [
+    ["stop announcements", stopSpeech],
     ["stop discovery", () => sightings?.close()],
     ["stop the manager's audit", () => managerAudit?.close()],
     ["stop removed apps' deadlines", () => appDeleting.close()],
@@ -775,6 +764,7 @@ export async function createModules(
     // What the manager finds on the home's network, which starts with the
     // core (core.ts); none under a manager that can't look.
     discovery: sightings,
+    startSpeech,
     // At stopping's first moment, before anything is awaited (lifecycle.ts).
     stopNewWork,
     // The modules' steps of stopping, in order (lifecycle.ts).

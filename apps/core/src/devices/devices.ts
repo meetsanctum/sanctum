@@ -25,6 +25,7 @@ import {
 import type { CoreDatabase } from "../database.js";
 import type { PlacesModule } from "../places/places.js";
 import { createDeviceLog } from "./activity.js";
+import { createAnnouncementDelivery } from "./announce.js";
 import { ownDeviceType } from "./classification.js";
 import { createCommandTracking } from "./commands.js";
 import { createDriverReports } from "./driver-reports.js";
@@ -593,6 +594,13 @@ export function createDevices(
       );
       return run(actor, app, who, view, target, command, whileOn);
     },
+
+    announce: createAnnouncementDelivery({
+      load,
+      reads,
+      deliver,
+      stopping: () => isStopping,
+    }),
 
     // A driver brings one of its devices in, or updates it, and reports what
     // one said, by its own key (driver-reports.ts).

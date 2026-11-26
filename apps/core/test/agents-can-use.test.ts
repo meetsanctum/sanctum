@@ -136,7 +136,7 @@ function run(core: TestCore, principal: Principal, actionId: string) {
 }
 
 describe("what AI agents can use", () => {
-  it("starts with the lights and switches to see, and each app's defaults", async () => {
+  it("starts with the lights, switches to see and speaking on smart speakers, and each app's defaults", async () => {
     const { core, maya } = await household();
 
     const list = await canUse(core, maya.token);
@@ -145,6 +145,7 @@ describe("what AI agents can use", () => {
       { id: "places.read", on: true, always: true },
       { id: "devices.control:light", on: true, always: false },
       { id: "devices.read:switch", on: true, always: false },
+      { id: "devices.announce", on: true, always: false },
     ]);
     expect(list.areas.map((area) => area.id)).toEqual(
       expect.arrayContaining([

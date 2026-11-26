@@ -6,13 +6,12 @@ import {
   controlPermission,
   historyReadPermission,
   peopleReadPermission,
-  permissionWords,
   type ActivityInfo,
   type AiCanUse,
   type AiOfferInfo,
   type CapabilityKind,
 } from "@meetsanctum/app-sdk";
-import type { CallToolResult, Tool } from "@modelcontextprotocol/server";
+import type { CallToolResult } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
 import type {
@@ -45,16 +44,26 @@ import {
   notInstructions,
   toolError,
 } from "./answers.js";
+import type { Speech } from "../speech/speech.js";
+import { createAnnounceTool } from "./announce-tool.js";
 import { assistantOf } from "./assistants.js";
 import type { AgentChanges } from "./changes.js";
-import { areasPage } from "./overview.js";
+import {
+  areasOff,
+  inputSchemaOf,
+  isOn,
+  Refused,
+  type CoreTool,
+  type Listing,
+} from "./core-tool.js";
 import { createRestoreCapability } from "./restore.js";
 
 // The core's own tools, each listed while what it needs is switched on in
 // What AI agents can use: `lights` and `device_command` for the kinds AI
 // agents may control, with `restore`, which puts an agent's own change of
 // either back, `entities` for what apps bring that's switched on,
-// `activity` and `history` for their areas. Each answers with what AI agents
+// `activity` and `history` for their areas, and `announce`, which says
+// something on a smart speaker (announce-tool.ts). Each answers with what AI agents
 // may see only: devices of the kinds they may read, and the names of people
 // and their phones and computers only while "See who lives here" is on. A
 // tool called while it's switched off answers `not_allowed`, with where it's
@@ -72,65 +81,12 @@ type CoreToolsOptions = {
   history: Pick<History, "states" | "statistics">;
   record: (entry: NewActivityEntry) => string;
   agentWho: (id: string) => ActivityAuthor;
+  // What Sanctum says out loud, for announce; a core without it has none.
+  speech?: Pick<Speech, "speak">;
   now?: () => Date;
 };
 
-// Who lists the tools: an MCP client, or an assistant app acting within a
-// turn, for which some tools take less.
-type Listing = { assistant: boolean };
-
-type CoreTool = {
-  /** As listed, from what's switched on now. */
-  tool: (canUse: AiCanUse, listing: Listing) => Tool;
-  /** Whether it's listed: what it needs is on. */
-  usable: (canUse: AiCanUse) => boolean;
-  /** Why it can't be used, when it's called anyway. */
-  refusal: (canUse: AiCanUse) => Refused;
-  run: (
-    agent: AgentCaller,
-    input: Record<string, unknown>,
-    canUse: AiCanUse,
-  ) => Promise<CallToolResult>;
-};
-
-const isOn = (canUse: AiCanUse, area: string) =>
-  canUse.areas.some((each) => each.id === area && each.on);
-
-const titleOf = (area: string) => permissionWords(area).title;
-
-// A refusal of what's switched off, or isn't for AI agents, with the areas
-// behind it, which the activity log names.
-class Refused extends Error {
-  constructor(
-    readonly answer: CallToolResult,
-    readonly items: readonly string[],
-  ) {
-    super("refused");
-  }
-}
-
-function areasOff(areas: readonly string[]) {
-  const titles = areas.map((area) => `“${titleOf(area)}”`).join(" and ");
-  const are = areas.length > 1 ? "are" : "is";
-  return new Refused(
-    toolError(
-      "not_allowed",
-      `${titles} ${are} switched off for AI agents in ${areasPage}.`,
-    ),
-    areas,
-  );
-}
-
 const isUsable = (offer: AiOfferInfo) => offer.on && offer.missing.length === 0;
-
-const inputSchemaOf = (schema: z.ZodType): Tool["inputSchema"] => {
-  const json = z.toJSONSchema(schema, { io: "input" }) as Record<
-    string,
-    unknown
-  >;
-  delete json.$schema;
-  return { ...json, type: "object" };
-};
 
 // The kinds AI agents may control, of those any area offers.
 const controlKinds = (canUse: AiCanUse) =>
@@ -637,6 +593,14 @@ export function createCoreTools(options: CoreToolsOptions) {
     entities,
     activity,
     history,
+    ...(options.speech && {
+      announce: createAnnounceTool({
+        devices: options.devices,
+        speech: options.speech,
+        record: options.record,
+        agentWho: options.agentWho,
+      }),
+    }),
   };
 
   // A refusal goes to the activity log once, under the agent's name.
@@ -667,7 +631,7 @@ export function createCoreTools(options: CoreToolsOptions) {
     ): Promise<CallToolResult | undefined> {
       if (!Object.hasOwn(tools, name)) return undefined;
       const tool = tools[name]!;
-      if (!tool.usable(canUse)) {
+      if (!(tool.callable ?? tool.usable)(canUse)) {
         return refused(agent, name, tool.refusal(canUse));
       }
       try {

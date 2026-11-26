@@ -240,6 +240,7 @@ describe("the host's status", () => {
         interface: "wlan0",
         kind: "wifi",
         address: "192.168.7.222",
+        cidr: "192.168.7.222/24",
         signalDbm: -37,
         speedMbps: null,
       },

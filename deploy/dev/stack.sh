@@ -52,12 +52,13 @@ is_listening() {
   nc -z 127.0.0.1 "$1" 2>/dev/null
 }
 
-# Two ports in a row from one the worktree's path hints at: the core's and, if
-# the stack needs it, its registry's.
+# Three ports in a row from one the worktree's path hints at: the core's,
+# its registry's, if the stack needs it, and the one smart speakers fetch
+# announcements from.
 pick_port() {
   local port=$((41000 + $(printf '%s' "$root" | cksum | cut -d' ' -f1) % 2000))
-  while is_listening "$port" || is_listening "$((port + 1))"; do
-    port=$((port + 2))
+  while is_listening "$port" || is_listening "$((port + 1))" || is_listening "$((port + 2))"; do
+    port=$((port + 3))
   done
   echo "$port"
 }
@@ -83,6 +84,7 @@ settings() {
   fi
   export SANCTUM_STACK_PORT
   export SANCTUM_STACK_REGISTRY_PORT="$((SANCTUM_STACK_PORT + 1))"
+  export SANCTUM_STACK_SPEAKER_PORT="$((SANCTUM_STACK_PORT + 2))"
   if [[ -z "$named_by_hand" ]]; then
     printf 'saved_stack=%q\nsaved_port=%q\n' "$stack" "$SANCTUM_STACK_PORT" >"$stack_file"
   fi
@@ -173,6 +175,8 @@ remove_core_with_other_settings() {
   grep -Fqx "CORE_NEW_HOME_APPS=${new_home_apps}" <<<"$env" || stale=true
   port="$(docker inspect -f '{{range (index .HostConfig.PortBindings "4100/tcp")}}{{.HostPort}}{{end}}' "$name")"
   [[ "$port" == "$SANCTUM_STACK_PORT" ]] || stale=true
+  port="$(docker inspect -f '{{range (index .HostConfig.PortBindings "4180/tcp")}}{{.HostPort}}{{end}}' "$name")"
+  [[ "$port" == "$SANCTUM_STACK_SPEAKER_PORT" ]] || stale=true
   [[ "$(docker inspect -f '{{.Image}}' "$name")" == "$(image_id "sanctum-${stack}-core:dev")" ]] || stale=true
   binds="$(docker inspect -f '{{index .Config.Labels "sanctum.stack.core-binds"}}' "$name")"
   [[ "$binds" == "${SANCTUM_STACK_CORE_BINDS%;}" ]] || stale=true

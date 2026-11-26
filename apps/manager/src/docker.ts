@@ -112,7 +112,13 @@ export type DockerClientLike = {
   listContainers: (options?: {
     all?: boolean;
     filters?: Record<string, string[]>;
-  }) => Promise<Array<{ Id: string; ImageID: string }>>;
+  }) => Promise<
+    Array<{
+      Id: string;
+      ImageID: string;
+      Ports?: { Type: string; PublicPort?: number }[];
+    }>
+  >;
   pull: (imageName: string) => Promise<unknown>;
   modem: {
     followProgress: (

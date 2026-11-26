@@ -284,6 +284,17 @@ export function createCore(
             // The manager announces the home's id and whether the host is
             // claimed.
             onClaimed: () => void manager!.reportClaimed(true),
+            // A core that doesn't listen serves no speakers either.
+            speaker:
+              replaced.moduleOptions?.speaker ??
+              (replaced.listens === false || config.speakerPort === undefined
+                ? undefined
+                : {
+                    host: config.host,
+                    port: config.speakerPort,
+                    publishedPort:
+                      config.speakerPublishedPort ?? config.speakerPort,
+                  }),
             log,
             now: replaced.now,
           });
@@ -365,6 +376,7 @@ export function createCore(
       ],
       ["start the manager's audit", () => modules!.managerAudit?.start()],
       ["start discovery", () => modules!.discovery?.start()],
+      ["start announcements", () => modules!.startSpeech()],
       ["start firmware's deadlines", () => modules!.firmware.start()],
       ["watch the AI model in use", () => modules!.models.start()],
       // A Zigbee stick plugged in while the home has no app for it offers

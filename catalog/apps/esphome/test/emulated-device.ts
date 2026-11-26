@@ -8,13 +8,21 @@ import {
 } from "esphome-client";
 import { createServer, type Server, type Socket } from "node:net";
 
+import {
+  decode,
+  field,
+  nestedMessage,
+  valueOf,
+  varint,
+  type FieldValue,
+  type Spec,
+} from "./emulated-protobuf.js";
+
 // An ESPHome device on a real socket, as its firmware answers the native
 // API: plaintext, or encrypted with Noise under its key, refusing the other.
 // It greets, says who it is, lists its entities, sends their states, takes
 // commands and answers pings, so the app's real client talks to it as to a
 // device on the home's network.
-
-type FieldValue = number | boolean | string;
 
 export type EmulatedEntity = {
   type: keyof typeof ENTITY_SCHEMAS;
@@ -23,6 +31,8 @@ export type EmulatedEntity = {
   name: string;
   /** Its list entry's other fields, by the library's names: deviceClass, supportedColorModes. */
   fields?: Record<string, FieldValue | readonly FieldValue[]>;
+  /** Its list entry's repeated messages, such as a media player's supportedFormats. */
+  messages?: Record<string, readonly Record<string, FieldValue>[]>;
 };
 
 export type EmulatedOptions = {
@@ -81,84 +91,6 @@ const message = {
   voiceAssistantResponse: 91,
   voiceAssistantEvent: 92,
 } as const;
-
-// Protocol buffers, as far as the API needs them.
-function varint(value: number) {
-  const bytes: number[] = [];
-  let rest = value >>> 0;
-  while (rest > 0x7f) {
-    bytes.push((rest & 0x7f) | 0x80);
-    rest >>>= 7;
-  }
-  bytes.push(rest);
-  return Buffer.from(bytes);
-}
-
-type Spec = { fieldNumber: number; valueType: string };
-
-// As ESPHome does, a field at its default (zero, false, empty) is left out.
-function field(spec: Spec, value: FieldValue): Buffer {
-  if (value === 0 || value === false || value === "") return Buffer.alloc(0);
-  const tag = (wire: number) => varint((spec.fieldNumber << 3) | wire);
-  if (spec.valueType === "float") {
-    const out = Buffer.alloc(4);
-    out.writeFloatLE(Number(value));
-    return Buffer.concat([tag(5), out]);
-  }
-  if (spec.valueType === "fixed32") {
-    const out = Buffer.alloc(4);
-    out.writeUInt32LE(Number(value) >>> 0);
-    return Buffer.concat([tag(5), out]);
-  }
-  if (spec.valueType === "string" || spec.valueType === "bytes") {
-    const text = Buffer.from(String(value));
-    return Buffer.concat([tag(2), varint(text.length), text]);
-  }
-  return Buffer.concat([tag(0), varint(Number(value))]);
-}
-
-function decode(payload: Buffer) {
-  const fields = new Map<number, (number | Buffer)[]>();
-  let at = 0;
-  const read = () => {
-    let value = 0;
-    let shift = 0;
-    for (;;) {
-      const byte = payload[at++]!;
-      value += (byte & 0x7f) * 2 ** shift;
-      if ((byte & 0x80) === 0) return value;
-      shift += 7;
-    }
-  };
-  while (at < payload.length) {
-    const tag = read();
-    const number = Math.floor(tag / 8);
-    const wire = tag & 7;
-    let value: number | Buffer;
-    if (wire === 0) value = read();
-    else if (wire === 5) {
-      value = payload.subarray(at, at + 4);
-      at += 4;
-    } else if (wire === 2) {
-      const length = read();
-      value = payload.subarray(at, at + length);
-      at += length;
-    } else throw new Error(`wire type ${wire}`);
-    fields.set(number, [...(fields.get(number) ?? []), value]);
-  }
-  return fields;
-}
-
-function valueOf(
-  raw: number | Buffer | undefined,
-  valueType: string,
-): FieldValue | undefined {
-  if (raw === undefined) return undefined;
-  if (valueType === "float") return (raw as Buffer).readFloatLE(0);
-  if (valueType === "string") return (raw as Buffer).toString();
-  if (valueType === "bool") return raw === 1;
-  return raw as number;
-}
 
 export class EmulatedDevice {
   readonly host = "127.0.0.1";
@@ -627,6 +559,13 @@ export class EmulatedDevice {
           for (const each of Array.isArray(value) ? value : [value])
             parts.push(field(spec, each));
         }
+        for (const [name, list] of Object.entries(entity.messages ?? {})) {
+          const spec = schema.repeatedMessageFields?.[name];
+          if (!spec) throw new Error(`${entity.type} has no messages ${name}`);
+          for (const each of list) {
+            parts.push(nestedMessage(name, spec, each));
+          }
+        }
         send(schema.messageType, Buffer.concat(parts));
       }
       send(message.listEntitiesDone, Buffer.alloc(0));
@@ -671,6 +610,11 @@ export class EmulatedDevice {
       ...this.states[key],
     };
     if (typeof said.volume === "number") now.volume = said.volume;
+    // An announcement it was asked to play shows as playing, as the Voice
+    // PE's firmware of 2026.6 shows it; the test says when it ends.
+    if (said.announcement === true && typeof said.mediaUrl === "string") {
+      now.state = MediaPlayerState.PLAYING;
+    }
     switch (said.command) {
       case MediaPlayerCommand.PLAY:
         now.state = MediaPlayerState.PLAYING;
@@ -764,6 +708,10 @@ type ListSpec = {
   messageType: number;
   fields: Record<string, Spec>;
   repeatedFields?: Record<string, Spec>;
+  repeatedMessageFields?: Record<
+    string,
+    { fieldNumber: number; fields: Record<string, Spec> }
+  >;
 };
 type CommandSpec = {
   keyFieldNumber: number;

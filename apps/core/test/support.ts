@@ -136,6 +136,7 @@ export async function testCore(
     // Certificates from a test's CA: the core serves their chain over HTTPS
     // and binds sign-ins to the CA's pin.
     certificates?: TestReplacements["certificates"];
+    speakerPort?: number;
     // The home's time zone, UTC unless a test says, and its sun times.
     // null: the home's own, from Places.
     timeZone?: string | null;
@@ -184,6 +185,7 @@ export async function testCore(
     {
       host: "127.0.0.1",
       port: 0,
+      speakerPort: options.speakerPort,
       allowedOrigins: options.allowedOrigins ?? [],
       dataDir,
       plainHttp: !options.certificates,
@@ -234,7 +236,7 @@ export async function testCore(
         },
         ticking: false,
         recordsStarts: false,
-        listens: false,
+        listens: options.speakerPort !== undefined,
         moduleOptions: {
           ...(options.appUpdates ? { appUpdates: options.appUpdates } : {}),
           limits: { ...defaultLimits, ...options.limits },

@@ -4,7 +4,7 @@ import type {
   DeviceRegistration,
   MediaActivity,
 } from "@meetsanctum/app-sdk";
-import type { TelemetryEvent } from "esphome-client";
+import { MediaPlayerState, type TelemetryEvent } from "esphome-client";
 
 import type { Session, Timings } from "./connection.js";
 import { signalOf, type Mapping } from "./entities.js";
@@ -13,6 +13,17 @@ import { connectionFactsOf, describeSession } from "./session-details.js";
 import { audioStateOf, mutedOf } from "./speaker.js";
 import { stateOf } from "./states.js";
 import { declineRequests } from "./voice.js";
+
+// An announcement Sanctum sent, on the player that got it. The Voice PE's
+// firmware reports an announcement it was asked for as playing, not
+// announcing, so that player's playing reads as an announcement: from its
+// first report of playing, which comes within a second of the command, until
+// it reports anything else. Only a fetch of the clip lets an ordinary
+// PLAYING report count as an announcement.
+/** How soon the player says it's playing an announcement, or it didn't. */
+const announcementStartsMs = 5_000;
+/** The longest an announcement holds the player's own activity. */
+const announcementHeldMs = 5 * 60_000;
 
 // What a device says, told to the core: each part's state, each press once,
 // and its Wi-Fi signal kept for its page.
@@ -94,8 +105,70 @@ export function createReports(
         : [],
     ),
   );
+  const announcements = new WeakMap<
+    Session,
+    {
+      key: number;
+      url: string;
+      fetchedAt: number | null;
+      started: boolean;
+      held?: { events: TelemetryEvent[]; flush: () => void };
+    }
+  >();
+  // An event from the player announcing, read as an announcement while it is
+  // one, and the end of it otherwise.
+  function readAnnouncement(
+    event: TelemetryEvent,
+    session: Session,
+  ): TelemetryEvent {
+    if (event.type !== "media_player") return event;
+    const announcing = announcements.get(session);
+    if (announcing?.key !== event.key || announcing.fetchedAt === null)
+      return event;
+    const since = Date.now() - announcing.fetchedAt;
+    if (
+      event.state === MediaPlayerState.PLAYING &&
+      since < announcementHeldMs &&
+      (announcing.started || since < announcementStartsMs)
+    ) {
+      announcing.started = true;
+      return { ...event, state: MediaPlayerState.ANNOUNCING };
+    }
+    announcements.delete(session);
+    return event;
+  }
+  function reportState(event: TelemetryEvent, session: Session) {
+    const { mapping } = describeSession(session);
+    report(
+      ctx,
+      facts,
+      key,
+      mapping,
+      readAnnouncement(event, session),
+      session,
+      activities,
+      audio.send,
+    );
+  }
   return {
     audio,
+    /** An announcement went to the player with this key. */
+    announced(session: Session, playerKey: number, url: string) {
+      announcements.get(session)?.held?.flush();
+      announcements.set(session, {
+        key: playerKey,
+        url,
+        fetchedAt: null,
+        started: false,
+      });
+    },
+    announcementFetched(session: Session, url: string) {
+      const announcing = announcements.get(session);
+      if (announcing?.url === url) {
+        announcing.fetchedAt ??= Date.now();
+        announcing.held?.flush();
+      }
+    },
     registered(capabilities: DeviceRegistration["capabilities"]) {
       for (const id of activities.keys()) {
         if (
@@ -106,8 +179,41 @@ export function createReports(
       }
     },
     state(event: TelemetryEvent, session: Session) {
-      const { mapping } = describeSession(session);
-      report(ctx, facts, key, mapping, event, session, activities, audio.send);
+      const announcing = announcements.get(session);
+      if (
+        event.type === "media_player" &&
+        announcing?.key === event.key &&
+        announcing.fetchedAt === null
+      ) {
+        if (announcing.held) {
+          announcing.held.events.push(event);
+          return;
+        }
+        if (event.state === MediaPlayerState.PLAYING && current() === session) {
+          // The fetch notice can arrive after playback. Keep this player's
+          // reports in order while it has a chance to arrive.
+          const events: TelemetryEvent[] = [event];
+          const flush = () => {
+            clearTimeout(timer);
+            announcing.held = undefined;
+            // No fetch: the announcement never played, so the player's
+            // reports are its own again from here on.
+            if (
+              announcing.fetchedAt === null &&
+              announcements.get(session) === announcing
+            ) {
+              announcements.delete(session);
+            }
+            if (current() !== session) return;
+            for (const held of events) reportState(held, session);
+          };
+          const timer = setTimeout(flush, announcementStartsMs);
+          timer.unref();
+          announcing.held = { events, flush };
+          return;
+        }
+      }
+      reportState(event, session);
     },
   };
 }

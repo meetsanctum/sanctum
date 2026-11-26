@@ -236,7 +236,7 @@ describe("a player's steps", () => {
         ...speaker,
         id: "microphones",
         kind: "audio" as const,
-        features: { mutes: true, muteSwitch: false },
+        features: { mutes: true, muteSwitch: false, announces: false },
       } as CapabilityInfo;
       const device = {
         ...homeDevices[0]!,
