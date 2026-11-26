@@ -6,6 +6,15 @@
 // stylesheet leaves out every rule of its utilities that the kit's already
 // has, word for word, and each utility comes once across the two.
 //
+// The minifier joins neighbouring rules that declare the same, so a utility
+// can stand alone in one stylesheet and share its rule with another in the
+// other: `.bg-foreground\/8{…}` in a page, `.bg-foreground,.bg-foreground\/8{…}`
+// in the kit. So rules are compared selector by selector: a page leaves out
+// the selectors the kit has with the same declarations and keeps the rest.
+// Matched whole, a page would keep a solid fallback, `bg-foreground/8` in
+// the full ink, and leave out its translucent override in `@supports` as
+// the kit's, and the fallback, coming later, would win.
+//
 // What two stylesheets can't keep is Tailwind's order between a page's own
 // utility and a later one the kit has: on a page's element with
 // `m-[13px] mt-auto`, the page's margin comes after the kit's `mt-auto` and
@@ -65,21 +74,68 @@ const isOwnLayer = (item: Item) =>
 const utilities = (css: string) =>
   itemsOf(css).filter((item) => item.prelude === "@layer utilities");
 
-// Each rule of a block, keyed by the groups it's in and its text.
+// The selectors of a rule's list: split at its commas, but not at those in
+// brackets, parentheses, strings or escapes, as in `:is(.a,.b)`.
+function selectorsOf(prelude: string): string[] {
+  const selectors: string[] = [];
+  let start = 0;
+  let depth = 0;
+  let quote: string | undefined;
+  for (let at = 0; at < prelude.length; at++) {
+    const character = prelude[at]!;
+    if (character === "\\") {
+      at++;
+    } else if (quote) {
+      if (character === quote) quote = undefined;
+    } else if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === "(" || character === "[") {
+      depth++;
+    } else if (character === ")" || character === "]") {
+      depth--;
+    } else if (character === "," && depth === 0) {
+      selectors.push(prelude.slice(start, at).trim());
+      start = at + 1;
+    }
+  }
+  selectors.push(prelude.slice(start).trim());
+  return selectors;
+}
+
+// A rule's key for each of its selectors: the groups it's in, the selector
+// and its declarations.
+const keysOf = (item: Item, within: string) =>
+  selectorsOf(item.prelude!).map(
+    (selector) => `${within}${selector}{${item.body}}`,
+  );
+
+// Each rule of a block, keyed by the groups it's in and its text, selector
+// by selector.
 function rulesOf(block: string, within: string, into: Set<string>) {
   for (const item of itemsOf(block)) {
     if (isOwnLayer(item)) continue;
     if (isGroup(item)) rulesOf(item.body!, `${within}${item.prelude}\n`, into);
-    else into.add(`${within}${item.text}`);
+    else if (item.body === undefined) into.add(`${within}${item.text}`);
+    else for (const key of keysOf(item, within)) into.add(key);
   }
+}
+
+// A rule with only the selectors the kit doesn't have, or nothing.
+function ruleWithout(item: Item, within: string, kit: Set<string>) {
+  const selectors = selectorsOf(item.prelude!);
+  const keys = keysOf(item, within);
+  const kept = selectors.filter((_, index) => !kit.has(keys[index]!));
+  if (kept.length === selectors.length) return item.text;
+  return kept.length > 0 ? `${kept.join(",")}{${item.body}}` : "";
 }
 
 function leaveOut(block: string, within: string, kit: Set<string>): string {
   return itemsOf(block)
     .map((item) => {
       if (isOwnLayer(item)) return item.text;
-      if (!isGroup(item))
+      if (item.body === undefined)
         return kit.has(`${within}${item.text}`) ? "" : item.text;
+      if (!isGroup(item)) return ruleWithout(item, within, kit);
       const body = leaveOut(item.body!, `${within}${item.prelude}\n`, kit);
       return body.trim() ? `${item.prelude}{${body}}` : "";
     })
