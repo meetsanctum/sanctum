@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useRef } from "react";
+import { useSwipePageSelected } from "@meetsanctum/ui-sdk";
+import { useEffect, useRef } from "react";
 
 import { everyWhileShown, isShown } from "./while-shown";
 
@@ -7,12 +8,9 @@ import { everyWhileShown, isShown } from "./while-shown";
 // every page mounted beside the one in view, so a page out of view waits,
 // and catches up at once when it is shown again.
 
-/** Whether the page holding a chart is the one in view. */
-export const ChartPageSelected = createContext(true);
-
 /** Moves a chart's time while its page and window are shown. */
 export function useChartClock(setNow: (now: number) => void) {
-  const selected = useContext(ChartPageSelected);
+  const selected = useSwipePageSelected();
   // The chart read the time as it mounted, so only a page shown again
   // catches up: a tick at mount would draw every chart twice as it opens.
   const mounted = useRef(false);

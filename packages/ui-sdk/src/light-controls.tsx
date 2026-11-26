@@ -34,7 +34,7 @@ export function LightControls(props: {
   pages?: readonly SwipePage[];
   /** The page it opens on, by its id: the first unless said. */
   initial?: string;
-  /** The page on show, including when it first opens. */
+  /** The page on show, including when it first opens, told in a transition once the pages start to slide. */
   onPageChange?: (id: string) => void;
 }) {
   const { name, features, state, failures } = props;

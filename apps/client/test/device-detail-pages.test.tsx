@@ -2,6 +2,7 @@
 import type { CapabilityInfo, DeviceInfo } from "@meetsanctum/app-sdk";
 import { createLiveFeed } from "@meetsanctum/ui-sdk";
 import { act } from "react";
+import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -197,39 +198,48 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it("keeps the opening tint on Remote and updates it on Playing", async () => {
-  const tv = mediaPlayer("tv", "TV", "office", {
-    on: true,
-    activity: "paused",
-  });
-  devices = [tv];
-  const first = "oklch(0.4 0.1 40)";
-  const next = "oklch(0.4 0.1 80)";
-  const tint = () =>
-    dialog()
-      .querySelector("[data-tint]:last-of-type")
-      ?.getAttribute("data-tint");
-  const select = (page: string) =>
-    act(async () => {
+it.each(["Playing", "History"])(
+  "keeps the opening tint on Remote and uses the new tint on %s after visiting Playing",
+  async (destination) => {
+    const tv = mediaPlayer("tv", "TV", "office", {
+      on: true,
+      activity: "paused",
+    });
+    devices = [tv];
+    const first = "oklch(0.4 0.1 40)";
+    const next = "oklch(0.4 0.1 80)";
+    const tint = () =>
+      dialog()
+        .querySelector("[data-tint]:last-of-type")
+        ?.getAttribute("data-tint");
+    const select = (page: string) =>
       dialog()
         .querySelector<HTMLButtonElement>(`[role=tab][aria-label=${page}]`)!
         .click();
+
+    vi.mocked(useArtwork).mockReturnValue({ url: "blob:first", colour: first });
+    await open("tv/player");
+    expect(tint()).toBe(first);
+    await act(async () => select("Remote"));
+
+    vi.mocked(useArtwork).mockReturnValue({ url: "blob:next", colour: next });
+    await act(async () =>
+      live.publish({ type: "device", id: tv.id, device: { ...tv } }),
+    );
+    expect(tint()).toBe(first);
+
+    await act(async () => {
+      flushSync(() => select("Playing"));
+      if (destination === "History") {
+        expect(tabs()).toContainEqual(["Playing", "true"]);
+        expect(tint()).toBe(first);
+        select("History");
+      }
     });
-
-  vi.mocked(useArtwork).mockReturnValue({ url: "blob:first", colour: first });
-  await open("tv/player");
-  expect(tint()).toBe(first);
-  await select("Remote");
-
-  vi.mocked(useArtwork).mockReturnValue({ url: "blob:next", colour: next });
-  await act(async () =>
-    live.publish({ type: "device", id: tv.id, device: { ...tv } }),
-  );
-  expect(tint()).toBe(first);
-
-  await select("Playing");
-  expect(tint()).toBe(next);
-});
+    expect(tabs()).toContainEqual([destination, "true"]);
+    expect(tint()).toBe(next);
+  },
+);
 
 it.each([
   ["a TV", true, "Remote"],
@@ -548,13 +558,11 @@ describe("a light with a button and a temperature sensor", () => {
         .spyOn(document, "visibilityState", "get")
         .mockReturnValue("visible");
       const select = (label: string) =>
-        act(async () =>
-          dialog()
-            .querySelector<HTMLButtonElement>(
-              `[role="tab"][aria-label="${label}"]`,
-            )!
-            .click(),
-        );
+        dialog()
+          .querySelector<HTMLButtonElement>(
+            `[role="tab"][aria-label="${label}"]`,
+          )!
+          .click();
       const showWindow = (state: DocumentVisibilityState) =>
         act(async () => {
           visibility.mockReturnValue(state);
@@ -576,7 +584,7 @@ describe("a light with a button and a temperature sensor", () => {
           : answer;
       });
       await open("panel/light");
-      await select(page);
+      await act(async () => select(page));
       const initial = tick();
       await advance();
       const beforeLeaving = tick();
@@ -588,7 +596,7 @@ describe("a light with a button and a temperature sensor", () => {
           ? new Promise(() => {})
           : request(path, init),
       );
-      await select("Brightness");
+      await act(async () => select("Brightness"));
       await showWindow("hidden");
       await advance();
       await showWindow("visible");
@@ -596,7 +604,16 @@ describe("a light with a button and a temperature sensor", () => {
       await advance();
       expect(tick()).toBe(beforeLeaving);
 
-      await select(page);
+      // The clock starts with the tab, before the deferred tint update.
+      const startInterval = vi.spyOn(globalThis, "setInterval");
+      await act(async () => {
+        flushSync(() => select(page));
+        expect(tabs()).toContainEqual([page, "true"]);
+        expect(startInterval).toHaveBeenCalledWith(
+          expect.any(Function),
+          60_000,
+        );
+      });
       const beforeHiding = tick();
       expect(beforeHiding).not.toBe(beforeLeaving);
       await showWindow("hidden");

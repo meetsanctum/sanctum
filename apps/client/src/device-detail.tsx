@@ -56,7 +56,6 @@ import { MotionPage } from "./motion-detail";
 import { Overlay } from "./overlay";
 import { SensorDetail } from "./sensor-detail";
 import { seenText } from "./settings-clients";
-import { ChartPageSelected } from "./use-chart-clock";
 import type { Devices } from "./use-devices";
 
 // A device's detail, opened from any of its tiles: an overlay, with the
@@ -458,23 +457,25 @@ export function DeviceDetail(props: {
     tint: string | null;
   } | null>(null);
   const selected = selection?.detailKey === detailKey ? selection : null;
-  const page =
-    selected?.page ?? initial ?? (controlTile ? undefined : after[0]?.id);
-  const tint =
-    page === "playing"
-      ? (artwork?.colour ?? (isArtworkMissing ? missingArtworkTint : null))
-      : (selected?.tint ?? null);
-  // The other pages keep the colour they had when they came into view.
+  const openingPage = initial ?? (controlTile ? undefined : after[0]?.id);
+  const page = selected?.page ?? openingPage;
+  const playingTint =
+    artwork?.colour ?? (isArtworkMissing ? missingArtworkTint : null);
+  const tint = page === "playing" ? playingTint : (selected?.tint ?? null);
+  // The other pages keep the colour of the page they came from, even when
+  // several page changes are queued before the detail draws again.
   const onPageChange = (page: string) =>
-    setSelection({ detailKey, page, tint });
-  const detailPages = after.map((each) => ({
-    ...each,
-    content: (
-      <ChartPageSelected.Provider value={each.id === page}>
-        {each.content}
-      </ChartPageSelected.Provider>
-    ),
-  }));
+    setSelection((previous) => {
+      const outgoing = previous?.detailKey === detailKey ? previous : null;
+      return {
+        detailKey,
+        page,
+        tint:
+          (outgoing?.page ?? openingPage) === "playing"
+            ? playingTint
+            : (outgoing?.tint ?? null),
+      };
+    });
 
   return (
     <Overlay
@@ -512,7 +513,7 @@ export function DeviceDetail(props: {
             onCommand={(command) =>
               void devices.command(controlTile, command).catch(() => undefined)
             }
-            pages={detailPages}
+            pages={after}
             initial={initial}
             onPageChange={onPageChange}
           />
@@ -520,7 +521,7 @@ export function DeviceDetail(props: {
           <SwipePages
             key={detailKey}
             label={name}
-            pages={detailPages}
+            pages={after}
             initial={initial}
             onPageChange={onPageChange}
           />
