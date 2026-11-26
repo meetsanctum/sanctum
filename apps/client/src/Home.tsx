@@ -404,12 +404,13 @@ function HomeScreen(
     if (!onDashboard || dashboard?.kind !== "home") setEditingHome(false);
   }, [onDashboard, dashboard?.kind]);
   const settings = useSettingsNavigation(routes, setRoutes, installed);
-  // Each page and dashboard starts at its top, before it is drawn, not
-  // where the one before it was left.
+  const shownDashboardId = onDashboard ? dashboard?.id : undefined;
+  // Reset before drawing a different page or dashboard, including when
+  // entering or leaving Edit Home.
   const scrollArea = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
     if (scrollArea.current) scrollArea.current.scrollTop = 0;
-  }, [route, dashboard?.id]);
+  }, [route, shownDashboardId, isEditingHome]);
   const openAutomations = () =>
     setRoutes([{ app: automationsApp.id, page: "main", params: {} }]);
   // Somewhere new from the sidebar, which takes the floating one away.
