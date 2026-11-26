@@ -91,9 +91,10 @@ it("draws many brightness changes in a few paths and lists each in one text", as
   const strip = await show(changes, 520);
   const paths = strip.querySelectorAll("path");
   expect(paths).toHaveLength(3);
-  expect(strip.querySelectorAll("rect")).toHaveLength(1);
+  // Its 100% line and its axis.
+  expect(strip.querySelectorAll("rect")).toHaveLength(2);
   const [off, fill, top] = paths;
-  expect(off!.getAttribute("d")).toBe("M458 87h22v1h-22z");
+  expect(off!.getAttribute("d")).toBe("M458 86h22v2h-22z");
   expect(fill!.getAttribute("d")).toMatch(/^M420 70h2v18h-2zM422 69h1v19h-1z/);
   expect(top!.getAttribute("d")).toMatch(/^M420 70h2v2h-2zM422 69h1v2h-1z/);
   expect(fill!.getAttribute("fill")).toBe(lightColour(lampState));

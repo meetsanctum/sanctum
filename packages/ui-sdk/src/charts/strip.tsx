@@ -2,12 +2,13 @@ import { Fragment, memo, useMemo } from "react";
 
 import { TimeTicks } from "./axis";
 import { SpokenPin, useCursor } from "./cursor";
-import { plotClass, Readout, useWidth } from "./frame";
+import { ChartFoot, plotClass, Readout, useWidth } from "./frame";
 import { useHomeClock } from "../home-clock";
 
 // A day as a strip: each span on filled in its own colour, as high as its
-// level where the strip shows levels, off as a hairline along its foot and
-// nothing where nothing was known, with the time every 6 hours under it.
+// level where the strip shows levels, off as a 2 px line along its foot and
+// nothing but the axis where nothing was known, with the time every 6 hours
+// under it.
 // It shows its value under a mouse or where a tap or the arrow keys pin it,
 // in quarter hours, and lists its spans for screen readers.
 
@@ -54,7 +55,8 @@ function marksOf(
     previousLeft = left;
     const layer = (layers[index] ??= { off: "", on: new Map() });
     if (span.mark === "off") {
-      layer.off += `M${left} ${height - 1}h${width}v1h${-width}z`;
+      // Thicker than the axis under it, so off never reads as not known.
+      layer.off += `M${left} ${height - 2}h${width}v2h${-width}z`;
       continue;
     }
     const { level: shown, colour } = span.mark;
@@ -75,7 +77,7 @@ const StripMarks = memo(function StripMarks(props: {
 }) {
   return props.layers.map(({ off, on }, index) => (
     <Fragment key={index}>
-      {off && <path d={off} className="fill-white/14" />}
+      {off && <path d={off} className="fill-white/30" />}
       {[...on].map(([colour, each]) => (
         <Fragment key={colour}>
           <path d={each.fill} fill={colour} fillOpacity={0.4} />
@@ -193,6 +195,7 @@ export function DayStripChart<Span extends StripSpan>(
               className="fill-white/8"
             />
           )}
+          <ChartFoot plot={plot} height={height} page={false} />
           {plot > 0 && <StripMarks layers={layers} />}
           {pointed !== null && (
             <rect

@@ -142,8 +142,9 @@ it("shows a TV's day as playing, on and off, and its week as time played", async
   const band = container.querySelector(
     '[role="group"][aria-label="Playing over the last 24 hours"] svg',
   )!;
-  const [off, idle] = band.querySelectorAll("rect");
-  expect(off?.getAttribute("height")).toBe("1");
+  const [axis, off, idle] = band.querySelectorAll("rect");
+  expect(axis?.getAttribute("class")).toBe("fill-white/14");
+  expect(off?.getAttribute("height")).toBe("2");
   expect(Number(off?.getAttribute("width"))).toBeGreaterThan(0);
   expect(idle?.getAttribute("height")).toBe(band.getAttribute("height"));
   expect(idle?.getAttribute("class")).toBe("fill-white/16");

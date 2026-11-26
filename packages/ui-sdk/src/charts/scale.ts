@@ -69,7 +69,7 @@ export function yOn(
     : height / 2;
 }
 
-// A gridline's middle, on a pixel's so it is sharp at 1×.
+// A gridline's centre, snapped to a pixel.
 export const gridYOn = (
   scale: ChartScale | null,
   height: number,
