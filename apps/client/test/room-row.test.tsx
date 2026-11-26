@@ -193,6 +193,32 @@ describe("a room's row", () => {
     );
   });
 
+  it("puts a tile section of a lower weight first, as Natural Light's before the moods", async () => {
+    // Natural Light's tiles weigh 100, Moods' 200.
+    const sun: AppInfo = {
+      ...glow,
+      provides: {
+        ...glow.provides,
+        roomSections: [
+          { ...glow.provides.roomSections[0]!, kind: "tiles", order: 100 },
+        ],
+      },
+    };
+    await show("room", [moods, sun]);
+    expect(rowOf("Office")).toEqual([
+      "Turn off lights in Office",
+      "Glow in Office",
+      "Relax in Office",
+    ]);
+    const grid = named("Relax in Office")!.parentElement!;
+    expect(grid.matches(".tile-grid")).toBe(true);
+    expect(grid.firstElementChild).toBe(named("Glow in Office"));
+    expect(named("Glow in Office")?.getAttribute("aria-pressed")).toBe("true");
+    expect(named("Relax in Office")?.getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+  });
+
   it("calls the section's action with the chip's input on a tap", async () => {
     await show("room");
     await act(async () => {

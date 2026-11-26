@@ -27,8 +27,8 @@ import {
 import { followedLights, roomButtons } from "./schema.js";
 import { targetKey } from "./target.js";
 
-// Natural Light's button sits beside the room's lights switch on its page
-// and on Home. The shell draws its sun icon and name from a
+// Natural Light's button is the first tile of the room's row, before its
+// moods, on its page and on Home. The shell draws its sun icon and name from a
 // `naturalLight.room` entity for each room where a light follows. It shows
 // only while the app is on and the home has a location.
 //

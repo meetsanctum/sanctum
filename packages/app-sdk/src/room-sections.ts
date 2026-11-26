@@ -5,8 +5,8 @@ import type { ActionDefinition, AppDefinition } from "./index.js";
 // Room sections: what an app adds to a room's row, the buttons and tiles
 // under the room's name on its page and on Home that set its lights' look.
 // The shell draws each from the app's entities of one type in that room.
-// Buttons such as Natural Light sit beside the room's own switch. Tiles
-// such as Moods' moods sit below. The row has no headings. The shell draws
+// Buttons sit beside the room's own switch. Tiles such as Natural Light
+// and Moods' moods sit below. The row has no headings. The shell draws
 // every section the same way, regardless of which app provides it.
 
 /**
@@ -91,8 +91,8 @@ export const sampleTilesMax = 6;
 /**
  * Where a room's sections go in its row, buttons and tiles each by these
  * weights. Sanctum keeps those below `appSectionOrderFrom` for its own, such
- * as 200 for Moods and Natural Light; any app takes one from 300 to 799, 500
- * unless it says, and ties go by app id.
+ * as 100 for Natural Light and 200 for Moods. Other apps take a weight
+ * from 300 to 799, defaulting to 500. Ties go by app id.
  */
 export const sectionOrderFrom = 100;
 export const appSectionOrderFrom = 300;
