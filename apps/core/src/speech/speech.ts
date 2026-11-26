@@ -34,6 +34,8 @@ const startingForMs = 15 * 60_000;
 const addressKeptMs = 5 * 60_000;
 
 export class SpeechUnavailable extends Error {}
+/** AI agents may no longer speak on smart speakers. */
+export class SpeechSwitchedOff extends Error {}
 
 // Waits `ms`, or less once `signal` aborts, without holding the process open.
 function pause(ms: number, signal: AbortSignal) {
@@ -243,6 +245,8 @@ export function createSpeech(options: {
 
     areaChanged() {
       reconcile();
+      // What hasn't reached a speaker yet isn't said once agents may not speak.
+      if (!options.areaOn()) options.announcements.withdrawUnfetched();
     },
 
     /**
@@ -252,8 +256,9 @@ export function createSpeech(options: {
      * come. `beforeTelling` runs then, and may throw to keep it from the
      * speaker, as when the speaker was muted while it waited. Throws
      * SpeechUnavailable while the speech service or the host's address isn't
-     * there or the speech fails before any sound, and the announcement's own
-     * refusal while too many wait.
+     * there or the speech fails before any sound, SpeechSwitchedOff once AI
+     * agents may no longer speak before the speaker is told, and the
+     * announcement's own refusal while too many wait.
      */
     async speak(input: {
       device: string;
@@ -318,7 +323,10 @@ export function createSpeech(options: {
       const tell = async () => {
         // The speaker needs a playable frame, and those ahead of it
         // must have finished, before the driver gets the address.
-        if ((await announcement.ready) && (await announcement.turn)) {
+        const playable =
+          (await announcement.ready) && (await announcement.turn);
+        if (!options.areaOn()) throw new SpeechSwitchedOff();
+        if (playable) {
           if (now() >= dispatchBy) throw waitExpired();
           input.beforeTelling?.();
           const url = announcement.dispatchUrl();

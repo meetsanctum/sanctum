@@ -10,6 +10,7 @@ import {
 import { assembleSpeech } from "../src/speech/assembly.js";
 import {
   createSpeech,
+  SpeechSwitchedOff,
   SpeechUnavailable,
   voices,
 } from "../src/speech/speech.js";
@@ -402,6 +403,45 @@ describe("createSpeech", () => {
       expect(told).toHaveLength(1);
       await second;
       expect(told).toHaveLength(2);
+    } finally {
+      speech.stop();
+    }
+  });
+
+  it("says nothing more once AI agents may no longer speak, waiting or told", async () => {
+    const { server, url } = await fakePiper([]);
+    piper = server;
+    const { speech, told, setArea } = setup({
+      devices: [],
+      serviceUrl: url,
+      address: "127.0.0.1",
+      cidr: "127.0.0.1/32",
+    });
+    await announcements!.start();
+    speech.start();
+    const created = vi.spyOn(announcements!, "create");
+    const delivered: boolean[] = [];
+    const speak = (text: string) =>
+      speech.speak({
+        device: "a",
+        text,
+        language: "en",
+        actor: { kind: "app", id: "sanctum.example" },
+        onDelivery: (fetched) => delivered.push(fetched),
+      });
+    try {
+      await speak("First");
+      const second = speak("Second");
+      await vi.waitFor(() => expect(created).toHaveBeenCalledTimes(2));
+      setArea(false);
+      await expect(second).rejects.toThrow(SpeechSwitchedOff);
+      expect(told).toHaveLength(1);
+      // The speaker was told the first, but it's gone before the fetch.
+      const firstUrl = new URL(told[0]!.url);
+      firstUrl.port = String(announcements!.port());
+      await expect(fetch(firstUrl)).rejects.toThrow();
+      await vi.waitFor(() => expect(delivered).toEqual([false]));
+      expect(announcements!.busy("a")).toBe(false);
     } finally {
       speech.stop();
     }

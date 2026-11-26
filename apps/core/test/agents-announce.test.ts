@@ -5,7 +5,7 @@ import type { NewActivityEntry } from "../src/activity/activity.js";
 import type { AgentCaller } from "../src/app-host/gate.js";
 import { createAnnounceTool } from "../src/agents/announce-tool.js";
 import { AnnouncementRefused } from "../src/speech/announcements.js";
-import { SpeechUnavailable } from "../src/speech/speech.js";
+import { SpeechSwitchedOff, SpeechUnavailable } from "../src/speech/speech.js";
 
 // The announce tool: an AI agent has Sanctum say something on a smart
 // speaker while "Speak on your smart speakers" is on, a few a minute, and
@@ -202,6 +202,16 @@ describe("the announce tool", () => {
     await expect(
       tool.run(agent, { speaker: "speaker", text: "Hi" }, canUse(false)),
     ).rejects.toMatchObject({ items: ["devices.announce"] });
+  });
+
+  it("refuses one that waited its turn once the area is switched off", async () => {
+    const { tool, recorded } = setup(speakerDevice(), async () => {
+      throw new SpeechSwitchedOff();
+    });
+    await expect(
+      tool.run(agent, { speaker: "speaker", text: "Hi" }, canUse(true)),
+    ).rejects.toMatchObject({ items: ["devices.announce"] });
+    expect(recorded).toEqual([]);
   });
 
   it("refuses a speaker turned all the way down", async () => {

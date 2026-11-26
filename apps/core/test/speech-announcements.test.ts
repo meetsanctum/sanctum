@@ -242,6 +242,25 @@ describe("createAnnouncements", () => {
     },
   );
 
+  it("withdraws every unfetched announcement at once, and lets one playing finish", async () => {
+    const served = await started();
+    const port = served.port()!;
+    const playing = served.create("speaker", network, 4180, speech([2_205]));
+    const waiting = served.create("speaker", network, 4180, speech([10]));
+    const told = served.create("other", network, 4180, speech([10]));
+    await Promise.all([playing.encoded, told.encoded]);
+    const body = fetch(local(playing.url, port));
+    await vi.waitFor(() => expect(playing.fetched()).toBe(true));
+    served.withdrawUnfetched();
+    expect(await waiting.turn).toBe(false);
+    expect(await waiting.delivery).toBe("failed");
+    expect(await told.delivery).toBe("failed");
+    expect(served.busy("other")).toBe(false);
+    await expect(fetch(local(told.url, port))).rejects.toThrow();
+    expect((await body).status).toBe(200);
+    expect(served.busy("speaker")).toBe(true);
+  });
+
   it("refuses a valid URL outside the selected interface's prefix", async () => {
     const served = await started();
     const elsewhere = speakerNetwork("127.0.0.2", "127.0.0.2/32")!;

@@ -379,6 +379,20 @@ export function createAnnouncements(options: {
       };
     },
 
+    /**
+     * Withdraws every announcement no speaker has fetched yet, those waiting
+     * their turn too, as when AI agents may no longer speak: what a speaker
+     * already plays goes on.
+     */
+    withdrawUnfetched() {
+      for (const queue of [...byDevice.values()]) {
+        // The last first, so none takes its turn on the way out.
+        for (const announcement of [...queue].reverse()) {
+          if (!announcement.fetched) end(announcement, "failed");
+        }
+      }
+    },
+
     /** Whether a device has an announcement that hasn't played yet. */
     busy(device: string) {
       return byDevice.has(device);

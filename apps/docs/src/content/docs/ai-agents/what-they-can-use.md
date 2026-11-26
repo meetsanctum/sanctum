@@ -57,7 +57,8 @@ home in the same words as apps' [permissions](/apps/permissions/).
   the agent can see and whose history your home keeps.
 
 Turning something off works at once: an agent's next request that needs it
-is refused.
+is refused. Turning off **Speak on your smart speakers** also drops what's
+still waiting to be said; what a speaker is already saying finishes.
 
 ## In your apps
 

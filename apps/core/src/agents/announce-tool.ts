@@ -10,6 +10,7 @@ import { announcementCapability } from "../devices/announce.js";
 import { AnnouncementRefused } from "../speech/announcements.js";
 import {
   speechLanguages,
+  SpeechSwitchedOff,
   SpeechUnavailable,
   type Speech,
 } from "../speech/speech.js";
@@ -183,6 +184,9 @@ export function createAnnounceTool(options: {
       } catch (error) {
         if (!synthesisStarted) releaseQuota();
         if (error instanceof NotHeard) return error.answer;
+        if (error instanceof SpeechSwitchedOff) {
+          throw areasOff([announcePermission]);
+        }
         if (error instanceof AnnouncementRefused) {
           return error.reason === "busy"
             ? toolError(
