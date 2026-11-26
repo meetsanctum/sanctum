@@ -273,13 +273,15 @@ type StatusItem =
   StatusTile | { key: "lights"; tiles: Tile[]; open: () => void };
 
 /**
- * The home's status on the dashboard: Lights' card first, with its switch
+ * The home's status on the dashboard: Lights' card, with its switch
  * (lights-card.tsx), then a tile for what the sensors read, how many
  * contact sensors are open, where there is motion and how many switches
- * are on, each opening its category, and last, while Sanctum or any device needs attention, one
- * that opens Settings, where they show first, or Status when only Sanctum
- * does, then, while a battery is to replace, Batteries, in Graphite, which
- * opens Maintenance; being last, they move nothing as they come and go.
+ * are on, each opening its category. While Sanctum, an app or any device
+ * needs attention, a tile opens Settings, where they show first, or Status
+ * when only Sanctum does: first, in red, while something is wrong, so a
+ * problem is the first thing seen, and otherwise last, in Graphite, where it
+ * moves nothing as it comes and goes. Last of all, while a battery is to
+ * replace, comes Batteries, in Graphite, which opens Maintenance.
  */
 export function HomeStatus(props: {
   devices: Devices;
@@ -327,7 +329,7 @@ export function HomeStatus(props: {
     appsNotRunning(props.apps, props.notSetUp),
   );
   if (attention) {
-    shown.push({
+    const tile: StatusItem = {
       key: "attention",
       title: attention.title,
       value: attention.value,
@@ -339,7 +341,9 @@ export function HomeStatus(props: {
         attention.opens === "status"
           ? (props.openStatus ?? props.openAttention)
           : props.openAttention,
-    });
+    };
+    if (attention.problem) shown.unshift(tile);
+    else shown.push(tile);
   }
   const batteries = batteriesTile(clock, devices.devices, Date.now());
   if (batteries) {

@@ -692,9 +692,9 @@ describe("the home's status", () => {
     ];
     await show("status");
     expect(statusTiles()).toEqual([
-      "PresenceNo readings",
-      // The sensor that doesn't answer needs attention.
+      // The sensor that doesn't answer needs attention, first.
       "hall motion sensorOffline",
+      "PresenceNo readings",
     ]);
   });
 

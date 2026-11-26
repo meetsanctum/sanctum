@@ -254,19 +254,19 @@ describe("the home's status", () => {
     await showStatus();
 
     expect(tiles().map(shown)).toEqual([
+      // The sensor that doesn't answer needs attention, first.
+      "hall sensorOffline",
       "Lights1 on",
       "EnvironmentNo readings",
-      // The sensor that doesn't answer needs attention.
-      "hall sensorOffline",
     ]);
   });
 
-  it("ends with what needs attention, by name for one device, opening Settings", async () => {
+  it("starts with what needs attention, by name for one device, opening Settings", async () => {
     openAttention.mockReset();
     devices = [lamp, { ...hallLight, availability: "offline" }];
     await showStatus();
 
-    const attention = tiles().at(-1)!;
+    const attention = tiles()[0]!;
     expect(shown(attention)).toBe("CeilingOffline");
     expect(attention.getAttribute("aria-label")).toBe("Ceiling is offline");
     // A problem's sign is red.
@@ -285,7 +285,7 @@ describe("the home's status", () => {
     ];
     await showStatus();
 
-    // Lights, Environment, then Attention, in one line that scrolls.
+    // Attention, then Lights and Environment, in one line that scrolls.
     expect(
       container.querySelector("section[aria-label='Home status']")?.classList,
     ).toContain("overflow-x-auto");
@@ -296,12 +296,12 @@ describe("the home's status", () => {
       true,
     );
     expect(container.querySelector(".truncate")).toBeNull();
-    expect(tiles()[1]?.className).toContain(
+    expect(tiles()[2]?.className).toContain(
       "min-w-[calc(var(--cell)*2+var(--cell-gap))]",
     );
-    expect(shown(tiles().at(-1)!)).toContain("Offline");
+    expect(shown(tiles()[0]!)).toContain("Offline");
     // Attention too grows with its words from two cells.
-    expect(tiles().at(-1)?.className).toContain(
+    expect(tiles()[0]?.className).toContain(
       "min-w-[calc(var(--cell)*2+var(--cell-gap))]",
     );
   });
@@ -316,8 +316,8 @@ describe("the home's status", () => {
       { ...lamp, id: "dark", name: "Desk lamp", availability: "offline" },
     ];
     await showStatus();
-    expect(shown(tiles().at(-1)!)).toBe("Attention2 devices");
-    expect(tiles().at(-1)?.getAttribute("aria-label")).toBe(
+    expect(shown(tiles()[0]!)).toBe("Attention2 devices");
+    expect(tiles()[0]?.getAttribute("aria-label")).toBe(
       "Attention, 2 devices: Hall plug isn't paired any more, Desk lamp is offline",
     );
 
@@ -343,15 +343,32 @@ describe("the home's status", () => {
     ]);
   });
 
-  it("ends with Attention, then Batteries", async () => {
+  it("starts with Attention for a problem, and ends with Batteries", async () => {
     devices = [
       lamp,
       { ...sensor("hall", "hall", 19.5, 58), battery: 8 },
       { ...hallLight, availability: "offline" },
     ];
     await showStatus();
-    expect(tiles().map(shown).slice(-2)).toEqual([
+    expect(tiles().map(shown)).toEqual([
       "CeilingOffline",
+      "Lights1 on",
+      "Environment19.5°",
+      "hall sensorBattery 8%",
+    ]);
+  });
+
+  it("keeps Attention last, before Batteries, while nothing is wrong", async () => {
+    devices = [
+      lamp,
+      { ...sensor("hall", "hall", 19.5, 58), battery: 8 },
+      loose,
+    ];
+    await showStatus();
+    expect(tiles().map(shown)).toEqual([
+      "Lights1 on",
+      "Environment19.5°",
+      "LooseNo room",
       "hall sensorBattery 8%",
     ]);
   });
