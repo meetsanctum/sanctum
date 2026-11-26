@@ -1,42 +1,39 @@
+import { pairingCodeLength } from "@meetsanctum/auth-protocol";
 import {
-  formatPairingCode,
-  pairingCodeLength,
-} from "@meetsanctum/auth-protocol";
-import { cn } from "cn";
+  InputOTPDisplay,
+  InputOTPGroup,
+  InputOTPSeparator,
+  InputOTPSlot,
+} from "@meetsanctum/ui-sdk";
 
-import { Skeleton } from "../components/ui/skeleton";
+// The code a shared device shows, in the very boxes the approving device
+// types it into (Add a shared device), four and four with a dash between,
+// so people copy it box by box. Empty boxes stand in while the device waits
+// for a code. The page says the code in words for screen readers.
 
-// One box per character makes the code easy to copy into the approval dialog.
-// The boxes have no outline so they read as display text. Their shapes stand
-// in while the device waits for a code.
+const half = pairingCodeLength / 2;
+const first = Array.from({ length: half }, (_, index) => index);
+const second = first.map((index) => index + half);
 
-const box =
-  "flex h-14.5 w-11.5 items-center justify-center rounded-md max-sm:h-11 max-sm:w-8";
-const placeholder = formatPairingCode(" ".repeat(pairingCodeLength));
-
-export function PairingCode(props: { formattedCode: string | undefined }) {
-  const [first, second] = (props.formattedCode ?? placeholder).split("-");
-  const boxes = (group: string) =>
-    [...group].map((character, index) =>
-      props.formattedCode ? (
-        <span key={index} className={cn(box, "bg-foreground/11")}>
-          {character}
-        </span>
-      ) : (
-        <Skeleton key={index} className={box} />
-      ),
-    );
+export function PairingCode(props: { code: string | undefined }) {
   return (
-    <span className="flex flex-col items-center">
-      <span
-        aria-hidden="true"
-        data-slot="pairing-code"
-        className="flex items-center gap-2 text-[28px] leading-none font-normal tabular-nums max-sm:gap-1 max-sm:text-xl"
-      >
-        {boxes(first!)}
-        <span className="mx-1.5 h-0.5 w-3.5 rounded-xs bg-muted-foreground max-sm:mx-1" />
-        {boxes(second!)}
-      </span>
-    </span>
+    <InputOTPDisplay
+      data-slot="pairing-code"
+      value={props.code ?? ""}
+      maxLength={pairingCodeLength}
+      className="w-100 max-w-full"
+    >
+      <InputOTPGroup>
+        {first.map((index) => (
+          <InputOTPSlot key={index} index={index} />
+        ))}
+      </InputOTPGroup>
+      <InputOTPSeparator />
+      <InputOTPGroup>
+        {second.map((index) => (
+          <InputOTPSlot key={index} index={index} />
+        ))}
+      </InputOTPGroup>
+    </InputOTPDisplay>
   );
 }

@@ -102,6 +102,41 @@ function InputOTP({
   );
 }
 
+// The same boxes showing a code to copy rather than one to type, such as
+// the code a shared device shows for another device to type in: no input
+// lies under them, so nothing takes focus or reads as a field. The boxes are
+// drawn for the eye; the page says the code in words for screen readers.
+// Empty boxes stand in while there is no code yet.
+function InputOTPDisplay({
+  value,
+  maxLength,
+  className,
+  children,
+  ...props
+}: Omit<React.ComponentProps<"div">, "aria-hidden" | "tabIndex"> & {
+  value: string;
+  maxLength: number;
+}) {
+  return (
+    <InputOTPContext.Provider
+      value={{ value: value.slice(0, maxLength), maxLength, focused: false }}
+    >
+      <div
+        data-slot="input-otp-display"
+        className={cn(
+          "flex w-full items-center justify-center gap-2 max-sm:gap-1",
+          className,
+        )}
+        {...props}
+        aria-hidden="true"
+        tabIndex={undefined}
+      >
+        {children}
+      </div>
+    </InputOTPContext.Provider>
+  );
+}
+
 function InputOTPGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -162,4 +197,10 @@ function InputOTPSeparator({
   );
 }
 
-export { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator };
+export {
+  InputOTP,
+  InputOTPDisplay,
+  InputOTPGroup,
+  InputOTPSlot,
+  InputOTPSeparator,
+};
