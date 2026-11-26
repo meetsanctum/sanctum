@@ -422,48 +422,67 @@ export function useDevices(live: LiveFeed) {
   // as a workflow's lights step does. The live connection brings each
   // light's new state. The core names the lights it could not switch; when
   // the whole call fails, each of `lights` it would have switched failed.
+  const switchingRooms = useRef(new Map<string, Promise<LightsResult>>());
   const switchLights = useCallback(
     async (place: LightsPlace, lights: Tile[], to: LightsSwitch = "toggle") => {
       const reachable = lights.filter((tile) => !tile.disabled);
+      const keys = reachable.map((tile) => tile.key);
       const on =
         to === "toggle" ? !reachable.some((tile) => tile.on) : to === "on";
-      // The core decides which lights to switch from what it knows, which
-      // may be newer than these tiles, so every light it might switch is
-      // followed; one it leaves alone never shows as pending.
-      const commands = send(reachable.map((tile) => tile.key));
+      const previous =
+        place.kind === "room"
+          ? switchingRooms.current.get(place.id)
+          : undefined;
       // A room's turn-on rule can leave individual lights off. Only the
       // core knows which ones it will turn on, so they wait for its live
       // state, and what an earlier command from here asked of them goes.
+      // A queued off press also covers lights an earlier press may turn on.
       const answered = on
-        ? ask(
-            reachable.map((tile) => tile.key),
-            null,
-          )
+        ? ask(keys, null)
         : ask(
-            reachable.filter((tile) => tile.on).map((tile) => tile.key),
+            previous
+              ? keys
+              : reachable.filter((tile) => tile.on).map((tile) => tile.key),
             { on },
           );
+      const request = async () => {
+        // The core may know more than the tiles did at the press. Follow
+        // every light it might switch from when the request goes out.
+        const commands = send(keys);
+        try {
+          const result = await coreJson<LightsResult>("/api/devices/lights", {
+            method: "POST",
+            json: { place, to } satisfies LightsRequest,
+          });
+          const failed = new Set(
+            result.failed.map((each) => tileKey(each.device, each.capability)),
+          );
+          const failedCommands = commands.filter(([key]) => failed.has(key));
+          forget(failedCommands);
+          failOnce(failedCommands);
+          return result;
+        } catch (error) {
+          forget(commands);
+          const switching = new Set(
+            reachable.filter((tile) => tile.on !== on).map((tile) => tile.key),
+          );
+          failOnce(commands.filter(([key]) => switching.has(key)));
+          throw error;
+        } finally {
+          answered();
+        }
+      };
+      // The core skips lights already in the requested state. Give the
+      // previous press time to take effect there before sending this one.
+      const result = previous ? previous.then(request, request) : request();
+      if (place.kind !== "room") return result;
+      switchingRooms.current.set(place.id, result);
       try {
-        const result = await coreJson<LightsResult>("/api/devices/lights", {
-          method: "POST",
-          json: { place, to } satisfies LightsRequest,
-        });
-        const failed = new Set(
-          result.failed.map((each) => tileKey(each.device, each.capability)),
-        );
-        const failedCommands = commands.filter(([key]) => failed.has(key));
-        forget(failedCommands);
-        failOnce(failedCommands);
-        return result;
-      } catch (error) {
-        forget(commands);
-        const switching = new Set(
-          reachable.filter((tile) => tile.on !== on).map((tile) => tile.key),
-        );
-        failOnce(commands.filter(([key]) => switching.has(key)));
-        throw error;
+        return await result;
       } finally {
-        answered();
+        if (switchingRooms.current.get(place.id) === result) {
+          switchingRooms.current.delete(place.id);
+        }
       }
     },
     [send, forget, failOnce, ask],

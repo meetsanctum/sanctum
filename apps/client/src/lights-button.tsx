@@ -1,7 +1,8 @@
 import type { Floor, LightsResult, LightsSwitch } from "@meetsanctum/app-sdk";
 import { icons, SectionButton, type Tile } from "@meetsanctum/ui-sdk";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
+import { tileKey } from "./device-tiles";
 import type { Devices } from "./use-devices";
 
 // The button for all the lights of a room or a floor: a chip of frosted
@@ -22,10 +23,10 @@ import type { Devices } from "./use-devices";
 // Turning off shows at once, as the lights' tiles do. Turning on shows at
 // once on the button alone: a room's turn-on rule may leave some lights
 // off, so its tiles wait for what the core says, but once any light is on
-// the button is White, so it is White from the press. It stays so until a
-// light is on, and goes back if the core switched none or the press failed.
+// the button is White, so it is White from the press. The tiles take over
+// when a light comes on, the press fails or switches none, or time runs out.
 
-/** How long a press the core answered may hold the button on, at most. */
+/** How long a press may hold the button on while waiting for its lights. */
 const turningOnMs = 5_000;
 
 const hasLightsOn = (lights: readonly Tile[]) =>
@@ -35,6 +36,8 @@ const hasLightsOn = (lights: readonly Tile[]) =>
 export type LightsButtonState = {
   /** Whether any of its lights is on, as their tiles show. */
   isOn: boolean;
+  /** The room's lit lights and their last turn-on commands, as the core shows. */
+  coreLightsOn?: () => ReadonlyMap<string, string | null>;
   /** Whose lights they are, in its accessible name: "in Kitchen". */
   where: string;
   /** A floor's only turns its lights off. */
@@ -51,31 +54,52 @@ export function LightsButton(props: { lights: LightsButtonState }) {
   const { lights } = props;
   const [failures, setFailures] = useState(0);
   const showFailure = () => setFailures((count) => count + 1);
-  // The press turning the lights on, until one shows on.
-  const [turningOn, setTurningOn] = useState<object>();
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
-  if (turningOn && lights.isOn) setTurningOn(undefined);
+  const [turningOn, setTurningOn] = useState<{
+    press: object;
+    alreadyOn: ReadonlyMap<string, string | null>;
+  }>();
+  const activePress = turningOn?.press;
+  useEffect(() => {
+    if (!activePress) return;
+    const timer = setTimeout(() => {
+      setTurningOn((current) =>
+        current?.press === activePress ? undefined : current,
+      );
+    }, turningOnMs);
+    return () => clearTimeout(timer);
+  }, [activePress]);
+  if (turningOn) {
+    const onNow = lights.coreLightsOn?.();
+    // A light that still shows on from before an earlier off press does
+    // not confirm this press. It can confirm once it goes off and back on,
+    // or the core shows a new turn-on command for it.
+    if (onNow) {
+      const { alreadyOn } = turningOn;
+      if ([...onNow].some(([key, at]) => alreadyOn.get(key) !== at)) {
+        setTurningOn(undefined);
+      } else if (onNow.size < alreadyOn.size) {
+        setTurningOn({ ...turningOn, alreadyOn: onNow });
+      }
+    }
+  }
   const isOn = lights.isOn || turningOn !== undefined;
   const words = isOn || lights.offOnly ? "Turn off lights" : "Turn on lights";
 
   const press = () => {
-    clearTimeout(timer.current);
     const to = isOn || lights.offOnly ? "off" : "on";
-    const pressed = to === "on" ? {} : undefined;
-    setTurningOn(pressed);
+    const alreadyOn = to === "on" ? lights.coreLightsOn?.() : undefined;
+    const pressed = {};
+    setTurningOn(alreadyOn ? { press: pressed, alreadyOn } : undefined);
     const stop = () =>
-      setTurningOn((current) => (current === pressed ? undefined : current));
+      setTurningOn((current) =>
+        current?.press === pressed ? undefined : current,
+      );
     // Individual failures also show on the affected devices' tiles.
     void lights.switchLights(to).then(
       ({ switched, failed }) => {
         if (switched === 0) {
           stop();
           if (failed.length > 0) showFailure();
-        } else if (pressed) {
-          // Its lights' states are on their way; should they never come,
-          // the tiles say what is on.
-          timer.current = setTimeout(stop, turningOnMs);
         }
       },
       () => {
@@ -106,6 +130,24 @@ export function roomLightsButton(
   if (lights.length === 0) return undefined;
   return {
     isOn: hasLightsOn(lights),
+    coreLightsOn: () => {
+      const on = new Map<string, string | null>();
+      for (const device of devices.devices) {
+        if (device.roomId !== room.id || device.availability === "offline") {
+          continue;
+        }
+        for (const capability of device.capabilities) {
+          if (capability.kind === "light" && capability.state?.on) {
+            const { setBy } = capability;
+            on.set(
+              tileKey(device.id, capability.id),
+              setBy?.asked.on === true ? setBy.at : null,
+            );
+          }
+        }
+      }
+      return on;
+    },
     where: `in ${room.name}`,
     isDisabled: lights.every((tile) => tile.disabled),
     switchLights: (to) =>

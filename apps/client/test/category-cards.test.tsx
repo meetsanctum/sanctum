@@ -318,12 +318,65 @@ describe("a room's lights on Lights' page", () => {
     await act(async () => live.refresh());
     expect(button("Turn off lights in Hall")?.dataset.on).toBe("");
 
-    // Pressed again, it turns them off.
-    await click(button("Turn off lights in Hall"));
-    expect(posted("/api/devices/lights").at(-1)).toEqual({
-      place: { kind: "room", id: "hall" },
-      to: "off",
+    // A later update can turn the button off without another press.
+    devices = [lamp, plug, hallLight];
+    await act(async () => live.refresh());
+    expect(button("Turn on lights in Hall")!.dataset.on).toBeUndefined();
+  });
+
+  it("sends a second press to turn lights off after the turn-on request", async () => {
+    const on = deferred<LightsResult>();
+    const coreAnswers = vi.mocked(coreJson).getMockImplementation()!;
+    vi.mocked(coreJson).mockImplementation((path, init) => {
+      const to = (init?.json as { to?: string } | undefined)?.to;
+      return path === "/api/devices/lights" && to === "on"
+        ? on.promise
+        : coreAnswers(path, init);
     });
+    await show("lights");
+    await click(button("Turn on lights in Hall"));
+    await click(button("Turn off lights in Hall"));
+    expect(button("Turn on lights in Hall")!.dataset.on).toBeUndefined();
+    expect(posted("/api/devices/lights")).toEqual([
+      { place: { kind: "room", id: "hall" }, to: "on" },
+    ]);
+
+    await act(async () => {
+      on.resolve({ on: true, switched: 1, failed: [] });
+    });
+    expect(posted("/api/devices/lights")).toEqual([
+      { place: { kind: "room", id: "hall" }, to: "on" },
+      { place: { kind: "room", id: "hall" }, to: "off" },
+    ]);
+  });
+
+  it("keeps turn-on feedback through an earlier turn-off update", async () => {
+    const off = deferred<LightsResult>();
+    const on = deferred<LightsResult>();
+    const coreAnswers = vi.mocked(coreJson).getMockImplementation()!;
+    vi.mocked(coreJson).mockImplementation((path, init) => {
+      if (path !== "/api/devices/lights") return coreAnswers(path, init);
+      const to = (init?.json as { to?: string } | undefined)?.to;
+      return to === "off" ? off.promise : on.promise;
+    });
+    const litHall = light(hallLight.id, hallLight.name, "hall", true);
+    devices = [lamp, plug, litHall];
+    await show("lights");
+    await click(button("Turn off lights in Hall"));
+    await click(button("Turn on lights in Hall"));
+    expect(button("Turn off lights in Hall")!.dataset.on).toBe("");
+
+    await act(async () => off.resolve({ on: false, switched: 1, failed: [] }));
+    devices = [lamp, plug, hallLight];
+    await act(async () => live.refresh());
+    expect(button("Turn off lights in Hall")!.dataset.on).toBe("");
+
+    devices = [lamp, plug, litHall];
+    await act(async () => live.refresh());
+    devices = [lamp, plug, hallLight];
+    await act(async () => live.refresh());
+    expect(button("Turn on lights in Hall")!.dataset.on).toBeUndefined();
+    await act(async () => on.resolve({ on: true, switched: 1, failed: [] }));
   });
 
   it("go back to off when the core switched none, and show a press that failed", async () => {
@@ -350,13 +403,13 @@ describe("a room's lights on Lights' page", () => {
     expect(hall.textContent).toBe("Turn on lights");
   });
 
-  it("go back to off a while after the core's answer when no light shows on", async () => {
+  it("goes back to off five seconds after the press while the core is still pending", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    vi.mocked(coreJson).mockImplementation(async (path) => {
-      if (path === "/api/devices") return devices;
-      if (path === "/api/places") return places;
-      return { on: true, switched: 1, failed: [] };
-    });
+    const answer = deferred<LightsResult>();
+    const coreAnswers = vi.mocked(coreJson).getMockImplementation()!;
+    vi.mocked(coreJson).mockImplementation((path, init) =>
+      path === "/api/devices/lights" ? answer.promise : coreAnswers(path, init),
+    );
     await show("lights");
     await click(button("Turn on lights in Hall"));
     expect(button("Turn off lights in Hall")?.dataset.on).toBe("");
@@ -368,7 +421,31 @@ describe("a room's lights on Lights' page", () => {
     await act(async () => {
       vi.advanceTimersByTime(100);
     });
-    expect(button("Turn on lights in Hall")?.dataset.on).toBeUndefined();
+    expect(button("Turn on lights in Hall")!.dataset.on).toBeUndefined();
+    await act(async () =>
+      answer.resolve({ on: true, switched: 1, failed: [] }),
+    );
+    expect(button("Turn on lights in Hall")!.dataset.on).toBeUndefined();
+  });
+
+  it("clears turn-on feedback's timer when leaving the page", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const answer = deferred<LightsResult>();
+    const coreAnswers = vi.mocked(coreJson).getMockImplementation()!;
+    vi.mocked(coreJson).mockImplementation((path, init) =>
+      path === "/api/devices/lights" ? answer.promise : coreAnswers(path, init),
+    );
+    await show("lights");
+    const timers = vi.getTimerCount();
+    await click(button("Turn on lights in Hall"));
+    expect(vi.getTimerCount()).toBe(timers + 1);
+
+    await show("switches");
+    expect(vi.getTimerCount()).toBe(timers);
+    await act(async () =>
+      answer.resolve({ on: true, switched: 1, failed: [] }),
+    );
+    expect(vi.getTimerCount()).toBe(timers);
   });
 
   it("have none in no room, whose lights are not together", async () => {
