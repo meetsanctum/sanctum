@@ -208,6 +208,10 @@ describe("AI model source dialogs", () => {
     expect(document.body.textContent).toContain(
       "Found Ollama at 192.168.1.50:11434, with 1 model",
     );
+    const helpId = button("Choose a model").getAttribute("aria-describedby");
+    expect(document.getElementById(helpId ?? "")?.textContent).toBe(
+      "For another model, run ollama pull on that computer, then check again.",
+    );
     await enterText(labelled("Computer"), "Studio Mac");
     expect(button("Add and check").disabled).toBe(true);
     await chooseModel("Llama3.2 3B");
@@ -290,6 +294,14 @@ describe("AI model source dialogs", () => {
     await click(button("Check key"));
     expect(document.body.textContent).toContain(
       "The key works. It can use 1 model.",
+    );
+    expect(document.body.textContent).toContain(
+      "The check uses up to about 1,000 tokens.",
+    );
+    // A provider lists only models that can use the tool: no help to give.
+    expect(document.body.textContent).not.toContain("can use tools");
+    expect(button("Choose a model").hasAttribute("aria-describedby")).toBe(
+      false,
     );
     await chooseModel("Llama3.2 3B");
     await click(button("Add and check"));

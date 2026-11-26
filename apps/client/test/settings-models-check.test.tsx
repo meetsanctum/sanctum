@@ -398,9 +398,10 @@ describe("A source's check in the dialog", () => {
     });
     expect(text()).toContain("GPT-5 Mini may not act on your devices");
     await click(button("Choose another model"));
-    expect(text()).toContain(
-      "Checking it uses tokens again, and OpenRouter charges for them.",
-    );
+    expect(
+      document.querySelector('[role="dialog"] [data-slot="dialog-description"]')
+        ?.textContent,
+    ).toBe("The check uses up to about 1,000 tokens.");
     expect(button("Change and check").disabled).toBe(true);
     await click(
       document.querySelector<HTMLButtonElement>(

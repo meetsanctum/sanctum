@@ -26,6 +26,7 @@ import { ModelPicker } from "./model-picker";
 import { SourceCheck } from "./source-check";
 import {
   availablePlaces,
+  checkCostText,
   placeDetails,
   placeNames,
   placePrivacy,
@@ -246,17 +247,19 @@ export function AddSource(props: {
       </label>
       <ModelPicker
         id={ids.model}
-        aria-describedby={`${ids.model}-help`}
+        aria-describedby={step === "computer" ? `${ids.model}-help` : undefined}
         models={found.models}
         value={model}
         onChange={setModel}
         disabled={adding}
       />
-      <p id={`${ids.model}-help`} className={help}>
-        {step === "computer"
-          ? "For another model, run ollama pull on that computer, then check again."
-          : "Choose one that can use tools, so it can act on your devices."}
-      </p>
+      {/* A provider lists only models that can use the tool, so there is
+          nothing to say there; a computer has only what was pulled. */}
+      {step === "computer" && (
+        <p id={`${ids.model}-help`} className={help}>
+          For another model, run ollama pull on that computer, then check again.
+        </p>
+      )}
     </div>
   );
   // What pressing Add and check does, and what it costs, right above it.
@@ -267,12 +270,7 @@ export function AddSource(props: {
         {productName} asks the model one short question to see that it answers
         and can use your home's tools.
       </p>
-      {step === "provider" && (
-        <p className={cardLine}>
-          It uses a few hundred tokens, and {providerNames[provider]} charges
-          for them.
-        </p>
-      )}
+      {step === "provider" && <p className={cardLine}>{checkCostText}</p>}
       {step === "provider" && provider === "openrouter" && (
         <p className={cardLine}>
           OpenRouter passes the question to the company behind the model.
