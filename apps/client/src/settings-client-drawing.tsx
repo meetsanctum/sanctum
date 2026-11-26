@@ -1,9 +1,5 @@
-import type {
-  ClientInfo,
-  DrawingChoice,
-  SetClientDrawing,
-} from "@meetsanctum/auth-protocol";
-import { Button, SegmentedControl } from "@meetsanctum/ui-sdk";
+import type { ClientInfo, SetClientDrawing } from "@meetsanctum/auth-protocol";
+import { Button, Switch } from "@meetsanctum/ui-sdk";
 import { useId, useLayoutEffect, useRef, useState } from "react";
 
 import { productName } from "./brand";
@@ -18,52 +14,19 @@ import {
 import { coreJson } from "./core-fetch";
 
 // Settings → Clients → a client's Effects and motion: Reduce effects and
-// Reduce motion for that client, each Automatic, On or Off, applied as
-// chosen. Any client sets any client's, as with its name. Choosing On for
-// Reduce effects turns Reduce motion on with it, in sight, and Reduce motion
-// keeps its own choice from then on: turning it off leaves Reduce effects
-// on, and turning Reduce effects off leaves it as it is.
-
-const options = [
-  { value: "automatic", label: "Automatic" },
-  { value: "on", label: "On" },
-  { value: "off", label: "Off" },
-] as const satisfies { value: DrawingChoice; label: string }[];
+// Reduce motion for that client, each a switch of its own, applied as set.
+// Any client sets any client's, as with its name.
 
 const label = "text-[13px] leading-[18px] font-medium text-muted-foreground";
 
 /** What a client's row says it draws with, where something is reduced. */
 export function drawnText(client: ClientInfo) {
-  const effects = client.drawn?.effects === "reduced";
-  const motion = client.drawn?.motion === "reduced";
-  if (effects && motion) return "Reduced effects and motion";
-  if (effects) return "Reduced effects";
-  if (motion) return "Reduced motion";
-  return null;
-}
-
-// Why Automatic has one on now, by what the client said it draws with under
-// its current choices: the reason in a status under its choices, after On,
-// and nothing otherwise.
-// The device's own reduced transparency or reduced motion is its
-// accessibility settings' doing.
-function onNow(
-  client: ClientInfo,
-  choice: DrawingChoice,
-  part: "effects" | "motion",
-) {
-  const { drawn } = client;
-  const saved = part === "effects" ? client.reduceEffects : client.reduceMotion;
-  if (
-    choice !== "automatic" ||
-    saved !== "automatic" ||
-    drawn?.[part] !== "reduced"
-  ) {
-    return null;
+  if (client.reduceEffects && client.reduceMotion) {
+    return "Reduced effects and motion";
   }
-  if (drawn.slowDevice) return "Low performance detected";
-  const whose = client.current ? "This device's" : `${client.name}'s`;
-  return `${whose} accessibility settings`;
+  if (client.reduceEffects) return "Reduced effects";
+  if (client.reduceMotion) return "Reduced motion";
+  return null;
 }
 
 type DrawingChange = Omit<SetClientDrawing, "id">;
@@ -98,13 +61,11 @@ export function ClientDrawing(props: {
   }, [openId]);
 
   const draft = pending?.opening === opening.current ? pending : undefined;
-  const effects =
-    draft?.change.reduceEffects ?? client?.reduceEffects ?? "automatic";
-  const motion =
-    draft?.change.reduceMotion ?? client?.reduceMotion ?? "automatic";
+  const effects = draft?.change.reduceEffects ?? client?.reduceEffects ?? false;
+  const motion = draft?.change.reduceMotion ?? client?.reduceMotion ?? false;
 
-  // One save at a time, so they reach the core in order; a pick while one
-  // is on its way is let go. The choices stay enabled, so focus stays.
+  // One save at a time, so they reach the core in order; a press while one
+  // is on its way is let go. The switches stay enabled, so focus stays.
   const save = async (change: DrawingChange) => {
     const opened = opening.current;
     if (!openId || !opened || saving.current) return;
@@ -127,18 +88,6 @@ export function ClientDrawing(props: {
     }
   };
 
-  const chooseEffects = (next: DrawingChoice) => {
-    const turnsMotionOn = next === "on" && motion !== "on";
-    void save({
-      reduceEffects: next,
-      ...(turnsMotionOn && { reduceMotion: "on" }),
-    });
-  };
-
-  const chooseMotion = (next: DrawingChoice) => {
-    void save({ reduceMotion: next });
-  };
-
   return (
     <Dialog
       open={!!props.client}
@@ -155,22 +104,20 @@ export function ClientDrawing(props: {
           </DialogDescription>
         </DialogHeader>
         {client && (
-          <div className="flex flex-col gap-7">
-            <Group
+          <div className="flex flex-col gap-5">
+            <Setting
               id={`${id}-effects`}
               title="Reduce effects"
               about="Without blur, fades or shadows, for a device that feels slow."
-              value={effects}
-              onChange={chooseEffects}
-              status={onNow(client, effects, "effects")}
+              on={effects}
+              onChange={(on) => void save({ reduceEffects: on })}
             />
-            <Group
+            <Setting
               id={`${id}-motion`}
               title="Reduce motion"
               about="Things appear and change in place, without sliding, zooming or flying in."
-              value={motion}
-              onChange={chooseMotion}
-              status={onNow(client, motion, "motion")}
+              on={motion}
+              onChange={(on) => void save({ reduceMotion: on })}
             />
           </div>
         )}
@@ -189,56 +136,30 @@ export function ClientDrawing(props: {
   );
 }
 
-// One setting: its name, what it does, its three choices, and under them
-// why Automatic has it on now: a badge of two segments, On and the reason,
-// which a screen reader hears after a comma.
-function Group(props: {
+// One setting: its name and its switch, and under them what it does.
+function Setting(props: {
   id: string;
   title: string;
   about: string;
-  value: DrawingChoice;
-  onChange: (value: DrawingChoice) => void;
-  status: string | null;
+  on: boolean;
+  onChange: (on: boolean) => void;
 }) {
   return (
-    <div className="flex min-w-0 flex-col">
-      <div className="mb-2 flex flex-col gap-0.5">
-        <span id={`${props.id}-label`} className="text-sm font-medium">
+    <div className="flex min-w-0 flex-col gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <label htmlFor={props.id} className="text-sm font-medium">
           {props.title}
-        </span>
-        <span id={`${props.id}-about`} className={label}>
-          {props.about}
-        </span>
+        </label>
+        <Switch
+          id={props.id}
+          aria-describedby={`${props.id}-about`}
+          checked={props.on}
+          onCheckedChange={props.onChange}
+        />
       </div>
-      <SegmentedControl
-        labelledBy={`${props.id}-label`}
-        describedBy={
-          props.status
-            ? `${props.id}-about ${props.id}-status`
-            : `${props.id}-about`
-        }
-        options={options}
-        value={props.value}
-        onValueChange={props.onChange}
-        className="self-start"
-      />
-      <div
-        id={`${props.id}-status`}
-        aria-live="polite"
-        aria-atomic="true"
-        className="flex flex-col"
-      >
-        {props.status && (
-          <span className="mt-2 flex w-fit max-w-full gap-px text-[13px] leading-[18px] font-medium">
-            <span className="shrink-0 rounded-l-sm bg-foreground/5 px-2 py-1 text-green dark:bg-foreground/8">
-              On<span className="sr-only">, </span>
-            </span>
-            <span className="rounded-r-sm bg-foreground/5 px-2 py-1 text-muted-foreground dark:bg-foreground/8">
-              {props.status}
-            </span>
-          </span>
-        )}
-      </div>
+      <span id={`${props.id}-about`} className={label}>
+        {props.about}
+      </span>
     </div>
   );
 }

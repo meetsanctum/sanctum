@@ -120,13 +120,11 @@ export function ClientsSection(props: {
     lastAppliedRefresh.current = ++refreshId.current;
     setClients((current) =>
       current?.map((client) =>
-        client.id === saved.id && client.drawingRevision < saved.drawingRevision
+        client.id === saved.id
           ? {
               ...client,
               reduceEffects: saved.reduceEffects,
               reduceMotion: saved.reduceMotion,
-              drawingRevision: saved.drawingRevision,
-              drawn: saved.drawn,
             }
           : client,
       ),

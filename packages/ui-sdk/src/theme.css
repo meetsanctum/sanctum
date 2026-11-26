@@ -12,9 +12,8 @@
 
 /* Reduce motion, a device's way of drawing the same screen without
    movement: where the page says data-motion="reduced", Tailwind's
-   motion-reduce and motion-safe follow it instead of the system's setting,
-   which the shell reads into it with the device's own choice
-   (apps/client/src/effects.ts). */
+   motion-reduce and motion-safe follow it instead of the system's setting.
+   The shell sets it on <html> (apps/client/src/effects.ts). */
 @custom-variant motion-reduce (&:where([data-motion="reduced"], [data-motion="reduced"] *));
 @custom-variant motion-safe (&:where(:root:not([data-motion="reduced"]), :root:not([data-motion="reduced"]) *));
 

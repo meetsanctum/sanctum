@@ -6,7 +6,9 @@
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { Effects } from "../src/effects.ts";
+
+// How the run drew effects, as data-effects on <html> said.
+type Effects = "regular" | "reduced";
 
 type Frames = {
   count: number;

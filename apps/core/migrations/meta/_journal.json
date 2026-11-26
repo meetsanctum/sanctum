@@ -386,6 +386,20 @@
       "when": 1795639978329,
       "tag": "0054_client-drawing",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "6",
+      "when": 1795710670873,
+      "tag": "0055_client-drawing-choices-removed",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "6",
+      "when": 1795710671490,
+      "tag": "0056_client-drawing-on-off",
+      "breakpoints": true
     }
   ]
 }

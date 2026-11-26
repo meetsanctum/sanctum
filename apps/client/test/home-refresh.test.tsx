@@ -101,18 +101,13 @@ it("applies drawing choices from a live notice, reading only Me", async () => {
     let me = {
       client: {
         id: host.clientId,
-        reduceEffects: "automatic",
-        reduceMotion: "off",
-        drawingRevision: 0,
+        reduceEffects: false,
+        reduceMotion: false,
       },
       person: null,
     };
     mockCoreJson.mockImplementation((path, init) =>
-      path === "/api/auth/me"
-        ? Promise.resolve(me)
-        : path === "/api/auth/me/drawn"
-          ? Promise.resolve(undefined)
-          : original(path, init),
+      path === "/api/auth/me" ? Promise.resolve(me) : original(path, init),
     );
     await remountHome();
     expect(document.documentElement.dataset.motion).toBeUndefined();
@@ -120,7 +115,7 @@ it("applies drawing choices from a live notice, reading only Me", async () => {
 
     me = {
       ...me,
-      client: { ...me.client, reduceMotion: "on", drawingRevision: 1 },
+      client: { ...me.client, reduceMotion: true },
     };
     await act(async () => receive({ type: "client" }));
 
