@@ -134,8 +134,10 @@ function whatItAdds(app: AppInfo, deviceCount: number) {
         ]
       : []),
     ...roomSections.map(({ title, kind }) => {
-      const what =
-        kind === "tiles" ? `${title} tiles` : `${title.toLowerCase()} buttons`;
+      // A section named for what it holds, such as Moods, says its name;
+      // one named for what it does, such as Natural Light, adds its kind,
+      // its name in its own case either way.
+      const what = title.endsWith("s") ? title : `${title} ${kind}`;
       return {
         goes: `Its ${what} leave every room`,
         gone: `Its ${what} aren't in any room`,

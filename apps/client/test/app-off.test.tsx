@@ -208,7 +208,7 @@ describe("what it asks before turning off", () => {
       "the mood tiles it adds to rooms",
       moods,
       0,
-      "Its Moods tiles leave every room until you turn it back on. Its data stays.",
+      "Its Moods leave every room until you turn it back on. Its data stays.",
     ],
     [
       "the Natural Light tiles it adds to rooms",
@@ -228,7 +228,7 @@ describe("what it asks before turning off", () => {
         },
       } as unknown as Partial<AppInfo>),
       0,
-      "Its glow buttons leave every room until you turn it back on. Its data stays.",
+      "Its Glow buttons leave every room until you turn it back on. Its data stays.",
     ],
     [
       "one that adds nothing",
