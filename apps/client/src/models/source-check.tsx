@@ -6,13 +6,7 @@ import type {
 } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
 import { Check, CircleAlert, CircleCheck, TriangleAlert } from "lucide-react";
-import {
-  useEffect,
-  useId,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import { useAuthAttempt } from "../auth/use-auth-attempt";
 import {
@@ -112,7 +106,6 @@ export function SourceCheck(props: {
 }) {
   const { source } = props;
   const check = source?.check;
-  const costId = useId();
   const [shown, setShown] = useState<Shown>({ kind: "check" });
   const [acting, setActing] = useState(false);
   const [failedAction, setFailedAction] = useState<CheckAction>();
@@ -167,9 +160,6 @@ export function SourceCheck(props: {
   }
 
   const name = ownName(source);
-  const kind = source.kind;
-  const provider =
-    kind === "sanctum" || kind === "computer" ? undefined : providerNames[kind];
   if (source.checking || step === "asking" || step === "seeing") {
     const isSeeing = step === "seeing";
     return (
@@ -240,22 +230,12 @@ export function SourceCheck(props: {
             <Button variant="outline" onClick={props.onClose}>
               Done
             </Button>
-            <Button
-              aria-describedby={provider ? costId : undefined}
-              disabled={acting}
-              onClick={() => void act("check")}
-            >
+            <Button disabled={acting} onClick={() => void act("check")}>
               Check again
             </Button>
           </>
         }
-      >
-        {provider && (
-          <p id={costId} className={help}>
-            Checking again uses tokens that {provider} can charge for.
-          </p>
-        )}
-      </Result>
+      />
     );
   }
 
@@ -281,7 +261,6 @@ export function SourceCheck(props: {
   }
 
   const switchName = ownName(source, props.inUse);
-  const switchCost = !source.inUse && provider;
   return (
     <Result
       badge={<CircleCheck className="size-6.5 text-(--leaf-text)" />}
@@ -305,7 +284,6 @@ export function SourceCheck(props: {
             <div className="grid min-w-0 grid-cols-1">
               <Button
                 variant="outline"
-                aria-describedby={switchCost ? costId : undefined}
                 disabled={acting}
                 onClick={() => void act("use")}
               >
@@ -316,14 +294,7 @@ export function SourceCheck(props: {
           <Button onClick={props.onClose}>Done</Button>
         </>
       }
-    >
-      {switchCost && (
-        <p id={costId} className={help}>
-          If the last check was at least 5 minutes ago, switching checks it
-          again and {switchCost} can charge for the tokens.
-        </p>
-      )}
-    </Result>
+    />
   );
 }
 

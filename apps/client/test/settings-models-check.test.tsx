@@ -208,10 +208,8 @@ describe("A source's check in the dialog", () => {
     // Where the other one runs, as it's somewhere else.
     expect(text()).toContain("Your home still uses Qwen3 8B on Office Mac.");
     expect(text()).toContain("Answered in 1.2 s · used 312 tokens");
-    expect(text()).not.toContain("uses a few hundred tokens");
-    expect(text()).toContain(
-      "If the last check was at least 5 minutes ago, switching checks it again and OpenRouter can charge for the tokens.",
-    );
+    // Switching right after its check doesn't check again: nothing to warn of.
+    expect(text()).not.toContain("charge");
     await click(button("Switch to GPT-5 Mini"));
     expect(coreJson).toHaveBeenCalledWith(
       "/api/models/sources/added/use",
@@ -276,10 +274,7 @@ describe("A source's check in the dialog", () => {
     });
     expect(text()).toContain("GPT-5 Mini didn't answer");
     expect(text()).toContain("OpenRouter took too long to answer.");
-    expect(text()).not.toContain("Used 0 tokens");
-    expect(text()).toContain(
-      "Checking again uses tokens that OpenRouter can charge for.",
-    );
+    expect(text()).not.toContain("tokens");
     await click(button("Check again"));
     expect(coreJson).toHaveBeenCalledWith(
       "/api/models/sources/added/check",
@@ -291,9 +286,6 @@ describe("A source's check in the dialog", () => {
     vi.mocked(coreJson).mockResolvedValue({ sources: [], apps: [] });
     await showCheck({ ...added, check: undefined });
     expect(text()).toContain("The check didn't finish");
-    expect(text()).toContain(
-      "Checking again uses tokens that OpenRouter can charge for.",
-    );
     expect(text()).not.toContain("Asking it one short question");
     await click(button("Check again"));
     expect(coreJson).toHaveBeenCalledWith(
