@@ -1,7 +1,7 @@
 import type { Forecast } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 
 import { condition, isWet } from "./conditions.js";
-import { homeDate } from "./days.js";
 import { hoursLeftToday, weatherNow } from "./hours.js";
 
 // The rest of the home's day in one sentence, from its hours: whether
@@ -23,16 +23,17 @@ export type DaySummary =
   | { kind: "dry"; words: string };
 
 export function daySummary(
+  clock: HomeClock,
   forecast: Forecast,
-  now = new Date(),
+  now = clock.now(),
 ): DaySummary | null {
-  const hours = hoursLeftToday(forecast, now);
+  const hours = hoursLeftToday(clock, forecast, now);
   if (hours.length === 0) return null;
   // A kept forecast may end partway through today. Its remaining hours
   // cannot say what happens for the rest of the day.
-  const today = homeDate(forecast.timeZone, now);
-  const end = new Date(Date.parse(hours.at(-1)!.time) + hourMs);
-  if (homeDate(forecast.timeZone, end) === today) return null;
+  const there = clock.withTimeZone(forecast.timeZone);
+  const end = Date.parse(hours.at(-1)!.time) + hourMs;
+  if (there.date(end) === there.date(now)) return null;
   // The hour it is has the weather now, as the page says it.
   const codes = hours.map((hour, index) =>
     index === 0 ? weatherNow(forecast, now).weatherCode : hour.weatherCode,

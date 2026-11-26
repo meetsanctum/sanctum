@@ -1,3 +1,4 @@
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import {
   widgetContent,
   type Forecast,
@@ -6,6 +7,9 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { cardOf, weatherCard } from "../src/card.js";
+
+// Each forecast and sun is read in the zone it was fetched in.
+const clock = homeClock();
 
 // What Weather's card says, which the shell draws: the weather now, today's
 // high, low and chance of rain, sunrise and sunset, and the next five days,
@@ -52,7 +56,7 @@ const forecast: Forecast = {
 
 describe("Weather's card", () => {
   it("shows the weather now, today and the days after", () => {
-    const card = cardOf(sun, forecast, now);
+    const card = cardOf(clock, sun, forecast, now);
 
     expect(widgetContent.parse(card)).toEqual(card);
     expect(card.blocks).toEqual([
@@ -104,7 +108,7 @@ describe("Weather's card", () => {
   });
 
   it("shows the sun while the forecast has not come yet", () => {
-    expect(cardOf(sun, null, now).blocks).toEqual([
+    expect(cardOf(clock, sun, null, now).blocks).toEqual([
       { kind: "note", text: "No forecast yet." },
       expect.objectContaining({ kind: "facts" }),
     ]);
@@ -112,7 +116,7 @@ describe("Weather's card", () => {
 
   it("moves on to the next day at the home's midnight", () => {
     // 00:30 in Zurich on the 31st: its sun is a day behind, so it has none.
-    const card = cardOf(sun, forecast, new Date("2026-10-30T23:30:00Z"));
+    const card = cardOf(clock, sun, forecast, new Date("2026-10-30T23:30:00Z"));
 
     expect(card.blocks).toEqual([
       expect.objectContaining({ kind: "headline" }),
@@ -125,6 +129,7 @@ describe("Weather's card", () => {
 
   it("shows the night, a day without its high, and a sun that neither rises nor sets", () => {
     const card = cardOf(
+      clock,
       {
         ...sun,
         days: [{ ...sun.days[1]!, sunrise: null, sunset: null }],
@@ -155,7 +160,7 @@ describe("Weather's card", () => {
   });
 
   it("says only the weather when the forecast has no today", () => {
-    const card = cardOf(null, { ...forecast, days: [] }, now);
+    const card = cardOf(clock, null, { ...forecast, days: [] }, now);
 
     expect(card.blocks).toEqual([
       { kind: "headline", icon: "cloud-sun", value: { temperature: 11.4 } },

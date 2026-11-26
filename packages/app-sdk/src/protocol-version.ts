@@ -40,6 +40,8 @@
 // 22 lets a newer request from the same device take over: the core ends the
 // older one's call with `end` and refuses its later calls `turn_ended`, and a
 // request carries the device's earlier exchanges.
-export const protocolVersion = 22;
+// 23 gives an app the home clock: ctx.clock, the home's time zone and how it
+// writes times.
+export const protocolVersion = 23;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 11;

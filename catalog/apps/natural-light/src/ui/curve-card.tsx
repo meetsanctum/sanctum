@@ -1,3 +1,5 @@
+import { useHomeClock } from "@meetsanctum/ui-sdk";
+
 import type { Preview } from "../preview.js";
 import { kelvinLabel, timeOfDay } from "./use-natural-light";
 
@@ -38,6 +40,7 @@ export function CurveCard(props: { preview: Preview | null | undefined }) {
 function Curve(props: { preview: Preview }) {
   const { preview } = props;
   const { curve, timeZone } = preview;
+  const clock = useHomeClock();
   return (
     <>
       <p className="m-0 flex items-baseline gap-3">
@@ -49,9 +52,9 @@ function Curve(props: { preview: Preview }) {
         </span>
       </p>
       <p className={`m-0 ${muted}`}>
-        Sunrise {timeOfDay(preview.sunrise, timeZone)} · Peak{" "}
-        {timeOfDay(preview.peak, timeZone)} · Sunset{" "}
-        {timeOfDay(preview.sunset, timeZone)}
+        Sunrise {timeOfDay(clock, preview.sunrise, timeZone)} · Peak{" "}
+        {timeOfDay(clock, preview.peak, timeZone)} · Sunset{" "}
+        {timeOfDay(clock, preview.sunset, timeZone)}
       </p>
       <div className="relative h-24 w-full">
         <svg

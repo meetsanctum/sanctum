@@ -71,6 +71,7 @@ export function fakeCore(app: AppDefinition) {
     readModel: absent,
     cancelModel: absent,
     hostResources: absent,
+    homeClock: async () => ({ timeZone: "UTC", hourCycle: "24h" as const }),
     aiTools: absent,
     callAiTool: absent,
     replyRequest: absent,

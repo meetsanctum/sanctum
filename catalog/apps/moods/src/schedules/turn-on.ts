@@ -4,6 +4,7 @@ import {
   type DeviceInfo,
   type TurnOn,
 } from "@meetsanctum/app-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import { eq } from "drizzle-orm";
 import { isDeepStrictEqual } from "node:util";
 
@@ -96,12 +97,12 @@ async function ruleOf(
   ctx: AppContext,
   roomId: string,
   lights: readonly Light[],
-  timeZone: string,
+  clock: HomeClock,
   now: Date,
 ) {
   const { db } = ctx.storage;
   const target = { kind: "room", id: roomId } as const;
-  const active = activeSpan(await readSchedule(db, roomId), now, timeZone);
+  const active = activeSpan(await readSchedule(db, roomId), now, clock);
   const mood = active ? await readMood(db, active.span.moodId) : null;
   return turnOnRule({
     roomId,
@@ -147,14 +148,13 @@ async function publishNow(
   const recorded = await db.select().from(turnOnEntities).all();
   const last = new Map(recorded.map((row) => [row.roomId, row]));
   const devices = held ?? (await ctx.devices.list());
-  const now = new Date();
+  const clock = await ctx.clock();
+  const now = clock.now();
   const wanted = rooms ?? [...new Set([...present.keys(), ...last.keys()])];
   for (const roomId of wanted) {
     const room = present.get(roomId);
     const lights = allLightsInRoom(devices, roomId);
-    const state = room
-      ? await ruleOf(ctx, roomId, lights, places.home.timeZone, now)
-      : null;
+    const state = room ? await ruleOf(ctx, roomId, lights, clock, now) : null;
     const kept = last.get(roomId);
     if (!state) {
       if (!kept) continue;

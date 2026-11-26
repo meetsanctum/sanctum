@@ -72,6 +72,7 @@ export const coreCallMethods = [
   "readModel",
   "cancelModel",
   "hostResources",
+  "homeClock",
   "aiTools",
   "callAiTool",
   "replyRequest",

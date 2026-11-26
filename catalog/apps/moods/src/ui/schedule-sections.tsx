@@ -1,18 +1,27 @@
-import { Button, icons, PageSection, tileIconOf } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  icons,
+  PageSection,
+  tileIconOf,
+  useHomeClock,
+} from "@meetsanctum/ui-sdk";
 import { useEffect, useState, type ReactNode } from "react";
 
 import {
   byStart,
   day,
-  formatMinute,
   holds,
-  minuteIn,
   nextFreeWindow,
   windowsOf,
 } from "../schedules/times.js";
 import type { TurnOnBehaviour } from "../schedules/store.js";
 import type { Mood } from "./mood-draft";
-import { spanWords, turnOnWords } from "./schedule-words";
+import {
+  minuteOfDay,
+  minuteWords,
+  spanWords,
+  turnOnWords,
+} from "./schedule-words";
 import type { RoomSchedule } from "./schedules";
 
 // The Schedule and Turning the lights on sections of Moods' page for a
@@ -66,11 +75,12 @@ export function DayBar(props: {
   minute: number;
 }) {
   const { scheduled, moods, minute } = props;
+  const clock = useHomeClock();
   const summary = scheduled.length
     ? scheduled
         .map(
           (span) =>
-            `${moods.get(span.moodId)?.name ?? "A mood"} ${spanWords(span)}`,
+            `${moods.get(span.moodId)?.name ?? "A mood"} ${spanWords(clock, span)}`,
         )
         .join(", ")
     : "Nothing scheduled";
@@ -78,7 +88,7 @@ export function DayBar(props: {
     <div className="flex flex-col gap-1.5 px-2.5 pt-2.5 pb-3">
       <div
         role="img"
-        aria-label={`${summary}. Now ${formatMinute(minute)}.`}
+        aria-label={`${summary}. Now ${minuteWords(clock, minute)}.`}
         className="relative h-11 overflow-hidden rounded-sm bg-foreground/5"
       >
         {scheduled.flatMap((span) => {
@@ -131,12 +141,12 @@ export function DayBar(props: {
 export function ScheduleSection(props: {
   schedule: RoomSchedule;
   moods: readonly Mood[];
-  timeZone: string;
   now: Date;
   open: (id?: string) => void;
 }) {
   const { schedule, now } = props;
-  const minute = minuteIn(now, props.timeZone);
+  const clock = useHomeClock();
+  const minute = minuteOfDay(clock, now);
   const moods = new Map(props.moods.map((mood) => [mood.id, mood]));
   const scheduled = byStart(schedule.scheduled);
   const free = nextFreeWindow(scheduled);
@@ -159,7 +169,10 @@ export function ScheduleSection(props: {
               <Squircle>
                 <Icon aria-hidden="true" />
               </Squircle>
-              <RowText name={mood?.name ?? "A mood"} line={spanWords(span)} />
+              <RowText
+                name={mood?.name ?? "A mood"}
+                line={spanWords(clock, span)}
+              />
               {holds(span, minute) && (
                 <span className="shrink-0 text-[13px] leading-[18px] font-medium">
                   Now
@@ -189,7 +202,7 @@ export function ScheduleSection(props: {
               props.moods.length === 0
                 ? "Make a mood first"
                 : free
-                  ? `${spanWords(free)} is free`
+                  ? `${spanWords(clock, free)} is free`
                   : "The day is full"
             }
           />
@@ -228,18 +241,18 @@ export function TurnOnSection(props: {
   schedule: RoomSchedule;
   moods: readonly Mood[];
   lightName: (light: { device: string; capability: string }) => string;
-  timeZone: string;
   now: Date;
   onChoose: (turnOn: TurnOnBehaviour) => void;
 }) {
-  const { schedule, now, timeZone } = props;
+  const { schedule, now } = props;
+  const clock = useHomeClock();
   const words = turnOnWords({
     schedule,
     moodNames: new Map(props.moods.map((mood) => [mood.id, mood.name])),
     lightName: props.lightName,
-    minute: minuteIn(now, timeZone),
+    minute: minuteOfDay(clock, now),
     now,
-    timeZone,
+    clock,
   });
   return (
     <div className="flex flex-col gap-2">

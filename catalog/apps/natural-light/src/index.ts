@@ -55,7 +55,7 @@ export function createNaturalLightApp(options: NaturalLightOptions = {}) {
   return defineApp({
     id: "sanctum.natural-light",
     name: "Natural Light",
-    version: "0.4.1",
+    version: "0.4.2",
     core: "^2.0.0",
     summary: "Lights that follow the colour of daylight through the day.",
     icon: { glyph: "sun", color: "sun" },

@@ -5,12 +5,15 @@ import {
   type PageProps,
   PageSection,
   tileIconOf,
+  useHomeClock,
 } from "@meetsanctum/ui-sdk";
+import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 
-import { byStart, formatMinute, holds, minuteIn } from "../schedules/times.js";
+import { byStart, holds } from "../schedules/times.js";
 import { roomLights } from "./mood-draft";
 import { motionLine } from "./motion-words";
 import { useNow } from "./schedule-sections";
+import { minuteOfDay, minuteWords } from "./schedule-words";
 import type { RoomSchedule } from "./schedules";
 import { useMoodsApp } from "./state";
 
@@ -25,20 +28,21 @@ function scheduleWords(
   schedule: RoomSchedule | undefined,
   names: ReadonlyMap<string, string>,
   minute: number,
+  clock: HomeClock,
 ) {
   const scheduled = byStart(schedule?.scheduled ?? []);
   const now = scheduled.find((span) => holds(span, minute));
   if (now) {
     return {
       moodId: now.moodId,
-      words: `${names.get(now.moodId) ?? "A mood"} until ${formatMinute(now.end)}`,
+      words: `${names.get(now.moodId) ?? "A mood"} until ${minuteWords(clock, now.end)}`,
     };
   }
   const next = scheduled.find((span) => span.start > minute) ?? scheduled[0];
   if (!next) return null;
   return {
     moodId: next.moodId,
-    words: `${names.get(next.moodId) ?? "A mood"} at ${formatMinute(next.start)}`,
+    words: `${names.get(next.moodId) ?? "A mood"} at ${minuteWords(clock, next.start)}`,
   };
 }
 
@@ -51,7 +55,8 @@ export function MainPage(props: PageProps) {
   const rooms = (places?.rooms ?? []).filter(
     (room) => roomLights(devices, room.id).length > 0,
   );
-  const minute = places ? minuteIn(now, places.home.timeZone) : 0;
+  const clock = useHomeClock();
+  const minute = minuteOfDay(clock, now);
   return (
     <>
       <PageBar title="Moods" />
@@ -75,6 +80,7 @@ export function MainPage(props: PageProps) {
               schedule,
               new Map(own.map((mood) => [mood.id, mood.name])),
               minute,
+              clock,
             );
             const mood = held && own.find((each) => each.id === held.moodId);
             const Icon = mood ? tileIconOf[mood.icon] : null;

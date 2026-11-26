@@ -8,8 +8,10 @@ import type {
   LiveMessage,
   Places,
 } from "@meetsanctum/app-sdk";
+import type { HourCycle } from "@meetsanctum/app-sdk/clock";
 import {
   AppScope,
+  HomeTimeZoneProvider,
   type AppClient,
   type LiveListener,
 } from "@meetsanctum/ui-sdk";
@@ -152,6 +154,8 @@ let container: HTMLDivElement;
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  // The device is in Los Angeles, so a time still written in its zone fails.
+  vi.stubEnv("TZ", "America/Los_Angeles");
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -160,20 +164,27 @@ afterEach(() => {
   act(() => root.unmount());
   container.remove();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
-async function show(client: AppClient, openSettings = () => undefined) {
+async function show(
+  client: AppClient,
+  openSettings = () => undefined,
+  hourCycle: HourCycle = "24h",
+) {
   const Page = ui.pages.main!;
   await act(async () => {
     root.render(
-      <AppScope client={client}>
-        <Page
-          params={{}}
-          open={() => undefined}
-          back={() => undefined}
-          openSettings={openSettings}
-        />
-      </AppScope>,
+      <HomeTimeZoneProvider timeZone="Europe/Zurich" hourCycle={hourCycle}>
+        <AppScope client={client}>
+          <Page
+            params={{}}
+            open={() => undefined}
+            back={() => undefined}
+            openSettings={openSettings}
+          />
+        </AppScope>
+      </HomeTimeZoneProvider>,
     );
   });
   return container.textContent ?? "";
@@ -218,6 +229,18 @@ describe("natural light's page", () => {
     expect(text).toContain("No lights that change colour temperature yet.");
   });
 
+  it("writes the sun's times as the home does, with 12 hours", async () => {
+    const text = await show(
+      fakeClient({ devices: [], entities: [], preview: today }).client,
+      () => undefined,
+      "12h",
+    );
+
+    expect(text).toMatch(
+      /Sunrise 7:04 AM · Peak \d{1,2}:\d\d [AP]M · Sunset \d{1,2}:\d\d PM/,
+    );
+  });
+
   it("shows today's curve and where each light stands", async () => {
     const text = await show(
       fakeClient({
@@ -235,7 +258,7 @@ describe("natural light's page", () => {
     expect(text).toContain(
       `${(Math.round(today.now.kelvin / 50) * 50).toLocaleString()} K`,
     );
-    expect(text).toMatch(/Sunrise\s*0?7:04/);
+    expect(text).toMatch(/Sunrise 07:04 · Peak \d\d:\d\d · Sunset \d\d:\d\d/);
     // The peak, which need not be the brightest time: night can be set
     // brighter.
     expect(text).toMatch(/Peak\s*\d/);

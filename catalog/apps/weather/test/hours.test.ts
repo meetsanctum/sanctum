@@ -1,3 +1,4 @@
+import { homeClock } from "@meetsanctum/app-sdk/clock";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -8,6 +9,9 @@ import {
   weatherNow,
 } from "../src/hours.js";
 import { forecast, morning } from "./sample.js";
+
+// Each forecast and sun is read in the zone it was fetched in.
+const clock = homeClock();
 
 // The forecast hour by hour, as Weather's page shows it.
 
@@ -37,7 +41,7 @@ describe("the hours from now", () => {
 
   it("end at the home's midnight for today", () => {
     // From ten in the morning in Zurich to the hour before midnight there.
-    const left = hoursLeftToday(forecast, morning);
+    const left = hoursLeftToday(clock, forecast, morning);
     expect(left).toHaveLength(14);
     expect(left.at(-1)?.time).toBe("2026-10-29T22:00:00.000Z");
   });
@@ -121,7 +125,12 @@ describe("the weather now", () => {
 
 describe("the next hours' columns", () => {
   it("are twelve, two hours apart, the first the weather now", () => {
-    const columns = hourColumns(forecast, { count: 12, every: 2 }, morning);
+    const columns = hourColumns(
+      clock,
+      forecast,
+      { count: 12, every: 2 },
+      morning,
+    );
 
     expect(columns.map((column) => column.time.slice(8, 16))).toEqual([
       "29T09:00",
@@ -150,7 +159,7 @@ describe("the next hours' columns", () => {
   it("mark the first of the home's next day", () => {
     // Midnight in Zurich is 23:00 UTC.
     const starts = (every: number, count: number) =>
-      hourColumns(forecast, { count, every }, morning)
+      hourColumns(clock, forecast, { count, every }, morning)
         .filter((column) => column.startsDay)
         .map((column) => column.time);
 
@@ -160,7 +169,12 @@ describe("the next hours' columns", () => {
   });
 
   it("are as many as a kept forecast still has", () => {
-    const columns = hourColumns(forecast, { count: 12, every: 2 }, later(41));
+    const columns = hourColumns(
+      clock,
+      forecast,
+      { count: 12, every: 2 },
+      later(41),
+    );
 
     expect(columns.map((column) => column.time.slice(8, 16))).toEqual([
       "31T02:00",

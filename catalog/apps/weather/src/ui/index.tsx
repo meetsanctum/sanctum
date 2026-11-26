@@ -1,4 +1,9 @@
-import { PageBar, defineAppUi, type PageProps } from "@meetsanctum/ui-sdk";
+import {
+  PageBar,
+  defineAppUi,
+  useHomeClock,
+  type PageProps,
+} from "@meetsanctum/ui-sdk";
 
 import { DaysCard } from "./days-card";
 import { HoursCard } from "./hours-card";
@@ -34,6 +39,7 @@ const beside = "flex min-w-0 flex-col gap-6 @[39rem]:gap-3";
 function MainPage(_props: PageProps) {
   const weather = useWeather();
   const { forecast, sun, unit, now } = weather;
+  const clock = useHomeClock();
   return (
     <>
       <PageBar title="Weather" />
@@ -64,8 +70,8 @@ function MainPage(_props: PageProps) {
               </div>
             </div>
             <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground @[60rem]:col-start-1 @[60rem]:row-start-2">
-              {updatedWords(forecast.updatedAt, forecast.timeZone, now)} ·
-              Forecast by Open-Meteo
+              {updatedWords(clock, forecast.updatedAt, forecast.timeZone, now)}{" "}
+              · Forecast by Open-Meteo
             </p>
           </div>
         </div>
