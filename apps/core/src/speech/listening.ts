@@ -63,8 +63,6 @@ export type HeardRun = {
   sound: AsyncIterable<Buffer>;
   /** Stops listening: the speaker stops sending, and `sound` ends. */
   stopListening(): void;
-  /** Fires when sound stops, including when the core reaches its audio limit. */
-  readonly stopped: Promise<void>;
   heard(text: string): void;
   /** A reply to play from an address the core serves. */
   reply(url: string, text: string): void;
@@ -72,7 +70,7 @@ export type HeardRun = {
   fail(error: ListenError): void;
   /** Ends the run. */
   done(): void;
-  /** Aborts when the run ends before its hearer is done with it. */
+  /** Aborts when the run ends. */
   signal: AbortSignal;
   readonly moments: Readonly<RunMoments>;
   /** How the driver ended it, once it did. */
@@ -85,7 +83,6 @@ export type Hearer = (run: HeardRun) => void | Promise<void>;
 type Run = Omit<HeardRun, "moments" | "ended"> & {
   moments: RunMoments;
   ended: ListenEnd | null;
-  markStopped(): void;
   steps: ListenStep[];
   finished: boolean;
   readers: Set<() => void>;
@@ -130,9 +127,9 @@ export function createListening(options: {
   // Whether a device's `audio` part says it listens.
   listens: (device: string) => boolean;
   // What hears a device's run, or why it's refused; none is `off`.
-  hearer: (device: string, driver: string) => Hearer | ListenRefusal | null;
+  hearer: (device: string) => Hearer | ListenRefusal | null;
   // A run the core refused on its own account, not the hearer's.
-  refused?: (device: string, refusal: ListenRefusal, driver: string) => void;
+  refused?: (device: string, refusal: ListenRefusal) => void;
   now?: () => number;
   log: (message: string) => void;
 }) {
@@ -175,7 +172,6 @@ export function createListening(options: {
     run.moments.stoppedListening = now();
     clearTimeout(run.quiet);
     run.endSound();
-    run.markStopped();
     tell(run, { step: "stopped" });
   }
 
@@ -209,12 +205,12 @@ export function createListening(options: {
       if (!device) throw new ActionError("not_found");
       if (closed) return { accepted: false, refusal: "unavailable" };
       const refuse = (refusal: ListenRefusal): ListenOpened => {
-        options.refused?.(device, refusal, driver);
+        options.refused?.(device, refusal);
         return { accepted: false, refusal };
       };
       // A request can arrive before an updated device registration does.
       if (!options.listens(device)) return refuse("unavailable");
-      const hearer = options.hearer(device, driver) ?? "off";
+      const hearer = options.hearer(device) ?? "off";
       if (typeof hearer === "string")
         return { accepted: false, refusal: hearer };
       // A speaker runs one request at a time: a newer one ends the older.
@@ -225,8 +221,6 @@ export function createListening(options: {
       const id = randomBytes(12).toString("base64url");
       const sound = soundQueue();
       const controller = new AbortController();
-      let markStopped!: () => void;
-      const stopped = new Promise<void>((resolve) => (markStopped = resolve));
       const run: Run = {
         id,
         device,
@@ -250,8 +244,6 @@ export function createListening(options: {
         push: (chunk) => sound.push(chunk),
         endSound: sound.end,
         stopListening: () => stopListening(run),
-        stopped,
-        markStopped,
         heard: (text) => tell(run, { step: "heard", text }),
         reply(url, text) {
           if (run.finished) return;

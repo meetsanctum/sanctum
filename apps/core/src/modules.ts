@@ -1,5 +1,4 @@
 import {
-  announcePermission,
   answersTo,
   modelsUsePermission,
   shownQuestions,
@@ -39,8 +38,7 @@ import { createAppVersions } from "./app-host/versions.js";
 import { createAppSecrets, createSealer } from "./app-host/secrets.js";
 import { createAppSettings } from "./app-host/settings.js";
 import { createAuth, loginRule } from "./auth/auth.js";
-import { assembleSpeech } from "./speech/assembly.js";
-import { assembleHearing } from "./speech/hearing.js";
+import { assembleSpeakerAudio } from "./speech/assembly.js";
 import type { Transcriber } from "./speech/spoken.js";
 import type { Limits } from "./auth/limits.js";
 import { setCoreFollowers } from "./core-followers.js";
@@ -465,15 +463,14 @@ export async function createModules(
   });
   // Pictures drivers hand over, in memory only (blobs/blobs.ts).
   const blobs = createBlobs({ now, log });
-  const { listening, spoken, isSpeaker } = assembleHearing({
-    devices,
-    places,
-    apps: () => apps,
-    speech: () => speech,
-    transcriber: options.transcriber,
-    record: activity.for("devices"),
-    log,
-  });
+  const { speech, startSpeech, stopSpeech, listening, spoken, isSpeaker } =
+    assembleSpeakerAudio(options, {
+      canUse: agentsCanUse,
+      devices,
+      places,
+      apps: () => apps,
+      record: activity.for("devices"),
+    });
   // The home's AI models, which the household adds in Settings, and the
   // turns in which apps ask the one in use.
   const models = createModels(db, {
@@ -653,14 +650,6 @@ export async function createModules(
       places.list().floors.find((floor) => floor.id === id)?.name ?? null,
     dashboard: (id) =>
       dashboards.list().find((dashboard) => dashboard.id === id)?.name ?? null,
-  });
-  const { speech, startSpeech, stopSpeech } = assembleSpeech({
-    speaker: options.speaker,
-    manager: options.manager,
-    devices,
-    areaOn: () => agentsCanUse.areaOn(announcePermission),
-    hears: () => Boolean(options.transcriber?.()),
-    log,
   });
   const agentTools: AgentTools = assembleAgentTools(agentAccess, {
     apps,

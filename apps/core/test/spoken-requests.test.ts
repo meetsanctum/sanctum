@@ -27,6 +27,7 @@ function setup(
     answers?: boolean;
     heard?: string | null;
     transcript?: Promise<string | null>;
+    turnFinished?: Promise<void>;
     prepare?: (text: string, signal?: AbortSignal) => Promise<void>;
     beforeDispatch?: () => Promise<void>;
     speakers?: Record<string, Speaker>;
@@ -74,6 +75,7 @@ function setup(
       answers: () => answers,
       hasRoom: () => room,
       ask(request) {
+        if (options.turnFinished) request.onTurnStarted?.(options.turnFinished);
         const answer = deferredResult<RequestReply | null>();
         let fail!: (error: unknown) => void;
         const failed = new Promise<never>((_, reject) => (fail = reject));
@@ -220,6 +222,28 @@ describe("a smart speaker's request", () => {
     ]);
   });
 
+  it("keeps the turn open after the reply played until the handler finishes", async () => {
+    const finished = deferredResult<void>();
+    const { wake, asked, until, listening, spoken, recorded, steps } = setup({
+      turnFinished: finished.promise,
+    });
+    const opened = await wake();
+    if (!opened.accepted) throw new Error(opened.refusal);
+    await until(() => asked.length === 1);
+    const { answer, request } = asked[0]!;
+    answer.resolve({ text: "On it" });
+    await until(() => kinds(steps(opened.run)).includes("reply"));
+    listening.close(driver, { run: opened.run, end: "played" });
+    await until(() => requestLines(recorded).length === 1);
+
+    expect(request.signal?.aborted).toBe(false);
+    expect(spoken.actsFor("device:speaker")).toBe(true);
+    expect(() => request.check?.()).not.toThrow();
+
+    finished.resolve();
+    await until(() => !spoken.actsFor("device:speaker"));
+  });
+
   it("names no room for a speaker in none", async () => {
     const { wake, asked, until } = setup();
     await wake("kitchen");
@@ -289,29 +313,58 @@ describe("a smart speaker's request", () => {
     expect(kinds(steps(first.run))).not.toContain("reply");
   });
 
-  it("says one moment after five seconds, then the reply on the speaker", async () => {
+  it.each([
+    [null, "nothing-heard"],
+    ["  ", "not-understood"],
+  ] as const)(
+    "ends with %s transcribed even after five seconds",
+    async (heard, error) => {
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+      const transcript = deferredResult<string | null>();
+      const { wake, asked, replied, steps } = setup({
+        transcript: transcript.promise,
+      });
+      const opened = await wake();
+      if (!opened.accepted) throw new Error(opened.refusal);
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(oneMomentAfterMs + 1);
+      expect(kinds(steps(opened.run))).toEqual(["stopped"]);
+
+      transcript.resolve(heard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(steps(opened.run)).toEqual([
+        { step: "stopped" },
+        { step: "error", error },
+        { step: "done" },
+      ]);
+      expect(asked).toEqual([]);
+      expect(replied).toEqual([]);
+    },
+  );
+
+  it("says one moment after five seconds and queues the reply as soon as it comes", async () => {
     vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
     const transcript = deferredResult<string>();
-    const { wake, asked, listening, until, spokenLate, recorded, steps } =
-      setup({ transcript: transcript.promise });
+    const { wake, asked, listening, spokenLate, recorded, steps } = setup({
+      transcript: transcript.promise,
+    });
     const opened = await wake();
     if (!opened.accepted) throw new Error(opened.refusal);
-
     await vi.advanceTimersByTimeAsync(0);
     expect(kinds(steps(opened.run))).toEqual(["stopped"]);
-    await vi.advanceTimersByTimeAsync(4_999);
-    expect(kinds(steps(opened.run))).toEqual(["stopped"]);
+    await vi.advanceTimersByTimeAsync(2_000);
+    transcript.resolve("turn off the lights");
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(asked).toHaveLength(1);
+    expect(kinds(steps(opened.run))).toEqual(["stopped", "heard"]);
     await vi.advanceTimersByTimeAsync(1);
     expect(steps(opened.run).at(-1)).toMatchObject({
       step: "reply",
       text: "One moment",
     });
-    listening.close(driver, { run: opened.run, end: "played" });
-
-    transcript.resolve("turn off the lights");
-    await until(() => asked.length === 1);
     asked[0]!.answer.resolve({ text: "Turned off the Office lights" });
-    await until(() => spokenLate.length === 1);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(kinds(steps(opened.run))).not.toContain("done");
     expect(spokenLate[0]).toMatchObject({
       device: "device:speaker",
       text: "Turned off the Office lights",
@@ -319,7 +372,7 @@ describe("a smart speaker's request", () => {
       actor: { kind: "app", id: "sanctum.assistant" },
       finishing: true,
     });
-    await until(() => requestLines(recorded).length === 1);
+    listening.close(driver, { run: opened.run, end: "played" });
     expect(requestLines(recorded)[0]).toMatchObject({
       outcome: "ok",
       detail: {
@@ -459,17 +512,28 @@ describe("a smart speaker's request", () => {
     expect(asked).toEqual([]);
   });
 
-  it("bounds refusal logging by driver and across the home", async () => {
+  it("bounds refusal logging per speaker and across the home", async () => {
     vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
-    const { wake, recorded, spoken } = setup({ answers: false });
+    const speakers = Object.fromEntries(
+      ["speaker", "kitchen", "bedroom", "hall", "garage"].map((key) => [
+        `device:${key}`,
+        { name: key, room: null, capability: "audio" },
+      ]),
+    );
+    const { wake, recorded } = setup({ answers: false, speakers });
     for (let i = 0; i < 10; i++) {
       expect(await wake()).toEqual({ accepted: false, refusal: "off" });
     }
     expect(recorded).toHaveLength(1);
-    for (let i = 0; i < 10; i++) {
-      spoken.refused("device:kitchen", "limited", `driver:${i}`);
+    for (const key of ["kitchen", "bedroom", "hall", "garage"]) {
+      expect(await wake(key)).toEqual({ accepted: false, refusal: "off" });
     }
-    expect(recorded).toHaveLength(4);
+    expect(recorded.map((entry) => entry.subjectId)).toEqual([
+      "device:speaker",
+      "device:kitchen",
+      "device:bedroom",
+      "device:hall",
+    ]);
     await vi.advanceTimersByTimeAsync(60_000);
     await wake();
     expect(recorded).toHaveLength(5);

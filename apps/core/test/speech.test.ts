@@ -471,6 +471,41 @@ describe("createSpeech", () => {
     }
   });
 
+  it("keeps a finishing reply queued while the acknowledgement waits to be fetched", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    const synthesize = vi
+      .spyOn(wyoming, "synthesize")
+      .mockImplementation(async function* () {
+        yield { rate: 22_050, samples: new Int16Array(4096) };
+      });
+    const { speech, told } = setup({
+      devices: [],
+      serviceUrl: "tcp://127.0.0.1:1",
+    });
+    announcements!.port = () => 4180;
+    speech.start();
+    try {
+      await speech.reply({ device: "a", text: "One moment", language: "en" });
+      const reply = speech.speak({
+        device: "a",
+        text: "Done",
+        language: "en",
+        actor: { kind: "app", id: "sanctum.assistant" },
+        finishing: true,
+      });
+      const dispatched = reply.catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(announcementKeptMs - 1);
+      expect(told).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await dispatched).toHaveProperty("encoded");
+      expect(told).toHaveLength(1);
+    } finally {
+      speech.stop();
+      synthesize.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("says nothing more once AI agents may no longer speak, waiting or told", async () => {
     const { server, url } = await fakePiper([]);
     piper = server;

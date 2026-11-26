@@ -1,7 +1,40 @@
+import { announcePermission } from "@meetsanctum/app-sdk";
+
+import type { AgentsCanUse } from "../agents/can-use.js";
 import type { ManagerClient } from "../manager.js";
 import { createAnnouncements } from "./announcements.js";
+import { assembleHearing } from "./hearing.js";
 import { createSpeech, speechLanguages, speechService } from "./speech.js";
 import { spokenPhrases } from "./spoken.js";
+
+type HearingOptions = Parameters<typeof assembleHearing>[0];
+
+export function assembleSpeakerAudio(
+  config: Pick<
+    Parameters<typeof assembleSpeech>[0],
+    "speaker" | "manager" | "log"
+  > &
+    Pick<HearingOptions, "transcriber">,
+  options: Pick<HearingOptions, "devices" | "places" | "apps" | "record"> & {
+    canUse: Pick<AgentsCanUse, "areaOn">;
+  },
+) {
+  const speech = assembleSpeech({
+    speaker: config.speaker,
+    manager: config.manager,
+    log: config.log,
+    devices: options.devices,
+    areaOn: () => options.canUse.areaOn(announcePermission),
+    hears: () => Boolean(config.transcriber?.()),
+  });
+  const hearing = assembleHearing({
+    ...options,
+    transcriber: config.transcriber,
+    log: config.log,
+    speech: () => speech.speech,
+  });
+  return { ...speech, ...hearing };
+}
 
 export function assembleSpeech(options: {
   speaker?: { host: string; port: number; publishedPort: number };

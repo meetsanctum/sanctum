@@ -4,6 +4,7 @@ import { TimedOut, withTimeout } from "../app-host/errors.js";
 import { announcementCapability } from "../devices/announce.js";
 import type { DeviceChange } from "../devices/devices.js";
 import { speakerNetwork, type Announcements } from "./announcements.js";
+import { listeningRunMs } from "./listening.js";
 import { synthesize, type SpeechAudio } from "./wyoming.js";
 
 // What Sanctum says out loud, in the home's one voice per language. Piper,
@@ -268,9 +269,10 @@ export function createSpeech(options: {
       tell: (url: string) => Promise<void>;
       onFetched?: (url: string) => Promise<void>;
       playbackGraceMs?: number;
+      dispatchWithinMs?: number;
     },
   ) {
-    const dispatchBy = now() + dispatchWithinMs;
+    const dispatchBy = now() + (how.dispatchWithinMs ?? dispatchWithinMs);
     const waitExpired = () =>
       new SpeechUnavailable(
         "The speaker didn't take the announcement in time.",
@@ -453,6 +455,11 @@ export function createSpeech(options: {
     }) {
       const how = {
         finishing: input.finishing === true,
+        // A finishing reply can queue behind an acknowledgement whose
+        // listening run hasn't ended yet. Give it time for that run too.
+        dispatchWithinMs: input.finishing
+          ? listeningRunMs + dispatchWithinMs
+          : dispatchWithinMs,
         onFetched: async (url: string) => {
           try {
             await options.devices.announce(

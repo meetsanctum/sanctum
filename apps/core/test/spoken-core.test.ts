@@ -14,7 +14,7 @@ import { expect, it, vi } from "vitest";
 import { base, running, useCleanUps } from "./app-apart-support.js";
 import { fakeManager } from "./manager-support.js";
 import { fakePiper } from "./speech-support.js";
-import { claimed, post, testCore } from "./support.js";
+import { claimed, deferredResult, post, testCore } from "./support.js";
 
 // A smart speaker someone asks, end to end in a running core: its driver
 // opens a run, the core hears the words, Sanctum's Assistant answers for the
@@ -24,6 +24,8 @@ useCleanUps();
 
 it("answers a smart speaker's request through the Assistant, for the speaker, in its room", async () => {
   const asked: Omit<AssistantRequestCall, "reply" | "signal">[] = [];
+  const afterPlayback = deferredResult<void>();
+  const commandResult = deferredResult<unknown>();
   const assistant = defineApp({
     ...base,
     id: assistantAppId,
@@ -37,15 +39,21 @@ it("answers a smart speaker's request through the Assistant, for the speaker, in
       // Its tools act for the speaker while its request lasts.
       const overview = await ctx.ai.call("home_overview");
       const rooms = (JSON.parse(overview.text) as { rooms: unknown[] }).rooms;
-      const switched = await ctx.ai.call("device_command", {
-        device: lampId,
-        capability: "light",
-        command: { on: false },
-      });
-      if (switched.isError) throw new Error(switched.text);
       await request.reply({
         text: `${rooms.length} room, from ${request.from.name}`,
       });
+      await afterPlayback.promise;
+      try {
+        commandResult.resolve(
+          await ctx.ai.call("device_command", {
+            device: lampId,
+            capability: "light",
+            command: { on: false },
+          }),
+        );
+      } catch (error) {
+        commandResult.resolve(error);
+      }
     },
   });
   let driverCtx: AppContext | undefined;
@@ -183,7 +191,8 @@ it("answers a smart speaker's request through the Assistant, for the speaker, in
     const audio = await fetch(reply.url);
     expect(audio.headers.get("content-type")).toBe("audio/flac");
     await audio.arrayBuffer();
-    // The core finishes the run after the audio without a playback report.
+    // The driver reports when the speaker finishes playing the reply.
+    await run.close("played");
     const finished: ListenStep[] = [];
     for await (const step of run.steps()) finished.push(step);
     expect(finished.at(-1)).toEqual({ step: "done" });
@@ -201,10 +210,14 @@ it("answers a smart speaker's request through the Assistant, for the speaker, in
         detail: {
           capability: "audio",
           capabilityKind: "audio",
-          finishedPlayingMs: null,
+          finishedPlayingMs: expect.any(Number),
         },
       }),
     );
+    afterPlayback.resolve();
+    const command = await commandResult.promise;
+    expect(command).toHaveProperty("text");
+    expect(command).not.toHaveProperty("isError", true);
     // Its tool's call is the Assistant's, asked from the speaker.
     const tools = core.activity
       .recent()
@@ -231,6 +244,7 @@ it("answers a smart speaker's request through the Assistant, for the speaker, in
       }),
     );
   } finally {
+    afterPlayback.resolve();
     server.close();
   }
 }, 12_000);

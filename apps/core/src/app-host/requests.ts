@@ -329,6 +329,8 @@ export function createRequests(options: {
       check?: () => void;
       // A speaker stopped or a newer wake took over before the next ask.
       signal?: AbortSignal;
+      // The handler's turn may outlast its reply.
+      onTurnStarted?: (finished: Promise<void>) => void;
     }): Promise<RequestReply | null> {
       if (closed) throw new ActionCallError("unavailable");
       const entry = installed.get(assistantAppId);
@@ -420,6 +422,7 @@ export function createRequests(options: {
         });
         dispatched = true;
         void finished.then(leave, leave);
+        request.onTurnStarted?.(run.done);
         return await reply;
       } finally {
         if (!dispatched) leave();
