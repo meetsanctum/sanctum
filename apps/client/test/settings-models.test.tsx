@@ -460,25 +460,6 @@ describe("Settings → AI models", () => {
     ).toBe(false);
   });
 
-  it("shows only the bar until the first answer", async () => {
-    sources = [];
-    const answer = vi.mocked(coreJson).getMockImplementation()!;
-    let release = () => {};
-    const held = new Promise<void>((resolve) => (release = resolve));
-    vi.mocked(coreJson).mockImplementation(async (path, init) => {
-      if (path === "/api/models") await held;
-      return answer(path, init);
-    });
-    await show();
-    expect(container.textContent).toBe("AI Models");
-    expect(container.querySelector("#settings-models")).toBeNull();
-    expect(button("Add a source")).toBeUndefined();
-
-    await act(async () => release());
-    expect(container.textContent).toContain("No AI model yet");
-    expect(button("Add a source")).toBeUndefined();
-  });
-
   it("offers where the model can run when the home has none", async () => {
     sources = [];
     await show();

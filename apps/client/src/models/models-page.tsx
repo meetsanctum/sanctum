@@ -9,7 +9,6 @@ import {
   Input,
   NativeSelect,
   NativeSelectOption,
-  PageBar,
   type LiveFeed,
   useHomeClock,
 } from "@meetsanctum/ui-sdk";
@@ -90,7 +89,8 @@ export function ModelsPage(props: {
   // Opens an app's page, as Ollama's.
   onOpenApp?: (appId: string) => void;
 }) {
-  const { info, refresh, answered } = useModels(props.live);
+  const { info, hasFailed, refresh, answered } = useModels(props.live);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [adding, setAdding] = useState(false);
   // Where Add a source starts, when the empty page asked where it runs, and
   // the choice that opened it, which gets focus back when it closes.
@@ -100,7 +100,7 @@ export function ModelsPage(props: {
   const [isActing, setIsActing] = useState(false);
   const addButton = useRef<HTMLButtonElement>(null);
   const firstChoice = useRef<HTMLButtonElement>(null);
-  const supportsSanctum = info === undefined || info.usage !== undefined;
+  const supportsSanctum = info?.usage !== undefined;
   const sources = info?.sources ?? [];
   const isEmpty = info !== undefined && sources.length === 0;
   const inUse = sources.find((source) => source.inUse);
@@ -143,20 +143,15 @@ export function ModelsPage(props: {
     />
   );
 
-  // Until the first answer it isn't known whether the home has a source or
-  // needs the empty page, so only the bar shows.
-  if (info === undefined) {
-    return <PageBar title={modelsTitle} leading={props.page} />;
-  }
-
   return (
     <>
       <Section
         id="settings-models"
         title={modelsTitle}
+        hideBody={info === undefined && !hasFailed}
         action={
           // With no source yet, the empty page's places are the way in.
-          !isEmpty && (
+          sources.length > 0 && (
             <Button
               ref={addButton}
               disabled={isActing}
@@ -172,6 +167,25 @@ export function ModelsPage(props: {
         }
         page={props.page}
       >
+        {hasFailed && (
+          <>
+            <p role="alert" className="m-0 text-sm text-destructive">
+              AI models couldn't load.
+            </p>
+            <Button
+              variant="outline"
+              className="self-start"
+              disabled={isRetrying}
+              onClick={async () => {
+                setIsRetrying(true);
+                await refresh();
+                setIsRetrying(false);
+              }}
+            >
+              Try again
+            </Button>
+          </>
+        )}
         {isEmpty && (
           <NoModel
             supportsSanctum={supportsSanctum}
@@ -213,26 +227,30 @@ export function ModelsPage(props: {
           onOpenApp={props.onOpenApp}
         />
       )}
-      <AddSource
-        open={adding}
-        onOpenChange={setAdding}
-        onAdded={answered}
-        onCloseAutoFocus={() => {
-          if (opener.current?.isConnected) opener.current.focus();
-          else focusAddSource();
-        }}
-        apps={props.apps}
-        supportsSanctum={supportsSanctum}
-        start={start}
-        onAppAdded={props.onAppAdded}
-        onOpenApp={props.onOpenApp}
-      />
-      <EditSource
-        editing={editing}
-        onClose={() => setEditing(undefined)}
-        onDone={answered}
-        onFocusFallback={focusAddSource}
-      />
+      {info && (
+        <>
+          <AddSource
+            open={adding}
+            onOpenChange={setAdding}
+            onAdded={answered}
+            onCloseAutoFocus={() => {
+              if (opener.current?.isConnected) opener.current.focus();
+              else focusAddSource();
+            }}
+            apps={props.apps}
+            supportsSanctum={supportsSanctum}
+            start={start}
+            onAppAdded={props.onAppAdded}
+            onOpenApp={props.onOpenApp}
+          />
+          <EditSource
+            editing={editing}
+            onClose={() => setEditing(undefined)}
+            onDone={answered}
+            onFocusFallback={focusAddSource}
+          />
+        </>
+      )}
     </>
   );
 }
