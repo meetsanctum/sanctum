@@ -50,9 +50,15 @@ seconds later: the frame opens afresh on the app's new build. A change that
 doesn't build leaves the last good pages, and a rebuilt kit is read again.
 
 `pnpm dev` runs the core over plain HTTP, for development only. On a host the
-core serves only HTTPS, with a certificate the manager signs as the host's
-certificate authority, and the desktop app pins that authority. The desktop
-app finds hosts on the network and talks to them cross-origin; see
+core serves its client API over HTTPS, with a certificate the manager signs as
+the host's certificate authority, and the desktop app pins that authority.
+Smart speakers fetch one-time announcement audio over a separate plain HTTP
+listener on port 4180, restricted to the home's network. To test announcements
+on a real speaker, use a Linux host such as a dev host. Docker Desktop forwards
+requests through its virtual machine, so the core cannot verify the speaker's
+network address. See [Docker Desktop networking](https://docs.docker.com/desktop/features/networking/#how-exposed-ports-work).
+
+The desktop app finds hosts on the network and talks to them cross-origin; see
 [apps/desktop](apps/desktop/README.md).
 
 ### A wall display

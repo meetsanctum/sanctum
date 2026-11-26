@@ -7,6 +7,7 @@ import {
   coreVolumeName,
   hasAppFolders,
   hasInit,
+  hasSpeakerPort,
   reconcileCore,
   socketGroupId,
   socketVolumeName,
@@ -138,6 +139,112 @@ describe("reconcileCore and the folders apps need", () => {
   });
 });
 
+describe("reconcileCore and the port speakers fetch sound from", () => {
+  // What a manager from before announcements leaves after an update.
+  async function olderCore(docker: FakeDocker) {
+    const options = coreContainerOptions(coreImage);
+    delete (options.HostConfig!.PortBindings as Record<string, unknown>)[
+      "4180/tcp"
+    ];
+    delete (options.ExposedPorts as Record<string, unknown>)["4180/tcp"];
+    options.Env = options.Env!.filter(
+      (each) => !each.startsWith("CORE_SPEAKER"),
+    );
+    const { id } = await docker.createContainer(options);
+    await docker.getContainer(id).start();
+    return id;
+  }
+
+  it("keeps the core running without announcements while the port is occupied", async () => {
+    const { docker, log } = setup();
+    await olderCore(docker);
+    const portAvailable = vi.fn(async () => false);
+    const reconcile = () =>
+      reconcileCore({ docker, image: coreImage, log, portAvailable });
+    docker.startError = new Error(
+      "Bind for 0.0.0.0:4180 failed: port is already allocated",
+    );
+
+    await reconcile();
+    const fallback = docker.container(coreContainerName)!;
+    expect(fallback.running).toBe(true);
+    expect(fallback.options.Env).toContain("CORE_SPEAKER_PORT=0");
+    expect(
+      hasSpeakerPort(await docker.getContainer(fallback.id).inspect()),
+    ).toBe(false);
+
+    docker.events = [];
+    await reconcile();
+    expect(docker.container(coreContainerName)?.id).toBe(fallback.id);
+    expect(docker.events).toEqual([]);
+
+    portAvailable.mockResolvedValue(true);
+    await reconcile();
+    const restored = docker.container(coreContainerName)!;
+    expect(restored.id).not.toBe(fallback.id);
+    expect(restored.running).toBe(true);
+    expect(
+      hasSpeakerPort(await docker.getContainer(restored.id).inspect()),
+    ).toBe(true);
+  });
+
+  it("recreates once a core without it, on the image it has", async () => {
+    const { docker, log, reconcile } = setup();
+    const older = await olderCore(docker);
+    expect(hasSpeakerPort(await docker.getContainer(older).inspect())).toBe(
+      false,
+    );
+
+    await reconcile();
+
+    const core = docker.container(coreContainerName)!;
+    expect(core.id).not.toBe(older);
+    expect(core.running).toBe(true);
+    expect(hasSpeakerPort(await docker.getContainer(core.id).inspect())).toBe(
+      true,
+    );
+    expect(core.options.Env).toContain("CORE_SPEAKER_PUBLISHED_PORT=4180");
+    expect(log).toHaveBeenCalledWith(
+      `Recreating ${coreContainerName} with the port speakers fetch sound from`,
+    );
+
+    docker.events = [];
+    await reconcile();
+    expect(docker.container(coreContainerName)!.id).toBe(core.id);
+    expect(docker.events).toEqual([]);
+  });
+
+  it("restarts a stopped core on its own image if the speaker port is taken", async () => {
+    const { docker, log } = setup();
+    const stopped = await docker.createContainer(
+      coreContainerOptions(coreImage),
+    );
+    const before = await docker.getContainer(stopped.id).inspect();
+    expect(hasSpeakerPort(before)).toBe(true);
+    docker.load("localhost:5000/sanctum-core:dev-2", {
+      title: "sanctum-core",
+      version: "dev-2",
+    });
+    docker.startError = new Error(
+      "Bind for 0.0.0.0:4180 failed: port is already allocated",
+    );
+
+    await expect(
+      reconcileCore({
+        docker,
+        log,
+        image: "localhost:5000/sanctum-core:dev-2",
+      }),
+    ).resolves.toBe(before.Image);
+    const fallback = docker.container(coreContainerName)!;
+    expect(fallback.id).not.toBe(stopped.id);
+    expect(fallback).toMatchObject({ imageId: before.Image, running: true });
+    expect(
+      hasSpeakerPort(await docker.getContainer(fallback.id).inspect()),
+    ).toBe(false);
+  });
+});
+
 describe("reconcileCore and the core's init process", () => {
   // What a manager from before the init process leaves after an update: the
   // core it created, which the manager that replaces it finds.
@@ -247,13 +354,22 @@ describe("reconcileCore", () => {
       // member of the socket's group.
       Binds: [`${coreVolumeName}:/data`, `${socketVolumeName}:/run/sanctum`],
       GroupAdd: [String(socketGroupId)],
-      PortBindings: { "4100/tcp": [{ HostPort: "4100" }] },
+      // Speakers fetch announcements on IPv4 only.
+      PortBindings: {
+        "4100/tcp": [{ HostPort: "4100" }],
+        "4180/tcp": [{ HostIp: "0.0.0.0", HostPort: "4180" }],
+      },
       RestartPolicy: { Name: "unless-stopped" },
       Init: true,
     });
     expect(core?.networks[sanctumNetworkName]).toBeDefined();
-    // The apps' origins may read the core's responses.
-    expect(core?.options.Env).toEqual(["CORE_ALLOWED_ORIGINS=app://sanctum"]);
+    // The apps' origins may read the core's responses, and it knows where
+    // speakers reach it.
+    expect(core?.options.Env).toEqual([
+      "CORE_ALLOWED_ORIGINS=app://sanctum",
+      "CORE_SPEAKER_PORT=4180",
+      "CORE_SPEAKER_PUBLISHED_PORT=4180",
+    ]);
   });
 
   it("pulls the core's image only when it is not on the host", async () => {

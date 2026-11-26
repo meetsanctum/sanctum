@@ -62,7 +62,7 @@ const button: CapabilityInfo = {
 const audio: CapabilityInfo = {
   id: "audio",
   kind: "audio",
-  features: { mutes: true, muteSwitch: false },
+  features: { mutes: true, muteSwitch: false, announces: false },
   state: { muted: false },
   observed: { muted: false },
   desired: null,
@@ -372,7 +372,7 @@ describe("microphone mute in device detail", () => {
   });
 
   it.each([
-    { features: { mutes: false, muteSwitch: false } },
+    { features: { mutes: false, muteSwitch: false, announces: false } },
     { observed: { heardAt: "2026-11-24T09:00:00Z" } },
   ])("hides the button until mute is supported and known", async (change) => {
     devices = [withAudio({ ...audio, ...change })];

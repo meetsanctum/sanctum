@@ -1,6 +1,8 @@
 import { request } from "node:http";
 import { z } from "zod";
 
+import { createManagerServices } from "./manager-services.js";
+
 import {
   appCapacities,
   appContainer,
@@ -9,17 +11,14 @@ import {
   appUsage,
   capabilities,
   discoveryAnswer,
-  heldServices,
   hostBody,
   hostHistory,
   hostResources,
   hostStatus,
-  serviceStatus,
   keptCopy,
   lanVersion,
   managerAudit,
   noCapabilities,
-  serviceGrant,
   signedCertificate,
   spaceFreed,
   spacePlan,
@@ -154,10 +153,6 @@ const askForCapabilitiesEveryMs = 30_000;
 const appUpdatePath = (app: string) =>
   `/api/apps/${encodeURIComponent(app)}/update`;
 
-function servicePath(service: string, app: string) {
-  return `/api/services/${encodeURIComponent(service)}/apps/${encodeURIComponent(app)}`;
-}
-
 export type AppNeed = { memoryMb: number; dataMb: number; services: string[] };
 
 export function createManagerClient(options: {
@@ -287,6 +282,14 @@ export function createManagerClient(options: {
   }
 
   return {
+    ...createManagerServices({
+      call: (...args) => call(socketPath, ...args),
+      once,
+      ask,
+      expectGranted,
+      parseBody,
+    }),
+
     // What the manager could do when last asked.
     capabilities: () => known,
 
@@ -461,31 +464,6 @@ export function createManagerClient(options: {
       );
     },
 
-    // Where a service answers over HTTP while it runs, as Ollama does, or
-    // null while it doesn't.
-    async serviceUrl(service: string) {
-      const answer = parseBody(
-        serviceStatus,
-        await once(
-          "GET",
-          `/api/services/${encodeURIComponent(service)}`,
-          undefined,
-          5_000,
-        ),
-      );
-      return answer.service.url ?? null;
-    },
-
-    // Erases a service's own data, once no app needs it and it has stopped.
-    async eraseServiceData(service: string) {
-      await once(
-        "DELETE",
-        `/api/services/${encodeURIComponent(service)}/data`,
-        undefined,
-        60_000,
-      );
-    },
-
     // An app's update (apps/manager/src/apps/updates.ts). Taking the slot, stopping
     // it and copying its database can take a while, as can putting that back.
     async beginAppUpdate(
@@ -597,71 +575,6 @@ export function createManagerClient(options: {
     async appUsage(app: string) {
       const path = `/api/apps/${encodeURIComponent(app)}/usage`;
       return parseBody(appUsage, await once("GET", path, undefined, 10_000));
-    },
-
-    // An app needs a service: the manager runs it from now on and answers
-    // with the app's connection details. Asking again changes nothing.
-    async needService(service: string, app: string) {
-      return ask(async () => {
-        const response = await call(
-          socketPath,
-          "PUT",
-          servicePath(service, app),
-        );
-        expectGranted(response);
-        return parseBody(serviceGrant, response.body).connection;
-      });
-    },
-
-    // The services the manager keeps for the app, whatever this core asked for.
-    async servicesHeldBy(
-      app: string,
-      { signal }: { signal?: AbortSignal } = {},
-    ) {
-      return ask(async () => {
-        const response = await call(
-          socketPath,
-          "GET",
-          "/api/services",
-          undefined,
-          undefined,
-          signal,
-        );
-        expectGranted(response);
-        return parseBody(heldServices, response.body)
-          .services.filter(({ apps }) => apps.includes(app))
-          .map(({ name }) => name);
-      }, signal);
-    },
-
-    // The app's permission for the service was switched off: one call,
-    // which the manager answers once the app's broker account is out of the
-    // broker, so a person sees it off only when it is. Rejects when the
-    // manager does not confirm in time.
-    async revokeService(service: string, app: string) {
-      await once("DELETE", servicePath(service, app), undefined, 30_000);
-    },
-
-    // The app no longer needs the service. Once no app does, the manager
-    // stops it; its data stays. The manager answers once its reconcile has
-    // run, which may wait for a service's container to stop, so this waits
-    // as long as revokeService does.
-    async releaseService(
-      service: string,
-      app: string,
-      { signal }: { signal?: AbortSignal } = {},
-    ) {
-      await ask(async () => {
-        const response = await call(
-          socketPath,
-          "DELETE",
-          servicePath(service, app),
-          undefined,
-          30_000,
-          signal,
-        );
-        expectGranted(response);
-      }, signal);
     },
 
     // Updates, asked once each: whoever asked waits for the answer and asks

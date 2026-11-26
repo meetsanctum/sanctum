@@ -71,7 +71,8 @@ if (args[0] === "inspect") {
       console.log("CORE_NEW_HOME_APPS=sanctum.moods,sanctum.natural-light,sanctum.weather,sanctum.fake-lights");
     }
   }
-  if (format.includes(".HostConfig.PortBindings")) console.log("45000");
+  if (format.includes('PortBindings "4100/tcp"')) console.log("45000");
+  if (format.includes('PortBindings "4180/tcp"')) console.log(process.env.STACK_TEST_SPEAKER_PORT ?? "45002");
   if (format === "{{.Image}}") console.log("sha256:current");
   if (format.includes('"sanctum.stack.core-binds"')) console.log(
     process.cwd() + "/apps/core/dist:/app/apps/core/dist:ro" +
@@ -132,6 +133,18 @@ describe("development stack CLI", { timeout: 20_000 }, () => {
     await tree.run("up");
 
     expect(await tree.commands()).not.toContainEqual([
+      "rm",
+      "-f",
+      "sanctum-one-core",
+    ]);
+  });
+
+  it("recreates a core without the port speakers fetch announcements from", async () => {
+    const tree = await worktree();
+
+    await tree.run("up", { STACK_TEST_SPEAKER_PORT: "" });
+
+    expect(await tree.commands()).toContainEqual([
       "rm",
       "-f",
       "sanctum-one-core",

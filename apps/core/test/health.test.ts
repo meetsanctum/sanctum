@@ -25,6 +25,9 @@ describe("loadConfig", () => {
     expect(loadConfig({})).toEqual({
       host: "127.0.0.1",
       port: 4100,
+      // Smart speakers fetch announcements here.
+      speakerPort: 4180,
+      speakerPublishedPort: 4180,
       allowedOrigins: [],
       dataDir: "./data",
       // HTTPS unless `pnpm dev` asks for plain HTTP.

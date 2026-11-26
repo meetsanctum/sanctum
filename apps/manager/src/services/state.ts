@@ -5,9 +5,10 @@ import type { ServiceSpec } from "./containers.js";
 import type { ZigbeeCoordinatorChoice } from "./zigbee-coordinator.js";
 
 // What the manager keeps about services, in its data volume: which apps need
-// which service, the broker accounts it generated, the chosen Zigbee
-// coordinator and how far each change of image got. It survives updates and
-// reboots; the services' own data lives in their volumes.
+// which service, which the core wants for itself, the broker accounts it
+// generated, the chosen Zigbee coordinator and how far each change of image
+// got. It survives updates and reboots; the services' own data lives in
+// their volumes.
 
 export type MqttAccount = { password: string; hash: string };
 
@@ -32,6 +33,8 @@ export type ImageChange = {
 export type ServicesState = {
   // The apps that asked for each service, by service name.
   apps: Record<string, string[]>;
+  // The services the core asked for itself. Absent where it never has.
+  core?: string[];
   // One broker account per MQTT client, by username: each service and each
   // app that talks MQTT.
   mqttAccounts: Record<string, MqttAccount>;

@@ -38,10 +38,10 @@ import {
 import { announcedOf, esphomeService, type Announced } from "./sightings.js";
 import { createReports } from "./reports.js";
 import { connectionFactsOf, describeSession } from "./session-details.js";
-import { lightCommandOf, mediaCommandOf } from "./states.js";
+import { lightCommandOf } from "./states.js";
+import { sendSpeakerCommand } from "./speaker-commands.js";
 import {
   changeSpeaker,
-  muteCommand,
   speakerStateOf,
   type SpeakerChange,
   type SpeakerState,
@@ -710,22 +710,13 @@ export function createDriver(ctx: AppContext, options: DriverOptions = {}) {
           entityId("light", entity.objectId),
           lightCommandOf(entity, command.command) as never,
         );
-      } else if (command.kind === "media" && entity.type === "media_player") {
-        const sent = mediaCommandOf(command.command);
-        if (!sent) {
-          throw new ActionError(
-            "not_found",
-            `${command.capability} takes no such command`,
-          );
-        }
-        session.client.command(entityId("media_player", entity.objectId), sent);
-      } else if (command.kind === "audio" && entity.type === "switch") {
-        await muteCommand(session, entity, command.command.muted);
       } else if (command.kind === "switch" && entity.type === "switch") {
         session.client.command(entityId("switch", entity.objectId), {
           state: command.command.on,
         });
-      } else {
+      } else if (
+        !(await sendSpeakerCommand(session, entity, command, owned.telemetry))
+      ) {
         // A motion sensor's settings are its configuration's, not Sanctum's.
         throw new ActionError(
           "not_found",

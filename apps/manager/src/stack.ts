@@ -13,10 +13,17 @@ const envSchema = z.object({
     .regex(/^[a-z0-9][a-z0-9-]{0,40}$/)
     .optional(),
   // What a stack's core runs on, which a host decides through updates and
-  // fixed settings: its image, its port on the Mac, the worktree's built code
-  // mounted over the image's, and its settings, each list split by `;`.
+  // fixed settings: its image, its port on the Mac, the port smart speakers
+  // fetch announcements from, the worktree's built code mounted over the
+  // image's, and its settings, each list split by `;`.
   SANCTUM_STACK_CORE_IMAGE: z.string().min(1).optional(),
   SANCTUM_STACK_CORE_PORT: z.coerce.number().int().min(1).max(65535).optional(),
+  SANCTUM_STACK_SPEAKER_PORT: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(65535)
+    .optional(),
   SANCTUM_STACK_CORE_BINDS: z.string().default(""),
   SANCTUM_STACK_CORE_ENV: z.string().default(""),
 });
@@ -31,6 +38,7 @@ export const stackCore = stack
   ? {
       image: env.SANCTUM_STACK_CORE_IMAGE,
       port: env.SANCTUM_STACK_CORE_PORT,
+      speakerPort: env.SANCTUM_STACK_SPEAKER_PORT,
       binds: list(env.SANCTUM_STACK_CORE_BINDS),
       env: list(env.SANCTUM_STACK_CORE_ENV),
     }

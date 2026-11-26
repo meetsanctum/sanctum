@@ -43,6 +43,8 @@ appears later is listed by itself.
 
 - A firewall on the machine has to let in UDP port 5353, which is how the
   app finds your home, and TCP port 4100, which is how it talks to it.
+  Smart speakers fetch what Sanctum says on TCP port 4180, over plain HTTP
+  from your home's network only.
 
 ## Zigbee does not start
 

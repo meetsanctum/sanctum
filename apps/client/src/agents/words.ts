@@ -1,5 +1,6 @@
 import {
   activityReadPermission,
+  announcePermission,
   aiAreas,
   aiAssistantPermission,
   controlPermission,
@@ -66,6 +67,7 @@ export const areaDetail: Record<string, string> = {
   [activityReadPermission]:
     "The activity log, with names only if See who lives here is on",
   [historyReadPermission]: "Up to 10 days back",
+  [announcePermission]: `In ${productName}'s voice, never on a muted speaker`,
   [peopleReadPermission]: "Names, in the activity log too",
 };
 

@@ -1,4 +1,9 @@
-import { ColorMode, EntityCategory, MediaPlayerState } from "esphome-client";
+import {
+  ColorMode,
+  EntityCategory,
+  MediaPlayerFormatPurpose,
+  MediaPlayerState,
+} from "esphome-client";
 
 import type { EmulatedEntity } from "./emulated-device.js";
 import type { startHome } from "./support.js";
@@ -15,6 +20,20 @@ export const player: EmulatedEntity = {
   // Volume set, mute and stop are standard. The speaker also supports Play and Pause.
   fields: {
     featureFlags: (1 << 0) | (1 << 2) | (1 << 3) | (1 << 12) | (1 << 14),
+  },
+  // What it plays, as its firmware lists it: music in stereo, and
+  // announcements in mono, which makes it announce.
+  messages: {
+    supportedFormats: [
+      { format: "flac", sampleRate: 48_000, numChannels: 2, sampleBytes: 2 },
+      {
+        format: "flac",
+        sampleRate: 48_000,
+        numChannels: 1,
+        purpose: MediaPlayerFormatPurpose.ANNOUNCEMENT,
+        sampleBytes: 2,
+      },
+    ],
   },
 };
 

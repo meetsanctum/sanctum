@@ -16,9 +16,12 @@
 # host, and sees the host's /dev read-only to find USB devices. It uses the
 # host's network so it can announce the host over mDNS. Its API has no port:
 # it listens on a Unix socket in the manager-socket volume, which only the
-# manager and the core mount. Clients only talk to the core, on port 4100. The
-# services the manager runs for apps, such as the MQTT broker, have no port
-# either: they are on the `sanctum` network only.
+# manager and the core mount. Clients only talk to the core, on port 4100.
+# Smart speakers fetch the announcements they play from the core on port
+# 4180, over plain HTTP on the home's network, at addresses that work once.
+# The services the manager runs for apps and the core, such as the MQTT
+# broker and Piper, have no port either: they are on the `sanctum` network
+# only.
 #
 # Updates replace the manager's image but keep this container definition, so
 # a change to it here reaches a host only through `docker compose up -d`.

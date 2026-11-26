@@ -297,6 +297,10 @@ function deviceEntry(
         problem: (entry.caused?.failed ?? 0) > 0,
       };
     }
+    case "device.announce":
+      return said(
+        `${entry.outcome === "ok" ? "Said" : "Couldn't say"} “${String(entry.detail?.text ?? "")}”`,
+      );
     case "device.offline":
       return said("Went offline", "It stopped answering");
     case "device.online":

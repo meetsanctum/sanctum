@@ -1,13 +1,14 @@
 import type { AppHost } from "./app-host/host.js";
 import type { Blobs } from "./blobs/blobs.js";
 import type { Dashboards } from "./dashboards/dashboards.js";
-import type { Devices } from "./devices/devices.js";
+import type { DeviceChange, Devices } from "./devices/devices.js";
 import type { Holds } from "./devices/holds.js";
 import type { Motion } from "./devices/motion.js";
 import type { Pairing } from "./devices/pairing.js";
 import type { EventBus } from "./event-bus.js";
 import type { History } from "./history/history.js";
 import type { createLiveUpdates } from "./live-updates.js";
+import type { Speech } from "./speech/speech.js";
 import type { Workflows } from "./workflows/workflows.js";
 
 // The core's event followers, in delivery order. Handlers call through so
@@ -24,6 +25,7 @@ export function setCoreFollowers(
     live,
     motion,
     pairing,
+    speech,
     workflows,
   }: {
     apps: Pick<AppHost, "eventsForApps">;
@@ -38,6 +40,7 @@ export function setCoreFollowers(
     >;
     motion: Pick<Motion, "follower">;
     pairing: Pick<Pairing, "removed" | "refresh">;
+    speech?: Pick<Speech, "deviceChanged">;
     workflows: Pick<
       Workflows,
       | "deviceChanged"
@@ -60,6 +63,18 @@ export function setCoreFollowers(
       },
     ],
     ["events for apps", apps.eventsForApps],
+    // Speech runs while a smart speaker can announce.
+    ...(speech
+      ? ([
+          [
+            "speech",
+            {
+              "device.changed": (change: DeviceChange) =>
+                speech.deviceChanged(change),
+            },
+          ],
+        ] as const)
+      : []),
     [
       "pairing",
       {

@@ -3,7 +3,7 @@
   "name": "Natural Light",
   "version": "0.4.2",
   "core": "^2.0.0",
-  "protocol": 23,
+  "protocol": 24,
   "summary": "Lights that follow the colour of daylight through the day.",
   "runtime": {
     "memory": 128,

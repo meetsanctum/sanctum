@@ -66,8 +66,12 @@ async function account(core: TestCore, appId = "test.bridge") {
 }
 
 // What it asked for, leaving out reading what the manager keeps for it.
-const asked = (socket: { received: { method: string }[] }) =>
-  socket.received.filter(({ method }) => method !== "GET");
+// What the apps asked the manager for: not reads, and not the core's own
+// speech, which a core with speakers off releases as it starts.
+const asked = (socket: { received: { method: string; url: string }[] }) =>
+  socket.received.filter(
+    ({ method, url }) => method !== "GET" && !url.endsWith("/piper/core"),
+  );
 
 // The manager's socket, answering for services as `answer` says, with no app's
 // update under way, which an app reads before it starts.

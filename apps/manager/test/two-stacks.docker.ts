@@ -37,11 +37,17 @@ async function isFree(port: number) {
   return free;
 }
 
-// A free pair of ports from here on: the stack's core and its registry after
-// it.
+// Three free ports in a row from here on: the stack's core, its registry and
+// the port speakers fetch announcements from.
 async function freePorts(from: number): Promise<number> {
-  for (let port = from; port < from + 1000; port += 2) {
-    if ((await isFree(port)) && (await isFree(port + 1))) return port;
+  for (let port = from; port < from + 1000; port += 3) {
+    if (
+      (await isFree(port)) &&
+      (await isFree(port + 1)) &&
+      (await isFree(port + 2))
+    ) {
+      return port;
+    }
   }
   throw new Error(`No free ports from ${from}`);
 }
@@ -183,7 +189,7 @@ describe("two stacks on one Docker", () => {
       44000 + (randomBytes(2).readUInt16BE() % 4000),
     );
     one = stackOf("one", first, true);
-    other = stackOf("other", await freePorts(first + 2), false);
+    other = stackOf("other", await freePorts(first + 3), false);
     await one.script("up");
     await other.script("up");
     await appsRunning(one);

@@ -23,10 +23,27 @@ describe("a smart speaker's microphones", () => {
     ).toEqual({
       id: "audio",
       kind: "audio",
-      features: { mutes: false, muteSwitch: false },
+      features: { mutes: false, muteSwitch: false, announces: false },
     });
-    expect(audio.supports(audio.features.parse({}))).toBe(false);
-    expect(audio.supports(audio.features.parse({ mutes: true }))).toBe(true);
+    expect(audio.supports(audio.features.parse({}), { muted: true })).toBe(
+      false,
+    );
+    expect(
+      audio.supports(audio.features.parse({ mutes: true }), { muted: true }),
+    ).toBe(true);
+  });
+
+  it("keeps driver announcements out of the public command schema", () => {
+    expect(
+      audio.command.safeParse({
+        announce: { url: "http://192.168.1.20:4180/a/abc.flac" },
+      }).success,
+    ).toBe(false);
+    expect(
+      audio.supports(audio.features.parse({ announces: true }), {
+        muted: true,
+      }),
+    ).toBe(false);
   });
 
   it("say whether they're muted and when it heard its wake word", () => {

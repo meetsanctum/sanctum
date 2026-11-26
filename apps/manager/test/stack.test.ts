@@ -42,9 +42,16 @@ describe("on a host", () => {
     expect(options.HostConfig?.RestartPolicy).toEqual({
       Name: "unless-stopped",
     });
+    // Speakers on the home's network fetch announcements on 4180, over IPv4.
     expect(options.HostConfig?.PortBindings).toEqual({
       "4100/tcp": [{ HostPort: "4100" }],
+      "4180/tcp": [{ HostIp: "0.0.0.0", HostPort: "4180" }],
     });
+    expect(options.Env).toEqual([
+      "CORE_ALLOWED_ORIGINS=app://sanctum",
+      "CORE_SPEAKER_PORT=4180",
+      "CORE_SPEAKER_PUBLISHED_PORT=4180",
+    ]);
     expect(sanctumNetworkName).toBe("sanctum");
     expect(serviceContainerName("mosquitto")).toBe("sanctum-mosquitto");
     expect(mosquittoUrl).toBe("mqtt://sanctum-mosquitto:1883");
@@ -111,14 +118,44 @@ describe("in a stack", () => {
       "/w/b/dist:/app/b/dist:ro",
     ]);
     // Only this Mac reaches a development core, on the stack's own port.
+    // Without a port for speakers, it publishes none.
     expect(options.HostConfig?.PortBindings).toEqual({
       "4100/tcp": [{ HostIp: "127.0.0.1", HostPort: "41000" }],
     });
+    expect(options.Env?.some((each) => each.startsWith("CORE_SPEAKER"))).toBe(
+      false,
+    );
     expect(options.HostConfig?.RestartPolicy).toEqual({ Name: "no" });
     expect(options.NetworkingConfig?.EndpointsConfig).toEqual({
       "sanctum-one": {},
     });
     expect(coreVolumeName).toBe("sanctum-one-core-data");
+  });
+
+  it("publishes the stack's own port for speakers, on every address", async () => {
+    inStack("one", {
+      SANCTUM_STACK_CORE_PORT: "41000",
+      SANCTUM_STACK_SPEAKER_PORT: "41002",
+    });
+    const { coreContainerOptions, hasSpeakerPort } =
+      await import("../src/core-container.js");
+
+    const options = coreContainerOptions("sanctum-one-core:dev");
+
+    // A speaker on the home's network reaches it through the Mac.
+    expect(options.HostConfig?.PortBindings).toEqual({
+      "4100/tcp": [{ HostIp: "127.0.0.1", HostPort: "41000" }],
+      "4180/tcp": [{ HostIp: "0.0.0.0", HostPort: "41002" }],
+    });
+    expect(options.Env).toEqual(
+      expect.arrayContaining([
+        "CORE_SPEAKER_PORT=4180",
+        "CORE_SPEAKER_PUBLISHED_PORT=41002",
+      ]),
+    );
+    expect(hasSpeakerPort({ HostConfig: { PortBindings: {} } } as never)).toBe(
+      false,
+    );
   });
 
   it("gives services and their data the stack's names", async () => {
