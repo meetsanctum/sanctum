@@ -125,15 +125,15 @@ describe("the Status page", () => {
     );
     expect(parts("status-storage")).toEqual([
       "Dev builds1.35 GB",
-      "Software1.21 GB",
+      "Sanctum1.21 GB",
       "Home's data28.7 MB",
       "Zigbee330 KB",
       "Moods180 KB",
-      "System and other5.57 GB",
+      "System5.57 GB",
     ]);
     const bar = section("status-storage")!.querySelector('[role="img"]')!;
     expect(bar.getAttribute("aria-label")).toBe(
-      "Storage, 6.92 GB free of 15.1 GB: Dev builds 1.35 GB, Software 1.21 GB, Home's data 28.7 MB, Zigbee 330 KB, Moods 180 KB, System and other 5.57 GB",
+      "Storage, 6.92 GB free of 15.1 GB: Dev builds 1.35 GB, Sanctum 1.21 GB, Home's data 28.7 MB, Zigbee 330 KB, Moods 180 KB, System 5.57 GB",
     );
     // In the brand's colours, apps in their own; the free space is the track.
     expect(

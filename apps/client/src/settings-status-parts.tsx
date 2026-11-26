@@ -129,7 +129,7 @@ function storageParts(parts: StoragePart[], apps: readonly AppInfo[]): Part[] {
       case "software":
         named.push({
           key: "software",
-          name: "Software",
+          name: productName,
           bytes: part.bytes,
           colour: "bg-purple",
         });
@@ -156,7 +156,7 @@ function storageParts(parts: StoragePart[], apps: readonly AppInfo[]): Part[] {
       case "system":
         system = {
           key: "system",
-          name: "System and other",
+          name: "System",
           bytes: part.bytes,
           colour: systemColour,
         };
