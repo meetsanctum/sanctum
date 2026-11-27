@@ -68,7 +68,8 @@ password**. Give them the new code: in the Mac app, they choose **Just
 me**, then **I have an invite code**, enter it and choose a new password.
 Their current password keeps working until the code is used, so a reset
 started by mistake changes nothing. To end the code, choose **Cancel code**
-and confirm.
+and confirm. It also ends if they change or choose a new password
+themselves first.
 
 ## Remove a sign-in or a person
 
