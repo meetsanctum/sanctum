@@ -56,6 +56,43 @@ describe("a page's stylesheet", () => {
     expect(withoutKitRules(page, kit)).toBe(page);
   });
 
+  it("compares rules selector by selector, however the minifier joined them", () => {
+    // The kit joins `bg-foreground/8` to `bg-foreground`, the page doesn't:
+    // the page's solid fallback, kept, would come after the kit's
+    // translucent colour and win, filling the rows with the ink.
+    const supports = "@supports (color:color-mix(in lab, red, red))";
+    const fill = (alpha: number) =>
+      `{.bg-foreground\\/${alpha}{background-color:color-mix(in oklab, var(--ink) ${alpha}%, transparent)}}`;
+    const kitCss = [
+      "@layer utilities{.bg-foreground,.bg-foreground\\/8,:is(.a,.c){background-color:var(--ink)}",
+      `${supports}${fill(8)}}`,
+    ].join("");
+    const page = [
+      "@layer utilities{.bg-foreground\\/8{background-color:var(--ink)}",
+      `${supports}${fill(8)}`,
+      ".bg-foreground,.bg-foreground\\/5,:is(.a,.b){background-color:var(--ink)}",
+      `${supports}${fill(5)}}`,
+    ].join("");
+    expect(withoutKitRules(page, kitCss)).toBe(
+      [
+        "@layer utilities{.bg-foreground\\/5,:is(.a,.b){background-color:var(--ink)}",
+        `${supports}${fill(5)}}`,
+      ].join(""),
+    );
+  });
+
+  it("keeps whitespace that is part of a selector", () => {
+    const kitCss = "@layer utilities{.flex{display:flex}}";
+    const standalone = "@layer utilities{.flex\u00a0{display:flex}}";
+    expect(withoutKitRules(standalone, kitCss)).toBe(standalone);
+
+    const page =
+      "@layer utilities{.flex, .flex\u00a0 , .flex\\ , .flex\\20  {display:flex}}";
+    expect(withoutKitRules(page, kitCss)).toBe(
+      "@layer utilities{.flex\u00a0,.flex\\ ,.flex\\20 {display:flex}}",
+    );
+  });
+
   it("keeps a layer without a name, which is never the kit's", () => {
     const page = "@layer utilities{@layer{.m-0{margin:0}}.m-0{margin:0}}";
     expect(
