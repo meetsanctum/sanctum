@@ -73,7 +73,7 @@ export function addsWords(app: AvailableApp) {
       : []),
     ...(adds.pieces > 0 ? [many(adds.pieces, "workflow piece")] : []),
   ];
-  const runs = `It runs on its own with up to ${app.memory} MB of memory.`;
+  const runs = `It uses up to ${app.memory} MB of memory.`;
   return parts.length > 0 ? `It adds ${list(parts)}. ${runs}` : runs;
 }
 

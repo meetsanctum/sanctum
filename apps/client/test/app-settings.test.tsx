@@ -390,8 +390,10 @@ describe("an app's settings page", () => {
       },
     };
     await show(example, opened);
-    expect(text()).toContain("Act as your AI assistant");
-    expect(text()).toContain("allow for AI agents. To do what you ask.");
+    expect(text()).toContain("Do things in your home for you");
+    expect(text()).toContain(
+      "It can see and do what you allow AI agents in Settings. To do what you ask.",
+    );
     expect(text()).toContain(
       "Your home's limits apply. To understand what you ask.",
     );

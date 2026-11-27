@@ -607,6 +607,17 @@ describe("What AI agents can use", () => {
     );
   });
 
+  it("says what AI agents can see about smart speakers", async () => {
+    canUse.areas.push({ id: "devices.read:audio", on: false, always: false });
+    await show();
+    const detailId = switchFor("See your smart speakers").getAttribute(
+      "aria-describedby",
+    );
+    expect(document.getElementById(detailId!)?.textContent).toBe(
+      "Whether their microphones are muted and when they last heard their wake word",
+    );
+  });
+
   it("refreshes shared permissions and rejects a read older than a local change", async () => {
     await show();
     canUse = canUseWith({ "people.read": true });
