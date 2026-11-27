@@ -1,6 +1,7 @@
 // The approved artwork for known glyph and colour pairs, from the brand's
 // files (assets/brand, under their own licence). App manifests still choose
 // a glyph and colour; an unrecognised pair keeps the standard line icon.
+import assistant from "@meetsanctum/brand/app-icons/assistant.webp";
 import automations from "@meetsanctum/brand/app-icons/automations.webp";
 import moods from "@meetsanctum/brand/app-icons/moods.webp";
 import naturalLight from "@meetsanctum/brand/app-icons/natural-light.webp";
@@ -9,6 +10,7 @@ import weather from "@meetsanctum/brand/app-icons/weather.webp";
 import zigbee from "@meetsanctum/brand/app-icons/zigbee.webp";
 
 export const appArtwork = new Map([
+  ["message-circle-more:iris", assistant],
   ["sparkles:blossom", automations],
   ["swatch-book:ember", moods],
   ["sun:sun", naturalLight],

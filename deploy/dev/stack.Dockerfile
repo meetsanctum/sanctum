@@ -27,6 +27,7 @@ COPY packages/ui-sdk/package.json packages/ui-sdk/package.json
 COPY packages/ui-sdk/bin packages/ui-sdk/bin
 # The catalog apps, one line each, as in apps/core/Dockerfile.
 COPY catalog/apps/apple-home-devices/package.json catalog/apps/apple-home-devices/package.json
+COPY catalog/apps/assistant/package.json catalog/apps/assistant/package.json
 COPY catalog/apps/esphome/package.json catalog/apps/esphome/package.json
 COPY catalog/apps/moods/package.json catalog/apps/moods/package.json
 COPY catalog/apps/natural-light/package.json catalog/apps/natural-light/package.json

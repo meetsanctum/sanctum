@@ -14,6 +14,7 @@
         "build",
         "@meetsanctum/core#build",
         "@meetsanctum/apple-home-devices#build",
+        "@meetsanctum/assistant#build",
         "@meetsanctum/esphome#build",
         "@meetsanctum/moods#build",
         "@meetsanctum/natural-light#build",
