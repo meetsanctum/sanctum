@@ -1,7 +1,7 @@
 import type { AgentInfo } from "@meetsanctum/auth-protocol";
 import * as opaque from "@serenity-kit/opaque";
 
-import { createActivity } from "../activity/activity.js";
+import type { RecordActivity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
 import type { People } from "../people/people.js";
 import { createAgentSetups } from "./agent-setups.js";
@@ -43,11 +43,12 @@ export async function createAuth(
     onClaimed?: () => void;
     limits?: Limits;
     now?: () => Date;
+    record: RecordActivity;
   },
 ) {
   await opaque.ready;
   const now = options.now ?? (() => new Date());
-  const record = createActivity(db, { now }).for("auth");
+  const { record } = options;
   const connections = createConnections({ now });
   const limiter = createLimiter({
     limits: options.limits,

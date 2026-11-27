@@ -15,6 +15,7 @@ import {
   ne,
   or,
   sql,
+  type SQL,
 } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
@@ -83,6 +84,36 @@ export type Connections = {
   tell(clientId: string, message: object): void;
 };
 
+function activePersonalClients(personId: string) {
+  return and(
+    eq(authClients.personId, personId),
+    eq(authClients.kind, "personal"),
+    isNull(authClients.revokedAt),
+  )!;
+}
+
+// A confirmation only covers the devices it showed. Check in the same
+// transaction as the removal, before any of those devices are signed out.
+export function assertPersonalClients(
+  db: Pick<CoreDatabase, "select">,
+  personId: string,
+  expectedClientIds: readonly string[] | undefined,
+) {
+  if (!expectedClientIds) return;
+  const expected = new Set(expectedClientIds);
+  const current = db
+    .select({ id: authClients.id })
+    .from(authClients)
+    .where(activePersonalClients(personId))
+    .all();
+  if (
+    expected.size !== current.length ||
+    current.some(({ id }) => !expected.has(id))
+  ) {
+    throw new AuthError("devices_changed");
+  }
+}
+
 export function createClients(
   db: CoreDatabase,
   options: {
@@ -92,6 +123,31 @@ export function createClients(
   },
 ) {
   const { record, connections, now } = options;
+
+  function revokeMatchingClients(affected: SQL, at: Date) {
+    db.update(authTokens)
+      .set({ revokedAt: at })
+      .where(
+        and(
+          inArray(
+            authTokens.clientId,
+            db.select({ id: authClients.id }).from(authClients).where(affected),
+          ),
+          isNull(authTokens.revokedAt),
+        ),
+      )
+      .run();
+    return db
+      .update(authClients)
+      .set({ revokedAt: at })
+      .where(affected)
+      .returning({
+        id: authClients.id,
+        name: authClients.name,
+        kind: authClients.kind,
+      })
+      .all();
+  }
 
   // What every request and every entry a shared client leaves in the
   // activity log reads, each compiled once: the client a token stands for,
@@ -481,45 +537,17 @@ export function createClients(
       return clients.filter(({ kind }) => kind !== "agent").length;
     },
 
-    // A person's personal clients and the agents they added, refused from
-    // their next request on, inside the caller's transaction, which closes
-    // their live connections with `close` once it commits.
-    revokePersonal(personId: string, at: Date): string[] {
-      const theirs = db
-        .select({ id: authClients.id })
-        .from(authClients)
-        .where(
-          and(
-            eq(authClients.personId, personId),
-            eq(authClients.kind, "personal"),
-            isNull(authClients.revokedAt),
-          ),
-        );
-      const affected = and(
-        isNull(authClients.revokedAt),
-        or(
-          inArray(authClients.id, theirs),
-          inArray(authClients.addedByClientId, theirs),
-        ),
+    // Sign out a person's own devices in the caller's transaction. The
+    // caller closes their live connections once it commits.
+    revokePersonal(
+      personId: string,
+      at: Date,
+      expectedClientIds?: readonly string[],
+    ): string[] {
+      assertPersonalClients(db, personId, expectedClientIds);
+      return revokeMatchingClients(activePersonalClients(personId), at).map(
+        ({ id }) => id,
       );
-      const ids = db
-        .select({ id: authClients.id })
-        .from(authClients)
-        .where(affected)
-        .all()
-        .map(({ id }) => id);
-      if (ids.length === 0) return ids;
-      db.update(authTokens)
-        .set({ revokedAt: at })
-        .where(
-          and(inArray(authTokens.clientId, ids), isNull(authTokens.revokedAt)),
-        )
-        .run();
-      db.update(authClients)
-        .set({ revokedAt: at })
-        .where(inArray(authClients.id, ids))
-        .run();
-      return ids;
     },
 
     close(ids: readonly string[]) {
@@ -538,32 +566,8 @@ export function createClients(
             eq(authClients.id, input.id),
             eq(authClients.addedByClientId, input.id),
           ),
-        );
-        db.update(authTokens)
-          .set({ revokedAt: at })
-          .where(
-            and(
-              inArray(
-                authTokens.clientId,
-                db
-                  .select({ id: authClients.id })
-                  .from(authClients)
-                  .where(affected),
-              ),
-              isNull(authTokens.revokedAt),
-            ),
-          )
-          .run();
-        const revoked = db
-          .update(authClients)
-          .set({ revokedAt: at })
-          .where(affected)
-          .returning({
-            id: authClients.id,
-            name: authClients.name,
-            kind: authClients.kind,
-          })
-          .all();
+        )!;
+        const revoked = revokeMatchingClients(affected, at);
         // One entry for the client, and one for each agent it took along.
         for (const { id, kind, name } of revoked) {
           record({

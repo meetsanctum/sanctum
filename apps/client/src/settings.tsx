@@ -171,6 +171,7 @@ export function SettingsPage(props: {
       return (
         <PeoplePage
           page={back}
+          live={props.live}
           me={props.me}
           onOpen={(id) => props.open(personSettingsPage, { id })}
         />
@@ -179,6 +180,7 @@ export function SettingsPage(props: {
       return props.params.id ? (
         <PersonPage
           key={props.params.id}
+          live={props.live}
           personId={props.params.id}
           back={props.back}
           backTo={backTo}

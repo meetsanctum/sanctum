@@ -92,7 +92,7 @@ export type AddPerson = {
   avatar?: string | null;
 };
 export type ChangePerson = { id: string } & Partial<AddPerson>;
-export type RemovePerson = { id: string };
+export type RemovePerson = { id: string; expectedClientIds?: string[] };
 
 export type ClientInfo = {
   id: string;
@@ -256,7 +256,7 @@ export type SetLoginFinish = {
   registrationRecord: string;
   keyStretching: number;
 };
-export type RemoveLogin = { personId: string };
+export type RemoveLogin = { personId: string; expectedClientIds?: string[] };
 
 /** `GET /api/auth/logins`: who signs in, and with which username. */
 export type LoginInfo = { personId: string; username: string };
@@ -375,6 +375,7 @@ export type AuthErrorCode =
   | "claimed"
   | "username_taken"
   | "last_login"
+  | "devices_changed"
   // An invite code that was right but can no longer be redeemed.
   | "invite_ended"
   | "too_many_attempts"

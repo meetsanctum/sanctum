@@ -29,7 +29,10 @@ const schemas = {
     unknown,
     ChangePerson
   >,
-  remove: z.object({ id }) satisfies z.ZodType<RemovePerson>,
+  remove: z.object({
+    id,
+    expectedClientIds: z.array(id).optional(),
+  }) satisfies z.ZodType<RemovePerson>,
 };
 
 export function registerPeopleRoutes(
@@ -60,8 +63,11 @@ export function registerPeopleRoutes(
   // Their login and personal clients go with them, so their next request is
   // refused, and their open connections close as the removal commits.
   app.post("/api/people/remove", async (request, reply) => {
-    const { id: personId } = parseRequest(schemas.remove, request.body);
-    people.remove(personId, by(request));
+    const { id: personId, expectedClientIds } = parseRequest(
+      schemas.remove,
+      request.body,
+    );
+    people.remove(personId, by(request), expectedClientIds);
     return reply.code(204).send();
   });
 }

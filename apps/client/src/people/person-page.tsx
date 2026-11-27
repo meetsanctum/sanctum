@@ -2,8 +2,16 @@ import type {
   ChangePerson,
   ClientInfo,
   PersonInfo,
+  RemoveLogin,
+  RemovePerson,
 } from "@meetsanctum/auth-protocol";
-import { Button, Input, PageBar, useHomeClock } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  Input,
+  PageBar,
+  useHomeClock,
+  type LiveFeed,
+} from "@meetsanctum/ui-sdk";
 import { useEffect, useId, useState, type FormEvent } from "react";
 
 import { ColourPicker } from "../colour-picker";
@@ -30,12 +38,14 @@ const label = "text-[13px] leading-[18px] font-medium text-muted-foreground";
 const tryAgain = "That didn't work. Try again.";
 
 export function PersonPage(props: {
+  live: LiveFeed;
   personId: string;
   back: () => void;
   backTo?: string;
 }) {
-  const { data, failed, refresh } = usePeople();
+  const { data, failed, refresh } = usePeople(props.live, true);
   const [asking, setAsking] = useState<Asking>();
+  const [saving, setSaving] = useState(false);
   const person = data?.people.find((each) => each.id === props.personId);
   const { back } = props;
 
@@ -51,69 +61,146 @@ export function PersonPage(props: {
       leading={<BackButton to={props.backTo} onBack={back} />}
     />
   );
-  if (!data || !person) {
+  const loadError = failed && (
+    <div className="flex shrink-0 flex-col items-start gap-2">
+      <p role="alert" className="m-0 text-sm text-destructive">
+        {data
+          ? "The details shown here may be out of date."
+          : "This page can't be shown now."}
+      </p>
+      <Button variant="outline" onClick={() => void refresh()}>
+        Retry
+      </Button>
+    </div>
+  );
+  if (!data || !person)
     return (
       <>
         {bar}
-        {failed && !data && (
-          <p role="alert" className="m-0 text-sm text-destructive">
-            This page can't be shown now. Try again in a moment.
-          </p>
-        )}
+        {loadError}
       </>
     );
-  }
 
   const signIn = signInOf(data, person.id);
-  const devices = devicesOf(data, person.id);
+  const devices = devicesOf(data.clients, person.id);
   const isLast = holdsLastSignIn(data, person.id);
   const done = async () => {
     await refresh();
   };
 
+  function askRemoval(
+    snapshot: NonNullable<typeof data>,
+    target: PersonInfo,
+    kind: "sign-in" | "person",
+    trigger: HTMLButtonElement,
+    notice?: string,
+  ) {
+    const signIn = signInOf(snapshot, target.id);
+    const devices = devicesOf(snapshot.clients, target.id);
+    const name = firstName(target.name);
+    const removePerson = kind === "person";
+    const codeEnds =
+      signIn.state === "signs-in" && signIn.resetEndsAt
+        ? "The password code stops working."
+        : signIn.state === "invited" && removePerson
+          ? "The invite code stops working."
+          : null;
+    setAsking({
+      title: removePerson
+        ? `Remove ${target.name}?`
+        : `Remove ${target.name}’s sign-in?`,
+      description: [
+        removePerson
+          ? signIn.state === "signs-in" && `${name}’s sign-in ends.`
+          : `${name} stays in People.`,
+        signsOutText(devices),
+        codeEnds,
+        removePerson && `Any agents ${name} added are removed and lose access.`,
+        removePerson && `To add ${name} again, use Add a person.`,
+      ]
+        .filter(Boolean)
+        .join(" "),
+      confirm: removePerson ? "Remove" : "Remove sign-in",
+      trigger,
+      notice,
+      run: async () => {
+        const expectedClientIds = devices.map(({ id }) => id);
+        try {
+          if (removePerson) {
+            await coreJson("/api/people/remove", {
+              method: "POST",
+              json: { id: target.id, expectedClientIds } satisfies RemovePerson,
+            });
+          } else {
+            await coreJson("/api/auth/logins/remove", {
+              method: "POST",
+              json: {
+                personId: target.id,
+                expectedClientIds,
+              } satisfies RemoveLogin,
+            });
+          }
+        } catch (error) {
+          if (!(error instanceof CoreError) || error.code !== "devices_changed")
+            throw error;
+          const latest = await refresh();
+          if (!latest) throw error;
+          const updated = latest.people.find(({ id }) => id === target.id);
+          if (
+            !updated ||
+            (!removePerson && signInOf(latest, target.id).state !== "signs-in")
+          )
+            return;
+          askRemoval(
+            latest,
+            updated,
+            kind,
+            trigger,
+            "The signed-in devices changed. Check the list and confirm again.",
+          );
+          return false;
+        }
+        await done();
+      },
+      problem: (error) => {
+        if (error instanceof CoreError && error.code === "devices_changed") {
+          return "The signed-in devices changed. Cancel and reload the page to see the current list.";
+        }
+        return lastSignInProblem(target, error);
+      },
+    });
+  }
+
   return (
     <>
       {bar}
+      {loadError}
       <NameAndColour
         // A change saved elsewhere starts the fields afresh.
         key={`${person.name}|${person.colour}`}
         person={person}
+        working={saving}
+        onWorkingChange={setSaving}
         onSaved={done}
       />
       <SignInCard
         person={person}
         signIn={signIn}
         isLast={isLast}
-        onRemove={() =>
-          setAsking({
-            title: `Remove ${person.name}’s sign-in?`,
-            description: [
-              `${firstName(person.name)} stays in People.`,
-              signsOutText(devices),
-            ]
-              .filter(Boolean)
-              .join(" "),
-            confirm: "Remove sign-in",
-            run: async () => {
-              await coreJson("/api/auth/logins/remove", {
-                method: "POST",
-                json: { personId: person.id },
-              });
-              await done();
-            },
-            problem: lastSignInProblem(person),
-          })
-        }
+        stale={failed}
+        onRemove={(trigger) => askRemoval(data, person, "sign-in", trigger)}
       />
       {(signIn.state === "signs-in" || devices.length > 0) && (
         <Devices
           person={person}
           devices={devices}
-          onSignOut={(client) =>
+          stale={failed}
+          onSignOut={(client, trigger) =>
             setAsking({
               title: `Sign out ${client.name}?`,
               description: `${firstName(person.name)} signs in again to use it.`,
               confirm: "Sign out",
+              trigger,
               run: async () => {
                 await coreJson("/api/auth/clients/revoke", {
                   method: "POST",
@@ -129,30 +216,10 @@ export function PersonPage(props: {
       <div className="flex shrink-0 flex-col items-start gap-2">
         <Button
           variant="destructive"
-          disabled={isLast}
+          disabled={isLast || failed}
           aria-describedby={isLast ? `${person.id}-last` : undefined}
-          onClick={() =>
-            setAsking({
-              title: `Remove ${person.name}?`,
-              description: [
-                signIn.state === "signs-in"
-                  ? `${firstName(person.name)}’s sign-in ends.`
-                  : null,
-                signsOutText(devices),
-                `To add ${firstName(person.name)} again, use Add a person.`,
-              ]
-                .filter(Boolean)
-                .join(" "),
-              confirm: "Remove",
-              run: async () => {
-                await coreJson("/api/people/remove", {
-                  method: "POST",
-                  json: { id: person.id },
-                });
-                await done();
-              },
-              problem: lastSignInProblem(person),
-            })
+          onClick={(event) =>
+            askRemoval(data, person, "person", event.currentTarget)
           }
         >
           Remove {person.name}
@@ -163,22 +230,22 @@ export function PersonPage(props: {
   );
 }
 
-function lastSignInProblem(person: PersonInfo) {
-  return (error: unknown) =>
-    error instanceof CoreError && error.code === "last_login"
-      ? `${person.name} is the only person who signs in, so this sign-in stays.`
-      : tryAgain;
+function lastSignInProblem(person: PersonInfo, error: unknown) {
+  return error instanceof CoreError && error.code === "last_login"
+    ? `${person.name} is the only person who signs in, so this sign-in stays.`
+    : tryAgain;
 }
 
 function NameAndColour(props: {
   person: PersonInfo;
+  working: boolean;
+  onWorkingChange: (working: boolean) => void;
   onSaved: () => Promise<void>;
 }) {
   const ids = useId();
-  const { person } = props;
+  const { person, working } = props;
   const [name, setName] = useState(person.name);
   const [colour, setColour] = useState(person.colour);
-  const [working, setWorking] = useState(false);
   const [problem, setProblem] = useState<string>();
   const trimmed = name.trim();
   const changes: Omit<ChangePerson, "id"> = {
@@ -190,7 +257,7 @@ function NameAndColour(props: {
   const save = async (event: FormEvent) => {
     event.preventDefault();
     if (working || !trimmed || unchanged) return;
-    setWorking(true);
+    props.onWorkingChange(true);
     setProblem(undefined);
     try {
       await coreJson<PersonInfo>("/api/people/update", {
@@ -201,7 +268,7 @@ function NameAndColour(props: {
     } catch {
       setProblem(tryAgain);
     } finally {
-      setWorking(false);
+      props.onWorkingChange(false);
     }
   };
 
@@ -226,6 +293,7 @@ function NameAndColour(props: {
                 setProblem(undefined);
               }}
               className="bg-background"
+              disabled={working}
               required
             />
           </div>
@@ -239,6 +307,7 @@ function NameAndColour(props: {
             setProblem(undefined);
           }}
           surface="var(--card)"
+          disabled={working}
         />
         {problem && (
           <p role="alert" className="m-0 text-sm text-destructive">
@@ -261,7 +330,8 @@ function SignInCard(props: {
   person: PersonInfo;
   signIn: SignIn;
   isLast: boolean;
-  onRemove: () => void;
+  stale: boolean;
+  onRemove: (trigger: HTMLButtonElement) => void;
 }) {
   const clock = useHomeClock();
   const { signIn, person } = props;
@@ -270,10 +340,10 @@ function SignInCard(props: {
     <Section id={`${person.id}-sign-in`} title="Sign-In">
       {signIn.state === "signs-in" ? (
         <div className="flex flex-col gap-3">
-          {signIn.reset ? (
+          {signIn.resetEndsAt ? (
             <Row
               title={`Signs in as ${signIn.username}`}
-              detail={`Password code works until ${untilText(clock, signIn.reset.endsAt)}`}
+              detail={`Password code works until ${untilText(clock, signIn.resetEndsAt)}`}
             />
           ) : (
             <p className="m-0 text-sm">Signs in as {signIn.username}</p>
@@ -281,9 +351,9 @@ function SignInCard(props: {
           <Button
             variant="outline"
             className="self-start"
-            disabled={props.isLast}
+            disabled={props.isLast || props.stale}
             aria-describedby={props.isLast ? noteId : undefined}
-            onClick={props.onRemove}
+            onClick={(event) => props.onRemove(event.currentTarget)}
           >
             Remove sign-in
           </Button>
@@ -307,9 +377,9 @@ function signInText(
 ) {
   switch (signIn.state) {
     case "invited":
-      return `Invite works until ${untilText(clock, signIn.invite.endsAt)}`;
+      return `Invite works until ${untilText(clock, signIn.endsAt)}`;
     case "invite-ended":
-      return signIn.invite.ended === "cancelled"
+      return signIn.ended === "cancelled"
         ? "The code was cancelled."
         : "The code ran out.";
     case "none":
@@ -320,7 +390,8 @@ function signInText(
 function Devices(props: {
   person: PersonInfo;
   devices: ClientInfo[];
-  onSignOut: (client: ClientInfo) => void;
+  stale: boolean;
+  onSignOut: (client: ClientInfo, trigger: HTMLButtonElement) => void;
 }) {
   const clock = useHomeClock();
   return (
@@ -341,7 +412,10 @@ function Devices(props: {
                   size="sm"
                   className="ms-auto"
                   aria-label={`Sign out ${client.name}`}
-                  onClick={() => props.onSignOut(client)}
+                  disabled={props.stale}
+                  onClick={(event) =>
+                    props.onSignOut(client, event.currentTarget)
+                  }
                 >
                   Sign out
                 </Button>

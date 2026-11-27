@@ -467,7 +467,11 @@ export function createLogins(
           clientId: principal.client.id,
           subjectId: input.personId,
         });
-        return clients.revokePersonal(input.personId, now());
+        return clients.revokePersonal(
+          input.personId,
+          now(),
+          input.expectedClientIds,
+        );
       });
       pending.drop(
         (entry) => "personId" in entry && entry.personId === input.personId,

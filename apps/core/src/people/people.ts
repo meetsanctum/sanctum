@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import type { ChangedBy, RecordActivity } from "../activity/activity.js";
+import { assertPersonalClients } from "../auth/clients.js";
 import type { CoreDatabase } from "../database.js";
 import { people } from "./schema.js";
 
@@ -204,9 +205,10 @@ export function createPeople(
     },
 
     // Their login and personal clients go with them (auth/schema.ts).
-    remove(id: string, by?: ChangedBy) {
+    remove(id: string, by?: ChangedBy, expectedClientIds?: readonly string[]) {
       flushChanges();
       const person = db.transaction((tx) => {
+        assertPersonalClients(tx, id, expectedClientIds);
         const removed = tx
           .delete(people)
           .where(eq(people.id, id))

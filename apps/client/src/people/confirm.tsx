@@ -18,8 +18,10 @@ export type Asking = {
   title: string;
   description: string;
   confirm: string;
-  // Does it; a throw keeps the alert open with what went wrong.
-  run: () => Promise<void>;
+  trigger: HTMLButtonElement;
+  notice?: string;
+  // A fresh confirmation or a refusal keeps the alert open.
+  run: () => Promise<void | false>;
   problem: (error: unknown) => string;
 };
 
@@ -45,8 +47,8 @@ export function Confirm(props: {
     setWorking(true);
     setProblem(undefined);
     try {
-      await asking.run();
-      props.onClose();
+      if ((await asking.run()) === false) setWorking(false);
+      else props.onClose();
     } catch (error) {
       setProblem(asking.problem(error));
       setWorking(false);
@@ -60,16 +62,26 @@ export function Confirm(props: {
         if (!open && !working) props.onClose();
       }}
     >
-      <DialogContent showCloseButton={false}>
-        <DialogHeader>
-          <DialogTitle>{asking?.title}</DialogTitle>
-          <DialogDescription>{asking?.description}</DialogDescription>
-        </DialogHeader>
-        {problem && (
-          <p role="alert" className="m-0 text-sm text-destructive">
-            {problem}
-          </p>
-        )}
+      <DialogContent
+        showCloseButton={false}
+        className="max-h-[calc(100vh-2rem)] grid-rows-[minmax(0,1fr)_auto] supports-[height:100dvh]:max-h-[calc(100dvh-2rem)]"
+        onCloseAutoFocus={(event) => {
+          if (!asking?.trigger.isConnected) return;
+          event.preventDefault();
+          asking.trigger.focus();
+        }}
+      >
+        <div className="flex min-h-0 flex-col gap-6 overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{asking?.title}</DialogTitle>
+            <DialogDescription>{asking?.description}</DialogDescription>
+          </DialogHeader>
+          {(problem || asking?.notice) && (
+            <p role="alert" className="m-0 text-sm text-destructive">
+              {problem ?? asking?.notice}
+            </p>
+          )}
+        </div>
         <DialogFooter>
           <Button
             variant="outline"

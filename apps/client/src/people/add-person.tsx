@@ -3,7 +3,7 @@ import type {
   PersonInfo,
 } from "@meetsanctum/auth-protocol";
 import { Button, Input } from "@meetsanctum/ui-sdk";
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent, type RefObject } from "react";
 
 import { ColourPicker, leastUsedColour } from "../colour-picker";
 import { Avatar } from "../components";
@@ -24,6 +24,7 @@ import { coreJson } from "../core-fetch";
 export function AddPerson(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  trigger: RefObject<HTMLButtonElement | null>;
   // The household's colours, so a new person starts with one few have.
   taken: readonly string[];
   onAdded: (person: PersonInfo) => void;
@@ -73,7 +74,13 @@ export function AddPerson(props: {
         if (!working) props.onOpenChange(next);
       }}
     >
-      <DialogContent>
+      <DialogContent
+        onCloseAutoFocus={(event) => {
+          if (!props.trigger.current) return;
+          event.preventDefault();
+          props.trigger.current.focus();
+        }}
+      >
         <form onSubmit={submit} className="flex flex-col gap-5">
           <DialogHeader>
             <DialogTitle>Add a person</DialogTitle>

@@ -120,7 +120,10 @@ const schemas = {
     registrationRecord: message,
     keyStretching: stretching,
   }) satisfies z.ZodType<SetLoginFinish>,
-  removeLogin: z.object({ personId: id }) satisfies z.ZodType<RemoveLogin>,
+  removeLogin: z.object({
+    personId: id,
+    expectedClientIds: z.array(id).optional(),
+  }) satisfies z.ZodType<RemoveLogin>,
   inviteStart: z.object({
     personId: id,
     registrationRequest: message,

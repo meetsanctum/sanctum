@@ -51,7 +51,7 @@ function invite(changes: Partial<InviteInfo>): InviteInfo {
   };
 }
 
-const household: PeopleData = {
+const household: PeopleData & { clients: ClientInfo[] } = {
   people: [
     { id: "alex", name: "Alex Keller", avatar: null, colour: "#c5cdac" },
     { id: "maya", name: "Maya Keller", avatar: null, colour: "#b9defc" },
@@ -68,8 +68,8 @@ const household: PeopleData = {
     invite({ personId: "ida", ended: "cancelled" }),
   ],
   clients: [
-    client({ id: "laptop", name: "MacBook Air", current: true }),
     client({ id: "phone" }),
+    client({ id: "laptop", name: "MacBook Air", current: true }),
     client({ id: "kitchen", kind: "shared", personId: null }),
     client({ id: "alex", personId: "alex" }),
   ],
@@ -80,11 +80,11 @@ describe("signing in", () => {
     expect(signInOf(household, "alex")).toEqual({
       state: "signs-in",
       username: "alex",
-      reset: null,
+      resetEndsAt: null,
     });
     expect(signInOf(household, "maya")).toMatchObject({
       state: "signs-in",
-      reset: { kind: "reset" },
+      resetEndsAt: household.invites[1]!.endsAt,
     });
     expect(signInOf(household, "sam")).toMatchObject({ state: "invited" });
     expect(signInOf(household, "ida")).toMatchObject({
@@ -117,7 +117,7 @@ describe("signing in", () => {
 
 describe("a person's devices", () => {
   it("are their own personal clients, this one first", () => {
-    expect(devicesOf(household, "maya").map(({ id }) => id)).toEqual([
+    expect(devicesOf(household.clients, "maya").map(({ id }) => id)).toEqual([
       "laptop",
       "phone",
     ]);
@@ -137,7 +137,7 @@ describe("a person's devices", () => {
   });
 
   it("are named in the alerts that sign them out", () => {
-    expect(signsOutText(devicesOf(household, "maya"))).toBe(
+    expect(signsOutText(devicesOf(household.clients, "maya"))).toBe(
       "Maya's iPhone signs out now. This device signs out now.",
     );
     expect(

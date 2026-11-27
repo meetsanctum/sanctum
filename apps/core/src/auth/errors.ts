@@ -13,6 +13,7 @@ const statuses: Record<AuthErrorCode, number> = {
   claimed: 409,
   username_taken: 409,
   last_login: 409,
+  devices_changed: 409,
   invite_ended: 410,
   too_many_attempts: 429,
   busy: 429,

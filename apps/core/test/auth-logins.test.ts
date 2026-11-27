@@ -1,6 +1,8 @@
+import { liveInvalidTokenCode } from "@meetsanctum/auth-protocol";
 import { describe, expect, it } from "vitest";
 
 import { authLogins } from "../src/auth/schema.js";
+import { openLive, settled } from "./devices-support.js";
 import {
   hostId,
   changePassword,
@@ -189,16 +191,44 @@ describe("logins", () => {
       password: "jonas's password",
     });
     const phone = await tokenFor(core, "jonas", "jonas's password");
+    const phoneId = core.auth.clients.authenticate(phone)!.client.id;
     const kitchen = sharedClient(core);
+    const connected = await openLive(core, phone);
+    const other = await openLive(core, kitchen.token);
+
+    const refused = await post(
+      core,
+      "/api/auth/logins/remove",
+      { personId: person.id, expectedClientIds: [] },
+      { token: kitchen.token },
+    );
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json()).toEqual({ error: "devices_changed" });
+    expect(connected.socket.readyState).toBe(connected.socket.OPEN);
+    expect((await get(core, "/api/auth/me", { token: phone })).statusCode).toBe(
+      200,
+    );
 
     const removed = await post(
       core,
       "/api/auth/logins/remove",
-      { personId: person.id },
+      { personId: person.id, expectedClientIds: [phoneId] },
       { token: kitchen.token },
     );
 
     expect(removed.statusCode).toBe(204);
+    expect((await connected.closed).code).toBe(liveInvalidTokenCode);
+    await settled();
+    expect(other.messages).toContainEqual(
+      expect.objectContaining({
+        type: "activity",
+        entry: expect.objectContaining({
+          source: "auth",
+          action: "login.remove",
+        }),
+      }),
+    );
+    other.socket.terminate();
     expect((await get(core, "/api/auth/me", { token: phone })).statusCode).toBe(
       401,
     );

@@ -1,7 +1,7 @@
 import type { Me, PersonInfo } from "@meetsanctum/auth-protocol";
-import { Button, useHomeClock } from "@meetsanctum/ui-sdk";
+import { Button, useHomeClock, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { ChevronRight } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 import { productName } from "../brand";
 import { Avatar, Section } from "../components";
@@ -17,12 +17,14 @@ import { signInLine } from "./words";
 export function PeoplePage(props: {
   // The way back to Settings.
   page: ReactNode;
+  live: LiveFeed;
   me?: Me;
   onOpen: (personId: string) => void;
 }) {
   const clock = useHomeClock();
-  const { data, failed, refresh } = usePeople();
+  const { data, failed } = usePeople(props.live);
   const [adding, setAdding] = useState(false);
+  const addButton = useRef<HTMLButtonElement>(null);
   const you = props.me?.client.kind === "personal" ? props.me.person?.id : null;
   const people = data?.people ?? [];
 
@@ -33,7 +35,11 @@ export function PeoplePage(props: {
         title="People"
         page={props.page}
         hideBody={!data && !failed}
-        action={<Button onClick={() => setAdding(true)}>Add a person</Button>}
+        action={
+          <Button ref={addButton} onClick={() => setAdding(true)}>
+            Add a person
+          </Button>
+        }
       >
         {data ? (
           <ul className="m-0 -mx-2.5 -my-2 flex list-none flex-col p-0">
@@ -56,18 +62,16 @@ export function PeoplePage(props: {
       {data && (
         <p className="m-0 shrink-0 px-1 text-[13px] leading-[18px] font-medium text-muted-foreground">
           {people.length <= 1
-            ? "Add the people who live here. They can sign in on their own phone or computer."
+            ? "Add the people who live here."
             : `Everyone who lives here. People who sign in can use ${productName} on their own phone or computer.`}
         </p>
       )}
       <AddPerson
         open={adding}
         onOpenChange={setAdding}
+        trigger={addButton}
         taken={people.map((person) => person.colour)}
-        onAdded={(person) => {
-          void refresh();
-          props.onOpen(person.id);
-        }}
+        onAdded={(person) => props.onOpen(person.id)}
       />
     </>
   );

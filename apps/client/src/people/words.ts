@@ -1,4 +1,7 @@
-import type { HomeClock } from "@meetsanctum/app-sdk/clock";
+import {
+  calendarDaysBetween,
+  type HomeClock,
+} from "@meetsanctum/app-sdk/clock";
 import type { ClientInfo } from "@meetsanctum/auth-protocol";
 
 import type { SignIn } from "./data";
@@ -24,13 +27,13 @@ export function firstName(name: string) {
   return name.trim().split(/\s+/)[0] ?? name;
 }
 
-const dayMs = 24 * 60 * 60_000;
-
 /** When something ends, as people say it: today at 21:40, tomorrow at 21:40. */
 export function untilText(clock: HomeClock, at: string, now = new Date()) {
   const end = new Date(at);
-  const days = Math.round(
-    (clock.startOfDay(end.getTime()) - clock.startOfDay(now.getTime())) / dayMs,
+  const days = calendarDaysBetween(
+    now.getTime(),
+    end.getTime(),
+    clock.timeZone,
   );
   const day =
     days === 0 ? "today" : days === 1 ? "tomorrow" : `on ${clock.dayText(end)}`;
@@ -43,7 +46,7 @@ export function signInLine(clock: HomeClock, signIn: SignIn, now?: Date) {
     case "signs-in":
       return "Signs in";
     case "invited":
-      return `Invite works until ${untilText(clock, signIn.invite.endsAt, now)}`;
+      return `Invite works until ${untilText(clock, signIn.endsAt, now)}`;
     case "invite-ended":
       return "Invite ended";
     case "none":
@@ -61,9 +64,10 @@ export function usedText(
   if (client.connectedSince) return "Used today";
   if (!client.lastSeenAt) return "Not used yet";
   const seen = new Date(client.lastSeenAt);
-  const days = Math.round(
-    (clock.startOfDay(now.getTime()) - clock.startOfDay(seen.getTime())) /
-      dayMs,
+  const days = calendarDaysBetween(
+    seen.getTime(),
+    now.getTime(),
+    clock.timeZone,
   );
   if (days <= 0) return "Used today";
   if (days === 1) return "Used yesterday";
