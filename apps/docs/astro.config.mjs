@@ -33,6 +33,10 @@ export default defineConfig({
           items: [{ autogenerate: { directory: "install" } }],
         },
         {
+          label: "People",
+          items: [{ autogenerate: { directory: "people" } }],
+        },
+        {
           label: "Devices",
           items: [{ autogenerate: { directory: "devices" } }],
         },

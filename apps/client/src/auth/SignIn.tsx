@@ -53,6 +53,9 @@ export function SignIn(props: {
   // and what follows once it is forgotten.
   recheck?: StoredHost;
   onForgotten?: () => void;
+  // Joining with an invite code instead, for someone who doesn't sign in
+  // yet or chooses a new password.
+  onJoin?: () => void;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -151,6 +154,18 @@ export function SignIn(props: {
           >
             {working ? <Busy>Signing in…</Busy> : "Sign in"}
           </Button>
+          {props.onJoin && (
+            <Button
+              variant="link"
+              type="button"
+              onClick={() => {
+                attempt.cancel();
+                props.onJoin?.();
+              }}
+            >
+              I have an invite code
+            </Button>
+          )}
           {props.recheck && props.onForgotten && isAnotherHome && (
             <ChooseAnotherHome
               host={props.recheck}

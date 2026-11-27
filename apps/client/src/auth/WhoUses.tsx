@@ -4,7 +4,7 @@ import type { FoundHost } from "../shell";
 import { Sheet, SheetRow } from "./sheet";
 
 // How this device joins a home: as someone's own, signed in with their
-// username and password, or as a shared device such as a wall display,
+// username and password or joined with an invite code, or as a shared device such as a wall display,
 // which nobody signs in on and another device approves. Both ways weigh the
 // same here, so a wall display never opens on a password form.
 export function WhoUses(props: {
@@ -24,7 +24,7 @@ export function WhoUses(props: {
           <SheetRow
             icon={User}
             name="Just me"
-            detail="Sign in with your username and password."
+            detail="Sign in, or join with an invite code."
             onClick={props.onPersonal}
           />
         </li>

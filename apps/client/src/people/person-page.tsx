@@ -12,12 +12,21 @@ import {
   useHomeClock,
   type LiveFeed,
 } from "@meetsanctum/ui-sdk";
-import { useEffect, useId, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 
 import { ColourPicker } from "../colour-picker";
 import { Avatar, BackButton, Row, Section } from "../components";
 import { CoreError, coreJson } from "../core-fetch";
 import { Confirm, type Asking } from "./confirm";
+import { InviteDialog, type Inviting } from "./invite-dialog";
+import { cancelInvite } from "./invites";
 import {
   devicesOf,
   holdsLastSignIn,
@@ -46,14 +55,28 @@ const tryAgain = "That didn't work. Try again.";
 export function PersonPage(props: {
   live: LiveFeed;
   personId: string;
+  // This device's own person, on a personal device.
+  you?: string | null;
+  // Just added: asks whether they will sign in, once.
+  ask?: boolean;
   back: () => void;
   backTo?: string;
 }) {
   const { data, failed, refresh } = usePeople(props.live, true);
   const [asking, setAsking] = useState<Asking>();
+  const [inviting, setInviting] = useState<Inviting>();
+  const [codeProblem, setCodeProblem] = useState<string>();
   const [saving, setSaving] = useState(false);
   const person = data?.people.find((each) => each.id === props.personId);
   const { back } = props;
+
+  // A person just added: whether they will sign in, asked once.
+  const asked = useRef(false);
+  useEffect(() => {
+    if (!props.ask || asked.current || !person) return;
+    asked.current = true;
+    setInviting({ person, kind: "invite", ask: true });
+  }, [props.ask, person]);
 
   // Removed here or elsewhere: the page has nothing left to show.
   const gone = !!data && !person;
@@ -92,6 +115,15 @@ export function PersonPage(props: {
   const isLast = holdsLastSignIn(data, person.id);
   const done = async () => {
     await refresh();
+  };
+  const cancelCode = async () => {
+    setCodeProblem(undefined);
+    try {
+      await cancelInvite(person.id);
+    } catch {
+      setCodeProblem(tryAgain);
+    }
+    await done();
   };
 
   function askRemoval(
@@ -160,9 +192,12 @@ export function PersonPage(props: {
       <SignInCard
         person={person}
         signIn={signIn}
+        isYou={props.you === person.id}
         isLast={isLast}
         stale={failed}
         onRemove={(trigger) => askRemoval(data, person, "sign-in", trigger)}
+        onInvite={(kind) => setInviting({ person, kind })}
+        onCancelCode={() => void cancelCode()}
       />
       {(signIn.state === "signs-in" || devices.length > 0) && (
         <Devices
@@ -199,7 +234,17 @@ export function PersonPage(props: {
           Remove {person.name}
         </Button>
       </div>
+      {codeProblem && (
+        <p role="alert" className="m-0 shrink-0 text-sm text-destructive">
+          {codeProblem}
+        </p>
+      )}
       <Confirm asking={asking} onClose={() => setAsking(undefined)} />
+      <InviteDialog
+        inviting={inviting}
+        onClose={() => setInviting(undefined)}
+        onMade={() => void refresh()}
+      />
     </>
   );
 }
@@ -303,13 +348,21 @@ function NameAndColour(props: {
 function SignInCard(props: {
   person: PersonInfo;
   signIn: SignIn;
+  // Whether it's this device's own person, who changes their password
+  // rather than resetting it.
+  isYou: boolean;
   isLast: boolean;
   stale: boolean;
   onRemove: (trigger: HTMLButtonElement) => void;
+  onInvite: (kind: "invite" | "reset") => void;
+  onCancelCode: () => void;
 }) {
   const clock = useHomeClock();
   const { signIn, person } = props;
   const noteId = `${person.id}-last`;
+  const actions = (children: ReactNode) => (
+    <div className="flex flex-wrap gap-2">{children}</div>
+  );
   return (
     <Section id={`${person.id}-sign-in`} title="Sign-In">
       {signIn.state === "signs-in" ? (
@@ -322,15 +375,37 @@ function SignInCard(props: {
           ) : (
             <p className="m-0 text-sm">Signs in as {signIn.username}</p>
           )}
-          <Button
-            variant="outline"
-            className="self-start"
-            disabled={props.isLast || props.stale}
-            aria-describedby={props.isLast ? noteId : undefined}
-            onClick={(event) => props.onRemove(event.currentTarget)}
-          >
-            Remove sign-in
-          </Button>
+          {actions(
+            <>
+              {signIn.resetEndsAt ? (
+                <Button
+                  variant="outline"
+                  disabled={props.stale}
+                  onClick={props.onCancelCode}
+                >
+                  Cancel code
+                </Button>
+              ) : (
+                !props.isYou && (
+                  <Button
+                    variant="outline"
+                    disabled={props.stale}
+                    onClick={() => props.onInvite("reset")}
+                  >
+                    Reset password
+                  </Button>
+                )
+              )}
+              <Button
+                variant="outline"
+                disabled={props.isLast || props.stale}
+                aria-describedby={props.isLast ? noteId : undefined}
+                onClick={(event) => props.onRemove(event.currentTarget)}
+              >
+                Remove sign-in
+              </Button>
+            </>,
+          )}
           {props.isLast && (
             <p id={noteId} className={`m-0 ${label}`}>
               {person.name} is the only person who signs in, so this sign-in
@@ -339,7 +414,38 @@ function SignInCard(props: {
           )}
         </div>
       ) : (
-        <p className="m-0 text-sm">{signInText(clock, signIn)}</p>
+        <div className="flex flex-col gap-3">
+          <p className="m-0 text-sm">{signInText(clock, signIn)}</p>
+          {actions(
+            signIn.state === "invited" ? (
+              <>
+                <Button
+                  variant="outline"
+                  disabled={props.stale}
+                  onClick={() => props.onInvite("invite")}
+                >
+                  New invite code
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={props.stale}
+                  onClick={props.onCancelCode}
+                >
+                  Cancel invite
+                </Button>
+              </>
+            ) : (
+              <Button
+                disabled={props.stale}
+                onClick={() => props.onInvite("invite")}
+              >
+                {signIn.state === "invite-ended"
+                  ? "New invite code"
+                  : "Invite to sign in"}
+              </Button>
+            ),
+          )}
+        </div>
       )}
     </Section>
   );

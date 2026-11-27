@@ -217,7 +217,7 @@ it("adds a person and opens their Settings page using the returned ID", async ()
     method: "POST",
     json: { name: "Ida West", colour: "#fcd2b3" },
   });
-  expect(opened).toEqual([["person", { id: added.id }]]);
+  expect(opened).toEqual([["person", { id: added.id, added: "yes" }]]);
 
   const [page, params] = opened[0]!;
   await show({ page, params });

@@ -12,6 +12,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CoreError, coreJson } from "../src/core-fetch";
+import { cancelInvite, makeInvite } from "../src/people/invites";
 import { PeoplePage } from "../src/people/people-page";
 import { PersonPage } from "../src/people/person-page";
 import { entry } from "./activity-fixtures";
@@ -20,6 +21,10 @@ import { entry } from "./activity-fixtures";
 // signs in, and removing a sign-in or a person asks first, naming what
 // ends, and never takes the home's last sign-in.
 
+vi.mock("../src/people/invites", () => ({
+  makeInvite: vi.fn(),
+  cancelInvite: vi.fn(),
+}));
 vi.mock("../src/core-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/core-fetch")>()),
   coreJson: vi.fn(),
@@ -426,5 +431,97 @@ describe("a person's page", () => {
     expect(posted).toEqual([["/api/people/remove", { id: "sam" }]]);
     expect(back).toHaveBeenCalledOnce();
     expect(container.textContent).not.toContain("Sam");
+  });
+});
+
+describe("inviting someone to sign in", () => {
+  async function show(
+    personId: string,
+    options: { you?: string; ask?: boolean } = {},
+  ) {
+    await act(async () =>
+      root.render(
+        <PersonPage
+          live={live}
+          personId={personId}
+          you={options.you}
+          ask={options.ask}
+          back={() => {}}
+        />,
+      ),
+    );
+  }
+
+  beforeEach(() => {
+    vi.mocked(makeInvite).mockReset();
+    vi.mocked(cancelInvite).mockReset();
+    vi.mocked(makeInvite).mockResolvedValue({
+      code: "K7QXM4PD",
+      info: {
+        personId: "sam",
+        kind: "invite",
+        createdAt: new Date().toISOString(),
+        endsAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+        ended: null,
+      },
+    });
+  });
+
+  it("shows the code once, with the steps on the person's device", async () => {
+    await show("sam");
+    await act(async () => button("Invite to sign in")!.click());
+    await act(nextTick);
+
+    expect(makeInvite).toHaveBeenCalledWith("sam", expect.any(AbortSignal));
+    expect(dialog().textContent).toContain("Invite Sam to sign in");
+    expect(dialog().textContent).toContain("K7QX-M4PD");
+    expect(dialog().textContent).toContain(
+      "You can’t see it again after you close this.",
+    );
+    expect(dialog().textContent).toContain(
+      "On Sam’s phone or computer, open Sanctum and choose your home.",
+    );
+    expect(dialog().textContent).toContain(
+      "Choose Just me, then I have an invite code.",
+    );
+    await confirm("Done");
+    await act(nextTick);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it("asks whether someone just added will sign in, and Not now makes no code", async () => {
+    await show("sam", { ask: true });
+    await act(nextTick);
+    expect(dialog().textContent).toContain("Will Sam sign in?");
+    await confirm("Not now");
+    expect(makeInvite).not.toHaveBeenCalled();
+  });
+
+  it("offers a new code or cancelling while an invite waits", async () => {
+    invites = [
+      {
+        personId: "sam",
+        kind: "invite",
+        createdAt: new Date().toISOString(),
+        endsAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+        ended: null,
+      },
+    ];
+    await show("sam");
+    expect(container.textContent).toContain("Invite works until");
+    expect(button("New invite code")).toBeDefined();
+
+    await act(async () => button("Cancel invite")!.click());
+    expect(cancelInvite).toHaveBeenCalledWith("sam");
+  });
+
+  it("resets someone else's password, never your own", async () => {
+    await show("maya", { you: "alex" });
+    expect(button("Reset password")).toBeDefined();
+
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await show("alex", { you: "alex" });
+    expect(button("Reset password")).toBeUndefined();
   });
 });
