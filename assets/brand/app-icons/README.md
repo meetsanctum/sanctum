@@ -10,14 +10,15 @@ Lossless WebP exports sit beside them. The shell's `AppIcon`
 (`apps/client/src/app-icon.tsx`) selects artwork by the manifest's glyph and
 colour; other pairs keep the standard line icon.
 
-| App           | Glyph         | Colour   | Master                                                      |
-| ------------- | ------------- | -------- | ----------------------------------------------------------- |
-| Settings      | `settings`    | Graphite | <img src="settings.png" width="64" height="64" alt="">      |
-| Moods         | `swatch-book` | Ember    | <img src="moods.png" width="64" height="64" alt="">         |
-| Automations   | `sparkles`    | Blossom  | <img src="automations.png" width="64" height="64" alt="">   |
-| Weather       | `cloud-sun`   | Sky      | <img src="weather.png" width="64" height="64" alt="">       |
-| Natural Light | `sun`         | Sun      | <img src="natural-light.png" width="64" height="64" alt=""> |
-| Zigbee        | `radio-tower` | Graphite | <img src="zigbee.png" width="64" height="64" alt="">        |
+| App           | Glyph                 | Colour   | Master                                                      |
+| ------------- | --------------------- | -------- | ----------------------------------------------------------- |
+| Settings      | `settings`            | Graphite | <img src="settings.png" width="64" height="64" alt="">      |
+| Moods         | `swatch-book`         | Ember    | <img src="moods.png" width="64" height="64" alt="">         |
+| Automations   | `sparkles`            | Blossom  | <img src="automations.png" width="64" height="64" alt="">   |
+| Weather       | `cloud-sun`           | Sky      | <img src="weather.png" width="64" height="64" alt="">       |
+| Natural Light | `sun`                 | Sun      | <img src="natural-light.png" width="64" height="64" alt=""> |
+| Zigbee        | `radio-tower`         | Graphite | <img src="zigbee.png" width="64" height="64" alt="">        |
+| Assistant     | `message-circle-more` | Iris     | <img src="assistant.png" width="64" height="64" alt="">     |
 
 Moods owns the colour swatches, Automations the two sparkles.
 Zigbee keeps the radio symbol rather than the Zigbee logo, which needs the

@@ -20,6 +20,7 @@ describe("approved app artwork", () => {
     ["cloud-sun", "sky", "weather"],
     ["sun", "sun", "natural-light"],
     ["radio-tower", "graphite", "zigbee"],
+    ["message-circle-more", "iris", "assistant"],
   ] as const)("renders %s/%s as %s artwork", (glyph, color, asset) => {
     const markup = renderToStaticMarkup(<AppIcon icon={{ glyph, color }} />);
     expect(markup).toContain(`/app-icons/${asset}.webp`);

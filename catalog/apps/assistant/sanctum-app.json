@@ -1,0 +1,141 @@
+{
+  "id": "sanctum.assistant",
+  "name": "Assistant",
+  "version": "0.1.0",
+  "core": "^2.0.0",
+  "protocol": 28,
+  "summary": "Does what you ask your smart speakers or type to Sanctum.",
+  "runtime": {
+    "memory": 128,
+    "data": 256
+  },
+  "migrations": null,
+  "requests": true,
+  "sentences": {
+    "en": [
+      "(turn|switch) (on|off) [the] {light}",
+      "(turn|switch) [the] {light} (on|off)",
+      "(turn|switch) (on|off) [the] (light|lights) in [the] {room}",
+      "(turn|switch) [the] (light|lights) in [the] {room} (on|off)",
+      "(turn|switch) (on|off) [the] {room} (light|lights)",
+      "(turn|switch) [the] {room} (light|lights) (on|off)",
+      "{room} (light|lights) (on|off)",
+      "(turn|switch) (on|off) [the] (light|lights) on [the] {floor}",
+      "(turn|switch) (on|off) [the] {floor} (light|lights)",
+      "(turn|switch) (on|off) all [of] [the] lights",
+      "(turn|switch) all [of] [the] lights (on|off)",
+      "(turn|switch) (on|off) [the] lights (everywhere|in the whole (house|home))",
+      "(turn|switch) (on|off) [the] (light|lights)",
+      "(turn|switch) [the] (light|lights) (on|off)",
+      "[the] (light|lights) (on|off)",
+      "(make|turn) [the] {light} (brighter|up|dimmer|down)",
+      "(make|turn) [the] (light|lights) in [the] {room} (brighter|up|dimmer|down)",
+      "(make|turn) [the] {room} (light|lights) (brighter|up|dimmer|down)",
+      "(dim|brighten) [the] (light|lights) in [the] {room}",
+      "(make|turn) [the] (light|lights) on [the] {floor} (brighter|up|dimmer|down)",
+      "(make|turn) all [of] [the] lights (brighter|up|dimmer|down)",
+      "(make|turn) [the] (light|lights) (brighter|up|dimmer|down)",
+      "(dim|brighten) [the] (light|lights)",
+      "[the] (light|lights) (brighter|up|dimmer|down)",
+      "(set|dim|turn) [the] {light} to (five|ten|twenty|twenty five|thirty|forty|fifty|sixty|seventy|seventy five|eighty|ninety|a hundred|one hundred) percent",
+      "(set|dim|turn) [the] (light|lights) in [the] {room} to (five|ten|twenty|twenty five|thirty|forty|fifty|sixty|seventy|seventy five|eighty|ninety|a hundred|one hundred) percent",
+      "(set|dim|turn) [the] {room} (light|lights) to (five|ten|twenty|twenty five|thirty|forty|fifty|sixty|seventy|seventy five|eighty|ninety|a hundred|one hundred) percent",
+      "(set|dim|turn) [the] (light|lights) on [the] {floor} to (five|ten|twenty|twenty five|thirty|forty|fifty|sixty|seventy|seventy five|eighty|ninety|a hundred|one hundred) percent",
+      "(set|dim|turn) all [of] [the] lights to (five|ten|twenty|twenty five|thirty|forty|fifty|sixty|seventy|seventy five|eighty|ninety|a hundred|one hundred) percent",
+      "(set|dim|turn) [the] (light|lights) to (five|ten|twenty|twenty five|thirty|forty|fifty|sixty|seventy|seventy five|eighty|ninety|a hundred|one hundred) percent",
+      "(put|change|set) it back",
+      "(put|turn) [the] lights back",
+      "undo [that|it]",
+      "(set|start) a timer [for (one|two|three|five|ten|fifteen|twenty|thirty|forty five|sixty) (second|seconds|minute|minutes|hour|hours)]",
+      "(set|start) a (one|two|three|five|ten|fifteen|twenty|thirty|forty five|sixty) (second|minute|hour) timer"
+    ],
+    "de": [
+      "(schalte|schalt|mach|mache) [das|die|den] {light} (an|ein|aus)",
+      "(schalte|schalt|mach|mache) [das|die] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {room} (an|ein|aus)",
+      "(schalte|schalt|mach|mache) (im|in der|in den|in|auf dem|auf der) {room} [das|die] (Licht|Lichter|Lampen) (an|ein|aus)",
+      "(Licht|Lichter) (im|in der|in den|in|auf dem|auf der) {room} (an|ein|aus)",
+      "(schalte|schalt|mach|mache) [das|die] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {floor} (an|ein|aus)",
+      "(schalte|schalt|mach|mache) alle (Lichter|Lampen) (an|ein|aus)",
+      "(schalte|schalt|mach|mache) [das|die] (Licht|Lichter|Lampen) (überall|im ganzen Haus) (an|ein|aus)",
+      "(schalte|schalt|mach|mache) überall [das|die] (Licht|Lichter|Lampen) (an|ein|aus)",
+      "(schalte|schalt|mach|mache) [das|die] (Licht|Lichter|Lampen) (an|ein|aus)",
+      "[das] (Licht|Lichter) (an|ein|aus)",
+      "(mach|mache) [das|die|den] {light} (heller|dunkler)",
+      "(mach|mache) [das|die] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {room} (heller|dunkler)",
+      "(dimm|dimme) [das|die] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {room}",
+      "(mach|mache) [das|die] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {floor} (heller|dunkler)",
+      "(mach|mache) alle (Lichter|Lampen) (heller|dunkler)",
+      "(mach|mache) [das|die] (Licht|Lichter|Lampen) (heller|dunkler)",
+      "(dimm|dimme) [das|die] (Licht|Lichter|Lampen)",
+      "(stell|stelle|dimm|dimme|mach|mache) [das|die|den] {light} auf (fünf|zehn|zwanzig|fünfundzwanzig|dreißig|vierzig|fünfzig|sechzig|siebzig|fünfundsiebzig|achtzig|neunzig|hundert) Prozent",
+      "(stell|stelle|dimm|dimme|mach|mache) [das|die] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {room} auf (fünf|zehn|zwanzig|fünfundzwanzig|dreißig|vierzig|fünfzig|sechzig|siebzig|fünfundsiebzig|achtzig|neunzig|hundert) Prozent",
+      "(stell|stelle|dimm|dimme|mach|mache) [das|die] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {floor} auf (fünf|zehn|zwanzig|fünfundzwanzig|dreißig|vierzig|fünfzig|sechzig|siebzig|fünfundsiebzig|achtzig|neunzig|hundert) Prozent",
+      "(stell|stelle|dimm|dimme|mach|mache) alle (Lichter|Lampen) auf (fünf|zehn|zwanzig|fünfundzwanzig|dreißig|vierzig|fünfzig|sechzig|siebzig|fünfundsiebzig|achtzig|neunzig|hundert) Prozent",
+      "(stell|stelle|dimm|dimme|mach|mache) [das|die] (Licht|Lichter|Lampen) auf (fünf|zehn|zwanzig|fünfundzwanzig|dreißig|vierzig|fünfzig|sechzig|siebzig|fünfundsiebzig|achtzig|neunzig|hundert) Prozent",
+      "(mach|mache) das rückgängig",
+      "(stell|stelle) [es|das] [wieder] zurück",
+      "rückgängig",
+      "(stell|stelle|setz|setze|starte) [einen] (Timer|Wecker) [(auf|für) (eine|einer|zwei|drei|fünf|zehn|fünfzehn|zwanzig|dreißig|sechzig) (Sekunde|Sekunden|Minute|Minuten|Stunde|Stunden)]"
+    ]
+  },
+  "notUnderstood": {
+    "en": "I can only help with lights.",
+    "de": "Ich kann nur mit dem Licht helfen."
+  },
+  "driver": null,
+  "permissions": [
+    {
+      "id": "ai.assistant",
+      "reason": "To do what you ask, with what AI agents may use.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    }
+  ],
+  "icon": {
+    "glyph": "message-circle-more",
+    "color": "iris"
+  },
+  "pages": [],
+  "settings": null,
+  "actions": [
+    {
+      "id": "assistant.language",
+      "title": "Language",
+      "tier": "write",
+      "input": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "de"
+            ]
+          }
+        },
+        "required": [
+          "language"
+        ]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "assistant": null
+    }
+  ],
+  "events": [],
+  "provides": {
+    "entities": [],
+    "widgets": [],
+    "roomSections": [],
+    "devicePages": [],
+    "triggers": [],
+    "conditions": [],
+    "steps": []
+  }
+}

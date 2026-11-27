@@ -617,6 +617,7 @@ describe("the catalog's apps, from their packages", () => {
   it("have manifests whose every schema compiles", () => {
     expect(packages.map(({ app }) => app.id).sort()).toEqual([
       "sanctum.apple-home-devices",
+      "sanctum.assistant",
       "sanctum.esphome",
       "sanctum.moods",
       "sanctum.natural-light",
@@ -675,7 +676,17 @@ describe("the catalog's apps, from their packages", () => {
       { token },
     );
 
+    // The Assistant matches a typed request with the home's names and asks
+    // the lights tool, which finds none in the new room.
+    const asked = await post(
+      started,
+      "/api/assistant/ask",
+      { text: "Turn off the lights in the den" },
+      { token },
+    );
+
     expect(moods.statusCode).toBe(200);
+    expect(asked.json()).toEqual({ reply: "No lights in Den." });
     expect(refused.statusCode).toBe(400);
     expect(settings.statusCode).toBe(400);
     expect(
