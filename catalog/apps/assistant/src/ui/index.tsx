@@ -89,7 +89,7 @@ function HearingLine(props: { hearing: Hearing }) {
   if (props.hearing.state === "ready") {
     return <Ready language={props.hearing.language} />;
   }
-  return words.step ? <StepBar label={words.step} /> : null;
+  return words?.step ? <StepBar label={words.step} /> : null;
 }
 
 function HearingCard(props: {
@@ -105,6 +105,8 @@ function HearingCard(props: {
     return <MutedCard />;
   }
   const words = hearingWords(hearing);
+  // The shell's own notice says it's off and opens its settings.
+  if (!words) return null;
   return (
     <section
       aria-labelledby={id}
@@ -134,13 +136,6 @@ function HearingCard(props: {
       {words.action === "addDevices" && (
         <div className="flex">
           <Button onClick={() => page.addDevices()}>Add a smart speaker</Button>
-        </div>
-      )}
-      {words.action === "settings" && (
-        <div className="flex">
-          <Button variant="outline" onClick={page.openSettings}>
-            Open settings
-          </Button>
         </div>
       )}
     </section>

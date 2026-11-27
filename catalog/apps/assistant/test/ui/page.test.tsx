@@ -367,7 +367,7 @@ describe("the Assistant's page", () => {
     expect(segment?.classList.contains("ml-[35%]")).toBe(true);
   });
 
-  it("says why it can't listen, with settings when it's off", async () => {
+  it("says why it can't listen, and leaves its being off to the shell", async () => {
     const { client } = fakeClient({
       hearing: {
         state: "failed",
@@ -377,11 +377,12 @@ describe("the Assistant's page", () => {
       },
       devices: [office],
     });
-    const props = await show(client);
+    await show(client);
 
-    expect(text()).toContain("The Assistant is off");
-    await press("Open settings");
-    expect(props.openSettings).toHaveBeenCalledOnce();
+    // The shell's notice says it's paused and opens its settings.
+    expect(text()).not.toContain("The Assistant is off");
+    expect(button("Open settings")).toBeUndefined();
+    expect(text()).toContain("Language");
 
     const memory = fakeClient({
       hearing: {
