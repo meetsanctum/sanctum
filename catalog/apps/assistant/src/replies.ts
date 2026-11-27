@@ -1,4 +1,4 @@
-import { replyTextMaxLength, type RequestLanguage } from "@meetsanctum/app-sdk";
+import { replyTextMaxLength, type SpeechLanguage } from "@meetsanctum/app-sdk";
 
 import { agentsPage } from "./tools.js";
 
@@ -247,4 +247,4 @@ const de: Replies = {
   },
 };
 
-export const replies: Record<RequestLanguage, Replies> = { en, de };
+export const replies: Record<SpeechLanguage, Replies> = { en, de };

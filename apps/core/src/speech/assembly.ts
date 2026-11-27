@@ -2,8 +2,10 @@ import {
   announcePermission,
   assistantAppId,
   moodType,
+  speechLanguages,
   type Hearing,
-  type RequestLanguage,
+  type Language,
+  type SpeechLanguage,
 } from "@meetsanctum/app-sdk";
 
 import type { AgentsCanUse } from "../agents/can-use.js";
@@ -12,7 +14,7 @@ import type { ManagerClient } from "../manager.js";
 import { createAnnouncements } from "./announcements.js";
 import { assembleHearing, hasListeningPart } from "./hearing.js";
 import { createLearning } from "./learning.js";
-import { createSpeech, speechLanguages, speechService } from "./speech.js";
+import { createSpeech, speechService } from "./speech.js";
 import { spokenPhrases } from "./spoken.js";
 
 type HearingOptions = Parameters<typeof assembleHearing>[0];
@@ -32,7 +34,7 @@ export function assembleSpeakerAudio(
       speechRetrainAfterMs?: number;
     },
   options: Pick<HearingOptions, "devices" | "apps" | "record"> & {
-    places: HearingOptions["places"] & { language(): RequestLanguage };
+    places: HearingOptions["places"] & { language(): Language };
     canUse: Pick<AgentsCanUse, "areaOn">;
     // The home's moods, by the standard type whatever app keeps them.
     entities: Pick<Entities, "list">;
@@ -98,7 +100,7 @@ export function assembleSpeakerAudio(
     // like "One moment".
     keptPhrases: () =>
       Object.entries(assistant()?.notUnderstood ?? {}).map(
-        ([language, text]) => ({ language: language as RequestLanguage, text }),
+        ([language, text]) => ({ language: language as SpeechLanguage, text }),
       ),
   });
   const hearing = assembleHearing({
@@ -152,7 +154,7 @@ export function assembleSpeech(options: {
   areaOn: () => boolean;
   hears?: () => boolean;
   // Phrases kept ready besides the core's own.
-  keptPhrases?: () => readonly { language: RequestLanguage; text: string }[];
+  keptPhrases?: () => readonly { language: SpeechLanguage; text: string }[];
   log: (message: string) => void;
 }) {
   const { speaker, manager, devices, areaOn, log } = options;

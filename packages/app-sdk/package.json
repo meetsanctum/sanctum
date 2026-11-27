@@ -13,6 +13,10 @@
       "types": "./dist/clock.d.ts",
       "default": "./dist/clock.js"
     },
+    "./languages": {
+      "types": "./dist/languages.d.ts",
+      "default": "./dist/languages.js"
+    },
     "./protocol": {
       "types": "./dist/protocol.d.ts",
       "default": "./dist/protocol.js"

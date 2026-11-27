@@ -1,7 +1,10 @@
 import {
   announcePermission,
+  languages,
+  speechLanguages,
   type AiCanUse,
   type DeviceInfo,
+  type SpeechLanguage,
 } from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
@@ -9,11 +12,9 @@ import type { ActivityAuthor, NewActivityEntry } from "../activity/activity.js";
 import { announcementCapability } from "../devices/announce.js";
 import { AnnouncementRefused } from "../speech/announcements.js";
 import {
-  speechLanguages,
   SpeechSwitchedOff,
   SpeechUnavailable,
   type Speech,
-  type SpeechLanguage,
 } from "../speech/speech.js";
 import {
   answer,
@@ -42,11 +43,6 @@ class NotHeard extends Error {
     super("The speaker wouldn't be heard");
   }
 }
-
-const languageNames: Record<SpeechLanguage, string> = {
-  en: "English",
-  de: "German",
-};
 
 const announceLimits = {
   // Each agent's, and the home's, in the last minute.
@@ -124,7 +120,10 @@ export function createAnnounceTool(options: {
         `The speakers, by id: ${speakers()
           .map((device) => `${device.id} (${JSON.stringify(device.name)})`)
           .join(", ")}.`,
-        `\`text\` is up to ${maxAnnouncementText} characters, said as written in \`language\`: the home's, ${languageNames[options.language()]}, unless the person speaks ${options.language() === "en" ? "German" : "English"}.`,
+        `\`text\` is up to ${maxAnnouncementText} characters, said as written in \`language\`: the home's, ${languages[options.language()].englishName}, unless the person speaks ${speechLanguages
+          .filter((language) => language !== options.language())
+          .map((language) => languages[language].englishName)
+          .join(" or ")}.`,
         "Each speaker says one thing at a time: what you send while it speaks waits its turn, up to two waiting, and the call answers once it's sent. A few a minute per speaker. A speaker says nothing while offline, muted or turned all the way down.",
         "Announce only what the person asked to have said, and say where it went.",
         notInstructions,
