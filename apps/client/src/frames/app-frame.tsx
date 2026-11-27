@@ -4,7 +4,7 @@ import {
   type FrameContext,
   type PageParams,
 } from "@meetsanctum/ui-sdk";
-import { appIconSchema, type AppInfo } from "@meetsanctum/app-sdk";
+import type { AppInfo } from "@meetsanctum/app-sdk";
 import { cn } from "cn";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -163,20 +163,21 @@ export function AppFrame(props: {
 // While it opens, two sections in the page's place, each a heading over a
 // card, still rather than pulsing so a wall display has nothing to draw.
 // They lie over the frame, which keeps its size, so the page lays itself
-// out once. Past 5 s a line under them says it's taking longer than usual.
+// out once. Past 5 s a line under them says it's taking longer than usual;
+// in a short window the cards give up height so the line stays in view.
 function Opening(props: { name: string; isSlow: boolean }) {
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 flex flex-col gap-3">
-      <Skeleton className="h-3.5 w-28" />
-      <Skeleton className="h-54 rounded-lg" />
-      <Skeleton className="mt-5 h-3.5 w-21" />
-      <Skeleton className="h-38 rounded-lg" />
+    <div className="pointer-events-none absolute inset-0 flex flex-col gap-3 overflow-hidden">
+      <Skeleton className="h-3.5 w-28 shrink-0" />
+      <Skeleton className="h-54 min-h-0 rounded-lg" />
+      <Skeleton className="mt-5 h-3.5 w-21 shrink-0" />
+      <Skeleton className="h-38 min-h-0 rounded-lg" />
       <div
         role="status"
         aria-atomic="true"
         className={
           props.isSlow
-            ? "mt-8 flex items-center justify-center gap-3 text-center"
+            ? "mt-8 flex shrink-0 items-center justify-center gap-3 text-center"
             : "sr-only"
         }
       >
@@ -203,13 +204,12 @@ function DidntOpen(props: {
   tryAgain: () => void;
 }) {
   const { name } = props.app;
-  const icon = appIconSchema.safeParse(props.app.icon);
   return (
     <Empty role="alert">
       <EmptyHeader>
         <EmptyMedia className="relative">
           <AppIcon
-            icon={icon.success ? icon.data : plainIcon}
+            icon={props.app.icon ?? plainIcon}
             className="opacity-40 grayscale-60"
           />
           <span className="absolute -end-2 -bottom-2 grid size-7 place-items-center rounded-lg bg-background">

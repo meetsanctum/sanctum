@@ -1,4 +1,4 @@
-import type { AppIcon as AppIconInfo } from "@meetsanctum/app-sdk";
+import { appColors, type AppIcon as AppIconInfo } from "@meetsanctum/app-sdk";
 import { cn } from "cn";
 import {
   AppWindow,
@@ -49,8 +49,15 @@ const glyphs: Record<string, LucideIcon> = {
 
 export const plainIcon = { glyph: "app-window", color: "graphite" } as const;
 
+// The core passes an app's icon on as its manifest says it, so a colour
+// outside the brand's goes grey rather than into the tile's style.
+const knownColors: ReadonlySet<string> = new Set(appColors);
+
 export function AppIcon(props: { icon: AppIconInfo; className?: string }) {
-  const artwork = appArtwork.get(`${props.icon.glyph}:${props.icon.color}`);
+  const color = knownColors.has(props.icon.color)
+    ? props.icon.color
+    : plainIcon.color;
+  const artwork = appArtwork.get(`${props.icon.glyph}:${color}`);
   const Glyph = Object.hasOwn(glyphs, props.icon.glyph)
     ? glyphs[props.icon.glyph]!
     : AppWindow;
@@ -60,7 +67,7 @@ export function AppIcon(props: { icon: AppIconInfo; className?: string }) {
         "grid size-18 shrink-0 place-items-center rounded-[22.5%] text-(--white)",
         props.className,
       )}
-      style={artwork ? undefined : { background: `var(--${props.icon.color})` }}
+      style={artwork ? undefined : { background: `var(--${color})` }}
     >
       {artwork ? (
         <img
