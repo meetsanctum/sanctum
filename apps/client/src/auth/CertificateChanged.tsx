@@ -49,11 +49,11 @@ export function CertificateChanged(props: {
         >
           {personal ? "Sign in again" : "Show a new code"}
         </Button>
-        <div className="flex flex-wrap justify-center gap-x-6 gap-y-2">
+        <div className="flex flex-wrap justify-center gap-x-2">
           <Button
             type="button"
             variant="link"
-            size="inline"
+            size="lg"
             onClick={props.onRetry}
           >
             Check again

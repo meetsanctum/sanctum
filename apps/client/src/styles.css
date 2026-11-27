@@ -335,19 +335,15 @@ body {
   }
 }
 
-/* The screens before the dashboard: the logo at the top, and the sheet in
-   the middle of the screen as long as there is room for both. The screen
-   scrolls itself: at a fixed height the empty row under a tall sheet shrinks
-   away, where at a minimum height it would keep the logo's height. */
+/* The screens before the dashboard: the bar at the top, with Back and the
+   logo, and under it the sheet, in the middle of the space left as long as
+   there is room. The bar stays put; only what is under it scrolls. */
 .sheet-screen {
   position: relative;
   isolation: isolate;
   height: 100vh;
-  overflow-y: auto;
   display: grid;
-  grid-template-rows: 1fr auto 1fr;
-  justify-items: center;
-  padding: max(40px, env(safe-area-inset-top)) 24px 40px;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 /* Keep the fixed height on older web views. The build's minifier drops
@@ -358,17 +354,65 @@ body {
   }
 }
 
-/* A phone keeps its width for the sheet, which has its own padding. */
-@media (max-width: 639px) {
-  .sheet-screen {
-    padding-inline: 16px;
-  }
+/* Back at the leading edge and the logo in the middle, both centred 27 px
+   down, on the line of the Mac's window buttons (20 px in and down, in the
+   desktop app). On the Mac Back starts past them, and the bar moves the
+   window between its buttons. */
+.sheet-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  height: 54px;
+  padding: 0 24px 0 15px;
+}
+
+.sheet-bar > button {
+  justify-self: start;
+}
+
+[data-platform="macos"] .sheet-bar {
+  padding-inline-start: 88px;
+  -webkit-app-region: drag;
+}
+
+[data-platform="macos"] .sheet-bar button {
+  -webkit-app-region: no-drag;
 }
 
 .sheet-logo {
-  align-self: start;
-  margin-bottom: 32px;
+  grid-column: 2;
   color: var(--white);
+}
+
+/* The sheet in the middle of the space under the bar, or from its top where
+   it is taller. What scrolls up fades out over 24 px at the bar's edge,
+   inside the 32 px above the sheet, so nothing is faded at rest. */
+.sheet-scroll {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 32px 24px calc(40px + env(safe-area-inset-bottom));
+  mask-image: linear-gradient(to bottom, transparent, black 24px);
+}
+
+/* Under Reduce effects a hard cut at the bar's edge, with no mask. */
+[data-effects="reduced"] .sheet-scroll {
+  mask-image: none;
+}
+
+/* A phone's bar is the top bar's, clear of the status bar and the screen's
+   corners; it keeps its width for the sheet, which has its own padding. */
+@media (max-width: 639px) {
+  .sheet-bar {
+    height: calc(64px + env(safe-area-inset-top));
+    padding: calc(12px + env(safe-area-inset-top))
+      calc(24px + env(safe-area-inset-right)) 8px
+      calc(15px + env(safe-area-inset-left));
+  }
+
+  .sheet-scroll {
+    padding-inline: 16px;
+  }
 }
 
 /* Behind the sheet is Sanctum's own backdrop, Graphite: a cool grey light

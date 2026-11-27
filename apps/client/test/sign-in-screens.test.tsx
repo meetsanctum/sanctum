@@ -290,4 +290,60 @@ describe("who uses this device", () => {
     await click("Back");
     expect(title()).toBe("Who uses this device?");
   });
+
+  it("puts Back in the bar over the sheet, with the logo, not in the sheet", () => {
+    const bar = container.querySelector(".sheet-bar")!;
+    expect(
+      bar.querySelector('button[aria-label="Back to Homes"]')?.textContent,
+    ).toBe("Homes");
+    expect(bar.querySelector(".logo")).not.toBeNull();
+    expect(container.querySelector("section")!.textContent).not.toContain(
+      "Homes",
+    );
+  });
+
+  it("starts each step at its title", async () => {
+    await click("Everyone at home");
+    expect(document.activeElement).toBe(container.querySelector("h1"));
+  });
+
+  it("goes back on Esc and on ⌘[", async () => {
+    await click("Just me");
+    expect(title()).toBe("Sign in to Office");
+
+    await press({ key: "Escape" });
+    expect(title()).toBe("Who uses this device?");
+
+    await press({ key: "[", metaKey: true });
+    expect(title()).toBe("Choose your home");
+
+    // Where there is no way back, the keys do nothing.
+    await press({ key: "Escape" });
+    expect(title()).toBe("Choose your home");
+  });
+
+  it("leaves Esc to a dialog or menu that handled it", async () => {
+    await click("Just me");
+    const event = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    event.preventDefault();
+    await act(async () => window.dispatchEvent(event));
+    expect(title()).toBe("Sign in to Office");
+  });
 });
+
+async function press(init: KeyboardEventInit) {
+  await act(async () =>
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        ...init,
+      }),
+    ),
+  );
+  await wait(0);
+}

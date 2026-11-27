@@ -315,7 +315,7 @@ function Welcome(props: {
         },
       }}
     >
-      <form className="flex flex-col gap-4" onSubmit={submit}>
+      <form className="flex flex-col gap-5" onSubmit={submit}>
         <div className="flex justify-center">
           <Avatar name={person.name} colour={person.colour} size="lg" />
         </div>
@@ -360,7 +360,7 @@ function Welcome(props: {
             variant="default"
             size="lg"
             type="submit"
-            className="mt-2 w-full"
+            className="mt-3 w-full"
             disabled={working}
           >
             {working ? <Busy>Joining…</Busy> : "Join"}

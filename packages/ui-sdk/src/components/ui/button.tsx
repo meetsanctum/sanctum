@@ -90,6 +90,10 @@ const buttonVariants = cva(
         // Words, with or without an icon, such as Done.
         default:
           "h-9 gap-1.5 px-4 in-data-[slot=button-group]:rounded-md has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        // A page's way back, its chevron and where it goes: as tall as
+        // Default, pressable in the 44 px around it, as a finger on a wall
+        // display needs.
+        back: "relative h-9 gap-1.5 ps-2 pe-4 before:absolute before:-inset-1 before:content-['']",
         sm: "h-8 gap-1 rounded-[min(var(--radius-md),10px)] px-2.5 in-data-[slot=button-group]:rounded-md has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5",
         // A wide action of its own, such as a card's button or a sheet's.
         lg: "h-11 gap-2 px-4 text-[15px]",
@@ -142,7 +146,7 @@ const buttonVariants = cva(
         // A small card among others, its icon with its words, which lay
         // themselves out, such as a place in Settings to start from.
         card: cardSize,
-        "sheet-row": `${cardSize} min-h-16 gap-3.5`,
+        "sheet-row": `${cardSize} min-h-18 gap-4 p-4`,
         // A card of its own, its words centred over what it leads to.
         choice:
           "h-auto min-h-77 w-full flex-col justify-start gap-0 rounded-lg px-5.5 pt-8 pb-5.5 text-center font-normal whitespace-normal",

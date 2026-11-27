@@ -196,7 +196,7 @@ export function ChooseAnotherHome(props: {
       <DialogTrigger asChild>
         <Button
           variant={props.variant ?? "outline"}
-          size={props.variant === "link" ? "inline" : "default"}
+          size={props.variant === "link" ? "lg" : "default"}
         >
           Choose another home
         </Button>

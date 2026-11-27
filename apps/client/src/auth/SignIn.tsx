@@ -122,7 +122,7 @@ export function SignIn(props: {
         },
       }}
     >
-      <form className="flex flex-col gap-4" onSubmit={submit}>
+      <form className="flex flex-col gap-5" onSubmit={submit}>
         <SheetField
           label="Username"
           value={username}
@@ -149,7 +149,7 @@ export function SignIn(props: {
             variant="default"
             size="lg"
             type="submit"
-            className="mt-2 w-full"
+            className="mt-3 w-full"
             disabled={working}
           >
             {working ? <Busy>Signing in…</Busy> : "Sign in"}
@@ -157,6 +157,7 @@ export function SignIn(props: {
           {props.onJoin && (
             <Button
               variant="link"
+              size="lg"
               type="button"
               onClick={() => {
                 attempt.cancel();

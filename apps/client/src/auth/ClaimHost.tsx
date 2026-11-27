@@ -87,7 +87,7 @@ export function ClaimHost(props: {
         },
       }}
     >
-      <form className="flex flex-col gap-4" onSubmit={submit}>
+      <form className="flex flex-col gap-5" onSubmit={submit}>
         <div className="flex items-end gap-4">
           <span className="mb-0.5">
             <Avatar name={name} colour={colour} size="lg" />
@@ -150,7 +150,7 @@ export function ClaimHost(props: {
             variant="default"
             size="lg"
             type="submit"
-            className="mt-2 w-full"
+            className="mt-3 w-full"
             disabled={working}
           >
             {working ? <Busy>Setting up…</Busy> : "Set up"}
