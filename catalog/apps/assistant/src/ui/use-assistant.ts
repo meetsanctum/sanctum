@@ -3,7 +3,7 @@ import type {
   Hearing,
   LiveDevice,
   Places,
-  RequestLanguage,
+  SpeechLanguage,
 } from "@meetsanctum/app-sdk";
 import { useAppClient } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -93,7 +93,7 @@ export function useAssistant() {
 
   /** Sets the home's language; false when it was refused. */
   const choose = useCallback(
-    async (language: RequestLanguage) => {
+    async (language: SpeechLanguage) => {
       if (!hearing || hearing.language === language) return true;
       setIsChoosing(true);
       try {

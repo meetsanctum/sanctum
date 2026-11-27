@@ -2,8 +2,8 @@ import { connect } from "node:net";
 
 import {
   listenRate,
-  requestLanguages,
-  type RequestLanguage,
+  speechLanguages,
+  type SpeechLanguage,
 } from "@meetsanctum/app-sdk";
 
 import { createReader, SpeechError, type WyomingEvent } from "./wyoming.js";
@@ -32,7 +32,7 @@ export type Lesson = {
 
 export class MissingSpeechLesson extends SpeechError {}
 
-export type SpeechTranscript = { text: string; language?: RequestLanguage };
+export type SpeechTranscript = { text: string; language?: SpeechLanguage };
 
 // One connection to the service: events out, and the next event back
 // within a time.
@@ -205,7 +205,7 @@ export async function transcribe(options: {
           const text =
             typeof event.data.text === "string" ? event.data.text : "";
           if (!voice && text === "") return null;
-          const language = requestLanguages.find(
+          const language = speechLanguages.find(
             (language) => language === event.data.language,
           );
           return { text, ...(language && { language }) };
@@ -247,10 +247,10 @@ export async function describeLanguages(options: {
   host: string;
   port: number;
   signal?: AbortSignal;
-}): Promise<RequestLanguage[]> {
+}): Promise<SpeechLanguage[]> {
   const languagesIn = (value: unknown) =>
     Array.isArray(value)
-      ? requestLanguages.filter((language) => value.includes(language))
+      ? speechLanguages.filter((language) => value.includes(language))
       : [];
   const connection = open(options, options.signal);
   try {

@@ -1,8 +1,8 @@
 import type {
   AssistantSentences,
   NotUnderstood,
-  RequestLanguage,
   SentenceBlank,
+  SpeechLanguage,
 } from "@meetsanctum/app-sdk";
 
 // What the Assistant understands, in each language: templates in hassil's
@@ -39,7 +39,7 @@ export type Choices = {
 
 export type Sentence = { template: string; intent: Intent };
 
-export type Language = {
+export type LanguageSentences = {
   choices: Choices;
   sentences: Sentence[];
   /** Said for speech outside the sentences, and written for typed words. */
@@ -53,7 +53,7 @@ const setOf = (where: Where): Intent => ({ do: "set", where });
 
 // A named light before a room's lights: "turn off the office light" means
 // the light called Office Light where there is one.
-const en: Language = {
+const en: LanguageSentences = {
   choices: {
     switch: { on: "on", off: "off" },
     step: {
@@ -242,7 +242,7 @@ const en: Language = {
 
 // German names rooms with an article of their own ("im Büro", "in der
 // Küche"), which the sentences take in any form.
-const de: Language = {
+const de: LanguageSentences = {
   choices: {
     switch: { an: "on", ein: "on", aus: "off" },
     step: { heller: "brighter", dunkler: "dimmer" },
@@ -405,7 +405,10 @@ const de: Language = {
   notUnderstood: "Ich kann nur mit Licht und Stimmungen helfen.",
 };
 
-export const languages: Record<RequestLanguage, Language> = { en, de };
+export const languageSentences: Record<SpeechLanguage, LanguageSentences> = {
+  en,
+  de,
+};
 
 const choicePattern = /<(switch|step|percent)>/g;
 
@@ -419,14 +422,16 @@ export function spokenTemplate(template: string, choices: Choices) {
 
 /** Every language's templates, as the Assistant's definition declares them. */
 export const sentences: AssistantSentences = Object.fromEntries(
-  Object.entries(languages).map(([language, { choices, sentences }]) => [
-    language,
-    sentences.map(({ template }) => spokenTemplate(template, choices)),
-  ]),
+  Object.entries(languageSentences).map(
+    ([language, { choices, sentences }]) => [
+      language,
+      sentences.map(({ template }) => spokenTemplate(template, choices)),
+    ],
+  ),
 );
 
 export const notUnderstood: NotUnderstood = Object.fromEntries(
-  Object.entries(languages).map(([language, words]) => [
+  Object.entries(languageSentences).map(([language, words]) => [
     language,
     words.notUnderstood,
   ]),
