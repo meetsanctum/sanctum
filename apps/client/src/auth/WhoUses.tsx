@@ -19,7 +19,7 @@ export function WhoUses(props: {
       subtitle={`This device joins ${props.host.name}.`}
       back={{ to: "Homes", onBack: props.onBack }}
     >
-      <ul className="m-0 flex list-none flex-col gap-2 p-0">
+      <ul className="m-0 flex list-none flex-col gap-3 p-0">
         <li>
           <SheetRow
             icon={User}

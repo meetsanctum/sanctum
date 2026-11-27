@@ -159,7 +159,7 @@ export function BackButton(props: {
   return (
     <Button
       variant={isPhone ? "ghost" : "outline"}
-      size={isPhone ? "bar" : "default"}
+      size={isPhone ? "bar" : "back"}
       aria-label={props.to ? `Back to ${props.to}` : "Back"}
       disabled={props.disabled}
       onClick={props.onBack}

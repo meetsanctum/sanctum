@@ -215,6 +215,7 @@ describe("joining with an invite code", () => {
   it("checks the code once it's whole, then welcomes the person", async () => {
     vi.mocked(checkInviteCode).mockResolvedValue(checked());
     await openJoin();
+    expect(document.activeElement).toBe(codeField());
     await type(codeField(), "k7qxm4pd");
 
     expect(checkInviteCode).toHaveBeenCalledWith(
@@ -224,6 +225,9 @@ describe("joining with an invite code", () => {
       }),
     );
     expect(title()).toBe("Welcome, Maya Keller");
+    expect(document.activeElement).toBe(
+      container.querySelector('input[autocomplete="new-password"]'),
+    );
     expect(
       (
         [...container.querySelectorAll("label")].find(
@@ -326,6 +330,18 @@ describe("joining with an invite code", () => {
     );
     expect(save).toHaveBeenCalledOnce();
     expect(back.disabled).toBe(true);
+    for (const shortcut of [{ key: "Escape" }, { key: "[", metaKey: true }]) {
+      await act(async () =>
+        document.activeElement!.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            bubbles: true,
+            cancelable: true,
+            ...shortcut,
+          }),
+        ),
+      );
+      expect(title()).toBe("Welcome, Maya Keller");
+    }
     await act(async () => saving.resolve());
     expect(container.querySelector(".home-screen")).not.toBeNull();
   });

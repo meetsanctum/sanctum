@@ -2,22 +2,28 @@ import { Button, Input } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { ChevronRight, CircleAlert, type LucideIcon } from "lucide-react";
 import {
+  useEffect,
+  useEffectEvent,
   useId,
+  useRef,
   type InputHTMLAttributes,
   type ReactNode,
   type Ref,
 } from "react";
 
-import { BackButton, Logo, WindowDragArea } from "../components";
+import { BackButton, Logo } from "../components";
 import { Skeleton } from "../components/ui/skeleton";
 import { KnotLoader } from "../knot-loader";
+import { getShell } from "../shell";
 
 // The screens before the dashboard share one sheet: a single column of
-// frosted Carbon glass over the Graphite backdrop, under the logo. Its head
-// is centred: a symbol on screens that start something, the title naming
-// the screen and one line on what it is for. What it asks for follows,
-// then its one primary action. Back, where there is a way back, is named
-// for where it goes.
+// frosted Carbon glass over the Graphite backdrop. Above it is the screen's
+// bar, which stays put while a tall sheet scrolls: Back at its leading edge
+// where there is a way back, named for where it goes, as Settings has it,
+// and the logo in the middle. The sheet holds only the task. Its head is
+// centred: a symbol on screens that start something, the title naming the
+// screen and one line on what it is for. What it asks for follows, then its
+// one primary action.
 
 export function Sheet(props: {
   title: string;
@@ -33,48 +39,100 @@ export function Sheet(props: {
   children: ReactNode;
 }) {
   const Glyph = props.glyph;
+  const title = useRef<HTMLHeadingElement>(null);
+  const back = props.back;
+  const canGoBack = back !== undefined && !back.disabled;
+  const goBack = useEffectEvent(() => back?.onBack());
+
+  // Esc, and ⌘[ as on the Mac, do what Back does, where there is a way
+  // back. A dialog or menu can handle Esc first, and an open dialog keeps
+  // the Back shortcut from reaching the sheet behind it.
+  useEffect(() => {
+    if (!canGoBack) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.repeat) return;
+      const modifiers = event.metaKey || event.ctrlKey || event.altKey;
+      const isEscape = event.key === "Escape" && !modifiers;
+      const isBackShortcut =
+        event.key === "[" &&
+        event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.shiftKey;
+      if (!isEscape && !isBackShortcut) return;
+      event.preventDefault();
+      if (
+        isBackShortcut &&
+        document.querySelector('[role="dialog"][data-state="open"]')
+      ) {
+        return;
+      }
+      goBack();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canGoBack]);
+
+  // A step that follows a press starts at its title, where the control
+  // pressed went with the screen before. A field the step focuses itself
+  // keeps its focus.
+  useEffect(() => {
+    if (document.activeElement === document.body) {
+      title.current?.focus();
+    }
+  }, []);
+
   return (
-    <main data-mode="evening" className="sheet-screen">
-      <WindowDragArea />
-      <Logo className="sheet-logo" />
-      <section
-        aria-labelledby="sheet-title"
-        className={cn(
-          "flex w-full min-w-0 flex-col gap-6 self-center rounded-xl bg-(--glass) px-8 pt-7 pb-8 text-foreground shadow-[inset_0_0_0_1px_var(--glass-line)] max-sm:px-5",
-          props.wide ? "max-w-190" : "max-w-110",
-        )}
-      >
-        {props.back && (
-          <div className="-mb-3 flex">
-            <BackButton {...props.back} />
-          </div>
-        )}
-        <header className="flex flex-col items-center gap-2 text-center">
-          {Glyph && (
-            <span
-              className={cn(
-                "mb-1.5 flex size-13 items-center justify-center rounded-lg bg-foreground/11",
-                props.warning && "text-(--sun-on-carbon)",
-              )}
+    <div
+      data-mode="evening"
+      data-platform={getShell().platform}
+      className="sheet-screen"
+    >
+      <header className="sheet-bar">
+        {back && <BackButton {...back} />}
+        <Logo className="sheet-logo" />
+      </header>
+      <main className="sheet-scroll">
+        <section
+          aria-labelledby="sheet-title"
+          className={cn(
+            "my-auto flex w-full min-w-0 flex-col gap-8 self-center rounded-xl bg-(--glass) p-10 text-foreground shadow-[inset_0_0_0_1px_var(--glass-line)] max-sm:px-6 max-sm:py-8",
+            props.wide ? "max-w-190" : "max-w-120",
+          )}
+        >
+          <header className="flex flex-col items-center gap-2 text-center">
+            {Glyph && (
+              <span
+                className={cn(
+                  "mb-2 flex size-13 items-center justify-center rounded-lg bg-foreground/11",
+                  props.warning && "text-(--sun-on-carbon)",
+                )}
+              >
+                <Glyph
+                  aria-hidden="true"
+                  className="size-7"
+                  strokeWidth={1.75}
+                />
+              </span>
+            )}
+            <h1
+              ref={title}
+              id="sheet-title"
+              tabIndex={-1}
+              className="m-0 text-2xl leading-[30px] font-semibold tracking-[-0.01em] text-balance outline-none"
             >
-              <Glyph aria-hidden="true" className="size-7" strokeWidth={1.75} />
-            </span>
-          )}
-          <h1
-            id="sheet-title"
-            className="m-0 text-2xl leading-[30px] font-semibold tracking-[-0.01em] text-balance"
-          >
-            {props.title}
-          </h1>
-          {props.subtitle && (
-            <p className="m-0 max-w-90 text-[15px] leading-[21px] text-balance text-muted-foreground">
-              {props.subtitle}
-            </p>
-          )}
-        </header>
-        {props.children}
-      </section>
-    </main>
+              {props.title}
+            </h1>
+            {props.subtitle && (
+              <p className="m-0 max-w-90 text-[15px] leading-[21px] text-balance text-muted-foreground">
+                {props.subtitle}
+              </p>
+            )}
+          </header>
+          {props.children}
+        </section>
+      </main>
+    </div>
   );
 }
 
@@ -209,9 +267,9 @@ export function SheetRow(props: {
 // The rows' shapes while the list is on its way.
 export function SheetRowsLoading() {
   return (
-    <div aria-busy="true" className="flex flex-col gap-2">
-      <Skeleton className="h-16 rounded-md" />
-      <Skeleton className="h-16 rounded-md opacity-55" />
+    <div aria-busy="true" className="flex flex-col gap-3">
+      <Skeleton className="h-18 rounded-md" />
+      <Skeleton className="h-18 rounded-md opacity-55" />
     </div>
   );
 }
@@ -220,7 +278,7 @@ export function SheetRowsLoading() {
 // on, centred under it.
 export function SheetActions(props: { children: ReactNode }) {
   return (
-    <div className="flex flex-col items-center gap-3">{props.children}</div>
+    <div className="flex flex-col items-center gap-2">{props.children}</div>
   );
 }
 

@@ -134,7 +134,7 @@ export function ChooseHost(props: {
       {notice}
       {hosts.length > 0 ? (
         <>
-          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+          <ul className="m-0 flex list-none flex-col gap-3 p-0">
             {hosts.map((host) => (
               <li key={host.id}>
                 <SheetRow

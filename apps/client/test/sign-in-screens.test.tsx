@@ -6,7 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
 import { ChooseHost } from "../src/auth/ChooseHost";
 import { checkHost, claimHost, signIn, SignInError } from "../src/auth/device";
-import type { FoundHost, Shell } from "../src/shell";
+import { SignIn } from "../src/auth/SignIn";
+import type { FoundHost, Shell, StoredHost } from "../src/shell";
+import { deferred } from "./deferred";
 
 vi.mock("../src/auth/device", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/auth/device")>()),
@@ -118,6 +120,9 @@ async function fill(label: string, value: string) {
 describe("choosing a home", () => {
   it("shows the rows' shapes while it looks, then a check list once nothing answers", async () => {
     expect(title()).toBe("Choose your home");
+    expect(
+      container.querySelector('[data-platform="macos"] .sheet-bar'),
+    ).not.toBeNull();
     expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
     expect(container.querySelector('[role="status"]')?.textContent).toBe(
       "Looking for homes…",
@@ -290,4 +295,130 @@ describe("who uses this device", () => {
     await click("Back");
     expect(title()).toBe("Who uses this device?");
   });
+
+  it("puts Back and the logo in the bar above the scrolling sheet", () => {
+    const bar = container.querySelector(".sheet-bar")!;
+    const scroll = container.querySelector("main.sheet-scroll")!;
+    expect(
+      bar.querySelector('button[aria-label="Back to Homes"]')?.textContent,
+    ).toBe("Homes");
+    expect(bar.querySelector(".logo")).not.toBeNull();
+    expect(bar.nextElementSibling).toBe(scroll);
+    expect(scroll.querySelector("section")).not.toBeNull();
+  });
+
+  it("starts each step at its title", async () => {
+    await click("Everyone at home");
+    expect(document.activeElement).toBe(container.querySelector("h1"));
+  });
+
+  it("goes back on Esc and on ⌘[", async () => {
+    await click("Just me");
+    expect(title()).toBe("Sign in to Office");
+
+    await press({ key: "Escape" });
+    expect(title()).toBe("Who uses this device?");
+
+    await press({ key: "[", metaKey: true });
+    expect(title()).toBe("Choose your home");
+
+    // Where there is no way back, the keys do nothing.
+    await press({ key: "Escape" });
+    expect(title()).toBe("Choose your home");
+  });
+
+  it.each([
+    ["Esc", { key: "Escape" }],
+    ["⌘[", { key: "[", metaKey: true }],
+  ])("goes back only one step when %s is held", async (_key, shortcut) => {
+    await click("Just me");
+
+    await press(shortcut);
+    expect(title()).toBe("Who uses this device?");
+
+    await press({ ...shortcut, repeat: true });
+    expect(title()).toBe("Who uses this device?");
+  });
 });
+
+describe("the forget-home confirmation during sign-in", () => {
+  const dialog = () => document.querySelector('[role="dialog"]');
+  const onBack = vi.fn();
+
+  beforeEach(async () => {
+    const recheck: StoredHost = {
+      hostId: office.id,
+      homeId: office.homeId!,
+      name: office.name,
+      url: office.url,
+      clientId: "mac",
+      token: "stored-token",
+      kind: "personal",
+      pin: null,
+    };
+    vi.mocked(checkHost).mockRejectedValueOnce(new SignInError("another_host"));
+    await act(async () =>
+      root.render(
+        <SignIn
+          host={office}
+          recheck={recheck}
+          onBack={onBack}
+          onSignedIn={vi.fn()}
+          onForgotten={vi.fn()}
+        />,
+      ),
+    );
+    await fill("Username", "taylor");
+    await fill("Password", "correct-password");
+    await click("Sign in");
+    await click("Choose another home");
+    expect(dialog()?.textContent).toContain("Forget this home?");
+  });
+
+  it("closes only the confirmation on Esc", async () => {
+    const focused = document.activeElement!;
+    expect(dialog()?.contains(focused)).toBe(true);
+
+    await press({ key: "Escape" }, focused);
+
+    expect(dialog()).toBeNull();
+    expect(title()).toBe("Sign in to Office");
+    expect(onBack).not.toHaveBeenCalled();
+  });
+
+  it("keeps the confirmation open on ⌘[ while forgetting the home", async () => {
+    const forgetting = deferred<void>();
+    const forget = vi.fn(async () => {
+      await forgetting.promise;
+      throw new Error("Storage unavailable");
+    });
+    window.sanctumShell!.credentials.forget = forget;
+    const forgetButton = [...dialog()!.querySelectorAll("button")].find(
+      (button) => button.textContent === "Forget",
+    )!;
+    await act(async () => forgetButton.click());
+    expect(forget).toHaveBeenCalledOnce();
+
+    await press({ key: "[", metaKey: true }, document.activeElement!);
+
+    expect(onBack).not.toHaveBeenCalled();
+    expect(dialog()?.textContent).toContain("Forget this home?");
+    await act(async () => forgetting.resolve());
+    expect(dialog()?.querySelector('[role="alert"]')?.textContent).toBe(
+      "That did not work. Try again.",
+    );
+  });
+});
+
+async function press(init: KeyboardEventInit, target: EventTarget = window) {
+  await act(async () =>
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        ...init,
+      }),
+    ),
+  );
+  await wait(0);
+}
