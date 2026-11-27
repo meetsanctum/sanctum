@@ -49,17 +49,15 @@ export function examples(language: RequestLanguage, room: string | null) {
       ];
 }
 
-/** What it answers anything else, in its language. */
-export const notUnderstood: Record<RequestLanguage, string> = {
-  en: "I can only help with lights.",
-  de: "Ich kann nur mit dem Licht helfen.",
-};
-
 /** The first thing to try, in a room the household has. */
-export function firstTry(language: RequestLanguage, room: string | null) {
-  if (language === "de") return "Mach das Licht aus";
-  return room ? `Turn off the ${room} lights` : "Turn off the lights";
+export function firstTry(language: RequestLanguage, room: string) {
+  return language === "de"
+    ? `Mach das Licht in ${room} aus`
+    : `Turn off the ${room} lights`;
 }
+
+export const assignSpeakerRoom =
+  "Assign a room to a smart speaker to try a command.";
 
 export type HearingWords = {
   title: string;
@@ -90,22 +88,17 @@ const failures: Record<HearingFailure, Omit<HearingWords, "step">> = {
   },
   memory: {
     title: "Not enough memory for speech recognition",
-    help: "Sanctum needs more free memory to listen. It tries again by itself.",
+    help: "Speech recognition needs more free memory. It tries again by itself.",
   },
   unavailable: {
     title: "Speech recognition isn't working",
-    help: "Sanctum tries again by itself.",
+    help: "Speech recognition tries again by itself.",
   },
 };
 
-/**
- * What the first card says about hearing. `switchingFrom` is the language
- * smart speakers keep hearing in while a new one gets ready.
- */
-export function hearingWords(
-  hearing: Hearing,
-  switchingFrom: RequestLanguage | null,
-): HearingWords {
+/** What the first card says about hearing. */
+export function hearingWords(hearing: Hearing): HearingWords {
+  const { activeLanguage } = hearing;
   const name = languageNames[hearing.language];
   if (hearing.state === "failed") return failures[hearing.failure];
   if (hearing.state === "no_speaker") {
@@ -125,17 +118,26 @@ export function hearingWords(
     hearing.state === "downloading"
       ? `Downloading speech recognition for ${name}`
       : "Learning your rooms and lights";
-  return switchingFrom && switchingFrom !== hearing.language
+  return activeLanguage && activeLanguage !== hearing.language
     ? {
         title: `Switching to ${name}`,
-        help: `${languageNames[switchingFrom]} keeps working until then.`,
+        help: `${languageNames[activeLanguage]} keeps working until then.`,
         step,
       }
     : {
         title: "Getting ready to listen",
-        help: "This takes a few minutes. Until then, your smart speakers won't respond.",
+        help: activeLanguage
+          ? `You can still speak ${languageNames[activeLanguage]}.`
+          : "This takes a few minutes. Until then, your smart speakers won't respond.",
         step,
       };
+}
+
+/** The audio capability whose microphones listen for requests. */
+export function listeningAudio(device: DeviceInfo) {
+  for (const part of device.capabilities) {
+    if (part.kind === "audio" && part.features.listens) return part;
+  }
 }
 
 /** A smart speaker's line under its name: its room, and what stops it. */
@@ -144,8 +146,7 @@ export function speakerLine(device: DeviceInfo, room: string | null): string {
   if (device.availability === "offline") {
     return `${where} · Not responding · check its power`;
   }
-  const audio = device.capabilities.find(({ kind }) => kind === "audio");
-  if ((audio?.state as { muted?: boolean } | undefined)?.muted) {
+  if (listeningAudio(device)?.state?.muted) {
     return `${where} · Microphones off · turn them on from its page`;
   }
   return room ? room : "No room · say the room when you ask";

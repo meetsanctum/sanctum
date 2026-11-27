@@ -48,6 +48,7 @@ export function useFrame(options: {
   household: FrameHousehold | undefined;
   /** Whether the home is away, as while it updates. */
   isAway: boolean;
+  pageRevision?: () => number;
   /** What else the page says: its bar, where to go, its size, a key. */
   on?: (event: FrameEvent) => void;
 }) {
@@ -109,6 +110,7 @@ export function useFrame(options: {
       frame: () => frame.current?.contentWindow ?? null,
       code,
       client: () => latest.current.app.client,
+      pageRevision: () => latest.current.pageRevision?.() ?? 0,
       setup: () => ({
         type: "setup",
         app: latest.current.app.info,

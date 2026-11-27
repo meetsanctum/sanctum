@@ -227,6 +227,7 @@ it("learns the language the Assistant sets at once, and asks and replies in it",
         expect(await home.hearing()).toEqual({
           state: "ready",
           language: "en",
+          activeLanguage: "en",
         }),
       { timeout: 5_000 },
     );
@@ -245,6 +246,7 @@ it("learns the language the Assistant sets at once, and asks and replies in it",
     expect(await home.hearing()).toEqual({
       state: "downloading",
       language: "de",
+      activeLanguage: "en",
     });
     expect(await home.ask()).toContainEqual({ step: "heard", text: words });
     expect(home.asked.at(-1)).toEqual({ text: words, language: "en" });
@@ -258,12 +260,16 @@ it("learns the language the Assistant sets at once, and asks and replies in it",
       }),
     );
     await vi.waitFor(async () =>
-      expect(await home.hearing()).toEqual({ state: "ready", language: "de" }),
+      expect(await home.hearing()).toEqual({
+        state: "ready",
+        language: "de",
+        activeLanguage: "de",
+      }),
     );
     await vi.waitFor(() =>
       expect(messages).toContainEqual({
         type: "hearing",
-        hearing: { state: "ready", language: "de" },
+        hearing: { state: "ready", language: "de", activeLanguage: "de" },
       }),
     );
 

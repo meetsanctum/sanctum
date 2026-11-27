@@ -25,7 +25,7 @@ const speaker = (
   id: string,
   name: string,
   roomId: string | null,
-  options: { muted?: boolean; offline?: boolean } = {},
+  options: { muted?: boolean; offline?: boolean; listens?: boolean } = {},
 ): DeviceInfo =>
   ({
     id,
@@ -36,7 +36,11 @@ const speaker = (
       {
         id: "audio",
         kind: "audio",
-        features: { listens: true, announces: true, mutes: true },
+        features: {
+          listens: options.listens ?? true,
+          announces: true,
+          mutes: true,
+        },
         state: { muted: options.muted ?? false },
       },
     ],
@@ -71,7 +75,7 @@ function fakeClient(options: {
     app,
     call,
     hearing: async () => options.hearing,
-    devices: async () => options.devices ?? [],
+    devices: vi.fn(async () => options.devices ?? []),
     places: async () => ({
       home: { name: "Home" },
       floors: [],
@@ -139,11 +143,12 @@ const button = (name: string) =>
 const press = (name: string) => act(() => button(name).click());
 
 const office = speaker("office-speaker", "Office Speaker", "office");
+const playback = speaker("playback", "Playback only", null, { listens: false });
 
 describe("the Assistant's page", () => {
   it("says it's ready, with something to try in a speaker's room", async () => {
     const { client } = fakeClient({
-      hearing: { state: "ready", language: "en" },
+      hearing: { state: "ready", language: "en", activeLanguage: "en" },
       devices: [office, lamp],
     });
     await show(client);
@@ -159,19 +164,28 @@ describe("the Assistant's page", () => {
   });
 
   it("lists only smart speakers, by room and what stops them, and opens each in the shell", async () => {
+    const muted = speaker("b", "Bedroom Speaker", "kitchen", { muted: true });
     const { client } = fakeClient({
-      hearing: { state: "ready", language: "en" },
+      hearing: { state: "ready", language: "en", activeLanguage: "en" },
       devices: [
         office,
         lamp,
+        playback,
         speaker("k", "Kitchen Speaker", null),
-        speaker("b", "Bedroom Speaker", "kitchen", { muted: true }),
+        {
+          ...muted,
+          capabilities: [
+            { ...playback.capabilities[0]!, id: "playback" },
+            ...muted.capabilities,
+          ],
+        },
         speaker("u", "Upstairs Speaker", "office", { offline: true }),
       ],
     });
     const props = await show(client);
 
     expect(text()).not.toContain("Desk Lamp");
+    expect(text()).not.toContain("Playback only");
     expect(text()).toContain("Office SpeakerOffice");
     expect(text()).toContain(
       "Kitchen SpeakerNo room · say the room when you ask",
@@ -189,9 +203,47 @@ describe("the Assistant's page", () => {
     expect(props.addDevices).toHaveBeenCalledOnce();
   });
 
+  it("applies live changes over an older speaker, hearing and room snapshot", async () => {
+    const { client, push } = fakeClient({
+      hearing: { state: "downloading", language: "en", activeLanguage: null },
+    });
+    let finishDevices!: (devices: DeviceInfo[]) => void;
+    const devices = new Promise<DeviceInfo[]>((resolve) => {
+      finishDevices = resolve;
+    });
+    vi.mocked(client.devices).mockReturnValueOnce(devices);
+    await show(client);
+
+    push({ type: "device", id: "removed", device: null });
+    push({
+      type: "device",
+      id: office.id,
+      device: speaker(office.id, office.name, office.roomId, { muted: true }),
+    });
+    const places = await client.places();
+    push({
+      type: "places",
+      places: {
+        ...places,
+        rooms: [{ id: "office", name: "Study", floorId: null }],
+      },
+    });
+    push({
+      type: "hearing",
+      hearing: { state: "ready", language: "en", activeLanguage: "en" },
+    });
+    await act(async () =>
+      finishDevices([office, speaker("removed", "Removed Speaker", null)]),
+    );
+
+    expect(text()).toContain("Ready in English");
+    expect(text()).toContain("Office SpeakerStudy · Microphones off");
+    expect(text()).not.toContain("Removed Speaker");
+  });
+
   it("asks for a smart speaker when there's none, with no list of them", async () => {
     const { client } = fakeClient({
-      hearing: { state: "no_speaker", language: "en" },
+      hearing: { state: "no_speaker", language: "en", activeLanguage: null },
       devices: [lamp],
     });
     const props = await show(client);
@@ -205,7 +257,7 @@ describe("the Assistant's page", () => {
 
   it("names each step while it gets ready, and follows it live", async () => {
     const { client, push } = fakeClient({
-      hearing: { state: "downloading", language: "en" },
+      hearing: { state: "downloading", language: "en", activeLanguage: null },
       devices: [office],
     });
     await show(client);
@@ -217,21 +269,32 @@ describe("the Assistant's page", () => {
         ?.getAttribute("aria-label"),
     ).toBe("Downloading speech recognition for English");
 
-    push({ type: "hearing", hearing: { state: "learning", language: "en" } });
+    push({
+      type: "hearing",
+      hearing: { state: "learning", language: "en", activeLanguage: null },
+    });
     expect(
       container
         .querySelector('[role="progressbar"]')
         ?.getAttribute("aria-label"),
     ).toBe("Learning your rooms and lights");
 
-    push({ type: "hearing", hearing: { state: "ready", language: "en" } });
+    push({
+      type: "hearing",
+      hearing: { state: "ready", language: "en", activeLanguage: "en" },
+    });
     expect(text()).toContain("Ready in English");
     expect(container.querySelector('[role="progressbar"]')).toBeNull();
   });
 
   it("says why it can't listen, with settings when it's off", async () => {
     const { client } = fakeClient({
-      hearing: { state: "failed", language: "en", failure: "assistant_off" },
+      hearing: {
+        state: "failed",
+        language: "en",
+        activeLanguage: null,
+        failure: "assistant_off",
+      },
       devices: [office],
     });
     const props = await show(client);
@@ -241,7 +304,12 @@ describe("the Assistant's page", () => {
     expect(props.openSettings).toHaveBeenCalledOnce();
 
     const memory = fakeClient({
-      hearing: { state: "failed", language: "en", failure: "memory" },
+      hearing: {
+        state: "failed",
+        language: "en",
+        activeLanguage: null,
+        failure: "memory",
+      },
       devices: [office],
     });
     await show(memory.client);
@@ -251,7 +319,7 @@ describe("the Assistant's page", () => {
 
   it("switches the language, saying the old one keeps working", async () => {
     const { client, call, push } = fakeClient({
-      hearing: { state: "ready", language: "en" },
+      hearing: { state: "ready", language: "en", activeLanguage: "en" },
       devices: [office],
     });
     await show(client);
@@ -265,19 +333,41 @@ describe("the Assistant's page", () => {
 
     push({
       type: "hearing",
-      hearing: { state: "downloading", language: "de" },
+      hearing: { state: "downloading", language: "de", activeLanguage: "en" },
     });
     expect(text()).toContain("Switching to Deutsch");
     expect(text()).toContain("English keeps working until then.");
-    expect(text()).toContain("“Mach das Licht aus”");
+    expect(select.closest("section")?.textContent).toContain(
+      "English keeps working until then.",
+    );
+    expect(text()).toContain("“Turn off the lights”");
+    expect(text()).not.toContain("Deutsch keeps working");
 
-    push({ type: "hearing", hearing: { state: "ready", language: "de" } });
+    push({
+      type: "hearing",
+      hearing: { state: "ready", language: "de", activeLanguage: "de" },
+    });
     expect(text()).toContain("Ready in Deutsch");
+    expect(text()).toContain("“Mach das Licht aus”");
+  });
+
+  it("shows the active language when opened mid-switch", async () => {
+    const { client } = fakeClient({
+      hearing: { state: "downloading", language: "de", activeLanguage: "en" },
+      devices: [office],
+    });
+    await show(client);
+    expect(text()).toContain("Switching to Deutsch");
+    expect(text()).toContain("English keeps working");
+    expect(container.querySelector("select")?.value).toBe("de");
+
+    await show(client, "setup", { ...pageProps(), params: { step: "try" } });
+    expect(text()).toContain("“Turn off the Office lights”");
   });
 
   it("says when the language didn't change", async () => {
     const { client } = fakeClient({
-      hearing: { state: "ready", language: "en" },
+      hearing: { state: "ready", language: "en", activeLanguage: "en" },
       devices: [office],
       refuse: true,
     });
@@ -293,7 +383,7 @@ describe("the Assistant's page", () => {
 
   it("opens Setup", async () => {
     const { client } = fakeClient({
-      hearing: { state: "ready", language: "en" },
+      hearing: { state: "ready", language: "en", activeLanguage: "en" },
       devices: [office],
     });
     const props = await show(client);
@@ -306,7 +396,7 @@ describe("the Assistant's page", () => {
 describe("Setup", () => {
   it("chooses the language, then shows what to try with the speakers", async () => {
     const { client, call } = fakeClient({
-      hearing: { state: "ready", language: "en" },
+      hearing: { state: "ready", language: "en", activeLanguage: "en" },
       devices: [office],
     });
     const props = await show(client, "setup");
@@ -331,7 +421,7 @@ describe("Setup", () => {
 
   it("goes back to the page on Cancel, and keeps a language it already has", async () => {
     const { client, call } = fakeClient({
-      hearing: { state: "ready", language: "en" },
+      hearing: { state: "ready", language: "en", activeLanguage: "en" },
       devices: [],
     });
     const props = await show(client, "setup");
@@ -341,8 +431,46 @@ describe("Setup", () => {
     expect(text()).toContain("Try it");
     expect(text()).toContain("No smart speaker yet");
 
+    await press("Add a smart speaker");
+    expect(props.addDevices).toHaveBeenCalledWith({ step: "try" });
+
     await press("Back");
     await press("Cancel");
     expect(props.back).toHaveBeenCalledOnce();
+  });
+
+  it("stays on the language step and explains a failed save", async () => {
+    const { client, call } = fakeClient({
+      hearing: { state: "ready", language: "en", activeLanguage: "en" },
+      devices: [office],
+      refuse: true,
+    });
+    await show(client, "setup");
+
+    const select = container.querySelector("select")!;
+    await act(async () => {
+      select.value = "de";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await press("Continue");
+
+    expect(call).toHaveBeenCalledWith("assistant.language", { language: "de" });
+    expect(text()).toContain("Step 1 of 2");
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "The language didn't change. Try again.",
+    );
+    expect(button("Continue").disabled).toBe(false);
+  });
+
+  it("asks for a room before suggesting a first command for a speaker without one", async () => {
+    const { client } = fakeClient({
+      hearing: { state: "ready", language: "de", activeLanguage: "de" },
+      devices: [speaker("unplaced", "Unplaced Speaker", null)],
+    });
+    await show(client, "setup", { ...pageProps(), params: { step: "try" } });
+    expect(text()).toContain(
+      "Assign a room to a smart speaker to try a command.",
+    );
+    expect(text()).not.toContain("“Mach das Licht aus”");
   });
 });

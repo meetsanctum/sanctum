@@ -588,6 +588,7 @@ function HomeScreen(
                       setEditingHome={setEditingHome}
                       openDevice={openDevice}
                       openRoomDevice={openRoomDevice}
+                      openAppDevice={openedDevice.openFromApp}
                       sectionEntities={sectionEntities}
                       widgetCards={widgetCards}
                       hostUrl={host.url}

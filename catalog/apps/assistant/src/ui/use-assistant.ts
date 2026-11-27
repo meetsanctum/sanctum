@@ -1,25 +1,35 @@
 import type {
   DeviceInfo,
   Hearing,
+  LiveDevice,
   Places,
   RequestLanguage,
 } from "@meetsanctum/app-sdk";
 import { useAppClient } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { listeningAudio } from "./words";
+
 // What the Assistant's page shows, read once and then followed live: how
 // speech recognition is doing, the smart speakers (devices whose
-// microphones listen) and the rooms they're in. Choosing a language asks the
-// app, and remembers the one smart speakers keep hearing in meanwhile.
-
-/** A device a person talks to: one whose microphones listen. */
-export const isSmartSpeaker = (device: DeviceInfo) =>
-  device.capabilities.some(
-    ({ kind, features }) =>
-      kind === "audio" && (features as { listens?: boolean }).listens === true,
-  );
+// microphones listen) and the rooms they're in.
 
 const byName = (a: DeviceInfo, b: DeviceInfo) => a.name.localeCompare(b.name);
+
+function updateSpeakers(current: DeviceInfo[], { id, device }: LiveDevice) {
+  if (device && listeningAudio(device)) {
+    return [...current.filter((each) => each.id !== id), device].sort(byName);
+  }
+  return current.some((each) => each.id === id)
+    ? current.filter((each) => each.id !== id)
+    : current;
+}
+
+type PendingRead = {
+  hearing?: Hearing;
+  rooms?: Places["rooms"];
+  devices: Map<string, LiveDevice>;
+};
 
 export function useAssistant() {
   const client = useAppClient();
@@ -27,55 +37,56 @@ export function useAssistant() {
   const [speakers, setSpeakers] = useState<DeviceInfo[]>();
   const [rooms, setRooms] = useState<Places["rooms"]>([]);
   const [hasFailed, setHasFailed] = useState(false);
-  // The language smart speakers heard in before someone chose another here,
-  // until the new one is ready.
-  const [switchingFrom, setSwitchingFrom] = useState<RequestLanguage | null>(
-    null,
-  );
   const [isChoosing, setIsChoosing] = useState(false);
-  const reading = useRef(0);
+  const pending = useRef<PendingRead | undefined>(undefined);
 
   const load = useCallback(async () => {
-    const current = ++reading.current;
+    const reading: PendingRead = { devices: new Map() };
+    pending.current = reading;
     try {
       const [nextHearing, devices, places] = await Promise.all([
         client.hearing(),
         client.devices(),
         client.places(),
       ]);
-      if (current !== reading.current) return;
-      setHearing(nextHearing);
-      setSpeakers(devices.filter(isSmartSpeaker).sort(byName));
-      setRooms(places.rooms);
+      if (pending.current !== reading) return;
+      let nextSpeakers = devices.filter(listeningAudio).sort(byName);
+      for (const update of reading.devices.values()) {
+        nextSpeakers = updateSpeakers(nextSpeakers, update);
+      }
+      setHearing(reading.hearing ?? nextHearing);
+      setSpeakers(nextSpeakers);
+      setRooms(reading.rooms ?? places.rooms);
       setHasFailed(false);
     } catch {
-      if (current === reading.current) setHasFailed(true);
+      if (pending.current === reading) setHasFailed(true);
+    } finally {
+      if (pending.current === reading) pending.current = undefined;
     }
   }, [client]);
 
   useEffect(() => {
-    void load();
     const unsubscribe = client.subscribe({
       refresh: () => void load(),
       message(message) {
+        const reading = pending.current;
         if (message.type === "hearing") {
+          if (reading) reading.hearing = message.hearing;
           setHearing(message.hearing);
-          if (message.hearing.state === "ready") setSwitchingFrom(null);
         } else if (message.type === "places") {
+          if (reading) reading.rooms = message.places.rooms;
           setRooms(message.places.rooms);
         } else if (message.type === "device") {
-          setSpeakers((current) => {
-            if (!current) return current;
-            const others = current.filter(({ id }) => id !== message.id);
-            return message.device && isSmartSpeaker(message.device)
-              ? [...others, message.device].sort(byName)
-              : others;
-          });
+          reading?.devices.set(message.id, message);
+          setSpeakers((current) =>
+            current ? updateSpeakers(current, message) : current,
+          );
         }
       },
     });
+    void load();
     return () => {
-      reading.current++;
+      pending.current = undefined;
       unsubscribe();
     };
   }, [client, load]);
@@ -83,13 +94,10 @@ export function useAssistant() {
   /** Sets the home's language; false when it was refused. */
   const choose = useCallback(
     async (language: RequestLanguage) => {
-      const before = hearing;
-      if (!before || before.language === language) return true;
+      if (!hearing || hearing.language === language) return true;
       setIsChoosing(true);
       try {
         await client.call("assistant.language", { language });
-        // Speakers hear in the old one only once it was ready there.
-        setSwitchingFrom(before.state === "ready" ? before.language : null);
         return true;
       } catch {
         return false;
@@ -110,7 +118,6 @@ export function useAssistant() {
     speakers,
     roomName,
     hasFailed,
-    switchingFrom,
     isChoosing,
     choose,
     reload: load,

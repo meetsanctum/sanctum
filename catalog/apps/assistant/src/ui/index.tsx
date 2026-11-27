@@ -15,14 +15,15 @@ import {
 } from "@meetsanctum/ui-sdk";
 import { useId, useState, type ReactNode } from "react";
 
-import { version } from "../../sanctum-app.json";
+import { notUnderstood, version } from "../../sanctum-app.json";
 import { useAssistant } from "./use-assistant";
 import {
+  assignSpeakerRoom,
   examples,
   firstTry,
   hearingWords,
   languageNames,
-  notUnderstood,
+  listeningAudio,
   speakerLine,
 } from "./words";
 
@@ -66,11 +67,8 @@ function Ready(props: { language: RequestLanguage }) {
 }
 
 /** How hearing is doing, as a step with a bar, or ready. */
-function HearingLine(props: {
-  hearing: Hearing;
-  switchingFrom: RequestLanguage | null;
-}) {
-  const words = hearingWords(props.hearing, props.switchingFrom);
+function HearingLine(props: { hearing: Hearing }) {
+  const words = hearingWords(props.hearing);
   if (props.hearing.state === "ready") {
     return <Ready language={props.hearing.language} />;
   }
@@ -79,12 +77,11 @@ function HearingLine(props: {
 
 function HearingCard(props: {
   hearing: Hearing;
-  switchingFrom: RequestLanguage | null;
   room: string | null;
   page: PageProps;
 }) {
   const { hearing, page } = props;
-  const words = hearingWords(hearing, props.switchingFrom);
+  const words = hearingWords(hearing);
   const id = useId();
   return (
     <section
@@ -98,12 +95,14 @@ function HearingCard(props: {
       <p className="m-0 text-sm leading-5 text-muted-foreground">
         {words.help}
         {hearing.state === "ready" &&
-          ` Try “${firstTry(hearing.language, props.room)}”.`}
+          (props.room
+            ? ` Try “${firstTry(hearing.language, props.room)}”.`
+            : ` ${assignSpeakerRoom}`)}
       </p>
-      <HearingLine hearing={hearing} switchingFrom={props.switchingFrom} />
+      <HearingLine hearing={hearing} />
       {words.action === "addDevices" && (
         <div className="flex">
-          <Button onClick={page.addDevices}>Add a smart speaker</Button>
+          <Button onClick={() => page.addDevices()}>Add a smart speaker</Button>
         </div>
       )}
       {words.action === "settings" && (
@@ -145,11 +144,10 @@ function Row(props: {
 }
 
 function speakerIcon(device: DeviceInfo) {
-  const audio = device.capabilities.find(({ kind }) => kind === "audio");
   const Icon =
     device.availability === "offline"
       ? icons.CircleMinus
-      : (audio?.state as { muted?: boolean } | undefined)?.muted
+      : listeningAudio(device)?.state?.muted
         ? icons.MicOff
         : icons.Speaker;
   return <Icon aria-hidden="true" className="size-4" />;
@@ -165,7 +163,11 @@ function Speakers(props: {
       id="assistant-speakers"
       title="Smart speakers"
       action={
-        <Button variant="outline" size="sm" onClick={props.page.addDevices}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => props.page.addDevices()}
+        >
           Add a smart speaker
         </Button>
       }
@@ -260,6 +262,14 @@ function LoadFailed(props: { onRetry: () => void }) {
   );
 }
 
+function LanguageChangeError() {
+  return (
+    <p className={help} role="alert">
+      The language didn't change. Try again.
+    </p>
+  );
+}
+
 function MainPage(page: PageProps) {
   const assistant = useAssistant();
   const { hearing, speakers, roomName } = assistant;
@@ -279,16 +289,11 @@ function MainPage(page: PageProps) {
   }
   const choose = async (language: RequestLanguage) =>
     setChoiceFailed(!(await assistant.choose(language)));
-  const { language } = hearing;
+  const { language, activeLanguage } = hearing;
   return (
     <>
       <PageBar title="Assistant" />
-      <HearingCard
-        hearing={hearing}
-        switchingFrom={assistant.switchingFrom}
-        room={room}
-        page={page}
-      />
+      <HearingCard hearing={hearing} room={room} page={page} />
       <PageSection id="assistant-setup" title="Setup">
         <Row
           icon={<icons.ListChecks aria-hidden="true" className="size-4" />}
@@ -316,18 +321,21 @@ function MainPage(page: PageProps) {
           />
           <p className={help}>
             It listens and replies in one language. Switching takes a few
-            minutes, and {languageNames[language]} keeps working until then.
+            minutes.
+            {activeLanguage &&
+              activeLanguage !== language &&
+              ` ${languageNames[activeLanguage]} keeps working until then.`}
           </p>
-          {choiceFailed && (
-            <p className={help} role="alert">
-              The language didn't change. Try again.
-            </p>
-          )}
+          {choiceFailed && <LanguageChangeError />}
         </div>
       </section>
       <PageSection id="assistant-say" title="What you can say">
         <div className="flex flex-col gap-3 px-2.5 py-2">
-          <Examples language={language} room={room} withAnythingElse />
+          <Examples
+            language={activeLanguage ?? language}
+            room={room}
+            withAnythingElse
+          />
         </div>
       </PageSection>
     </>
@@ -339,15 +347,17 @@ function MainPage(page: PageProps) {
 function SetupPage(page: PageProps) {
   const assistant = useAssistant();
   const { hearing, speakers, roomName } = assistant;
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2>(page.params.step === "try" ? 2 : 1);
   const [chosen, setChosen] = useState<RequestLanguage>();
+  const [choiceFailed, setChoiceFailed] = useState(false);
   const titleId = useId();
   const room = firstRoom(speakers, roomName);
   const language = chosen ?? hearing?.language ?? "en";
 
   const next = async () => {
-    if (!(await assistant.choose(language))) return;
-    setStep(2);
+    const changed = await assistant.choose(language);
+    setChoiceFailed(!changed);
+    if (changed) setStep(2);
   };
 
   if (step === 1) {
@@ -384,6 +394,7 @@ function SetupPage(page: PageProps) {
             isChoosing={assistant.isChoosing}
             onChoose={setChosen}
           />
+          {choiceFailed && <LanguageChangeError />}
           <div className={card}>
             <h3 className="m-0 text-[13px] font-semibold text-muted-foreground">
               Things you can say
@@ -415,19 +426,27 @@ function SetupPage(page: PageProps) {
             Try it
           </h2>
         </div>
-        <p className="m-0 text-xl leading-7 font-semibold" lang={language}>
-          “{firstTry(language, room)}”
-        </p>
-        <p className="m-0 text-sm leading-5 text-muted-foreground">
-          Say your speaker's wake word first. “The lights” means the lights in
-          that speaker's room.
-        </p>
+        {hearing?.activeLanguage && room && (
+          <>
+            <p
+              className="m-0 text-xl leading-7 font-semibold"
+              lang={hearing.activeLanguage}
+            >
+              “{firstTry(hearing.activeLanguage, room)}”
+            </p>
+            <p className="m-0 text-sm leading-5 text-muted-foreground">
+              Say your speaker's wake word first.
+            </p>
+          </>
+        )}
+        {speakers && speakers.length > 0 && !room && (
+          <p className="m-0 text-sm leading-5 text-muted-foreground">
+            {assignSpeakerRoom}
+          </p>
+        )}
         {hearing && (
           <div aria-live="polite">
-            <HearingLine
-              hearing={hearing}
-              switchingFrom={assistant.switchingFrom}
-            />
+            <HearingLine hearing={hearing} />
           </div>
         )}
         {speakers && speakers.length > 0 ? (
@@ -451,7 +470,10 @@ function SetupPage(page: PageProps) {
           <div className={card}>
             <p className="m-0 text-sm font-medium">No smart speaker yet</p>
             <div className="flex">
-              <Button variant="outline" onClick={page.addDevices}>
+              <Button
+                variant="outline"
+                onClick={() => page.addDevices({ step: "try" })}
+              >
                 Add a smart speaker
               </Button>
             </div>

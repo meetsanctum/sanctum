@@ -1,5 +1,5 @@
 {
-  "version": "0.1.40",
+  "version": "0.1.41",
   "react": "19.3.1",
   "exports": {
     "@meetsanctum/ui-sdk": [
@@ -2321,7 +2321,7 @@
       "    back(): void;",
       "    openSettings(): void;",
       "    openDevice(device: string): void;",
-      "    addDevices(): void;",
+      "    addDevices(returnParams?: PageParams): void;",
       "};",
       "export type DevicePageProps = {",
       "    device: DeviceInfo;",
@@ -2725,7 +2725,7 @@
       "import type { AppInfo, DeviceInfo, LiveMessage, LivePress, TemperatureUnit } from \"@meetsanctum/app-sdk\";",
       "import type { HourCycle } from \"@meetsanctum/app-sdk/clock\";",
       "import type { PageParams } from \"../app-ui\";",
-      "export declare const frameBridge = 4;",
+      "export declare const frameBridge = 5;",
       "export type FrameHello = {",
       "    sanctum: \"hello\";",
       "    code: string;",
@@ -2795,6 +2795,7 @@
       "    device: string;",
       "} | {",
       "    type: \"addDevices\";",
+      "    returnParams?: PageParams;",
       "} | {",
       "    type: \"ready\";",
       "} | {",

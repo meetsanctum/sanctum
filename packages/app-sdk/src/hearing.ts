@@ -37,6 +37,12 @@ export const hearingFailures = [
 ] as const;
 export type HearingFailure = (typeof hearingFailures)[number];
 
-export type Hearing =
-  | { state: Exclude<HearingState, "failed">; language: RequestLanguage }
-  | { state: "failed"; language: RequestLanguage; failure: HearingFailure };
+export type Hearing = {
+  /** The home's selected language. */
+  language: RequestLanguage;
+  /** What speakers can hear now, or null while they cannot listen. */
+  activeLanguage: RequestLanguage | null;
+} & (
+  | { state: Exclude<HearingState, "failed"> }
+  | { state: "failed"; failure: HearingFailure }
+);

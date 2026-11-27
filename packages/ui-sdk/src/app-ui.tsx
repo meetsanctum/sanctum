@@ -45,8 +45,8 @@ export type PageProps = {
    * opens, over this page: one the app may read, as the shell checks.
    */
   openDevice(device: string): void;
-  /** Opens Settings → Devices, adding devices, over this page. */
-  addDevices(): void;
+  /** Opens Add devices over this page, with optional page params to restore on return. */
+  addDevices(returnParams?: PageParams): void;
 };
 
 /** What a device page gets: the device, with the capabilities the app may read. */

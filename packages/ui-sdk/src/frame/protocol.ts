@@ -17,7 +17,7 @@ import type { PageParams } from "../app-ui";
 // id, and the shell answers each; it never sends a URL, method or header.
 
 /** The version of what's said here; a client from before a page's can't show it. */
-export const frameBridge = 4;
+export const frameBridge = 5;
 
 /** The first message, from the frame to its parent, before there's a port. */
 export type FrameHello = { sanctum: "hello"; code: string; bridge: number };
@@ -66,7 +66,7 @@ export type FromFrame =
   | { type: "back" }
   | { type: "openSettings" }
   | { type: "openDevice"; device: string }
-  | { type: "addDevices" }
+  | { type: "addDevices"; returnParams?: PageParams }
   | { type: "ready" }
   // Its files didn't load, or it stopped working once drawn.
   | { type: "failed"; reason: "files" | "stopped"; message: string }

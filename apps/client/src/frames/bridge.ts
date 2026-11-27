@@ -35,7 +35,7 @@ export type FrameEvent =
   | { type: "back" }
   | { type: "openSettings" }
   | { type: "openDevice"; device: string }
-  | { type: "addDevices" }
+  | { type: "addDevices"; returnParams?: PageParams }
   | { type: "size"; height: number }
   | { type: "key"; key: "Escape" };
 
@@ -62,11 +62,21 @@ export function openBridge(options: {
   client: () => AppClient;
   /** What the frame is told first, once it has its port. */
   setup: () => Extract<ToFrame, { type: "setup" }>;
+  /** Changes when the shell shows another page in the same frame. */
+  pageRevision?: () => number;
   on: (event: FrameEvent) => void;
   /** Where the shell listens for the hello, the window it shows the frame in. */
   host?: Window;
 }): FrameBridge {
-  const { frame, code, client, setup, on, host = window } = options;
+  const {
+    frame,
+    code,
+    client,
+    setup,
+    pageRevision,
+    on,
+    host = window,
+  } = options;
   let port: MessagePort | undefined;
   let unsubscribe: (() => void) | undefined;
   // The page's captures by its number for each: stopped ones stay until
@@ -126,9 +136,15 @@ export function openBridge(options: {
         return;
       case "back":
       case "openSettings":
-      case "addDevices":
       case "ready":
         return on({ type: message.type });
+      case "addDevices":
+        if (message.returnParams === undefined)
+          return on({ type: "addDevices" });
+        if (isParams(message.returnParams)) {
+          on({ type: "addDevices", returnParams: message.returnParams });
+        }
+        return;
       case "openDevice":
         return void openDevice(message.device);
       case "size": {
@@ -157,13 +173,22 @@ export function openBridge(options: {
   // A device the app may read, as its own client lists them: any other id
   // opens nothing.
   async function openDevice(device: unknown) {
-    if (!isText(device)) return;
+    if (!isText(device) || waiting >= requestsAllowed) return;
+    const revision = pageRevision?.();
+    waiting++;
     try {
       const readable = await client().devices();
-      if (isClosed || !readable.some(({ id }) => id === device)) return;
+      if (
+        isClosed ||
+        revision !== pageRevision?.() ||
+        !readable.some(({ id }) => id === device)
+      )
+        return;
       on({ type: "openDevice", device });
     } catch {
       // A page that can't read devices opens none.
+    } finally {
+      waiting--;
     }
   }
 
