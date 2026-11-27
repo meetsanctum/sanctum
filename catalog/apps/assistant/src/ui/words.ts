@@ -14,6 +14,8 @@ export const languageNames: Record<RequestLanguage, string> = {
   de: "Deutsch",
 };
 
+const germanRoomCommand = "Mach das Licht aus";
+
 /** A few things to say, in the language the Assistant listens in. */
 export function examples(language: RequestLanguage, room: string | null) {
   // A German room takes an article its name decides, so its examples name
@@ -21,7 +23,7 @@ export function examples(language: RequestLanguage, room: string | null) {
   const place = room ?? "Kitchen";
   return language === "de"
     ? [
-        { say: "Mach das Licht aus", what: "The lights in the speaker's room" },
+        { say: germanRoomCommand, what: "The lights in the speaker's room" },
         {
           say: "Schalte das Licht im Wohnzimmer ein",
           what: "Any room or floor, by its name",
@@ -51,9 +53,7 @@ export function examples(language: RequestLanguage, room: string | null) {
 
 /** The first thing to try, in a room the household has. */
 export function firstTry(language: RequestLanguage, room: string) {
-  return language === "de"
-    ? `Mach das Licht in ${room} aus`
-    : `Turn off the ${room} lights`;
+  return language === "de" ? germanRoomCommand : `Turn off the ${room} lights`;
 }
 
 export const assignSpeakerRoom =

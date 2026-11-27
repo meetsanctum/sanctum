@@ -45,11 +45,11 @@ function StepBar(props: { label: string }) {
     <div className="flex flex-col gap-1.5">
       <span className="text-sm font-medium">{props.label}</span>
       <div
-        className="h-1.5 overflow-hidden rounded-full bg-foreground/10"
+        className="h-1.5 overflow-hidden bg-foreground/10"
         role="progressbar"
         aria-label={props.label}
       >
-        <span className="ml-[35%] block h-full w-[30%] rounded-full bg-foreground motion-safe:animate-pulse" />
+        <span className="ml-[35%] block h-full w-[30%] bg-foreground motion-safe:animate-pulse" />
       </div>
     </div>
   );
@@ -80,7 +80,7 @@ function HearingCard(props: {
   room: string | null;
   page: PageProps;
 }) {
-  const { hearing, page } = props;
+  const { hearing, page, room } = props;
   const words = hearingWords(hearing);
   const id = useId();
   return (
@@ -95,9 +95,18 @@ function HearingCard(props: {
       <p className="m-0 text-sm leading-5 text-muted-foreground">
         {words.help}
         {hearing.state === "ready" &&
-          (props.room
-            ? ` Try “${firstTry(hearing.language, props.room)}”.`
-            : ` ${assignSpeakerRoom}`)}
+          (room ? (
+            <>
+              {" "}
+              Try “
+              <span lang={hearing.language}>
+                {firstTry(hearing.language, room)}
+              </span>
+              ”{hearing.language === "de" && ` at a speaker in ${room}`}.
+            </>
+          ) : (
+            ` ${assignSpeakerRoom}`
+          ))}
       </p>
       <HearingLine hearing={hearing} />
       {words.action === "addDevices" && (
@@ -353,6 +362,7 @@ function SetupPage(page: PageProps) {
   const titleId = useId();
   const room = firstRoom(speakers, roomName);
   const language = chosen ?? hearing?.language ?? "en";
+  const tryLanguage = hearing?.activeLanguage ?? hearing?.language;
 
   const next = async () => {
     const changed = await assistant.choose(language);
@@ -426,16 +436,18 @@ function SetupPage(page: PageProps) {
             Try it
           </h2>
         </div>
-        {hearing?.activeLanguage && room && (
+        {tryLanguage && room && (
           <>
             <p
               className="m-0 text-xl leading-7 font-semibold"
-              lang={hearing.activeLanguage}
+              lang={tryLanguage}
             >
-              “{firstTry(hearing.activeLanguage, room)}”
+              “{firstTry(tryLanguage, room)}”
             </p>
             <p className="m-0 text-sm leading-5 text-muted-foreground">
-              Say your speaker's wake word first.
+              {tryLanguage === "de"
+                ? `At a speaker in ${room}, say its wake word first.`
+                : "Say your speaker's wake word first."}
             </p>
           </>
         )}

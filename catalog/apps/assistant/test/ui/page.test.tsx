@@ -348,7 +348,9 @@ describe("the Assistant's page", () => {
       hearing: { state: "ready", language: "de", activeLanguage: "de" },
     });
     expect(text()).toContain("Ready in Deutsch");
-    expect(text()).toContain("“Mach das Licht aus”");
+    expect(text()).toContain(
+      "Try “Mach das Licht aus” at a speaker in Office.",
+    );
   });
 
   it("shows the active language when opened mid-switch", async () => {
@@ -394,6 +396,29 @@ describe("the Assistant's page", () => {
 });
 
 describe("Setup", () => {
+  it("shows what to try while speech recognition downloads for the first time", async () => {
+    const { client } = fakeClient({
+      hearing: { state: "downloading", language: "de", activeLanguage: null },
+      devices: [office],
+    });
+    await show(client, "setup");
+
+    await act(async () => button("Continue").click());
+
+    expect(text()).toContain("Step 2 of 2");
+    expect(container.querySelector('p[lang="de"]')?.textContent).toBe(
+      "“Mach das Licht aus”",
+    );
+    expect(text()).toContain(
+      "At a speaker in Office, say its wake word first.",
+    );
+    expect(
+      container
+        .querySelector('[role="progressbar"]')
+        ?.getAttribute("aria-label"),
+    ).toBe("Downloading speech recognition for Deutsch");
+  });
+
   it("chooses the language, then shows what to try with the speakers", async () => {
     const { client, call } = fakeClient({
       hearing: { state: "ready", language: "en", activeLanguage: "en" },
