@@ -8,6 +8,7 @@ import type { CapabilityKind } from "./devices.js";
 import { lanRange } from "./lan.js";
 import { modelsUsePermission } from "./models.js";
 import { turnOnType } from "./lights.js";
+import { moodType } from "./moods.js";
 import { forecastType, sunType } from "./weather.js";
 
 // How Sanctum names each permission, the same for every app: a permission's
@@ -93,6 +94,7 @@ const sharedTypes: Record<string, string> = {
   [sunType.id]: "Read the sun times",
   [forecastType.id]: "Read the forecast",
   [turnOnType.id]: "Read how rooms' lights turn on",
+  [moodType.id]: "Read the rooms' moods",
 };
 
 const fixed: Record<string, PermissionWords> = {

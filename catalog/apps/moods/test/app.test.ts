@@ -39,7 +39,7 @@ describe("Moods", () => {
 
   it("brings its moods and what turning each room on brings to the home", () => {
     expect(moodsApp.provides?.entities?.map((type) => type.id)).toEqual([
-      "moods.mood",
+      "mood",
       "lights.turnOn",
     ]);
   });
@@ -54,10 +54,18 @@ describe("Moods", () => {
           assistant ? [[id, assistant.starts, assistant.needs ?? []]] : [],
       ),
     ).toEqual([
-      ["moods.createMood", "off", ["moods.mood", "devices.control:light"]],
-      ["moods.runMood", "on", ["moods.mood", "devices.control:light"]],
-      ["moods.mood", "on", []],
+      ["moods.createMood", "off", ["mood", "devices.control:light"]],
+      ["moods.runMood", "on", ["mood", "devices.control:light"]],
+      ["mood", "on", []],
     ]);
+  });
+
+  it("runs the home's moods by their entities' input, for whoever reads them by type", () => {
+    expect(
+      toStaticManifest(moodsApp).actions.flatMap((action) =>
+        action.runs ? [[action.id, action.runs]] : [],
+      ),
+    ).toEqual([["moods.runMood", "mood"]]);
   });
 
   it("runs its moods in workflows, and leaves a place's lights to the core's own pieces", () => {
@@ -75,7 +83,7 @@ describe("Moods", () => {
       {
         id: "moods.room",
         title: "Moods",
-        entityType: "moods.mood",
+        entityType: "mood",
         kind: "tiles",
         order: 200,
         press: expect.objectContaining({

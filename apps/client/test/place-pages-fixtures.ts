@@ -97,7 +97,7 @@ export const loose = light("loose", "Loose", null, false);
 const moodsSection: RoomSectionInfo = {
   id: "moods.room",
   title: "Moods",
-  entityType: "moods.mood",
+  entityType: "mood",
   kind: "tiles",
   order: 200,
   press: { action: "moods.runMood" },
@@ -158,14 +158,14 @@ export const entity = (
   state: { icon: "sun", order: 0, active: false, input: { id: key }, ...state },
   updatedAt: "2026-10-29T10:00:00.000Z",
 });
-export const relax = entity("sanctum.moods", "moods.mood", "relax", {
+export const relax = entity("sanctum.moods", "mood", "relax", {
   placeId: "office",
   name: "Relax",
   icon: "armchair",
   order: 0,
   active: true,
 });
-export const work = entity("sanctum.moods", "moods.mood", "work", {
+export const work = entity("sanctum.moods", "mood", "work", {
   placeId: "office",
   name: "Work",
   icon: "briefcase",

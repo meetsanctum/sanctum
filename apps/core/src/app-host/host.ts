@@ -660,6 +660,26 @@ export function createAppHost(options: {
       return installed.get(appId)?.contract.actions.get(actionId);
     },
 
+    /** The action of an installed app's that runs its entities of a type. */
+    runner(appId: string, typeId: string) {
+      const actions = installed.get(appId)?.contract.actions.values() ?? [];
+      return [...actions].find((action) => action.runs === typeId);
+    },
+
+    /** Records an agent's refused run when its entity cannot be read. */
+    recordAgentRefusal(agentId: string, appId: string, actionId: string) {
+      const action = installed.get(appId)?.contract.actions.get(actionId);
+      if (action) {
+        recordRefusal(
+          appId,
+          action,
+          activity.agentWho(agentId),
+          "forbidden",
+          undefined,
+        );
+      }
+    },
+
     /** What each installed app offers AI agents. */
     offers(): AppOffers[] {
       return [...installed.values()].map((entry) => ({

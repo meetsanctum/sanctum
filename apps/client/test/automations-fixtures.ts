@@ -169,7 +169,7 @@ export const runMood = piece({
   sentence: "Run {id}",
   config: {
     type: "object",
-    properties: { id: { type: "string", entityOf: "moods.mood" } },
+    properties: { id: { type: "string", entityOf: "mood" } },
     required: ["id"],
   },
 });
@@ -408,7 +408,7 @@ export const names: Names = {
     );
   },
   entity: (type, key) =>
-    type === "moods.mood" && key === "focus" ? "Focus" : undefined,
+    type === "mood" && key === "focus" ? "Focus" : undefined,
   app: (id) => (id === "sanctum.moods" ? "Moods" : undefined),
   time: (wall) => wall,
 };

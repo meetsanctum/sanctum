@@ -54,6 +54,9 @@
 // 28 lets the Assistant set the home's language for speech
 // (ctx.speech.setLanguage) and say, in its manifest, what a smart speaker
 // answers for speech it didn't understand.
-export const protocolVersion = 28;
+// 29 brings moods as a standard type, mood, and an action that runs a
+// standard type's entities (an action's `runs`), which a core before would
+// refuse in a manifest.
+export const protocolVersion = 29;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 11;

@@ -95,7 +95,7 @@ const moods: AppInfo = {
   name: "Moods",
   settings: null,
   provides: {
-    entities: [{ id: "moods.mood", title: "Mood" }],
+    entities: [{ id: "mood", title: "Mood" }],
     widgets: [],
     roomSections: [],
     devicePages: [],

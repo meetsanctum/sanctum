@@ -78,7 +78,7 @@ const moods: AppInfo = {
       {
         id: "moods.room",
         title: "Moods",
-        entityType: "moods.mood",
+        entityType: "mood",
         kind: "tiles",
         order: 200,
         press: { action: "moods.runMood" },
@@ -117,7 +117,7 @@ const weather: AppInfo = {
 const aurora: EntityInfo = {
   app: "sanctum.moods",
   key: "aurora",
-  type: "moods.mood",
+  type: "mood",
   name: "Aurora",
   state: {
     placeId: "kitchen",

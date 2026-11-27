@@ -1,9 +1,9 @@
 {
   "id": "sanctum.moods",
   "name": "Moods",
-  "version": "0.13.1",
+  "version": "0.14.0",
   "core": "^2.0.0",
-  "protocol": 28,
+  "protocol": 29,
   "summary": "Moods for each room, and what remotes and motion do with its lights.",
   "runtime": {
     "memory": 128,
@@ -580,7 +580,7 @@
         "starts": "off",
         "description": "Save a new mood without applying it. Give the room ID, a name, an optional icon and the desired state of each selected light, identified by device and capability.",
         "needs": [
-          "moods.mood",
+          "mood",
           "devices.control:light"
         ]
       }
@@ -983,7 +983,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 128,
-            "entityOf": "moods.mood"
+            "entityOf": "mood"
           }
         },
         "required": [
@@ -996,7 +996,7 @@
         "properties": {
           "switched": {
             "type": "integer",
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "maximum": 9007199254740991
           },
           "failed": {
@@ -1005,10 +1005,12 @@
               "type": "object",
               "properties": {
                 "device": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 },
                 "capability": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
               },
               "required": [
@@ -1029,10 +1031,11 @@
         "starts": "on",
         "description": "Run a saved mood in its room. This can turn off other lights in the room. Returns the number of successful light commands and the lights whose commands failed.",
         "needs": [
-          "moods.mood",
+          "mood",
           "devices.control:light"
         ]
-      }
+      },
+      "runs": "mood"
     },
     {
       "id": "moods.previewMood",
@@ -1152,7 +1155,7 @@
         "properties": {
           "switched": {
             "type": "integer",
-            "minimum": -9007199254740991,
+            "minimum": 0,
             "maximum": 9007199254740991
           },
           "failed": {
@@ -1161,10 +1164,12 @@
               "type": "object",
               "properties": {
                 "device": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 },
                 "capability": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
               },
               "required": [
@@ -3514,9 +3519,9 @@
   "provides": {
     "entities": [
       {
-        "id": "moods.mood",
+        "id": "mood",
         "title": "Mood",
-        "standard": false,
+        "standard": true,
         "state": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
@@ -3572,15 +3577,10 @@
             },
             "input": {
               "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string"
-                }
+              "propertyNames": {
+                "type": "string"
               },
-              "required": [
-                "id"
-              ],
-              "additionalProperties": false
+              "additionalProperties": {}
             }
           },
           "required": [
@@ -3595,7 +3595,7 @@
         },
         "assistant": {
           "starts": "on",
-          "description": "The rooms' moods, with each mood's room ID, name, icon, display order and whether it is active. Pass a mood's input to moods.runMood to run it."
+          "description": "The rooms' moods, with each mood's room ID, name, icon, display order and whether it is active. Run one with the run tool, by its app and key."
         }
       },
       {
@@ -3721,7 +3721,7 @@
       {
         "id": "moods.room",
         "title": "Moods",
-        "entityType": "moods.mood",
+        "entityType": "mood",
         "kind": "tiles",
         "order": 200,
         "press": {
@@ -3769,5 +3769,6 @@
         "needs": []
       }
     ]
-  }
+  },
+  "oldestPage": "0.14.0"
 }

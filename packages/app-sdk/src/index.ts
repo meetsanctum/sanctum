@@ -16,6 +16,12 @@ import {
 import type { AppContext } from "./context.js";
 import type { AppDefinition } from "./app-definition.js";
 import {
+  assertProvides,
+  assertUniqueIds,
+  isSchema,
+  memberId,
+} from "./app-validation.js";
+import {
   assertDevicePages,
   devicePageInfo,
   type DevicePageInfo,
@@ -23,6 +29,7 @@ import {
 import type { EntityTypeDefinition } from "./entities.js";
 import { staticProblems } from "./device-problems.js";
 import { assertDriver } from "./driver.js";
+import { assertEntityRuns } from "./entity-runs.js";
 import {
   needsProblems,
   permissionIds,
@@ -38,12 +45,12 @@ import {
   type RoomSectionInfo,
 } from "./room-sections.js";
 import { turnOnType } from "./lights.js";
+import { moodType } from "./moods.js";
 import { protocolVersion } from "./protocol-version.js";
 import { assertAssistantSpeech } from "./assistant-speech.js";
 import { settingsSchemaOf, type SettingsSchema } from "./settings.js";
 import { forecastType, sunType } from "./weather.js";
 import {
-  assertWidgets,
   widgetContent,
   widgetEntityType,
   widgetInfo,
@@ -80,6 +87,8 @@ export * from "./listening.js";
 export * from "./live.js";
 export * from "./media.js";
 export * from "./models.js";
+export * from "./moods.js";
+export { sameSchema } from "./entity-runs.js";
 export * from "./requests.js";
 export * from "./sentences.js";
 export * from "./hearing.js";
@@ -102,12 +111,14 @@ export * from "./workflows.js";
 /**
  * The core's standard entity types, which any app may provide and, with
  * entities.read:<type>, read. The core reads some itself: sun for its
- * workflows, and lights.turnOn when it turns a place's lights on.
+ * workflows, lights.turnOn when it turns a place's lights on, and mood,
+ * which its run tool runs for AI agents.
  */
 export const standardEntityTypes: readonly EntityTypeDefinition[] = [
   sunType,
   forecastType,
   turnOnType,
+  moodType,
 ];
 
 /** How dangerous an action is; the core maps tiers to auto-run or approval. */
@@ -168,6 +179,12 @@ export interface ActionDefinition<
    * join when they are about the same device and by the same caller.
    */
   readonly aboutDevice?: DeviceActionActivity;
+  /**
+   * The id of a standard type with a run, such as mood, that it runs: it
+   * takes one of the app's entities' `input` and answers the type's run
+   * output (entity-runs.ts).
+   */
+  readonly runs?: string;
   /** How Automations words it as a workflow's step or condition. */
   readonly words?: PieceWords;
   /**
@@ -249,8 +266,6 @@ export function defineEvent<Payload extends z.ZodType>(
 ): EventDefinition<Payload> {
   return event;
 }
-
-const memberId = /^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$/;
 
 export { isOlderVersion } from "./contract.js";
 
@@ -441,7 +456,7 @@ export function defineApp(app: AppDefinition): AppDefinition {
   }
   const asked = permissionIds(app.permissions);
   assertUniqueIds("permission", asked);
-  assertProvides(app);
+  assertProvides(app, standardEntityTypes);
   assertAssistantOffers(
     app.actions,
     (app.provides?.entities ?? []).map(
@@ -449,6 +464,7 @@ export function defineApp(app: AppDefinition): AppDefinition {
     ),
   );
   assertRoomSections(app);
+  assertEntityRuns(app, standardEntityTypes);
   assertDevicePages({ permissions: asked, provides: app.provides });
   assertWorkflowPieces(app);
   assertDriver(app, asked);
@@ -514,6 +530,7 @@ export function toStaticManifest(app: AppDefinition) {
       output: z.toJSONSchema(action.output),
       assistant: action.assistant ?? null,
       ...(action.turn ? { turn: true as const } : {}),
+      ...(action.runs !== undefined ? { runs: action.runs } : {}),
       ...(action.aboutDevice
         ? { aboutDevice: { done: action.aboutDevice.done } }
         : {}),
@@ -595,50 +612,6 @@ export function entityTypesOf(app: AppDefinition): EntityTypeDefinition[] {
     ...(app.provides?.entities ?? []),
     ...(app.provides?.widgets ?? []),
   ].map((each) => entityTypeOf(app, each.id)!);
-}
-
-function assertProvides(app: AppDefinition) {
-  const provides = app.provides ?? {};
-  if (typeof provides !== "object") {
-    throw new Error("An app's provides must be an object");
-  }
-  const types = provides.entities ?? [];
-  const widgets = provides.widgets ?? [];
-  if (!Array.isArray(types) || !Array.isArray(widgets)) {
-    throw new Error("An app provides lists of entity types and widgets");
-  }
-  for (const type of types) {
-    const id = String(type?.id);
-    if (!type || typeof type.title !== "string" || !isSchema(type.state)) {
-      throw new Error(`Entity type "${id}" needs a title and a state schema`);
-    }
-    const standard = standardEntityTypes.some((each) => each.id === type.id);
-    if (standard !== (type.standard === true)) {
-      throw new Error(
-        standard
-          ? `"${id}" is a standard entity type: use the core's definition`
-          : `"${id}" is not one of the core's standard entity types`,
-      );
-    }
-    if (!standard && !memberId.test(id)) {
-      throw new Error(
-        `Entity type "${id}" must be namespaced, such as naturalLight.target`,
-      );
-    }
-  }
-  assertUniqueIds(
-    "entity type",
-    types.map((type) => type.id),
-  );
-  // A widget's id is the type of the entities that hold its cards.
-  assertWidgets(app, [
-    ...types.map((type) => type.id),
-    ...standardEntityTypes.map((type) => type.id),
-  ]);
-  assertUniqueIds(
-    "widget",
-    widgets.map((widget) => widget.id),
-  );
 }
 
 // The JSON Schema properties of an object schema, or none for anything else.
@@ -745,10 +718,6 @@ function assertWorkflowPieces(app: AppDefinition) {
   }
 }
 
-function isSchema(value: unknown) {
-  return typeof (value as z.ZodType | undefined)?.safeParse === "function";
-}
-
 function assertAction(action: ActionDefinition) {
   const id = String(action?.id);
   if (
@@ -774,15 +743,5 @@ function assertAction(action: ActionDefinition) {
     throw new Error(
       `"${id}"'s aboutDevice needs a non-blank done phrase of up to 80 characters`,
     );
-  }
-}
-
-function assertUniqueIds(kind: string, ids: readonly string[]) {
-  const seen = new Set<string>();
-  for (const id of ids) {
-    if (seen.has(id)) {
-      throw new Error(`Duplicate ${kind} id "${id}"`);
-    }
-    seen.add(id);
   }
 }

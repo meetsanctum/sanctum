@@ -28,7 +28,7 @@ const moodState = z.object({
   smart: z.boolean(),
 });
 const moodType = defineEntityType({
-  id: "moods.mood",
+  id: "example.scene",
   title: "Mood",
   state: moodState,
 });
@@ -41,15 +41,15 @@ const action = (id: string, tier: "read" | "write" | "destructive") =>
     output: z.object({}),
     run: async () => ({}),
   });
-const runMood = action("moods.runMood", "write");
-const deleteMood = action("moods.deleteMood", "destructive");
+const runScene = action("example.runScene", "write");
+const deleteScene = action("example.deleteScene", "destructive");
 const section = defineRoomSection({
-  id: "moods.room",
-  title: "Moods",
-  entityType: "moods.mood",
+  id: "example.room",
+  title: "Scenes",
+  entityType: "example.scene",
   kind: "tiles",
   order: 200,
-  press: runMood,
+  press: runScene,
 });
 
 function app(
@@ -57,14 +57,14 @@ function app(
   more: Partial<AppDefinition> = {},
 ): AppDefinition {
   return {
-    id: "sanctum.moods",
-    name: "Moods",
+    id: "sanctum.example",
+    name: "Example",
     version: "0.1.0",
     core: "^2.0.0",
     icon: { glyph: "sofa", color: "ember" },
     pages: ["main", "room"],
     permissions: [{ id: "devices.control:light", reason: "For the test." }],
-    actions: [runMood, deleteMood],
+    actions: [runScene, deleteScene],
     events: [],
     provides: {
       entities: [moodType],
@@ -78,12 +78,12 @@ describe("a room section", () => {
   it("is declared in the static manifest, with the action a tap calls", () => {
     expect(toStaticManifest(defineApp(app())).provides.roomSections).toEqual([
       {
-        id: "moods.room",
-        title: "Moods",
-        entityType: "moods.mood",
+        id: "example.room",
+        title: "Scenes",
+        entityType: "example.scene",
         kind: "tiles",
         order: 200,
-        press: { action: "moods.runMood" },
+        press: { action: "example.runScene" },
         preview: null,
       },
     ]);
@@ -118,12 +118,12 @@ describe("a room section", () => {
     ],
     [
       "an action that is not the app's",
-      { press: action("moods.other", "write") },
+      { press: action("example.other", "write") },
       /not one of the app's/,
     ],
     [
       "an action more than write",
-      { press: deleteMood },
+      { press: deleteScene },
       /must be read or write/,
     ],
   ])("refuses %s", (_name, changes, error) => {
@@ -152,7 +152,7 @@ describe("a room section", () => {
         ...two,
         provides: {
           ...two.provides,
-          roomSections: [section, { ...section, id: "moods.other" }],
+          roomSections: [section, { ...section, id: "example.other" }],
         },
       }),
     ).toThrow(/one room section at most/);
@@ -172,7 +172,7 @@ describe("a room section", () => {
           },
         ),
       ),
-    ).toThrow(/moods.mood, but its icon does not fit a tile/);
+    ).toThrow(/example.scene, but its icon does not fit a tile/);
   });
 });
 
@@ -223,7 +223,7 @@ describe("the contract", () => {
     const next = toStaticManifest(
       defineApp({ ...app(), provides: { entities: [moodType] } }),
     );
-    expect(brokenPromises(earlier, next)).toEqual(["roomSection moods.room"]);
+    expect(brokenPromises(earlier, next)).toEqual(["roomSection example.room"]);
     expect(
       brokenPromises(earlier, {
         ...next,

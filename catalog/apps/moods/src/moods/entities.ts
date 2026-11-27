@@ -1,50 +1,25 @@
 import {
-  defineEntityType,
+  moodType,
   type AppContext,
   type DeviceEvent,
   type DeviceInfo,
+  type MoodState,
 } from "@meetsanctum/app-sdk";
 import { eq, inArray } from "drizzle-orm";
 import { isDeepStrictEqual } from "node:util";
-import { z } from "zod";
 
 import { lightsInRoom } from "../targets.js";
-import { moodIcons } from "./icons.js";
 import { activeMood } from "./light-states.js";
 import { moodEntities } from "./schema.js";
 import { lightsOf } from "./smart.js";
 import { readMoods, type Mood } from "./store.js";
 
-// What Moods brings to the home: a `moods.mood` entity for each mood, in the
-// tile shape a room section draws, with whether the room's lights show it
-// now. Which one they show is the rule Moods' pages use (light-states.ts):
-// offline lights do not count, and when several moods match, none is active.
-// One state serves every viewer.
-
-export const moodState = z.object({
-  /** The mood's room. */
-  placeId: z.string(),
-  icon: z.enum(moodIcons),
-  name: z.string(),
-  /** Its place among the room's moods, from 0. */
-  order: z.number().int().min(0),
-  /** Whether the room's lights show it now. */
-  active: z.boolean(),
-  /** What moods.runMood takes to run it. */
-  input: z.object({ id: z.string() }),
-});
-export type MoodState = z.infer<typeof moodState>;
-
-export const moodType = defineEntityType({
-  id: "moods.mood",
-  title: "Mood",
-  state: moodState,
-  assistant: {
-    starts: "on",
-    description:
-      "The rooms' moods, with each mood's room ID, name, icon, display order and whether it is active. Pass a mood's input to moods.runMood to run it.",
-  },
-});
+// What Moods brings to the home: an entity of the standard mood type for
+// each mood, in the tile shape a room section draws, with whether the
+// room's lights show it now and, as its input, what moods.runMood takes to
+// run it. Which one they show is the rule Moods' pages use
+// (light-states.ts): offline lights do not count, and when several moods
+// match, none is active. One state serves every viewer.
 
 // One publication at a time, so a room read before a change never lands
 // after one read since: a mood saved while its preview's lights still
