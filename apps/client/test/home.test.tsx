@@ -201,6 +201,27 @@ describe("Settings' pages", () => {
     expect(pageTitle()).toBe("Settings");
   });
 
+  it("open again on a category's page of Devices, with Back to Devices", async () => {
+    homeData.devices = [light("lamp", "Lamp")];
+    await refresh();
+    await openFromOverview("Settings");
+    await openArea("Devices");
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          'main button[aria-label="Lights: 1 device"]',
+        )!
+        .click(),
+    );
+    expect(pageTitle()).toBe("Lights");
+    await goHome();
+
+    await openFromOverview("Settings");
+    expect(pageTitle()).toBe("Lights");
+    await act(async () => backTo("Devices")!.click());
+    expect(pageTitle()).toBe("Devices");
+  });
+
   it("opens Needs attention from Home even when Settings was left on another page", async () => {
     const lamp = light("lamp", "Lamp", {
       availability: "offline",

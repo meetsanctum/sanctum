@@ -4,6 +4,8 @@ import {
   capabilityKinds,
   deviceCategories,
   deviceCategoryOf,
+  deviceCategoryOfType,
+  deviceTypes,
 } from "../src/index.js";
 
 // Where a device's parts show: the list the shell's sidebar, room pages and
@@ -32,5 +34,17 @@ describe("the device categories", () => {
 
   it("have none for a kind they do not know", () => {
     expect(deviceCategoryOf("curtain")).toBeUndefined();
+  });
+
+  it("put a device of each type in one category, by what its type needs", () => {
+    for (const type of deviceTypes) {
+      const category = deviceCategoryOfType(type.id);
+      if (type.id === "unknown") expect(category).toBeUndefined();
+      else expect(category, type.id).toBe(deviceCategoryOf(type.needs[0]!));
+    }
+    expect(deviceCategoryOfType("motion")?.id).toBe("presence");
+    expect(deviceCategoryOfType("plug")?.id).toBe("switches");
+    expect(deviceCategoryOfType("window")?.id).toBe("security");
+    expect(deviceCategoryOfType("smart-speaker")?.id).toBe("media");
   });
 });

@@ -1,8 +1,5 @@
 import {
   historyFields,
-  lowBattery,
-  lowCharge,
-  maintenanceOf,
   type AppInfo,
   type CapabilityInfo,
   type DeviceInfo,
@@ -13,15 +10,8 @@ import {
   type Places,
   type ProbeResult,
 } from "@meetsanctum/app-sdk";
-import type { HomeClock } from "@meetsanctum/app-sdk/clock";
-import {
-  Button,
-  pressLabel,
-  type LiveFeed,
-  useHomeClock,
-} from "@meetsanctum/ui-sdk";
-import { cn } from "cn";
-import { Check, CircleAlert, LoaderCircle } from "lucide-react";
+import { Button, type LiveFeed, useHomeClock } from "@meetsanctum/ui-sdk";
+import { Radio } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -31,10 +21,9 @@ import {
 } from "react";
 
 import { AddDevices } from "./add-devices";
-import { attentionText } from "./attention";
+import { categoryLooks } from "./category-looks";
 import { RepairDevice } from "./repair-device";
-import { Section } from "./components";
-import { Progress } from "./components/ui/progress";
+import { Row, Section } from "./components";
 import { coreDevice, coreDevices } from "./core-devices";
 import { coreJson } from "./core-fetch";
 import type { OnHome } from "./dashboards";
@@ -46,23 +35,32 @@ import {
   updatesHint,
   useMinuteClock,
   type CheckResult,
-  type Status,
 } from "./device-firmware";
+import {
+  deviceGroupOf,
+  deviceGroupTitle,
+  groupNoun,
+  unknownGroup,
+  upperFirst,
+} from "./device-groups";
+import {
+  deviceDetail,
+  DeviceLine,
+  deviceStatus,
+  pressShownMs,
+} from "./device-line";
 import { DeviceMenu } from "./device-menu";
 import { EditDevice, keepHistory, type Editing } from "./edit-device";
 import { foundHint, useAdding } from "./found-devices";
-import { lowBatteryText, quietText } from "./maintenance";
-import {
-  deviceProblem,
-  DeviceIcon,
-  roomName,
-  updateDevice,
-} from "./device-parts";
+import { deviceProblem, DeviceIcon, updateDevice } from "./device-parts";
 import { MotionSettings } from "./motion-settings";
+import { DeviceGroupList } from "./settings-device-groups";
 import type { ServiceNotSetUp } from "./system-status";
 
-// Settings → Devices, where the household manages its hardware: every device
-// with its room, for every client, a shared one too, to add devices, rename
+// Settings → Devices, where the household manages its hardware: first a
+// list of the categories the home has devices in (settings-device-groups),
+// then a page for each with its devices and their rooms, for every client,
+// a shared one too, to add devices, rename
 // them, move them between rooms, choose whether its history is kept, which
 // deletes it when not, and remove them. A device that joined again or whose
 // driver cannot take it off its network can still be removed by force. A
@@ -74,58 +72,6 @@ import type { ServiceNotSetUp } from "./system-status";
 // battery says its charge on its line; one gone quiet or low leads it, in
 // red with a sign, unless an update or a check has something to say, as
 // Maintenance says it (maintenance.ts).
-
-// How long a press stays on a remote's line.
-export const pressShownMs = 4_000;
-
-export function deviceDetail(
-  device: DeviceInfo,
-  rooms: Places["rooms"],
-  // The action it was pressed with just now, if any.
-  pressed?: string,
-): string {
-  return [
-    roomName(rooms, device.roomId) ?? "No room",
-    device.driverName !== device.name ? device.driverName : null,
-    device.battery !== null && device.battery >= lowBattery
-      ? `Battery ${device.battery}%`
-      : null,
-    // One that left its network says so first instead.
-    device.availability === "offline" && device.leftAt === null
-      ? "Offline"
-      : null,
-    pressed ? `${pressLabel(pressed)} just now` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-}
-
-/**
- * What leads a device's line: that its network no longer has it or what its
- * driver says is wrong with it, its firmware's or a check's news, or else
- * that it went quiet or its battery is low.
- */
-export function deviceStatus(
-  clock: HomeClock,
-  device: DeviceInfo,
-  firmware: Status | null,
-  now: number,
-): Status | null {
-  if (device.leftAt !== null) {
-    return { text: attentionText("left", device), tone: "problem" };
-  }
-  if (device.problem) {
-    return { text: attentionText("problem", device), tone: "problem" };
-  }
-  if (firmware) return firmware;
-  const need = maintenanceOf(device, now);
-  if (need === "quiet")
-    return { text: quietText(clock, device, now), tone: "problem" };
-  if (need === "battery") {
-    return { text: lowBatteryText(lowCharge(device)), tone: "problem" };
-  }
-  return null;
-}
 
 const byName = (a: DeviceInfo, b: DeviceInfo) => a.name.localeCompare(b.name);
 
@@ -140,9 +86,19 @@ export function DevicesSection(props: {
   notSetUp?: readonly ServiceNotSetUp[];
   // The way back of Settings' Devices page, which it is the whole of.
   page?: ReactNode;
+  // The group whose page this is, a category's id or the unknown one;
+  // without one, the list of groups.
+  group?: string;
+  // Opens a group's page from the list.
+  onOpenGroup?: (group: string) => void;
+  // The devices the shell already has, which the page shows until its own
+  // read answers, so it never opens blank.
+  known?: readonly DeviceInfo[];
 }) {
   const clock = useHomeClock();
-  const [devices, setDevices] = useState<DeviceInfo[]>();
+  const [devices, setDevices] = useState<DeviceInfo[] | undefined>(() =>
+    props.known?.length ? [...props.known].sort(byName) : undefined,
+  );
   const [rooms, setRooms] = useState<Places["rooms"]>([]);
   // Whether each device with a history keeps it.
   const [kept, setKept] = useState<Record<string, boolean>>({});
@@ -516,29 +472,56 @@ export function DevicesSection(props: {
   };
 
   const tuned = devices?.find((each) => each.id === tuning);
+  // A category's page, or the list of categories without one.
+  const groupTitle = deviceGroupTitle(props.group);
+  const listed =
+    devices && groupTitle
+      ? devices.filter((device) => deviceGroupOf(device) === props.group)
+      : devices;
+  const isList = !groupTitle;
 
   return (
     <Section
       id="settings-devices"
-      title="Devices"
+      title={groupTitle ?? "Devices"}
       hint={
-        devices &&
-        ([updatesHint(devices), foundHint(addable)]
+        listed &&
+        ([updatesHint(listed), foundHint(addable)]
           .filter(Boolean)
           .join(" · ") ||
           undefined)
       }
       action={<Button onClick={() => setAdding(true)}>Add devices</Button>}
       page={props.page ?? null}
+      hideBody={!listed}
+      bare={isList && !!devices?.length}
     >
       {devices &&
-        (devices.length === 0 ? (
+        listed &&
+        (isList && devices.length === 0 ? (
           <p className="m-0 text-[13px] font-medium text-muted-foreground">
             No devices yet.
           </p>
+        ) : isList ? (
+          <DeviceGroupList
+            devices={devices}
+            onOpen={(group) => props.onOpenGroup?.(group)}
+          />
+        ) : listed.length === 0 ? (
+          // Its last device went while its page was open: the page stays
+          // until someone goes back.
+          <ul className="m-0 flex list-none flex-col gap-3 p-0">
+            <li className="flex items-center gap-3">
+              <GroupRound group={props.group!} />
+              <Row
+                title={`No ${groupNoun(props.group)} any more`}
+                detail={`${upperFirst(groupNoun(props.group))} you add show here`}
+              />
+            </li>
+          </ul>
         ) : (
           <ul className="m-0 flex list-none flex-col gap-3 p-0">
-            {devices.map((device) => {
+            {listed.map((device) => {
               const button = updateButton(device, devices);
               const hasHistory = device.capabilities.some(
                 (capability) => historyFields[capability.kind].length > 0,
@@ -665,58 +648,19 @@ export function DevicesSection(props: {
   );
 }
 
-// A device's name, and its line: what is going on with its firmware or a
-// check first, in red with a sign when something went wrong, then its room
-// and the rest, with an update's progress under it. Maintenance's rows
-// are drawn the same.
-export function DeviceLine(props: {
-  device: DeviceInfo;
-  status: Status | null;
-  detail: string;
-}) {
-  const { status } = props;
+// A group's icon in the plain round, for its page's quiet row.
+function GroupRound(props: { group: string }) {
   const Icon =
-    status?.tone === "busy"
-      ? LoaderCircle
-      : status?.tone === "problem"
-        ? CircleAlert
-        : status?.tone === "done"
-          ? Check
-          : null;
+    props.group === unknownGroup
+      ? Radio
+      : (categoryLooks[props.group as keyof typeof categoryLooks]?.icon ??
+        Radio);
   return (
-    <span className="flex min-w-0 flex-1 flex-col gap-px leading-tight">
-      <span className="truncate text-sm font-medium">{props.device.name}</span>
-      <span className="flex min-w-0 items-center gap-1 text-[13px] font-medium text-muted-foreground">
-        {Icon && (
-          <Icon
-            aria-hidden="true"
-            className={cn(
-              "size-3.5 shrink-0",
-              status?.tone === "busy" && "animate-spin",
-              status?.tone === "problem" && "text-destructive",
-            )}
-          />
-        )}
-        <span className="truncate">
-          {status && (
-            <span
-              className={cn(status.tone === "problem" && "text-destructive")}
-            >
-              {status.text}
-            </span>
-          )}
-          {status?.then && ` · ${status.then}`}
-          {status && " · "}
-          {props.detail}
-        </span>
-      </span>
-      {status?.progress !== undefined && (
-        <Progress
-          value={status.progress}
-          aria-label={`${props.device.name}'s update`}
-          className="mt-1.5 max-w-105"
-        />
-      )}
+    <span
+      aria-hidden="true"
+      className="flex size-8 shrink-0 items-center justify-center rounded-full bg-foreground/12"
+    >
+      <Icon className="size-4" />
     </span>
   );
 }

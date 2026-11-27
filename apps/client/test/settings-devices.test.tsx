@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CoreError, coreJson } from "../src/core-fetch";
 import { SettingsPage } from "../src/settings";
-import { pressShownMs } from "../src/settings-devices";
+import { pressShownMs } from "../src/device-line";
 import type { OnHome } from "../src/dashboards";
 import { unknownHome } from "./home-fixtures";
 import {
@@ -132,12 +132,13 @@ describe("Settings → Devices", () => {
     vi.unstubAllGlobals();
   });
 
-  async function show(me: Me) {
+  // A category's page of Settings → Devices, or the list without one.
+  async function show(me: Me, group: string | null = "lights") {
     await act(async () =>
       root.render(
         <SettingsPage
-          page="devices"
-          params={{}}
+          page={group ? "device-group" : "devices"}
+          params={group ? { id: group } : {}}
           open={() => undefined}
           back={() => undefined}
           apps={[zigbee]}
@@ -192,14 +193,17 @@ describe("Settings → Devices", () => {
   }
 
   it("is for every client, shared ones too", async () => {
-    await show(admin);
+    await show(admin, null);
     expect(container.textContent).toContain("Devices");
     expect(container.textContent).toContain("Add devices");
 
-    await show({
-      client: { ...macbook, kind: "shared", personId: null },
-      person: null,
-    } as unknown as Me);
+    await show(
+      {
+        client: { ...macbook, kind: "shared", personId: null },
+        person: null,
+      } as unknown as Me,
+      null,
+    );
     expect(container.textContent).toContain("Add devices");
   });
 
@@ -242,10 +246,13 @@ describe("Settings → Devices", () => {
     );
     expect(container.textContent).toContain("Office light");
 
+    // The category's page stays once its last device goes, and says so.
     await act(async () =>
       live.publish({ type: "device", id: "desk", device: null }),
     );
-    expect(container.textContent).toContain("No devices yet.");
+    expect(container.querySelector("h1")?.textContent).toBe("Lights");
+    expect(container.textContent).toContain("No lights any more");
+    expect(container.textContent).toContain("Lights you add show here");
   });
 
   it("lists a device with a part of a kind this build does not know", async () => {
@@ -321,7 +328,7 @@ describe("Settings → Devices", () => {
       ],
     });
     devices = [light("desk", "Light"), remote];
-    await show(admin);
+    await show(admin, "buttons");
     const press = (action: string) =>
       act(async () =>
         live.publish({
@@ -512,7 +519,7 @@ describe("Settings → Devices", () => {
       { path: "/api/devices/remove", json: { id: "desk", force: false } },
       { path: "/api/devices/remove", json: { id: "desk", force: true } },
     ]);
-    expect(container.textContent).toContain("No devices yet.");
+    expect(container.textContent).toContain("No lights any more");
   });
 
   it("does not offer force for another device when an earlier removal fails late", async () => {

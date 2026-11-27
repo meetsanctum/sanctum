@@ -103,9 +103,28 @@ describe("the default app page", () => {
 
     await act(async () => showDevices()!.click());
     expect(pageTitle()).toBe("Devices");
+    const lights = () =>
+      container.querySelector<HTMLButtonElement>(
+        'main button[aria-label="Lights: 1 device"]',
+      );
+    expect(lights()).not.toBeNull();
+
+    // A category's page has its devices, and Back to Devices puts focus
+    // on the category's row again.
+    await act(async () => lights()!.click());
+    expect(pageTitle()).toBe("Lights");
     expect(container.querySelector("main")?.textContent).toContain(
       "Hall Light",
     );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          '.top-bar button[aria-label="Back to Devices"]',
+        )!
+        .click(),
+    );
+    expect(pageTitle()).toBe("Devices");
+    expect(document.activeElement).toBe(lights());
 
     await act(async () =>
       container

@@ -1,12 +1,12 @@
 import { cn } from "cn";
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 
 import { productName } from "./brand";
 import { knotPath } from "./knot";
 import { AvatarFallback, Avatar as AvatarRoot } from "./components/ui/avatar";
 import { getShell } from "./shell";
 import { Button, PageBar, usePhone } from "@meetsanctum/ui-sdk";
-import { ChevronLeft, User } from "lucide-react";
+import { ChevronLeft, ChevronRight, User, type LucideIcon } from "lucide-react";
 
 // Small pieces the screens share.
 
@@ -82,6 +82,8 @@ export function Section(props: {
   page?: ReactNode;
   // A page can show its bar before its card is ready.
   hideBody?: boolean;
+  // Its children draw their own card, as a list of rows that open pages.
+  bare?: boolean;
   children: ReactNode;
 }) {
   const Heading = props.level === 3 ? "h3" : "h2";
@@ -95,7 +97,9 @@ export function Section(props: {
       {props.hint}
     </span>
   );
-  const card = (
+  const card = props.bare ? (
+    props.children
+  ) : (
     <div className="flex min-w-0 flex-col gap-3 rounded-lg bg-card px-4 py-3.5 text-card-foreground">
       {props.children}
     </div>
@@ -208,5 +212,65 @@ export function Row(props: {
         </span>
       )}
     </span>
+  );
+}
+
+// A card of areas that belong together, set apart from the next by space
+// alone.
+export function AreaGroup(props: { children: ReactNode }) {
+  return (
+    <ul className="m-0 flex list-none flex-col rounded-lg bg-card p-1.5 text-card-foreground">
+      {props.children}
+    </ul>
+  );
+}
+
+// An area: its icon, its name over how it stands, and the chevron that
+// says it opens a page. Settings' first page lists its areas so, and
+// Devices its categories, each icon in its category's colour.
+export function AreaRow(props: {
+  icon: LucideIcon;
+  // The icon's colour, as a category's in the sidebar; else the ink.
+  colour?: string;
+  title: string;
+  detail: ReactNode;
+  // What a screen reader hears of a detail that isn't words alone.
+  spoken?: string;
+  onOpen: () => void;
+  ref?: Ref<HTMLButtonElement>;
+}) {
+  const Icon = props.icon;
+  return (
+    <li>
+      <Button
+        ref={props.ref}
+        variant="row"
+        size="row"
+        type="button"
+        onClick={props.onOpen}
+        aria-label={
+          props.spoken ? `${props.title}: ${props.spoken}` : undefined
+        }
+      >
+        <span
+          aria-hidden="true"
+          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-foreground/8"
+        >
+          <Icon className="size-4" style={{ color: props.colour }} />
+        </span>
+        {typeof props.detail === "string" ? (
+          <Row title={props.title} detail={props.detail} />
+        ) : (
+          <span className="flex min-w-0 flex-col gap-px leading-tight">
+            <span className="truncate text-sm font-medium">{props.title}</span>
+            {props.detail}
+          </span>
+        )}
+        <ChevronRight
+          aria-hidden="true"
+          className="ms-auto size-4 shrink-0 text-muted-foreground"
+        />
+      </Button>
+    </li>
   );
 }

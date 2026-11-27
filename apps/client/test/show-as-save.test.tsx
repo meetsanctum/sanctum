@@ -111,7 +111,12 @@ describe.each(["Settings", "Add devices"])("saving Show as in %s", (where) => {
   async function show() {
     await act(async () => {
       root.render(
-        <DevicesSection apps={[zigbee]} live={live} home={unknownHome} />,
+        <DevicesSection
+          apps={[zigbee]}
+          live={live}
+          home={unknownHome}
+          group="security"
+        />,
       );
     });
     if (where === "Add devices") {
@@ -185,7 +190,7 @@ describe.each(["Settings", "Add devices"])("saving Show as in %s", (where) => {
       live.publish({ type: "device", id: sensor.id, device: null });
     });
     await act(async () => replies[0]!(door));
-    expect(container.textContent).toContain("No devices yet.");
+    expect(container.textContent).toContain("No contact sensors any more");
     expect(container.textContent).not.toContain("Hall door");
   });
 

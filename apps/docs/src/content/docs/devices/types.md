@@ -58,7 +58,7 @@ model called "Smart plug". When it can't tell, the device is a switch.
 ## Door and window
 
 A contact sensor can be shown as a door or window. In **Settings → Devices**,
-open the device's menu and choose **Show as**. The options are **Contact
+open **Security**, then the device's menu, and choose **Show as**. The options are **Contact
 sensor**, **Door** and **Window**. A door in the Office is automatically
 named "Office Door" and shows as open or closed like any contact sensor.
 
@@ -69,8 +69,8 @@ sensor underneath.
 ## TV and speaker
 
 A media player can be shown as a TV or a speaker, as a contact sensor can
-be shown as a door: in **Settings → Devices**, open the device's menu and
-choose **Show as**. A TV box in the Living Room shown as a TV is the
+be shown as a door: in **Settings → Devices**, open **Media**, then the
+device's menu, and choose **Show as**. A TV box in the Living Room shown as a TV is the
 "Living Room TV"; a speaker shown as a speaker is the "Living Room
 Speaker".
 

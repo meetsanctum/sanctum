@@ -19,6 +19,7 @@ import {
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 
 import { appsNotRunning, attentionTile, needingAttention } from "./attention";
+import { categoryLooks } from "./category-looks";
 import {
   contactsOf,
   contactsStatus,
@@ -88,21 +89,6 @@ export const placePages = "places";
 
 /** The page of the devices in no room, among the shell's own. */
 export const noRoomPage = "no-room";
-
-// A category's icon and colour, for each the SDK lists.
-const categoryLooks: Record<
-  DeviceCategory,
-  { icon: LucideIcon; colour: string }
-> = {
-  lights: { icon: icons.Lightbulb, colour: "var(--sun-text)" },
-  switches: { icon: icons.Plug, colour: "var(--ember-text)" },
-  environment: { icon: icons.Thermometer, colour: "var(--sky-text)" },
-  presence: { icon: icons.Footprints, colour: "var(--leaf-text)" },
-  // An open window is a fact and no warning, so Security is never red.
-  security: { icon: icons.Shield, colour: "var(--iris-text)" },
-  media: { icon: icons.TvMinimalPlay, colour: "var(--blossom-text)" },
-  buttons: { icon: icons.CircleDot, colour: "var(--graphite-text)" },
-};
 
 const readingIcons: Record<Reading["measure"], LucideIcon> = {
   temperature: icons.Thermometer,
