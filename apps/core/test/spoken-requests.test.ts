@@ -238,10 +238,16 @@ describe("a smart speaker's request", () => {
       detail: {
         firstSoundMs: expect.any(Number),
         stoppedListeningMs: expect.any(Number),
+        heardWordsMs: expect.any(Number),
         replyReadyMs: expect.any(Number),
         finishedPlayingMs: expect.any(Number),
       },
     });
+    const moments = requestLines(recorded)[0]!.detail as Record<string, number>;
+    expect(moments.heardWordsMs).toBeGreaterThanOrEqual(
+      moments.stoppedListeningMs!,
+    );
+    expect(moments.replyReadyMs).toBeGreaterThanOrEqual(moments.heardWordsMs!);
     // Its request is over: the Assistant acts for it no more.
     expect(spoken.actsFor("device:speaker")).toBe(false);
   });

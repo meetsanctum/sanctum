@@ -91,6 +91,7 @@ function sinceHeard(moments: Readonly<RunMoments>) {
   return {
     firstSoundMs: after(moments.firstSound),
     stoppedListeningMs: after(moments.stoppedListening),
+    heardWordsMs: after(moments.heardWords),
     replyReadyMs: after(moments.replyReady),
     finishedPlayingMs: after(moments.finishedPlaying),
   };
@@ -337,6 +338,8 @@ export function createSpokenRequests(options: {
         return;
       }
       run.stopListening();
+      // Splits speech recognition's time from the Assistant's in Activity.
+      run.recognised();
       const transcript: SpeechTranscript | null =
         typeof heard.transcript === "string"
           ? { text: heard.transcript }

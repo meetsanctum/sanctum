@@ -48,6 +48,8 @@ export type RunMoments = {
   heard: number;
   firstSound: number | null;
   stoppedListening: number | null;
+  /** When speech recognition gave its words, or found none it knows. */
+  heardWords: number | null;
   replyReady: number | null;
   finishedPlaying: number | null;
 };
@@ -63,6 +65,8 @@ export type HeardRun = {
   sound: AsyncIterable<Buffer>;
   /** Stops listening: the speaker stops sending, and `sound` ends. */
   stopListening(): void;
+  /** Notes when speech recognition answered, with words or none it knows. */
+  recognised(): void;
   heard(text: string): void;
   /** A reply to play from an address the core serves. */
   reply(url: string, text: string): void;
@@ -242,12 +246,16 @@ export function createListening(options: {
           heard: now(),
           firstSound: null,
           stoppedListening: null,
+          heardWords: null,
           replyReady: null,
           finishedPlaying: null,
         },
         push: (chunk) => sound.push(chunk),
         endSound: sound.end,
         stopListening: () => stopListening(run),
+        recognised() {
+          run.moments.heardWords ??= now();
+        },
         heard: (text) => tell(run, { step: "heard", text }),
         reply(url, text) {
           if (run.finished) return;
