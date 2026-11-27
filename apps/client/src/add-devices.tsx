@@ -28,7 +28,6 @@ import { FoundPage, foundKey } from "./add-devices-found";
 import { JoiningPage, type JoiningState } from "./add-devices-joining";
 import { OfferedAppSheet } from "./add-devices-offer";
 import { productName } from "./brand";
-
 import { CoreError, coreJson } from "./core-fetch";
 import { problemReason, updateDevice } from "./device-parts";
 import { EditDevice, type Editing } from "./edit-device";

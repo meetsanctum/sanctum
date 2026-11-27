@@ -19,7 +19,6 @@ import {
 } from "react";
 
 import { productName } from "./brand";
-
 import { coreJson } from "./core-fetch";
 import {
   DeviceIcon,
