@@ -159,7 +159,7 @@ describe("the Assistant's page", () => {
     expect(container.querySelector('[role="progressbar"]')).toBeNull();
     expect(text()).toContain("“Turn on the Office lights”");
     expect(text()).toContain(
-      "For anything else, it says “I can only help with lights.”",
+      "For anything else, it says “I can only help with lights and moods.”",
     );
   });
 

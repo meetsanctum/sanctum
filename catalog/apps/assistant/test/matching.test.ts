@@ -17,14 +17,14 @@ const names: HomeNames = {
   room: ["Office", "Kitchen", "Lena's Room", "Den"],
   floor: ["Ground Floor", "Upstairs"],
   light: ["Office Light", "Desk Lamp"],
-  mood: [],
+  mood: ["Evening", "Movie Night"],
 };
 
 const german: HomeNames = {
   room: ["Büro", "Küche", "Wohnzimmer"],
   floor: ["Erdgeschoss"],
   light: ["Stehlampe"],
-  mood: [],
+  mood: ["Abend"],
 };
 
 const en = (text: string) => match(text, languages.en, names);
@@ -179,6 +179,41 @@ describe("matching English", () => {
     expect(en("turn on the lights in the garden")).toBeNull();
     expect(en("turn on the lights in the dentist")).toBeNull();
     expect(en("please turn on the lights and play music")).toBeNull();
+  });
+});
+
+describe("matching moods", () => {
+  it("reads a mood in a room, or the speaker's room", () => {
+    expect(en("set the kitchen to movie night")).toMatchObject({
+      intent: { do: "mood", where: "room" },
+      names: { room: "Kitchen", mood: "Movie Night" },
+    });
+    expect(en("Evening in the office")).toMatchObject({
+      intent: { do: "mood", where: "room" },
+      names: { room: "Office", mood: "Evening" },
+    });
+    expect(en("turn on evening")).toMatchObject({
+      intent: { do: "mood", where: "here" },
+      names: { mood: "Evening" },
+    });
+    expect(en("set the mood to movie night")).toMatchObject({
+      intent: { do: "mood", where: "here" },
+    });
+    expect(de("Stell das Büro auf Abend")).toMatchObject({
+      intent: { do: "mood", where: "room" },
+      names: { room: "Büro", mood: "Abend" },
+    });
+    expect(de("starte die Stimmung Abend")).toMatchObject({
+      intent: { do: "mood", where: "here" },
+    });
+  });
+
+  it("takes a light's name over a mood's", () => {
+    const both = { ...names, light: ["Evening"] };
+    expect(match("turn on evening", languages.en, both)?.intent).toEqual({
+      do: "switch",
+      where: "light",
+    });
   });
 });
 

@@ -40,6 +40,21 @@ const overview = {
   notAllowed: [],
 };
 
+// The home's moods, as the entities tool lists them for AI agents.
+const mood = (key: string, name: string, placeId: string) => ({
+  app: "sanctum.moods",
+  appName: "Moods",
+  key,
+  type: "mood",
+  name,
+  state: { placeId, icon: "moon", name, order: 0, active: false },
+});
+const moods = [
+  mood("office-evening", "Evening", "room-office"),
+  mood("kitchen-evening", "Evening", "room-kitchen"),
+  mood("kitchen-dinner", "Dinner", "room-kitchen"),
+];
+
 const json = (value: unknown): AiToolAnswer => ({
   text: JSON.stringify(value),
   isError: false,
@@ -75,6 +90,8 @@ async function ask(
     lights: () => json({ change: "c1", lights: [lit("Desk Lamp")] }),
     restore: () =>
       json({ change: "c1", changed: [{ name: "Desk Lamp", result: "sent" }] }),
+    entities: () => json({ entities: moods }),
+    run: () => json({ type: "mood", result: { switched: 2, failed: [] } }),
     ...options.tools,
   };
   const ctx = {
@@ -471,8 +488,13 @@ describe("the Assistant's requests", () => {
       replies: [{ text: "I can't set timers yet." }],
     });
     const { calls, replies } = await ask("play some music");
-    expect(calls.map(({ name }) => name)).toEqual(["home_overview"]);
-    expect(replies).toEqual([{ text: "I can only help with lights." }]);
+    expect(calls.map(({ name }) => name)).toEqual([
+      "home_overview",
+      "entities",
+    ]);
+    expect(replies).toEqual([
+      { text: "I can only help with lights and moods." },
+    ]);
   });
 
   it("answers in German", async () => {
@@ -509,7 +531,7 @@ describe("the Assistant's requests", () => {
 
   it.each([
     ["Settings, What AI Agents Can Use", "I'm not allowed to do that."],
-    ["Example's settings", "I can only help with lights."],
+    ["Example's settings", "I can only help with lights and moods."],
   ])("checks for the light permission in %s", async (where, text) => {
     expect(
       await ask("turn off the desk lamp", {
@@ -524,13 +546,127 @@ describe("the Assistant's requests", () => {
         },
       }),
     ).toEqual({
-      calls: [{ name: "home_overview", input: {} }],
+      calls: [
+        { name: "home_overview", input: {} },
+        { name: "entities", input: { type: "mood" } },
+      ],
       replies: [{ text }],
     });
   });
 
   it("doesn't answer a request that has ended", async () => {
     expect((await ask("lights off", { aborted: true })).replies).toEqual([]);
+  });
+});
+
+describe("the Assistant's moods", () => {
+  it("runs a mood in the speaker's room, reading the moods only for it", async () => {
+    const { calls, replies } = await ask("set the mood to evening");
+    expect(calls).toEqual([
+      { name: "home_overview", input: {} },
+      { name: "entities", input: { type: "mood" } },
+      { name: "run", input: { app: "sanctum.moods", key: "office-evening" } },
+    ]);
+    expect(replies).toEqual([
+      { text: "Evening in Office.", confirmation: true },
+    ]);
+  });
+
+  it("runs a mood in the room named, or the one room that has it", async () => {
+    const ran = async (text: string, options = {}) =>
+      (await ask(text, options)).calls.find(({ name }) => name === "run")
+        ?.input;
+    expect(await ran("Evening in the kitchen")).toEqual({
+      app: "sanctum.moods",
+      key: "kitchen-evening",
+    });
+    // Asked from the Office, but only the Kitchen has Dinner.
+    expect(await ran("turn on dinner")).toEqual({
+      app: "sanctum.moods",
+      key: "kitchen-dinner",
+    });
+    expect(await ran("turn on dinner", { from: "client" })).toEqual({
+      app: "sanctum.moods",
+      key: "kitchen-dinner",
+    });
+  });
+
+  it("asks which room, or says there's no such mood there", async () => {
+    expect((await ask("turn on evening", { from: "client" })).replies).toEqual([
+      {
+        text: "Which room? Several have a mood called Evening. Say the room too.",
+      },
+    ]);
+    expect((await ask("set the office to dinner")).replies).toEqual([
+      { text: "Office has no mood called Dinner." },
+    ]);
+  });
+
+  it("names the lights a mood couldn't reach", async () => {
+    const { replies } = await ask("set the mood to evening", {
+      tools: {
+        run: () =>
+          json({
+            type: "mood",
+            result: {
+              switched: 1,
+              failed: [{ device: "device-desk", capability: "light" }],
+            },
+          }),
+      },
+    });
+    expect(replies).toEqual([
+      { text: "Evening in Office. Desk Lamp didn't answer." },
+    ]);
+  });
+
+  it("says where running moods is switched on when it isn't allowed", async () => {
+    const refused = {
+      run: () => ({
+        text: "“Run a mood” is switched off for AI agents in Moods' settings.",
+        isError: true,
+      }),
+    };
+    expect(
+      (await ask("set the mood to evening", { tools: refused })).replies,
+    ).toEqual([
+      {
+        text: "“Run a mood” is switched off for AI agents in Moods' settings.",
+      },
+    ]);
+    const abend = {
+      ...refused,
+      entities: () =>
+        json({ entities: [mood("office-abend", "Abend", "room-office")] }),
+    };
+    expect(
+      (
+        await ask("stell die Stimmung auf Abend", {
+          language: "de",
+          tools: abend,
+        })
+      ).replies,
+    ).toEqual([
+      {
+        text: "Ich darf diese Stimmung nicht starten. Das lässt sich in den Einstellungen von Moods einschalten.",
+      },
+    ]);
+  });
+
+  it("answers in German", async () => {
+    const { replies } = await ask("Stell das Büro auf Abend", {
+      language: "de",
+      tools: {
+        home_overview: () =>
+          json({
+            ...overview,
+            rooms: [{ id: "room-office", name: "Büro", floorId: null }],
+          }),
+        entities: () =>
+          json({ entities: [mood("office-abend", "Abend", "room-office")] }),
+      },
+    });
+    expect(replies).toEqual([{ text: "Büro: Abend.", confirmation: true }]);
   });
 });
 

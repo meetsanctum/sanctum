@@ -1,13 +1,17 @@
 import {
   aiAssistantPermission,
   assistantAppId,
+  defineAction,
   defineApp,
+  moodRunSchema,
+  moodType,
   registerPermission,
   type AppContext,
   type ListenStep,
   type VoiceRun,
 } from "@meetsanctum/app-sdk";
 import { expect, it, vi } from "vitest";
+import { z } from "zod";
 
 import { base, running, useCleanUps } from "./app-apart-support.js";
 import { fakeManager } from "./manager-support.js";
@@ -48,13 +52,41 @@ it("teaches the Assistant's sentences and hears a speaker's words with them", as
     },
   });
   let driverCtx: AppContext | undefined;
+  // It keeps moods of the standard type too, which speech recognition
+  // learns by name whatever app keeps them.
+  const setMood = defineAction({
+    id: "example.setMood",
+    title: "Set a mood",
+    tier: "write",
+    input: z.object({}),
+    output: moodRunSchema,
+    runs: moodType.id,
+    async run() {
+      return { switched: 0, failed: [] };
+    },
+  });
+  const mood = (name: string) =>
+    driverCtx!.entities.publish({
+      type: moodType.id,
+      key: "evening",
+      name,
+      state: {
+        placeId: "office",
+        icon: "moon",
+        name,
+        order: 0,
+        active: false,
+        input: {},
+      },
+    });
   const driver = defineApp({
     ...base,
     id: "sanctum.example",
     permissions: [
       { id: registerPermission, reason: "To register devices.", needed: true },
     ],
-    actions: [],
+    actions: [setMood],
+    provides: { entities: [moodType] },
     start: async (ctx) => {
       driverCtx = ctx;
       await ctx.devices.register({
@@ -185,6 +217,21 @@ it("teaches the Assistant's sentences and hears a speaker's words with them", as
     // Wait for the rename on its own so another change can't hide a missed event.
     await vi.waitFor(() =>
       expect(stp.lessons.at(-1)).toMatchObject({ lists: { room: ["Study"] } }),
+    );
+
+    // A mood brings its sentence, and a new name retrains.
+    await mood("Evening");
+    await vi.waitFor(() =>
+      expect(stp.lessons.at(-1)).toMatchObject({
+        templates: expect.arrayContaining(["set the mood to {mood}"]),
+        lists: { mood: ["Evening"] },
+      }),
+    );
+    await mood("Movie Night");
+    await vi.waitFor(() =>
+      expect(stp.lessons.at(-1)).toMatchObject({
+        lists: { mood: ["Movie Night"] },
+      }),
     );
 
     const reportMute = (muted: boolean) =>

@@ -32,6 +32,10 @@ export function examples(language: RequestLanguage, room: string | null) {
           say: "Stell das Licht auf vierzig Prozent",
           what: "Or heller and dunkler",
         },
+        {
+          say: "Stell das Wohnzimmer auf Abend",
+          what: "A room's mood, by its name",
+        },
         { say: "Mach das rückgängig", what: "Undoes the last change it made" },
       ]
     : [
@@ -46,6 +50,10 @@ export function examples(language: RequestLanguage, room: string | null) {
         {
           say: "Set the lights to forty percent",
           what: "Or brighter and dimmer",
+        },
+        {
+          say: `Set the ${place} to Evening`,
+          what: "A room's mood, by its name",
         },
         { say: "Put it back", what: "Undoes the last change it made" },
       ];

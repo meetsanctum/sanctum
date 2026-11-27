@@ -36,6 +36,14 @@ export type Replies = {
   restoreIssues: Record<RestoreIssue, string>;
   changedSince: string;
   cannotPutBack: string;
+  /** A mood that ran, by its name and its room's. */
+  moodSet(mood: string, room: string): string;
+  /** No mood of that name where it was asked for. */
+  noSuchMood(mood: string, room: string | null): string;
+  /** `run` refused: its own words in English, which say where it's decided. */
+  cannotRunMood(toolWords: string): string;
+  /** Several rooms have a mood of that name, and none was said. */
+  whichMoodRoom(mood: string): string;
   noTimers: string;
   notInARoom: string;
   whichRoom: string;
@@ -116,6 +124,14 @@ const en: Replies = {
   },
   changedSince: "Nothing put back: it changed since.",
   cannotPutBack: "There's nothing I can put back.",
+  moodSet: (mood, room) => `${mood} in ${room}.`,
+  noSuchMood: (mood, room) =>
+    room
+      ? `${room} has no mood called ${mood}.`
+      : `There's no mood called ${mood}.`,
+  cannotRunMood: (toolWords) => toolWords,
+  whichMoodRoom: (mood) =>
+    `Which room? Several have a mood called ${mood}. Say the room too.`,
   noTimers: "I can't set timers yet.",
   notInARoom: "I'm not in a room yet. Choose my room in Settings, Devices.",
   whichRoom: "Which room's lights? Say the room too.",
@@ -183,6 +199,16 @@ const de: Replies = {
   },
   changedSince: "Nichts zurückgestellt: es wurde inzwischen geändert.",
   cannotPutBack: "Da kann ich nichts zurückstellen.",
+  moodSet: (mood, room) => `${room}: ${mood}.`,
+  noSuchMood: (mood, room) =>
+    room
+      ? `${room}: keine Stimmung „${mood}“.`
+      : `Es gibt keine Stimmung „${mood}“.`,
+  // Where it's decided is in Moods' settings, which are in English.
+  cannotRunMood: () =>
+    "Ich darf diese Stimmung nicht starten. Das lässt sich in den Einstellungen von Moods einschalten.",
+  whichMoodRoom: (mood) =>
+    `Welcher Raum? Mehrere haben die Stimmung „${mood}“. Sag den Raum mit dazu.`,
   noTimers: "Ich kann noch keine Timer stellen.",
   notInARoom:
     "Ich bin noch in keinem Raum. Wähle meinen Raum unter Settings, Devices.",

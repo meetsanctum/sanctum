@@ -1,7 +1,7 @@
 {
   "id": "sanctum.assistant",
   "name": "Assistant",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "core": "^2.0.0",
   "protocol": 29,
   "summary": "Controls lights by voice or typed request.",
@@ -45,6 +45,11 @@
       "(set|dim|turn) [the] (light|lights) on [the] {floor} to (five|ten|twenty|twenty five|thirty|forty|fifty|sixty|seventy|seventy five|eighty|ninety|a hundred|one hundred) percent",
       "(set|dim|turn) all [of] [the] lights to (five|ten|twenty|twenty five|thirty|forty|fifty|sixty|seventy|seventy five|eighty|ninety|a hundred|one hundred) percent",
       "(set|dim|turn) [the] (light|lights) to (five|ten|twenty|twenty five|thirty|forty|fifty|sixty|seventy|seventy five|eighty|ninety|a hundred|one hundred) percent",
+      "(set|switch|change) [the] {room} to {mood}",
+      "(set|start|turn on) {mood} in [the] {room}",
+      "{mood} in [the] {room}",
+      "(set|start|turn on) [the] {mood} [mood]",
+      "set the mood to {mood}",
       "(put|change|set) it back",
       "(put|turn) [the] lights back",
       "undo [(that|it)]",
@@ -74,6 +79,11 @@
       "(stell|stelle|dimm|dimme|mach|mache) [(das|die)] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {floor} auf (fünf|zehn|zwanzig|fünfundzwanzig|dreißig|vierzig|fünfzig|sechzig|siebzig|fünfundsiebzig|achtzig|neunzig|hundert) Prozent",
       "(stell|stelle|dimm|dimme|mach|mache) alle (Lichter|Lampen) auf (fünf|zehn|zwanzig|fünfundzwanzig|dreißig|vierzig|fünfzig|sechzig|siebzig|fünfundsiebzig|achtzig|neunzig|hundert) Prozent",
       "(stell|stelle|dimm|dimme|mach|mache) [(das|die)] (Licht|Lichter|Lampen) auf (fünf|zehn|zwanzig|fünfundzwanzig|dreißig|vierzig|fünfzig|sechzig|siebzig|fünfundsiebzig|achtzig|neunzig|hundert) Prozent",
+      "(stell|stelle|setz|setze) [(den|das|die)] {room} auf {mood}",
+      "(starte|aktiviere|stell|stelle) {mood} (im|in der|in den|in|auf dem|auf der) {room}",
+      "{mood} (im|in der|in den|in|auf dem|auf der) {room}",
+      "(starte|aktiviere) [die Stimmung] {mood}",
+      "(stell|stelle|setz|setze) die Stimmung auf {mood}",
       "(mach|mache) das rückgängig",
       "(stell|stelle) [(es|das)] [wieder] zurück",
       "rückgängig",
@@ -81,8 +91,8 @@
     ]
   },
   "notUnderstood": {
-    "en": "I can only help with lights.",
-    "de": "Ich kann nur mit dem Licht helfen."
+    "en": "I can only help with lights and moods.",
+    "de": "Ich kann nur mit Licht und Stimmungen helfen."
   },
   "driver": null,
   "permissions": [
