@@ -16,7 +16,7 @@ import {
 } from "./replies.js";
 import { readMoods, runMood } from "./moods.js";
 import { languages } from "./sentences.js";
-import { callTool, type Overview } from "./tools.js";
+import { agentsPage, callTool, type Overview } from "./tools.js";
 
 // Answers a request: matches its words against the sentences with the
 // home's names, then does what it asks through the tools every AI agent
@@ -279,9 +279,7 @@ export async function answerRequest(
       return await runMood(ctx, named, moods, overview, request, words);
     }
     const lightsHidden = overview.notAllowed.some(
-      ({ title, where }) =>
-        title === lightControlTitle &&
-        where === "Settings, What AI Agents Can Use",
+      ({ title, where }) => title === lightControlTitle && where === agentsPage,
     );
     return { text: lightsHidden ? words.notAllowed : language.notUnderstood };
   } catch (error) {

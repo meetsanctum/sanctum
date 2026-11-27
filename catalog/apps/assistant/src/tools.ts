@@ -3,6 +3,12 @@ import type { RequestContext } from "@meetsanctum/app-sdk";
 // The tools every AI agent gets, as the Assistant calls them, and what it
 // reads of their answers.
 
+/**
+ * Where the core decides what AI agents may use: the Settings page its
+ * refusals and home_overview name when one of its own areas is off.
+ */
+export const agentsPage = "Settings, What AI Agents Can Use";
+
 // What home_overview answers that the Assistant reads.
 export type Overview = {
   floors: { id: string; name: string }[];

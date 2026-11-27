@@ -732,6 +732,11 @@ describe("the Assistant's moods", () => {
       "Ich darf diese Stimmung nicht starten. Das lässt sich in den Einstellungen von Moods einschalten.",
     ],
     [
+      "not_allowed",
+      "“Run a mood” needs “Control your lights”, which is switched off for AI agents in Settings, What AI Agents Can Use.",
+      "Ich darf diese Stimmung nicht starten. Das lässt sich unter Settings, What AI Agents Can Use einschalten.",
+    ],
+    [
       "timeout",
       "The app didn't answer in time.",
       "Die App hat nicht rechtzeitig geantwortet.",

@@ -1,5 +1,7 @@
 import { replyTextMaxLength, type RequestLanguage } from "@meetsanctum/app-sdk";
 
+import { agentsPage } from "./tools.js";
+
 // What the Assistant answers, in each language: short, since a smart speaker
 // says it, and naming what changed by the home's own names. The names keep
 // the household's spelling and take no article, as a room's name may not
@@ -41,7 +43,10 @@ export type Replies = {
   moodSet(mood: string, room: string): string;
   /** No mood of that name where it was asked for. */
   noSuchMood(mood: string, room: string | null): string;
-  /** `run` refused: its own words, or the app whose settings decide it. */
+  /**
+   * `run` refused: its own words, or where it's switched on: the app's
+   * settings, or Settings' page for AI agents when a core area is off.
+   */
   cannotRunMood(toolWords: string, appName: string): string;
   duplicateMood(mood: string, room: string | null): string;
   /** Several rooms have a mood of that name, and none was said. */
@@ -213,8 +218,12 @@ const de: Replies = {
       ? `${room}: keine Stimmung „${mood}“.`
       : `Es gibt keine Stimmung „${mood}“.`,
   // Where it's decided is the app's settings, whose words are English.
-  cannotRunMood: (_toolWords, appName) =>
-    `Ich darf diese Stimmung nicht starten. Das lässt sich in den Einstellungen von ${appName} einschalten.`,
+  // The core's words name the place; German names it too, as Settings'
+  // pages are in English.
+  cannotRunMood: (toolWords, appName) =>
+    toolWords.includes(agentsPage)
+      ? `Ich darf diese Stimmung nicht starten. Das lässt sich unter ${agentsPage} einschalten.`
+      : `Ich darf diese Stimmung nicht starten. Das lässt sich in den Einstellungen von ${appName} einschalten.`,
   duplicateMood: (mood, room) =>
     room
       ? `${room}: Mehrere Stimmungen heißen „${mood}“.`
