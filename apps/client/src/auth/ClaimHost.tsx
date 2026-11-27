@@ -1,5 +1,5 @@
 import { Button } from "@meetsanctum/ui-sdk";
-import { useId, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 
 import { ColourPicker, identityColours } from "../colour-picker";
 import { Avatar } from "../components";
@@ -31,7 +31,9 @@ export function ClaimHost(props: {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [problem, setProblem] = useState<CredentialProblem>();
-  const [working, setWorking] = useState(false);
+  const [pending, setPending] = useState<"claim" | "save">();
+  const working = pending !== undefined;
+  const saving = useRef(false);
   const secure = useSecureStorage();
   const attempt = useAuthAttempt();
   const problemId = useId();
@@ -49,7 +51,7 @@ export function ClaimHost(props: {
     event.preventDefault();
     if (working) return;
     setProblem(undefined);
-    setWorking(true);
+    setPending("claim");
     const signal = attempt.start();
     try {
       const shell = getShell();
@@ -64,6 +66,10 @@ export function ClaimHost(props: {
         person: { name: name.trim(), colour },
         client: { name: await shell.deviceName(), platform: shell.platform },
       });
+      signal.throwIfAborted();
+      // The home has been set up. Keep its new credentials while they save.
+      saving.current = true;
+      setPending("save");
       const stored = await rememberSignIn(
         props.host,
         signedIn,
@@ -74,8 +80,9 @@ export function ClaimHost(props: {
       props.onClaimed(stored);
     } catch (error) {
       if (signal.aborted) return;
+      saving.current = false;
       setProblem({ text: problemText(error) });
-      setWorking(false);
+      setPending(undefined);
     }
   };
 
@@ -140,9 +147,11 @@ export function ClaimHost(props: {
       title="Your name and colour"
       subtitle="People at home know you by your name and colour."
       back={{
-        disabled: working,
+        disabled: pending === "save",
         onBack: () => {
+          if (saving.current) return;
           attempt.cancel();
+          setPending(undefined);
           setProblem(undefined);
           setStep(1);
         },
@@ -160,7 +169,7 @@ export function ClaimHost(props: {
           maxLength={60}
           readOnly={working}
           required
-          autoFocus
+          ref={focusVisibleName}
         />
         <ColourPicker
           legend="Your colour"
@@ -186,4 +195,16 @@ export function ClaimHost(props: {
       </form>
     </Sheet>
   );
+}
+
+// On a short screen, leave focus to the sheet's heading so the logo and
+// heading stay in place when this step opens.
+function focusVisibleName(field: HTMLInputElement | null) {
+  const scroll = field?.closest(".sheet-scroll");
+  if (!field || !scroll) return;
+  const { top, bottom } = field.getBoundingClientRect();
+  const bounds = scroll.getBoundingClientRect();
+  if (top >= bounds.top && bottom <= bounds.bottom) {
+    field.focus({ preventScroll: true });
+  }
 }

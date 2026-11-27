@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { SignedIn } from "@meetsanctum/auth-protocol";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,7 +8,14 @@ import { App } from "../src/App";
 import { ChooseHost } from "../src/auth/ChooseHost";
 import { checkHost, claimHost, signIn, SignInError } from "../src/auth/device";
 import { SignIn } from "../src/auth/SignIn";
-import type { FoundHost, Shell, StoredHost } from "../src/shell";
+import { setCredential } from "../src/core-fetch";
+import { setCoreBaseUrl } from "../src/core-url";
+import {
+  getShell,
+  type FoundHost,
+  type Shell,
+  type StoredHost,
+} from "../src/shell";
 import { deferred } from "./deferred";
 
 vi.mock("../src/auth/device", async (importOriginal) => ({
@@ -79,8 +87,11 @@ beforeEach(async () => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  setCredential(null);
+  setCoreBaseUrl(null);
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   vi.resetAllMocks();
 });
 
@@ -187,6 +198,36 @@ describe("choosing a home", () => {
 });
 
 describe("setting up a new home", () => {
+  const signedIn: SignedIn = {
+    token: "setup-token",
+    client: {
+      id: "mac",
+      name: "Mac",
+      kind: "personal",
+      platform: "macos",
+      personId: "taylor",
+      createdAt: "2026-01-01T00:00:00Z",
+      lastSeenAt: null,
+      connectedSince: null,
+      current: true,
+      reduceEffects: false,
+      reduceMotion: false,
+    },
+    person: {
+      id: "taylor",
+      name: "Taylor Reed",
+      avatar: null,
+      colour: "#fcd2b3",
+    },
+  };
+
+  async function enterCredentials() {
+    await act(async () => publish([unclaimed]));
+    await click("New home");
+    await fill("Username", "taylor");
+    await fill("Password", "correct-password");
+  }
+
   it("asks how to sign in first, then the name and colour", async () => {
     await act(async () => publish([unclaimed]));
     await click("New home");
@@ -225,6 +266,104 @@ describe("setting up a new home", () => {
     expect(avatar().textContent).toBe("TR");
   });
 
+  it("focuses the heading when the name field is below the visible sheet", async () => {
+    await enterCredentials();
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    const bounds = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        if (this.matches(".sheet-scroll")) return new DOMRect(0, 64, 480, 256);
+        if (this.matches('input[autocomplete="name"]')) {
+          return new DOMRect(16, 340, 448, 44);
+        }
+        return bounds.call(this);
+      },
+    );
+
+    await click("Continue");
+
+    expect(document.activeElement).toBe(container.querySelector("h1"));
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: true });
+  });
+
+  it("sets up the home with the chosen sign-in, name and colour", async () => {
+    const saving = deferred<void>();
+    const save = vi
+      .spyOn(getShell().credentials, "save")
+      .mockReturnValue(saving.promise);
+    vi.mocked(checkHost).mockResolvedValue({
+      homeId: office.homeId!,
+      pin: null,
+    });
+    vi.mocked(claimHost).mockResolvedValue(signedIn);
+    await enterCredentials();
+    await click("Continue");
+    await fill("Your name", " Taylor Reed ");
+    const peach = container.querySelector<HTMLButtonElement>(
+      '[role="radio"][aria-label="Peach"]',
+    )!;
+    await act(async () => peach.click());
+
+    await click("Set up");
+
+    expect(claimHost).toHaveBeenCalledExactlyOnceWith({
+      url: unclaimed.url,
+      signal: expect.any(AbortSignal),
+      username: "taylor",
+      password: "correct-password",
+      person: { name: "Taylor Reed", colour: "#fcd2b3" },
+      client: { name: "Mac", platform: "macos" },
+    });
+    expect(save).toHaveBeenCalledExactlyOnceWith({
+      hostId: unclaimed.id,
+      homeId: office.homeId,
+      name: unclaimed.name,
+      url: unclaimed.url,
+      clientId: "mac",
+      token: "setup-token",
+      kind: "personal",
+      pin: null,
+    });
+    expect(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Back"]')
+        ?.disabled,
+    ).toBe(true);
+    await press({ key: "Escape" });
+    expect(title()).toBe("Your name and colour");
+    expect(container.querySelector(".home-screen")).toBeNull();
+
+    await act(async () => saving.resolve());
+
+    expect(container.querySelector(".home-screen")).not.toBeNull();
+  });
+
+  it("cancels a pending claim on Back and lets setup be retried", async () => {
+    const first = deferred<SignedIn>();
+    const save = vi.spyOn(getShell().credentials, "save");
+    vi.mocked(checkHost).mockResolvedValue({
+      homeId: office.homeId!,
+      pin: null,
+    });
+    vi.mocked(claimHost)
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(signedIn);
+    await enterCredentials();
+    await click("Continue");
+    await fill("Your name", "Taylor Reed");
+    await click("Set up");
+
+    await click("Back");
+
+    expect(title()).toBe("Set up your home");
+    expect(vi.mocked(claimHost).mock.calls[0]?.[0].signal?.aborted).toBe(true);
+    await act(async () => first.resolve(signedIn));
+    expect(save).not.toHaveBeenCalled();
+    await click("Continue");
+    await click("Set up");
+    expect(claimHost).toHaveBeenCalledTimes(2);
+    expect(container.querySelector(".home-screen")).not.toBeNull();
+  });
+
   it("stays on the first step while the password is too short", async () => {
     await act(async () => publish([unclaimed]));
     await click("New home");
@@ -258,6 +397,8 @@ describe("setting up a new home", () => {
     await act(async () => reveal.click());
 
     expect(password.type).toBe("text");
+    expect(password.getAttribute("autocorrect")).toBe("off");
+    expect(password.getAttribute("spellcheck")).toBe("false");
     expect(reveal.getAttribute("aria-pressed")).toBe("true");
 
     await click("Continue");

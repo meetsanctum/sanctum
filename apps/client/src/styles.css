@@ -335,9 +335,8 @@ body {
   }
 }
 
-/* The screens before the dashboard: the bar at the top, with Back and the
-   logo, and under it the sheet, in the middle of the space left as long as
-   there is room. The bar stays put; only what is under it scrolls. */
+/* The screens before the dashboard: the Back bar stays at the top, and the
+   logo and sheet start below it and scroll together. */
 .sheet-screen {
   position: relative;
   isolation: isolate;

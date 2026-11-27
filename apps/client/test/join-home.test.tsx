@@ -278,7 +278,17 @@ describe("joining with an invite code", () => {
     await openJoin();
     await type(codeField(), "K7QXM4PD");
     const username = await fill("Username", "maya");
-    await fill("Password", "staple battery horse");
+    const password = await fill("Password", "staple battery horse");
+    const reveal = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Show password"]',
+    )!;
+    expect(password.type).toBe("password");
+    await act(async () => reveal.click());
+    expect(password.type).toBe("text");
+    expect(password.value).toBe("staple battery horse");
+    await act(async () => reveal.click());
+    expect(password.type).toBe("password");
+    expect(password.value).toBe("staple battery horse");
     await click("Join");
 
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(

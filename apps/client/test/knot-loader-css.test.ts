@@ -73,10 +73,10 @@ it("lets the sign-in sheet scroll in the space below the bar", () => {
     "grid-template-rows",
     "auto minmax(0,1fr)",
   ]);
-  expect(declarationsOf(".sheet-scroll")).toContainEqual([
-    "overflow-y",
-    "auto",
-  ]);
+  expect(Object.fromEntries(declarationsOf(".sheet-scroll"))).toMatchObject({
+    "overflow-y": "auto",
+    "scrollbar-gutter": "stable both-edges",
+  });
 });
 
 it("keeps Back's extended hit area out of the Mac window drag region", () => {

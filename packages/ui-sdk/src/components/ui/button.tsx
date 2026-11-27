@@ -24,7 +24,7 @@ const cardSize =
   "h-auto w-full justify-start rounded-md p-3.5 text-start font-normal whitespace-normal";
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-[transform,translate,scale,opacity] outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 motion-safe:active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
@@ -90,7 +90,7 @@ const buttonVariants = cva(
         // hairline, a little lighter under the pointer, such as a way to add
         // devices. What it leads to is said on it in the primary look.
         choice:
-          "bg-linear-to-b from-white/12 to-white/6 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.1),inset_0_0_0_1px_rgb(255_255_255/0.12),0_16px_40px_rgb(0_0_0/0.24)] reduce-effects:shadow-[inset_0_1px_0_rgb(255_255_255/0.1),inset_0_0_0_1px_rgb(255_255_255/0.12)] hover:from-white/15 hover:to-white/8 active:not-aria-[haspopup]:translate-y-0 active:scale-[0.98] disabled:opacity-100",
+          "bg-linear-to-b from-white/12 to-white/6 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.1),inset_0_0_0_1px_rgb(255_255_255/0.12),0_16px_40px_rgb(0_0_0/0.24)] reduce-effects:shadow-[inset_0_1px_0_rgb(255_255_255/0.1),inset_0_0_0_1px_rgb(255_255_255/0.12)] hover:from-white/15 hover:to-white/8 motion-safe:active:not-aria-[haspopup]:translate-y-0 active:scale-[0.98] disabled:opacity-100",
       },
       size: {
         // Words, with or without an icon, such as Done.
@@ -114,10 +114,6 @@ const buttonVariants = cva(
         // The top bar's: 36 px with the sidebar's pins' 9 px corners and an
         // 18 px icon, pressable in the 44 px around it.
         bar: "relative size-9 rounded-sm before:absolute before:-inset-1 before:content-[''] [&_svg:not([class*='size-'])]:size-4.5",
-        // A button inside a sheet's 44 px field, such as Show password: 36
-        // px with a 20 px icon, pressable in the 44 px around it.
-        reveal:
-          "relative size-9 rounded-sm before:absolute before:-inset-1 before:content-[''] [&_svg:not([class*='size-'])]:size-5",
         // A place in the sidebar: its icon, its name and its status.
         item: "h-10 justify-start gap-2.5 rounded-md ps-2 pe-3 text-left text-sm",
         // A tile in a grid, as tall as its grid says (--tile-height).

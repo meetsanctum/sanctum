@@ -87,10 +87,10 @@ export function Sheet(props: {
 
   // A step that follows a press starts at its title, where the control
   // pressed went with the screen before. A field the step focuses itself
-  // keeps its focus.
+  // keeps its focus. Focusing the heading keeps the logo in place.
   useEffect(() => {
     if (document.activeElement === document.body) {
-      title.current?.focus();
+      title.current?.focus({ preventScroll: true });
     }
   }, []);
 
@@ -162,20 +162,26 @@ export function SheetField(
     // The id of the problem about this field.
     problemId?: string;
     compact?: boolean;
-    // A password field with a button that shows what was typed.
-    revealable?: boolean;
     ref?: Ref<HTMLInputElement>;
     children?: ReactNode;
   } & Omit<
     InputHTMLAttributes<HTMLInputElement>,
-    "id" | "aria-invalid" | "aria-describedby"
-  >,
+    "id" | "aria-invalid" | "aria-describedby" | "type"
+  > &
+    (
+      | { revealable?: boolean; type: "password" }
+      | {
+          revealable?: false;
+          type?: InputHTMLAttributes<HTMLInputElement>["type"];
+        }
+    ),
 ) {
   const { label, hint, problemId, compact, revealable, children, ...input } =
     props;
   const id = useId();
   const hintId = `${id}-hint`;
   const [shown, setShown] = useState(false);
+  const RevealIcon = shown ? EyeOff : Eye;
   const field = (
     <Input
       className={cn(
@@ -184,6 +190,8 @@ export function SheetField(
       )}
       {...input}
       type={revealable && shown ? "text" : input.type}
+      autoCorrect={revealable ? "off" : input.autoCorrect}
+      spellCheck={revealable ? false : input.spellCheck}
       id={id}
       aria-invalid={problemId ? true : undefined}
       aria-describedby={
@@ -204,7 +212,7 @@ export function SheetField(
           {field}
           <Button
             variant="ghost"
-            size={compact ? "icon-sm" : "reveal"}
+            size={compact ? "icon-sm" : "bar"}
             type="button"
             aria-label="Show password"
             aria-pressed={shown}
@@ -214,7 +222,10 @@ export function SheetField(
               compact ? "absolute end-0.5 top-0.5" : "absolute end-1 top-1"
             }
           >
-            {shown ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+            <RevealIcon
+              aria-hidden="true"
+              className={compact ? undefined : "size-5"}
+            />
           </Button>
         </div>
       ) : (
