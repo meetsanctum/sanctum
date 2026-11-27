@@ -132,6 +132,40 @@ describe("what speech recognition learns", () => {
     }
   });
 
+  it("learns the light sentences when the mood vocabulary exceeds the budget", async () => {
+    const describe = vi.spyOn(words, "describeLanguages").mockResolvedValue([]);
+    const teach = vi
+      .spyOn(words, "train")
+      .mockResolvedValue({ digest: "digest-1", changed: true });
+    const { learning, names } = learningSetup(
+      { url: "tcp://127.0.0.1:10300" },
+      {
+        sentences: {
+          en: ["turn on [the] {light}", "set the mood to {mood} in {room}"],
+        },
+      },
+    );
+    names.mood = Array.from(
+      { length: 2_000 },
+      (_, i) => `Reading by the window in the evening ${i + 1}`,
+    );
+    try {
+      learning.start();
+      await vi.waitFor(() =>
+        expect(learning.transcriber()).toBeTypeOf("function"),
+      );
+      expect(teach.mock.lastCall?.[0].lesson).toEqual({
+        language: "en",
+        templates: ["turn on [the] {light}"],
+        lists: { light: ["Desk Lamp"] },
+      });
+    } finally {
+      learning.stop();
+      teach.mockRestore();
+      describe.mockRestore();
+    }
+  });
+
   it("keeps the previous lesson when its templates lose their names", async () => {
     const describe = vi.spyOn(words, "describeLanguages").mockResolvedValue([]);
     const teach = vi

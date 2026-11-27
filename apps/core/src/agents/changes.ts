@@ -34,7 +34,10 @@ export function createAgentChanges(options: {
 }) {
   const now = options.now ?? (() => new Date());
   type Scope = Pick<AgentCaller, "id" | "requestClientId">;
-  const byScope = new Map<string, { agent: string; changes: AgentChange[] }>();
+  const byScope = new Map<
+    string,
+    { agent: string; changes: AgentChange[]; moodAt?: Date }
+  >();
   const keyOf = ({ id, requestClientId }: Scope) =>
     JSON.stringify([id, requestClientId]);
 
@@ -42,9 +45,13 @@ export function createAgentChanges(options: {
   function prune() {
     const oldest = now().getTime() - changesKept.ms;
     for (const [key, scope] of byScope) {
-      const { agent, changes } = scope;
+      const { agent, changes, moodAt } = scope;
       const kept = changes.filter((change) => change.at.getTime() > oldest);
-      if (kept.length === 0 || !options.isActiveAgent(agent)) {
+      if (moodAt && moodAt.getTime() <= oldest) delete scope.moodAt;
+      if (
+        (kept.length === 0 && !scope.moodAt) ||
+        !options.isActiveAgent(agent)
+      ) {
         byScope.delete(key);
       } else {
         scope.changes = kept;
@@ -67,10 +74,23 @@ export function createAgentChanges(options: {
       return change.id;
     },
 
-    /** The agent's last change that's still kept. */
-    last(agent: Scope): AgentChange | undefined {
+    /** Stops a request from implicitly undoing a change before a mood. */
+    recordMood(agent: Scope) {
       prune();
-      return byScope.get(keyOf(agent))?.changes.at(-1);
+      if (!options.isActiveAgent(agent.id)) return;
+      const key = keyOf(agent);
+      byScope.set(key, {
+        agent: agent.id,
+        changes: byScope.get(key)?.changes ?? [],
+        moodAt: now(),
+      });
+    },
+
+    /** The agent's last change that's still kept, or a mood run. */
+    last(agent: Scope): AgentChange | "mood" | undefined {
+      prune();
+      const scope = byScope.get(keyOf(agent));
+      return scope?.moodAt ? "mood" : scope?.changes.at(-1);
     },
 
     /** One of the agent's own changes that's still kept. */

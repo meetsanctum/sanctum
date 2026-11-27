@@ -17,8 +17,8 @@ import { notUnderstood, sentences } from "./sentences.js";
 // sentences, in English and German, and does what they ask through the
 // tools every AI agent gets: lights on, off, brighter, dimmer or to a
 // brightness, for the speaker's room, a room, a floor, a light or the whole
-// home; a room's mood by its name; and putting back what it changed. It
-// asks no model. Its page is in ./ui.
+// home; a room's mood by its name; and putting back a direct light change
+// when no mood has run since. It asks no model. Its page is in ./ui.
 
 /** Sets the home's one language, which smart speakers hear and speak. */
 const language = defineAction({

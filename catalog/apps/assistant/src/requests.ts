@@ -204,7 +204,14 @@ async function putBack(
   words: Replies,
 ): Promise<RequestReply> {
   const answer = await callTool(ctx, "restore", {});
-  if (!answer.ok) return { text: words.failed(answer.words) };
+  if (!answer.ok) {
+    return {
+      text:
+        answer.error === "mood_not_restorable"
+          ? words.cannotUndoMood
+          : words.failed(answer.words),
+    };
+  }
   const { changed } = answer.value as { changed: RestoreAnswer[] };
   if (changed.length === 0) return { text: words.cannotPutBack };
   const missed = changed.filter((light) => !done(light));
@@ -252,29 +259,31 @@ export async function answerRequest(
     const read = await callTool(ctx, "home_overview", {});
     if (!read.ok) return { text: words.failed(read.words) };
     const overview = read.value as Overview;
-    let matched = match(request.text, language, namesOf(overview));
+    const names = namesOf(overview);
+    const matched = match(request.text, language, names);
+    if (matched)
+      return await changeLights(ctx, matched, overview, request, words);
+
     // A mood's name only after nothing else matched: its list is a read of
     // its own, which lights don't wait for.
-    if (!matched) {
-      const moods = await readMoods(ctx);
-      const named = match(request.text, language, {
-        ...namesOf(overview),
-        mood: moods.map((mood) => mood.name),
-      });
-      if (named?.intent.do === "mood") {
-        return await runMood(ctx, named, moods, overview, request, words);
-      }
-      matched = named;
+    const lookedUp = await readMoods(ctx);
+    if (!lookedUp.ok) {
+      return { text: words.failed(lookedUp.words, lookedUp.error) };
     }
-    if (!matched) {
-      const lightsHidden = overview.notAllowed.some(
-        ({ title, where }) =>
-          title === lightControlTitle &&
-          where === "Settings, What AI Agents Can Use",
-      );
-      return { text: lightsHidden ? words.notAllowed : language.notUnderstood };
+    const { moods } = lookedUp;
+    const named = match(request.text, language, {
+      ...names,
+      mood: moods.map((mood) => mood.name),
+    });
+    if (named?.intent.do === "mood") {
+      return await runMood(ctx, named, moods, overview, request, words);
     }
-    return await changeLights(ctx, matched, overview, request, words);
+    const lightsHidden = overview.notAllowed.some(
+      ({ title, where }) =>
+        title === lightControlTitle &&
+        where === "Settings, What AI Agents Can Use",
+    );
+    return { text: lightsHidden ? words.notAllowed : language.notUnderstood };
   } catch (error) {
     if (isActionError(error) && error.code === "forbidden") {
       return { text: words.notAllowed };

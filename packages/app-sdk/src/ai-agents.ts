@@ -23,7 +23,14 @@ import { placesReadPermission } from "./places.js";
 export const aiAssistantPermission = "ai.assistant";
 
 /** A tool's answer as the model reads it: the home's data, or why it failed. */
-export type AiToolAnswer = { text: string; isError: boolean };
+export type AiToolAnswer = {
+  text: string;
+  isError: boolean;
+  /** The tool's error code, when it returned one. */
+  error?: string;
+  /** Where a person can change the settings that blocked a tool. */
+  settings?: readonly string[];
+};
 
 /** Reading the activity log: who did what, when and why. */
 export const activityReadPermission = "activity.read";

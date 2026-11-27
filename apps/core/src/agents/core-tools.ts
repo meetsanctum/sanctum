@@ -309,7 +309,7 @@ export function createCoreTools(options: CoreToolsOptions) {
       title: "Put back",
       description: [
         assistant
-          ? "Put back one of your own changes: the `change` a lights or device_command call answered with, or, left out, your last change."
+          ? "Put back one of your own changes: the `change` a lights or device_command call answered with, or, left out, your last change if you haven't run a mood since."
           : "Put back one of your own changes: the `change` a lights or device_command call answered with.",
         "Each light or switch that still shows what you set goes back to how it was. One changed since, by a person, a switch or an app, is left as it is and named, with the app where one changed it; one whose command is still on its way is uncertain.",
         "Only your last 5 changes are kept, for an hour. Putting back a change twice answers the same. A mood's run can't be put back this way.",
@@ -332,6 +332,9 @@ export function createCoreTools(options: CoreToolsOptions) {
         asked === undefined
           ? options.changes.last(agent)
           : options.changes.find(agent, asked);
+      if (change === "mood") {
+        return toolError("mood_not_restorable", "I can't undo a mood.");
+      }
       if (!change) {
         return toolError(
           "change_gone",

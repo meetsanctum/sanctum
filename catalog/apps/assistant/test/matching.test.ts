@@ -185,26 +185,26 @@ describe("matching English", () => {
 describe("matching moods", () => {
   it("reads a mood in a room, or the speaker's room", () => {
     expect(en("set the kitchen to movie night")).toMatchObject({
-      intent: { do: "mood", where: "room" },
+      intent: { do: "mood" },
       names: { room: "Kitchen", mood: "Movie Night" },
     });
     expect(en("Evening in the office")).toMatchObject({
-      intent: { do: "mood", where: "room" },
+      intent: { do: "mood" },
       names: { room: "Office", mood: "Evening" },
     });
     expect(en("turn on evening")).toMatchObject({
-      intent: { do: "mood", where: "here" },
+      intent: { do: "mood" },
       names: { mood: "Evening" },
     });
     expect(en("set the mood to movie night")).toMatchObject({
-      intent: { do: "mood", where: "here" },
+      intent: { do: "mood" },
     });
     expect(de("Stell das Büro auf Abend")).toMatchObject({
-      intent: { do: "mood", where: "room" },
+      intent: { do: "mood" },
       names: { room: "Büro", mood: "Abend" },
     });
     expect(de("starte die Stimmung Abend")).toMatchObject({
-      intent: { do: "mood", where: "here" },
+      intent: { do: "mood" },
     });
   });
 

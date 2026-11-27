@@ -36,12 +36,14 @@ export type Replies = {
   restoreIssues: Record<RestoreIssue, string>;
   changedSince: string;
   cannotPutBack: string;
+  cannotUndoMood: string;
   /** A mood that ran, by its name and its room's. */
   moodSet(mood: string, room: string): string;
   /** No mood of that name where it was asked for. */
   noSuchMood(mood: string, room: string | null): string;
-  /** `run` refused: its own words in English, which say where it's decided. */
-  cannotRunMood(toolWords: string): string;
+  /** `run` refused: its own words and where the settings are. */
+  cannotRunMood(toolWords: string, settings?: readonly string[]): string;
+  duplicateMood(mood: string, room: string | null): string;
   /** Several rooms have a mood of that name, and none was said. */
   whichMoodRoom(mood: string): string;
   noTimers: string;
@@ -50,7 +52,7 @@ export type Replies = {
   whichNamed(kind: "room" | "floor" | "light", name: string): string;
   notAllowed: string;
   /** A tool's refusal in this language, where its own words are English. */
-  failed(toolWords: string): string;
+  failed(toolWords: string, error?: string): string;
 };
 
 const list = (names: readonly string[], and: string) =>
@@ -124,12 +126,17 @@ const en: Replies = {
   },
   changedSince: "Nothing put back: it changed since.",
   cannotPutBack: "There's nothing I can put back.",
+  cannotUndoMood: "I can't undo a mood.",
   moodSet: (mood, room) => `${mood} in ${room}.`,
   noSuchMood: (mood, room) =>
     room
       ? `${room} has no mood called ${mood}.`
       : `There's no mood called ${mood}.`,
   cannotRunMood: (toolWords) => toolWords,
+  duplicateMood: (mood, room) =>
+    room
+      ? `More than one mood in ${room} is called ${mood}.`
+      : `More than one mood in the same room is called ${mood}.`,
   whichMoodRoom: (mood) =>
     `Which room? Several have a mood called ${mood}. Say the room too.`,
   noTimers: "I can't set timers yet.",
@@ -199,14 +206,22 @@ const de: Replies = {
   },
   changedSince: "Nichts zurückgestellt: es wurde inzwischen geändert.",
   cannotPutBack: "Da kann ich nichts zurückstellen.",
+  cannotUndoMood: "Eine Stimmung kann ich nicht rückgängig machen.",
   moodSet: (mood, room) => `${room}: ${mood}.`,
   noSuchMood: (mood, room) =>
     room
       ? `${room}: keine Stimmung „${mood}“.`
       : `Es gibt keine Stimmung „${mood}“.`,
-  // Where it's decided is in Moods' settings, which are in English.
-  cannotRunMood: () =>
-    "Ich darf diese Stimmung nicht starten. Das lässt sich in den Einstellungen von Moods einschalten.",
+  cannotRunMood: (_toolWords, settings) => {
+    const refused = "Ich darf diese Stimmung nicht starten.";
+    return settings?.length
+      ? `${refused} Prüfe die Freigabe in ${list(settings, "und")}.`
+      : refused;
+  },
+  duplicateMood: (mood, room) =>
+    room
+      ? `${room}: Mehrere Stimmungen heißen „${mood}“.`
+      : `Mehrere Stimmungen im selben Raum heißen „${mood}“.`,
   whichMoodRoom: (mood) =>
     `Welcher Raum? Mehrere haben die Stimmung „${mood}“. Sag den Raum mit dazu.`,
   noTimers: "Ich kann noch keine Timer stellen.",
@@ -216,7 +231,14 @@ const de: Replies = {
   whichNamed: (kind, name) =>
     `Mehrere ${{ room: "Räume", floor: "Etagen", light: "Lampen" }[kind]} heißen „${name}“. Welche davon meinst du?`,
   notAllowed: "Das darf ich nicht.",
-  failed: () => "Das hat nicht geklappt.",
+  failed: (_toolWords, error) => {
+    if (error === "limited") {
+      return "Zu viele Anfragen. Versuch es in einer Minute noch einmal.";
+    }
+    if (error === "timeout")
+      return "Die App hat nicht rechtzeitig geantwortet.";
+    return "Das hat nicht geklappt.";
+  },
 };
 
 export const replies: Record<RequestLanguage, Replies> = { en, de };

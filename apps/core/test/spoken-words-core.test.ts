@@ -233,6 +233,15 @@ it("teaches the Assistant's sentences and hears a speaker's words with them", as
         lists: { mood: ["Movie Night"] },
       }),
     );
+    await driverCtx!.entities.remove("evening");
+    await vi.waitFor(() => {
+      const lesson = stp.lessons.at(-1);
+      expect(lesson?.templates).toEqual([
+        "turn (on|off) the {room} lights",
+        "turn (on|off) [the] {light}",
+      ]);
+      expect(lesson?.lists).not.toHaveProperty("mood");
+    });
 
     const reportMute = (muted: boolean) =>
       driverCtx!.devices.report({

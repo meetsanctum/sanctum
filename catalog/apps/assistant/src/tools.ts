@@ -17,8 +17,13 @@ export type Overview = {
 };
 
 // A tool's answer, read: its JSON, or its words when it refused.
-export type ToolResult =
-  { ok: true; value: unknown } | { ok: false; words: string };
+export type ToolFailure = {
+  ok: false;
+  words: string;
+  error?: string;
+  settings?: readonly string[];
+};
+export type ToolResult = { ok: true; value: unknown } | ToolFailure;
 
 export async function callTool(
   ctx: RequestContext,
@@ -40,7 +45,12 @@ export async function callTool(
     } catch {
       // A refusal is one sentence, not JSON.
     }
-    return { ok: false, words: answer.text };
+    return {
+      ok: false,
+      words: answer.text,
+      error: answer.error,
+      settings: answer.settings,
+    };
   }
   return { ok: true, value: JSON.parse(answer.text) as unknown };
 }

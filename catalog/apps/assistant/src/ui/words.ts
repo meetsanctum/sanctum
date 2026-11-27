@@ -36,7 +36,10 @@ export function examples(language: RequestLanguage, room: string | null) {
           say: "Stell das Wohnzimmer auf Abend",
           what: "A room's mood, by its name",
         },
-        { say: "Mach das rückgängig", what: "Undoes the last change it made" },
+        {
+          say: "Mach das rückgängig",
+          what: "Undoes the last light change if no mood has run since",
+        },
       ]
     : [
         {
@@ -55,7 +58,10 @@ export function examples(language: RequestLanguage, room: string | null) {
           say: `Set the ${place} to Evening`,
           what: "A room's mood, by its name",
         },
-        { say: "Put it back", what: "Undoes the last change it made" },
+        {
+          say: "Put it back",
+          what: "Undoes the last light change if no mood has run since",
+        },
       ];
 }
 
