@@ -13,13 +13,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changePassword, PasswordChangeError } from "../src/auth/password";
 import { CoreError, coreJson } from "../src/core-fetch";
-import { makeInvite } from "../src/people/invites";
 import { PersonPage } from "../src/people/person-page";
 import { deferred } from "./deferred";
 
-// Changing your own password from your own page: the dialog checks the new
-// password before anything is sent, says what went wrong beside its cause,
-// can't be closed while it saves, and the page says the password changed.
+// Changing your own password from your own page: Change password takes
+// Reset password's place there, the dialog checks the new password before
+// anything is sent, says what went wrong beside its cause, can't be closed
+// while it saves, and the page says the password changed.
 
 vi.mock("../src/auth/password", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/auth/password")>()),
@@ -188,24 +188,17 @@ function resetCode(): InviteInfo {
 }
 
 describe("Change password", () => {
-  it("offers password recovery alongside Change password on your own page", async () => {
+  it("takes Reset password's place on your own page only", async () => {
     await show();
     expect(button("Change password")).toBeDefined();
+    expect(button("Reset password")).toBeUndefined();
     expect(container.textContent).toContain(
       "You stay in People but can’t sign in. Your devices sign out at once.",
     );
 
-    vi.mocked(makeInvite).mockResolvedValue({
-      code: "K7QXM4PD",
-      info: resetCode(),
-    });
-    await click("Reset password");
-    expect(dialog()?.textContent).toContain(`Reset ${alex.name}’s password`);
-    expect(makeInvite).toHaveBeenCalledWith(
-      expect.objectContaining({ personId: alex.id, kind: "reset" }),
-      expect.any(AbortSignal),
-    );
-    expect(button("Copy code")).toBeDefined();
+    await show("maya");
+    expect(button("Change password")).toBeUndefined();
+    expect(button("Reset password")).toBeDefined();
   });
 
   it("offers Change password and Cancel code on your own page with an active reset code", async () => {

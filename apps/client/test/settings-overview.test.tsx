@@ -228,7 +228,7 @@ it("adds a person and opens their Settings page using the returned ID", async ()
   );
 });
 
-it("offers Reset password on every device and Change password on your own", async () => {
+it("offers Change password on your own page and Reset password elsewhere", async () => {
   vi.mocked(coreJson).mockImplementation(async (path) => {
     if (path === "/api/people") return [maya.person] as never;
     if (path === "/api/auth/logins") {
@@ -249,7 +249,7 @@ it("offers Reset password on every device and Change password on your own", asyn
     );
   await show({ page: "person", params: { id: "maya" }, me: maya });
   expect(buttons()).toContain("Change password");
-  expect(buttons()).toContain("Reset password");
+  expect(buttons()).not.toContain("Reset password");
   await show({
     page: "person",
     params: { id: "maya" },

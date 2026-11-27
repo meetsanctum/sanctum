@@ -35,8 +35,13 @@ export async function changePassword(input: {
 }) {
   const host = currentCredential();
   if (!host) throw new PasswordChangeError("no_host");
-  // The new registration response needs the shell's certificate check.
-  if (!host.pin || new URL(host.url).protocol !== "https:" || !getShell().trust)
+  // Over HTTPS the new registration response needs the shell's pinned
+  // certificate check; plain HTTP, in development only, has none, as for
+  // signing in.
+  if (
+    new URL(host.url).protocol !== "http:" &&
+    (!host.pin || !getShell().trust)
+  )
     throw new PasswordChangeError("unchecked");
 
   const requestSignal = () => {

@@ -9,9 +9,9 @@ import { untilText } from "./words";
 
 // A person's Sign-In card: one thing per row, what it is on the left and
 // its value or its actions on the right, as each device's row is. Someone
-// who signs in has a Username row and a Password row. Reset password is
-// available on every device, with Change password on your own device.
-// An active reset code has a row of its own. Someone who doesn't sign
+// who signs in has a Username row and a Password row; on your own page
+// Password offers Change password, on anyone else's Reset password. A code
+// waiting for a new password is a row of its own. Someone who doesn't sign
 // in, or whose invite is waiting or ended, has one row about it. Removing a
 // sign-in is at the page's foot, with removing the person.
 
@@ -90,13 +90,14 @@ export function SignInCard(props: {
               ) : undefined
             }
           >
-            {props.own &&
-              small(
-                "Change password",
-                () => props.onChangePassword(),
-                props.changeTrigger,
-              )}
-            {!reset && small("Reset password", () => props.onInvite("reset"))}
+            {props.own
+              ? small(
+                  "Change password",
+                  () => props.onChangePassword(),
+                  props.changeTrigger,
+                )
+              : !reset &&
+                small("Reset password", () => props.onInvite("reset"))}
           </CardRow>
           {reset && (
             <CardRow

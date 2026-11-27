@@ -52,16 +52,14 @@ Your current password is checked on your Mac before anything changes, and
 neither password leaves it. Your other devices stay signed in. To sign one
 out, choose **Sign out** beside it under **Devices**.
 
-**Change password** shows only on your own page, on your own device, and
-requires a secure connection to your home.
+Change password shows only on your own page, on your own device. On someone
+else's page, and on a shared device, it is **Reset password**.
 
 ## Reset a password
 
 If someone forgets their password, open their page and choose **Reset
-password**. You can also make a code from your own signed-in Mac if you
-forget your password. Copy the code before signing out. To use the code
-in the Mac app, choose **Just me**, then **I have an invite code**, enter
-the code and choose a new password.
+password**. Give them the new code: in the Mac app, they choose **Just
+me**, then **I have an invite code**, enter it and choose a new password.
 Their current password keeps working until the code is used, so a reset
 started by mistake changes nothing. To end the code, choose **Cancel code**
 and confirm.

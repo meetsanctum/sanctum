@@ -217,16 +217,25 @@ describe("changing your password on this device", () => {
     );
   });
 
-  it.each([
-    ["plain HTTP", "http://home.example", held.pin],
-    ["an unpinned host", held.url, null],
-  ])("refuses to send a password change over %s", async (_name, url, pin) => {
-    selectHost({ ...held, url, pin });
+  it("refuses to send a password change over HTTPS to an unpinned host", async () => {
+    selectHost({ ...held, pin: null });
 
     await expect(changePassword(passwords)).rejects.toEqual(
       new PasswordChangeError("unchecked"),
     );
     expect(fetchResponse).not.toHaveBeenCalled();
+  });
+
+  it("changes it over plain HTTP in development, as signing in does", async () => {
+    selectHost({ ...held, url: "http://home.example", pin: null });
+    fetchResponse.mockImplementationOnce(async () => {
+      throw new TypeError("offline");
+    });
+
+    await expect(changePassword(passwords)).rejects.toBeInstanceOf(TypeError);
+    expect(String(fetchResponse.mock.calls[0]![0])).toBe(
+      "http://home.example/api/auth/password/start",
+    );
   });
 
   it("requires the shell to check the host's certificate", async () => {

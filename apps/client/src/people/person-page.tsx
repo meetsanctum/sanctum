@@ -34,7 +34,7 @@ import { agentsGoText, firstName, signsOutText, usedText } from "./words";
 // their devices out at once, so each asks first, naming what ends. The core
 // keeps the home's last sign-in, and the page says so before anyone
 // presses. On your own page, on a device signed in as you, Change password
-// is available alongside the reset code flow.
+// takes Reset password's place.
 
 const label = "text-[13px] leading-[18px] font-medium text-muted-foreground";
 

@@ -44,7 +44,7 @@ function changeProblem(error: unknown): Problem {
     }
     if (error.code === "unchecked") {
       return {
-        text: "Changing your password requires a secure connection to your home.",
+        text: "This app can't check this home's security certificate.",
       };
     }
     return { text: `${productName} ran into a problem. Try again.` };
