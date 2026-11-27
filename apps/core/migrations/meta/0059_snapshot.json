@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "90b2ed62-7f52-49c3-9abf-d3d48fbe0fe6",
+  "id": "39662c0f-fb46-4bb9-a32a-bd9b36c8e4c7",
   "prevId": "a849cfcc-99e6-4e3a-9b39-f6d25fdd2f4b",
   "tables": {
     "activity": {
@@ -1125,6 +1125,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": 0
+        },
+        "last_tried_at": {
+          "name": "last_tried_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "ended_reason": {
           "name": "ended_reason",

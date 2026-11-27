@@ -1,4 +1,8 @@
-import { inviteMs, inviteTries } from "@meetsanctum/auth-protocol";
+import {
+  inviteMs,
+  inviteTries,
+  keyStretching,
+} from "@meetsanctum/auth-protocol";
 import { eq } from "drizzle-orm";
 import { assert, describe, expect, it, vi } from "vitest";
 
@@ -53,6 +57,9 @@ describe("inviting a person to sign in", () => {
       kind: "invite",
       ended: null,
     });
+    expect(core.db.select().from(authInvites).get()?.keyStretching).toBe(
+      keyStretching.version,
+    );
 
     const joined = await redeem(core, made.code!, { username: " Jonas " });
 

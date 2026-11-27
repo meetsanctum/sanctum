@@ -308,6 +308,7 @@ export type InviteStarted = RegistrationStarted & {
 export type InviteFinish = {
   registrationId: string;
   registrationRecord: string;
+  keyStretching: number;
 };
 export type CancelInvite = { personId: string };
 
@@ -316,7 +317,12 @@ export type CancelInvite = { personId: string };
 // invite it is), the new password's registration, and the end, which saves
 // the new sign-in and creates the device's personal client.
 export type RedeemStart = { lookup: string; startLoginRequest: string };
-export type RedeemStarted = { redeemId: string; loginResponse: string };
+export type RedeemStarted = {
+  redeemId: string;
+  loginResponse: string;
+  /** The key-stretching version to use when proving the code. */
+  keyStretching: number;
+};
 export type RedeemCheck = {
   redeemId: string;
   finishLoginRequest: string;

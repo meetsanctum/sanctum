@@ -5,6 +5,7 @@ import {
   inviteMs,
   inviteTries,
   isUsername,
+  keyStretching,
   normaliseUsername,
   pairingCodeAlphabet,
   pairingLookupLength,
@@ -285,6 +286,7 @@ export function createInvites(
             kind,
             lookup: entry.lookup,
             registrationRecord: input.registrationRecord,
+            keyStretching: input.keyStretching,
             createdAt: at,
             expiresAt: new Date(at.getTime() + inviteMs),
           })
@@ -364,7 +366,11 @@ export function createInvites(
       if (active) {
         recordAttempt(found, tries, at, address);
       }
-      return { redeemId, loginResponse };
+      return {
+        redeemId,
+        loginResponse,
+        keyStretching: invite?.keyStretching ?? keyStretching.version,
+      };
     },
 
     // The code was right and the device sees this host: the person sees

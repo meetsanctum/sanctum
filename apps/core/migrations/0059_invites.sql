@@ -8,6 +8,7 @@ CREATE TABLE `auth_invites` (
 	`created_at` integer NOT NULL,
 	`expires_at` integer NOT NULL,
 	`tries` integer DEFAULT 0 NOT NULL,
+	`last_tried_at` integer,
 	`ended_reason` text,
 	`ended_at` integer,
 	FOREIGN KEY (`person_id`) REFERENCES `people`(`id`) ON UPDATE no action ON DELETE cascade

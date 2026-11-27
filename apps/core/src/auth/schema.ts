@@ -184,6 +184,7 @@ export const authInvites = sqliteTable("auth_invites", {
   kind: text("kind", { enum: inviteKinds }).notNull(),
   lookup: text("lookup").notNull().unique(),
   registrationRecord: text("registration_record").notNull(),
+  keyStretching: integer("key_stretching").notNull(),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
   // Challenges issued since the code last checked or the cooldown elapsed.

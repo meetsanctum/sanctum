@@ -12,6 +12,7 @@ import {
   type RedeemFinish,
   type RedeemFinished,
   type RedeemRegistered,
+  type RedeemStarted,
 } from "@meetsanctum/auth-protocol";
 import * as opaque from "@serenity-kit/opaque";
 
@@ -24,6 +25,7 @@ import { hostId, post, registration, type TestCore } from "./support.js";
 const fast = {
   "argon2id-custom": { iterations: 1, memory: 1024, parallelism: 1 },
 } as const;
+const inviteProfiles: Partial<Record<number, typeof fast>> = { 1: fast };
 
 const phone = { name: "Jonas's iPhone", platform: "ios" } as const;
 
@@ -66,6 +68,7 @@ export async function invite(
     {
       registrationId,
       registrationRecord: started.finish(registrationResponse),
+      keyStretching: keyStretching.version,
     },
     { token, ...call },
   );
@@ -96,12 +99,20 @@ export async function checkInvite(
   if (start.statusCode !== 200) {
     return { outcome: "refused" as const, response: start };
   }
-  const { redeemId, loginResponse } = start.json();
+  const {
+    redeemId,
+    loginResponse,
+    keyStretching: version,
+  } = start.json<RedeemStarted>();
+  const profile = inviteProfiles[version];
+  if (!profile) {
+    throw new Error(`unsupported invite key-stretching version: ${version}`);
+  }
   const proof = opaque.client.finishLogin({
     clientLoginState: login.clientLoginState,
     loginResponse,
     password: secret,
-    keyStretching: fast,
+    keyStretching: profile,
   });
   if (!proof) {
     // A wrong code: the device stops here and sends nothing more.
