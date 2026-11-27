@@ -334,18 +334,6 @@ describe("a smart speaker's request", () => {
     );
     expect(unknown.replied).toEqual([{ text: notUnderstood }]);
     expect(unknown.asked).toEqual([]);
-    unknown.listening.close(driver, { run: opened.run, end: "played" });
-    await unknown.until(() => requestLines(unknown.recorded).length === 1);
-    expect(requestLines(unknown.recorded)).toMatchObject([
-      {
-        outcome: "failed",
-        reason: "not_understood",
-        detail: {
-          heardWordsMs: expect.any(Number),
-          finishedPlayingMs: expect.any(Number),
-        },
-      },
-    ]);
 
     const silent = setup({ heard: null, notUnderstood });
     const quiet = await silent.wake();
@@ -451,17 +439,8 @@ describe("a smart speaker's request", () => {
       expect(asked).toEqual([]);
       expect(replied).toEqual([]);
       expect(moments.heardWords).toBe(moments.heard + oneMomentAfterMs + 1);
-      expect(requestLines(recorded)).toMatchObject(
-        heard === null
-          ? []
-          : [
-              {
-                outcome: "failed",
-                reason: "not_understood",
-                detail: { heardWordsMs: oneMomentAfterMs + 1 },
-              },
-            ],
-      );
+      // Speech it can't use leaves no line, as before: a run refused does.
+      expect(requestLines(recorded)).toEqual([]);
     },
   );
 

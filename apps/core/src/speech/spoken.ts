@@ -362,12 +362,10 @@ export function createSpokenRequests(options: {
         if (sorry && url && !signal.aborted) {
           run.reply(url, sorry);
           await runEnded;
-        } else if (!signal.aborted) {
-          run.fail(text === null ? "nothing-heard" : "not-understood");
+          return;
         }
-        if (text !== null) {
-          recorded(request, speaker, { ok: false, reason: "not_understood" });
-        }
+        if (signal.aborted) return;
+        run.fail(text === null ? "nothing-heard" : "not-understood");
         return;
       }
       run.heard(words);
