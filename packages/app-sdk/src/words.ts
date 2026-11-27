@@ -19,88 +19,15 @@ function once<T>(key: string, make: () => T): T {
 
 const localeOf = (language: Language) => languages[language].locale;
 
-const numberOptionNames = [
-  "localeMatcher",
-  "numberingSystem",
-  "style",
-  "currency",
-  "currencyDisplay",
-  "currencySign",
-  "unit",
-  "unitDisplay",
-  "notation",
-  "minimumIntegerDigits",
-  "minimumFractionDigits",
-  "maximumFractionDigits",
-  "minimumSignificantDigits",
-  "maximumSignificantDigits",
-  "roundingIncrement",
-  "roundingMode",
-  "roundingPriority",
-  "trailingZeroDisplay",
-  "compactDisplay",
-  "useGrouping",
-  "signDisplay",
-];
-
-const dateOptionNames = [
-  "localeMatcher",
-  "calendar",
-  "numberingSystem",
-  "hour12",
-  "hourCycle",
-  "timeZone",
-  "weekday",
-  "era",
-  "year",
-  "month",
-  "day",
-  "dayPeriod",
-  "hour",
-  "minute",
-  "second",
-  "fractionalSecondDigits",
-  "timeZoneName",
-  "formatMatcher",
-  "dateStyle",
-  "timeStyle",
-];
-
-// Intl reads inherited options too. Use the same values for the cache key
-// and the formatter, and leave coercion of unusual values to Intl.
-function readOptions<T extends object>(options: T, names: readonly string[]) {
-  const values = Object.create(null) as Record<string, unknown>;
-  let cacheable = true;
-  for (const name of names) {
-    const value: unknown = Reflect.get(options, name);
-    if (value === undefined) continue;
-    values[name] = value;
-    cacheable &&=
-      typeof value === "string" ||
-      typeof value === "boolean" ||
-      (typeof value === "number" && Number.isFinite(value));
-  }
-  return {
-    values: values as T,
-    key: cacheable ? JSON.stringify(values) : null,
-  };
-}
-
 /** A number as the language writes it: "1,250.5" in English. */
 export function number(
   language: Language,
   value: number,
   options?: Intl.NumberFormatOptions,
 ): string {
-  const locale = localeOf(language);
-  const { values, key } =
-    options === undefined
-      ? { values: undefined, key: "{}" }
-      : readOptions(options, numberOptionNames);
-  if (key === null) return new Intl.NumberFormat(locale, values).format(value);
   return once(
-    `number|${language}|${key}`,
-    () => new Intl.NumberFormat(locale, values),
+    `number|${language}|${JSON.stringify(options ?? {})}`,
+    () => new Intl.NumberFormat(localeOf(language), options),
   ).format(value);
 }
 
@@ -140,19 +67,22 @@ export function list(
   ).format(items);
 }
 
-/** A date or time as the language writes it, or "Invalid Date" for an invalid instant. */
+/**
+ * A date or time as the language writes it, or "Invalid Date" for an
+ * instant that isn't one.
+ */
 export function date(
   language: Language,
   value: Date | number,
   options: Intl.DateTimeFormatOptions,
 ): string {
-  return formatDate(value, () => {
-    const locale = localeOf(language);
-    const { values, key } = readOptions(options, dateOptionNames);
-    return key === null
-      ? new Intl.DateTimeFormat(locale, values)
-      : dateFormatter(`words|${language}|${key}`, locale, values);
-  });
+  return formatDate(value, () =>
+    dateFormatter(
+      `words|${language}|${JSON.stringify(options)}`,
+      localeOf(language),
+      options,
+    ),
+  );
 }
 
 /**

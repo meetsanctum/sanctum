@@ -1,3 +1,7 @@
+// Date formatters for the home clock (clock.ts) and words.ts: kept for the
+// most recent 128 options, since making one costs and options such as the
+// home's time zone can change.
+
 const formats = new Map<string, Intl.DateTimeFormat>();
 const maxFormats = 128;
 

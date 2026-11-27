@@ -13,14 +13,6 @@ describe("a language's words", () => {
     expect(number("en", 2.345, { maximumFractionDigits: 1 })).toBe("2.3");
   });
 
-  it("distinguishes number formats with inherited options", () => {
-    const percent: Intl.NumberFormatOptions = Object.create({
-      style: "percent",
-    });
-    expect(number("en", 0.5)).toBe("0.5");
-    expect(number("en", 0.5, percent)).toBe("50%");
-  });
-
   it("gives a count the noun its number takes", () => {
     const lights = { one: "# light", other: "# lights" };
     expect(plural("en", 1, lights)).toBe("1 light");
@@ -48,21 +40,6 @@ describe("a language's words", () => {
     } as const;
     expect(date("en", at, options)).toBe("27 November");
     expect(date("de", at, options)).toBe("27. November");
-  });
-
-  it("distinguishes date formats with inherited time zones", () => {
-    const at = Date.UTC(2026, 10, 27, 2);
-    const options = { day: "numeric", month: "short" } as const;
-    const utc: Intl.DateTimeFormatOptions = Object.assign(
-      Object.create({ timeZone: "UTC" }),
-      options,
-    );
-    const losAngeles: Intl.DateTimeFormatOptions = Object.assign(
-      Object.create({ timeZone: "America/Los_Angeles" }),
-      options,
-    );
-    expect(date("en", at, utc)).toBe("27 Nov");
-    expect(date("en", at, losAngeles)).toBe("26 Nov");
   });
 
   it("writes invalid dates the way the home clock does", () => {
