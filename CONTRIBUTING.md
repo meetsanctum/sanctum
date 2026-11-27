@@ -171,20 +171,29 @@ deploy/                    a host's installer and compose file; deploy/dev for d
 
 The Connector workflow stages `@meetsanctum/mcp` on npm from a tag
 `mcp-vX.Y.Z`. It checks that the tag names the package's version, runs the
-connector's checks, and packs it to hold only `dist/cli.js`, the README and
-the licence. A staged version installs for nobody until a maintainer of the
-`@meetsanctum` scope approves it, on npmjs.com under Staged Packages or with
-`npm stage approve`, with two-factor authentication.
+connector's checks, and packs it to hold only `dist/cli.js`, `package.json`,
+the README and the licence. CI also checks the archive and runs the installed
+connector's `--version` command. A staged version installs for nobody until a
+maintainer of the `@meetsanctum` scope approves it, on npmjs.com under Staged
+Packages or with `npm stage approve`, with two-factor authentication.
 
 Settings' prompt pins the connector's version (`agentConnector` in
 `packages/auth-protocol/src/agent-setup.ts`), and the connector's tests hold it
 to `packages/mcp/package.json`. A new connector version bumps both together,
 is tagged and approved, and only then ships in a core.
 
-npm trusts the workflow as a trusted publisher, with no token stored, and
-attaches provenance. A trusted publisher can only be set on a package that
-exists, so the package's first version is staged with a short-lived token in the
-repository's `NPM_TOKEN` secret, removed once the trusted publisher is set.
+Release maintainers tag reviewed commits from `main`. In GitHub, activate a
+tag ruleset for `mcp-v*` that restricts creation, updates and deletion, and
+allows only release maintainers to bypass those restrictions. The workflow
+requires a protected tag. Configure the `connector-release` environment to
+allow only `mcp-v*` tags and require approval from release maintainers.
+
+npm trusts the staging job and attaches provenance. Configure `connector.yml`
+as the trusted publisher with environment `connector-release`, and allow only
+staged publishing. npm requires the package to exist before setting up trust.
+For the first release, store a short-lived, stage-only npm token scoped to
+`@meetsanctum` in the environment's `NPM_TOKEN` secret. Leave Bypass 2FA off.
+Revoke the token and delete the secret once the trusted publisher is set.
 
 ## Running a host
 

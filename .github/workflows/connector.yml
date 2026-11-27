@@ -5,38 +5,36 @@ name: Connector
 # it on npmjs.com with two-factor authentication, so nothing reaches anyone's
 # computer without a person's say.
 #
-# npm trusts this workflow through OIDC (trusted publishing), with no token
-# stored here, and attaches provenance. A trusted publisher can only be set on
-# a package that exists, so while the repository has an NPM_TOKEN secret, a
-# short-lived token stages instead, with provenance still from OIDC.
+# npm trusts the staging job through OIDC and attaches provenance. The
+# connector-release environment holds a stage-only token for the first release.
 on:
   push:
     tags: ["mcp-v*.*.*"]
 
 permissions:
   contents: read
-  # Trusted publishing and provenance.
-  id-token: write
 
 concurrency:
   group: connector-${{ github.ref }}
 
 jobs:
-  stage:
+  build:
     runs-on: ubuntu-latest
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     steps:
+      - name: Require a protected release tag
+        run: |
+          if [ "$GITHUB_REF_PROTECTED" != true ]; then
+            echo "::error::Protect mcp-v* tags with the connector release ruleset"
+            exit 1
+          fi
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
-          registry-url: https://registry.npmjs.org
-      # Staged publishing needs npm 11.15.0 or later.
-      - run: npm install --global npm@11.21.3
-      - run: pnpm install --frozen-lockfile
       # Settings' prompt pins the connector's version, and the connector's
       # tests hold that pin to its package.json: the tag must name it too.
       - name: Check the tag names the package's version
@@ -46,30 +44,37 @@ jobs:
             echo "::error::$GITHUB_REF_NAME doesn't match @meetsanctum/mcp $version"
             exit 1
           fi
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @meetsanctum/mcp... build
       - run: pnpm --filter @meetsanctum/mcp... typecheck
       - run: pnpm --filter @meetsanctum/mcp... test
-      - run: pnpm --filter @meetsanctum/mcp... build
-      # pnpm packs it, which turns workspace versions into real ones, and the
-      # tarball must hold only the bundled connector, its README and licence.
-      - name: Pack and check what goes out
+      - name: Check the connector archive
         working-directory: packages/mcp
-        run: |
-          pnpm pack --pack-destination "$RUNNER_TEMP"
-          tarball="$(ls "$RUNNER_TEMP"/meetsanctum-mcp-*.tgz)"
-          listed="$(tar -tzf "$tarball" | sort | tr '\n' ' ')"
-          expected="package/LICENSE package/README.md package/dist/cli.js package/package.json "
-          if [ "$listed" != "$expected" ]; then
-            echo "::error::The package holds: $listed"
-            exit 1
-          fi
-          if tar -xzOf "$tarball" package/dist/cli.js | grep -Eq '(from |import\()"@meetsanctum/'; then
-            echo "::error::dist/cli.js imports a workspace package instead of bundling it"
-            exit 1
-          fi
-          tar -xzf "$tarball" -C "$RUNNER_TEMP"
-      # npm stages the package pnpm packed, as it unpacks.
+        run: bash tools/check-archive.sh "$RUNNER_TEMP/connector"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: connector
+          path: ${{ runner.temp }}/connector/connector.tgz
+          if-no-files-found: error
+
+  stage:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: connector-release
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      # Staged publishing needs npm 11.15.0 or later.
+      - run: npm install --global --ignore-scripts npm@11.21.3
+      - uses: actions/download-artifact@v8
+        with:
+          name: connector
+          path: ${{ runner.temp }}/connector
       - name: Stage it on npm
-        working-directory: ${{ runner.temp }}/package
-        run: npm stage publish --access public --provenance
+        run: npm stage publish "$RUNNER_TEMP/connector/connector.tgz" --access public --provenance --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
