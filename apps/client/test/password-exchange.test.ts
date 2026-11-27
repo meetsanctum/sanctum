@@ -268,19 +268,29 @@ describe("changing your password on this device", () => {
 });
 
 describe("choosing a new password on this device", () => {
+  const registrationStarted = () =>
+    Response.json({
+      registrationId: "registration",
+      registrationResponse: "registration-response",
+    });
+
   it("registers the new one alone, with no current password", async () => {
     fetchResponse
-      .mockResolvedValueOnce(
-        Response.json({
-          registrationId: "registration",
-          registrationResponse: "registration-response",
-        }),
-      )
+      .mockResolvedValueOnce(registrationStarted())
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
 
-    await choosePassword({ next: "new password" });
+    await choosePassword({ next: "new cafe\u0301 password" });
 
     expect(client.startLogin).not.toHaveBeenCalled();
+    expect(client.startRegistration).toHaveBeenCalledExactlyOnceWith({
+      password: "new café password",
+    });
+    expect(client.finishRegistration).toHaveBeenCalledExactlyOnceWith({
+      clientRegistrationState: "registration-state",
+      registrationResponse: "registration-response",
+      password: "new café password",
+      keyStretching: keyStretching.profile,
+    });
     expect(String(fetchResponse.mock.calls[0]![0])).toBe(
       `${url}/api/auth/password/choose/start`,
     );
@@ -293,6 +303,16 @@ describe("choosing a new password on this device", () => {
       registrationRecord: "registration-record",
       keyStretching: keyStretching.version,
     });
+  });
+
+  it("reports that recovery is unconfirmed when the finish reply is lost", async () => {
+    fetchResponse
+      .mockResolvedValueOnce(registrationStarted())
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    await expect(choosePassword({ next: "new password" })).rejects.toEqual(
+      new PasswordChangeError("unconfirmed"),
+    );
   });
 
   it("refuses to send it over HTTPS to an unpinned host", async () => {

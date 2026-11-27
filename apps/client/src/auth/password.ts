@@ -32,9 +32,8 @@ export class PasswordChangeError extends Error {
 
 const requestTimeoutMs = 10_000;
 
-// The host this device holds, checked as signing in checks it, and a
-// signal for each request that ends with the caller's, after a while, or
-// once the device holds another host.
+// Check that the device still holds the same host before each request.
+// Each request's signal follows the caller's cancellation and a deadline.
 function exchange(signal: AbortSignal | undefined) {
   const host = currentCredential();
   if (!host) throw new PasswordChangeError("no_host");
@@ -55,6 +54,20 @@ function exchange(signal: AbortSignal | undefined) {
     return signal ? AbortSignal.any([signal, deadline]) : deadline;
   };
   return { host, requestSignal };
+}
+
+async function finishPassword(
+  path: string,
+  json: PasswordFinish | PasswordChooseFinish,
+  signal: AbortSignal,
+  callerSignal: AbortSignal | undefined,
+) {
+  try {
+    await coreJson(path, { method: "POST", signal, json });
+  } catch (error) {
+    if (error instanceof CoreError || callerSignal?.aborted) throw error;
+    throw new PasswordChangeError("unconfirmed");
+  }
 }
 
 export async function changePassword(input: {
@@ -96,23 +109,18 @@ export async function changePassword(input: {
     host,
     registrationRecord,
   );
-  const signal = requestSignal();
-  try {
-    await coreJson("/api/auth/password/finish", {
-      method: "POST",
-      signal,
-      json: {
-        changeId: started.changeId,
-        finishLoginRequest: proof.finishLoginRequest,
-        binding,
-        registrationRecord,
-        keyStretching: keyStretching.version,
-      } satisfies PasswordFinish,
-    });
-  } catch (error) {
-    if (error instanceof CoreError || input.signal?.aborted) throw error;
-    throw new PasswordChangeError("unconfirmed");
-  }
+  await finishPassword(
+    "/api/auth/password/finish",
+    {
+      changeId: started.changeId,
+      finishLoginRequest: proof.finishLoginRequest,
+      binding,
+      registrationRecord,
+      keyStretching: keyStretching.version,
+    } satisfies PasswordFinish,
+    requestSignal(),
+    input.signal,
+  );
 }
 
 export async function choosePassword(input: {
@@ -139,19 +147,14 @@ export async function choosePassword(input: {
     password: next,
     keyStretching: keyStretching.profile,
   });
-  const signal = requestSignal();
-  try {
-    await coreJson("/api/auth/password/choose/finish", {
-      method: "POST",
-      signal,
-      json: {
-        registrationId: started.registrationId,
-        registrationRecord,
-        keyStretching: keyStretching.version,
-      } satisfies PasswordChooseFinish,
-    });
-  } catch (error) {
-    if (error instanceof CoreError || input.signal?.aborted) throw error;
-    throw new PasswordChangeError("unconfirmed");
-  }
+  await finishPassword(
+    "/api/auth/password/choose/finish",
+    {
+      registrationId: started.registrationId,
+      registrationRecord,
+      keyStretching: keyStretching.version,
+    } satisfies PasswordChooseFinish,
+    requestSignal(),
+    input.signal,
+  );
 }

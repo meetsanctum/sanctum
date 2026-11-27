@@ -21,13 +21,6 @@ describe("Activity for invites", () => {
     ["invite.redeem", "ok", null, "Joined with an invite code", false],
     ["invite.redeem", "ok", "reset", "Chose a new password with a code", false],
     [
-      "password.choose",
-      "ok",
-      null,
-      "Chose a new password without the old one",
-      false,
-    ],
-    [
       "invite.redeem",
       "refused",
       "too_many_attempts",
@@ -66,4 +59,23 @@ describe("Activity for invites", () => {
       ).toMatchObject({ title, problem });
     },
   );
+});
+
+it("describes password recovery from a signed-in device", () => {
+  expect(
+    activityWords(
+      clock,
+      entry({
+        kind: "system",
+        source: "auth",
+        action: "password.choose",
+        detail: null,
+        subject: { type: "person", id: "jonas", name: "Jonas", gone: false },
+      }),
+      "home",
+    ),
+  ).toMatchObject({
+    title: "Chose a new password without the old one",
+    problem: false,
+  });
 });

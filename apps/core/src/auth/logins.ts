@@ -634,6 +634,10 @@ export function createLogins(
         ) {
           throw new AuthError("expired");
         }
+        server.validateRegistrationRecord(
+          entry.username,
+          input.registrationRecord,
+        );
         db.update(authLogins)
           .set({
             registrationRecord: input.registrationRecord,

@@ -10,7 +10,6 @@ import {
   type ClaimFinish,
   type ClaimStart,
   type CollectAgentToken,
-  type InviteFinish,
   type InviteInfo,
   type InviteStart,
   type LoginInfo,
@@ -22,7 +21,6 @@ import {
   type PairLookup,
   type PairPoll,
   type PairRequest,
-  type PasswordChooseFinish,
   type PasswordChooseStart,
   type PasswordFinish,
   type PasswordStart,
@@ -30,11 +28,11 @@ import {
   type RedeemFinish,
   type RedeemRegister,
   type RedeemStart,
+  type RegistrationFinish,
   type RemoveLogin,
   type RenameClient,
   type RevokeClient,
   type SetClientDrawing,
-  type SetLoginFinish,
   type SetLoginStart,
   type SignInFinish,
   type SignInStart,
@@ -48,6 +46,7 @@ import type { People } from "../people/people.js";
 import type { Auth } from "./auth.js";
 import { parseRequest, personalCaller } from "./callers.js";
 import type { Principal } from "./clients.js";
+import { AuthError } from "./errors.js";
 import { registerLive } from "./live.js";
 import { personInfo } from "./logins.js";
 import { bearerToken } from "./tokens.js";
@@ -82,6 +81,11 @@ const deviceSecret = z
   .regex(/^[A-Za-z0-9_-]+$/)
   .max(128);
 const stretching = z.number().int().min(1).max(keyStretching.version);
+const registrationFinish = z.object({
+  registrationId: id,
+  registrationRecord: message,
+  keyStretching: stretching,
+}) satisfies z.ZodType<RegistrationFinish>;
 
 const schemas = {
   claimStart: z.object({
@@ -117,11 +121,6 @@ const schemas = {
     username,
     registrationRequest: message,
   }) satisfies z.ZodType<SetLoginStart>,
-  setLoginFinish: z.object({
-    registrationId: id,
-    registrationRecord: message,
-    keyStretching: stretching,
-  }) satisfies z.ZodType<SetLoginFinish>,
   removeLogin: z.object({ personId: id }) satisfies z.ZodType<RemoveLogin>,
   inviteStart: z.object({
     personId: id,
@@ -129,11 +128,6 @@ const schemas = {
     replacesInviteId: id.optional(),
     registrationRequest: message,
   }) satisfies z.ZodType<InviteStart>,
-  inviteFinish: z.object({
-    registrationId: id,
-    registrationRecord: message,
-    keyStretching: stretching,
-  }) satisfies z.ZodType<InviteFinish>,
   cancelInvite: z.object({
     personId: id,
     inviteId: id,
@@ -221,11 +215,6 @@ const schemas = {
   passwordChooseStart: z.object({
     registrationRequest: message,
   }) satisfies z.ZodType<PasswordChooseStart>,
-  passwordChooseFinish: z.object({
-    registrationId: id,
-    registrationRecord: message,
-    keyStretching: stretching,
-  }) satisfies z.ZodType<PasswordChooseFinish>,
 };
 
 const parse = parseRequest;
@@ -422,7 +411,7 @@ export async function registerAuth(
     logins.setLoginFinish(
       principal(request),
       address(request),
-      parse(schemas.setLoginFinish, request.body),
+      parse(registrationFinish, request.body),
     );
     return reply.code(204).send();
   });
@@ -452,7 +441,7 @@ export async function registerAuth(
     invites.finish(
       principal(request),
       address(request),
-      parse(schemas.inviteFinish, request.body),
+      parse(registrationFinish, request.body),
     ),
   );
   app.post("/api/auth/invites/cancel", async (request, reply) => {
@@ -510,11 +499,13 @@ export async function registerAuth(
     ),
   );
   app.post("/api/auth/password/choose/finish", async (request, reply) => {
-    logins.passwordChooseFinish(
-      personal(request),
-      address(request),
-      parse(schemas.passwordChooseFinish, request.body),
-    );
+    personal(request);
+    const input = parse(registrationFinish, request.body);
+    // The device can be signed out while the request body is being read.
+    const token = bearerToken(request.headers.authorization);
+    const caller = token && auth.authenticate(token);
+    if (!caller) throw new AuthError("invalid_client_token");
+    logins.passwordChooseFinish(caller, address(request), input);
     return reply.code(204).send();
   });
 
