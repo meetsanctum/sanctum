@@ -50,7 +50,7 @@ export function Sheet(props: {
   useEffect(() => {
     if (!canGoBack) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing) return;
+      if (event.defaultPrevented || event.isComposing || event.repeat) return;
       const modifiers = event.metaKey || event.ctrlKey || event.altKey;
       const isEscape = event.key === "Escape" && !modifiers;
       const isBackShortcut =

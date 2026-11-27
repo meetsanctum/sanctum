@@ -326,6 +326,19 @@ describe("who uses this device", () => {
     await press({ key: "Escape" });
     expect(title()).toBe("Choose your home");
   });
+
+  it.each([
+    ["Esc", { key: "Escape" }],
+    ["⌘[", { key: "[", metaKey: true }],
+  ])("goes back only one step when %s is held", async (_key, shortcut) => {
+    await click("Just me");
+
+    await press(shortcut);
+    expect(title()).toBe("Who uses this device?");
+
+    await press({ ...shortcut, repeat: true });
+    expect(title()).toBe("Who uses this device?");
+  });
 });
 
 describe("the forget-home confirmation during sign-in", () => {

@@ -79,6 +79,14 @@ it("lets the sign-in sheet scroll in the space below the bar", () => {
   ]);
 });
 
+it("keeps Back's extended hit area out of the Mac window drag region", () => {
+  const back = "[data-platform=macos] .sheet-bar button";
+  expect([
+    ...declarationsOf(`${back}:before`),
+    ...declarationsOf(`${back}::before`),
+  ]).toContainEqual(["-webkit-app-region", "no-drag"]);
+});
+
 it("gives the sign-in and dashboard bars the same height on narrow screens", () => {
   for (const bar of [".sheet-bar", ".top-bar"]) {
     const heights = rules
