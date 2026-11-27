@@ -1,0 +1,13 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/catalog/apps/apple-home-devices/sanctum-app.json",
+        "$TURBO_ROOT$/catalog/apps/esphome/sanctum-app.json",
+        "$TURBO_ROOT$/catalog/apps/ollama/sanctum-app.json"
+      ]
+    }
+  }
+}

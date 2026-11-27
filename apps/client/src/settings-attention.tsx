@@ -341,6 +341,7 @@ export function NeedsAttentionSection(props: {
         {apps.map((app) => (
           <li key={app.id} className={rowLayout}>
             <AppIcon
+              appId={app.id}
               icon={app.icon ?? plainIcon}
               className="size-8 [&_svg]:size-4"
             />

@@ -7,7 +7,9 @@ app overview at 3× density.
 
 Lossless WebP exports sit beside them. The shell's `AppIcon`
 (`apps/client/src/app-icon.tsx`) selects artwork by the manifest's glyph and
-colour; other pairs keep the standard line icon.
+colour. The artwork for Apple Home Devices, ESPHome and Ollama also requires
+a matching app ID. When no artwork matches, the shell uses the standard line
+icon.
 
 | App                | Glyph                 | Colour   | Master                                                           |
 | ------------------ | --------------------- | -------- | ---------------------------------------------------------------- |

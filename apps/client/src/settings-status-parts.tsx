@@ -50,6 +50,7 @@ type Part = {
   name: string;
   bytes: number;
   colour: string;
+  appId?: string;
   icon?: AppInfo["icon"];
 };
 
@@ -84,7 +85,7 @@ function PartRow(props: {
     <li className="flex items-center gap-3">
       <span className="flex size-6 shrink-0 items-center justify-center">
         {part.icon ? (
-          <AppIcon icon={part.icon} className="size-6" />
+          <AppIcon appId={part.appId} icon={part.icon} className="size-6" />
         ) : (
           <span
             aria-hidden="true"
@@ -154,6 +155,7 @@ function storageParts(parts: StoragePart[], apps: readonly AppInfo[]): Part[] {
           name: app?.name ?? part.app,
           bytes: part.bytes,
           colour: colourOf[app?.icon?.color ?? ""] ?? "bg-gray",
+          appId: part.app,
           icon: app?.icon ?? undefined,
         });
         break;
@@ -219,6 +221,7 @@ function memoryParts(parts: MemoryPart[], apps: readonly AppInfo[]): Part[] {
           name: app?.name ?? part.app,
           bytes: part.bytes,
           colour: colourOf[app?.icon?.color ?? ""] ?? "bg-gray",
+          appId: part.app,
           icon: app?.icon ?? undefined,
         });
         break;
