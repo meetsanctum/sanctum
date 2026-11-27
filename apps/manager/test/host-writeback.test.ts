@@ -1,4 +1,11 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -9,7 +16,7 @@ import {
   backlogOf,
   createWriteback,
   createWritebackHelper,
-  dirtyableMemory,
+  memoryOf,
   limitsFor,
   pageSizeOf,
   type WritebackLimits,
@@ -20,14 +27,6 @@ const mb = 1024 * 1024;
 const gb = 1024 * mb;
 const page = 4096;
 const floor = { backgroundBytes: 8 * mb, bytes: 32 * mb };
-const zoneinfo = `Node 0, zone   Normal
-        high     32
-        managed  1024
-        protection: (0, 64)
-Node 0, zone  Movable
-        high     0
-        managed  0
-        protection: (0, 0)`;
 
 afterEach(() => {
   vi.useRealTimers();
@@ -62,18 +61,15 @@ describe("limitsFor", () => {
 });
 
 describe("the kernel's files", () => {
-  it("reads the backlog and dirtyable memory", () => {
+  it("reads the backlog and the memory available", () => {
     expect(backlogOf("Dirty: 819200 kB\nWriteback: 20480 kB\n")).toBe(
       (819200 + 20480) * 1024,
     );
     expect(backlogOf("MemTotal: 1 kB")).toBeNull();
-    expect(
-      dirtyableMemory(
-        "nr_free_pages 896\nnr_active_file 140\nnr_inactive_file 84\n",
-        zoneinfo,
-        page,
-      ),
-    ).toBe(1024 * page);
+    expect(memoryOf("MemTotal: 8 kB\nMemAvailable:    5913204 kB\n")).toBe(
+      5913204 * 1024,
+    );
+    expect(memoryOf("MemTotal: 8 kB\n")).toBeNull();
   });
 
   it("reads the page size and the disk's write counters", () => {
@@ -93,43 +89,49 @@ describe("the kernel's files", () => {
   });
 });
 
-it("measures one backing disk and falls back when another disk appears", async () => {
-  const root = await mkdtemp(join(tmpdir(), "sanctum-disks-"));
+it("measures the disk under Sanctum's data, whatever else the host has", async () => {
+  // The temporary folder's own path, links resolved, as realpath gives it.
+  const root = await realpath(await mkdtemp(join(tmpdir(), "sanctum-disks-")));
   const path = (name: string) => join(root, name);
   try {
-    const disk = path("sys/devices/mmcblk0");
+    const disk = path("sys/devices/platform/mmc0/block/mmcblk0");
     const partition = join(disk, "mmcblk0p2");
+    const nvme = path("sys/devices/pci0/nvme/block/nvme0n1");
+    const loop = path("sys/devices/virtual/block/loop3");
     await Promise.all(
-      [
-        partition,
-        path("sys/block"),
-        path("sys/dev/block"),
-        path("proc/self"),
-      ].map((dir) => mkdir(dir, { recursive: true })),
+      [partition, nvme, loop, path("sys/dev/block")].map((dir) =>
+        mkdir(dir, { recursive: true }),
+      ),
     );
     await Promise.all([
-      symlink(disk, path("sys/block/mmcblk0")),
       symlink(partition, path("sys/dev/block/179:2")),
-      writeFile(join(disk, "size"), "33554432\n"),
+      symlink(nvme, path("sys/dev/block/259:0")),
+      symlink(loop, path("sys/dev/block/7:3")),
+      writeFile(join(partition, "partition"), "2\n"),
       writeFile(join(disk, "stat"), "0 0 0 0 3 0 1152 4990 0 4980 4950\n"),
-      writeFile(
-        path("proc/self/mountinfo"),
-        [
-          "30 25 0:28 / / rw - overlay overlay rw",
-          "31 30 179:2 /manager /data rw - ext4 /dev/mmcblk0p2 rw",
-          "32 30 179:2 /core /core-data rw - ext4 /dev/mmcblk0p2 rw",
-        ].join("\n"),
-      ),
+      writeFile(join(nvme, "stat"), "0 0 0 0 3 0 2048 10 0 10 10\n"),
     ]);
-    const read = createDiskReader(["/data", "/core-data"], root);
-    expect(await read()).toMatchObject({
+    const devices = new Map([
+      ["/data", "179:2"],
+      ["/core-data", "179:2"],
+    ]);
+    const read = createDiskReader(["/data", "/core-data"], {
+      root,
+      deviceOf: async (dir) => devices.get(dir)!,
+    });
+    expect(await read()).toEqual({
+      disk,
       bytes: 1152 * 512,
       writeMs: 4990,
       busyMs: 4980,
     });
-    const another = path("sys/block/nvme0n1");
-    await mkdir(another);
-    await writeFile(join(another, "size"), "536870912\n");
+    // On two disks, neither says how long the other's backlog takes.
+    devices.set("/core-data", "259:0");
+    expect(await read()).toBeNull();
+    // A device of the kernel's own, such as a loop, LVM or encryption, has
+    // no counters of the disk's.
+    devices.set("/data", "7:3");
+    devices.set("/core-data", "7:3");
     expect(await read()).toBeNull();
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -149,7 +151,6 @@ function host(
     ["proc/self/smaps", `KernelPageSize: ${pageSize / 1024} kB\n`],
     ["proc/sys/vm/dirty_background_bytes", String(options.background ?? 0)],
     ["proc/sys/vm/dirty_bytes", String(options.limit ?? 0)],
-    ["proc/zoneinfo", zoneinfo],
   ]);
   let disk: string | null = "test-disk";
   let pagesWritten = 0;
@@ -175,10 +176,13 @@ function host(
     bytes += diskBytes;
     writeMs += writing;
     busyMs += busy;
-    files.set("proc/meminfo", `Dirty: ${backlog / 1024} kB\nWriteback: 0 kB\n`);
+    files.set(
+      "proc/meminfo",
+      `MemAvailable: ${memory / 1024} kB\nDirty: ${backlog / 1024} kB\nWriteback: 0 kB\n`,
+    );
     files.set(
       "proc/vmstat",
-      `nr_free_pages ${memory / pageSize + 96}\nnr_active_file 0\nnr_inactive_file 0\nnr_written ${pagesWritten}\nnr_dirty_background_threshold ${(16 * mb) / pageSize}\n`,
+      `nr_written ${pagesWritten}\nnr_dirty_background_threshold ${(16 * mb) / pageSize}\n`,
     );
   };
   set();
@@ -369,7 +373,7 @@ describe("createWriteback", () => {
     expect(applied).toEqual([floor, floor]);
   });
 
-  it("does nothing without a dirtyable memory reading", async () => {
+  it("does nothing without /proc/meminfo", async () => {
     const logs: string[] = [];
     const apply = vi.fn();
     const writeback = createWriteback({
@@ -382,7 +386,7 @@ describe("createWriteback", () => {
     writeback.stop();
     expect(apply).not.toHaveBeenCalled();
     expect(logs).toEqual([
-      "Not limiting what waits to be written: no dirtyable memory reading",
+      "Not limiting what waits to be written: no /proc/meminfo",
     ]);
   });
 });

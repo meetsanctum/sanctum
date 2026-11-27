@@ -13,9 +13,18 @@ import { stacked } from "../stack.js";
 import { memoryField } from "./readings.js";
 import type { DiskWrites } from "./writeback-disk.js";
 
-// Linux's default ratios are based on memory. Limit the write backlog by
-// time on a measured disk, with a small startup limit and a ceiling based
-// on how much memory the kernel can use for dirty pages.
+// How much the host's kernel may hold back from its disks. A save waits for
+// everything written before it, so what's held back is how long a save can
+// wait: unpacking a large image left about 800 MB on a Pi whose SD card writes
+// 5–7 MB/s, and the core's and the apps' saves waited up to two minutes. The
+// kernel's own limits are a share of memory, which knows nothing of the disk.
+//
+// Here they're time instead: writing out starts with half a second's worth
+// held back, and whoever writes waits once there are two seconds' worth, at
+// the speed Sanctum's disk was seen writing out. Until it has been, it's the
+// floor, which suits the slowest disk, and never more than the kernel's own
+// share of memory. The kernel forgets them when it restarts, and the manager
+// sets them again when it starts.
 const mebibyte = 1024 * 1024;
 const floor = { background: 8 * mebibyte, limit: 32 * mebibyte };
 const seconds = { background: 0.5, limit: 2 };
@@ -56,32 +65,10 @@ function vmPages(vmstat: string, name: string) {
   return match ? Number(match[1]) : null;
 }
 
-// On a 64-bit host the ratio applies to free pages after reserves, plus
-// the active and inactive file cache. Each zone reserves its high watermark
-// and protection for allocations that can fall back into that zone.
-export function dirtyableMemory(
-  vmstat: string,
-  zoneinfo: string,
-  pageSize: number,
-) {
-  const free = vmPages(vmstat, "nr_free_pages");
-  const active = vmPages(vmstat, "nr_active_file");
-  const inactive = vmPages(vmstat, "nr_inactive_file");
-  if (free === null || active === null || inactive === null) return null;
-  const zones = zoneinfo.split(/^Node \d+, zone\s+\w+/m).slice(1);
-  if (zones.length === 0) return null;
-  let reserved = 0;
-  for (const zone of zones) {
-    const high = /^\s*high\s+(\d+)$/m.exec(zone);
-    const managed = /^\s*managed\s+(\d+)$/m.exec(zone);
-    const protection = /^\s*protection: \(([\d, ]+)\)$/m.exec(zone);
-    if (!high || !managed || !protection) return null;
-    reserved += Math.min(
-      Number(managed[1]),
-      Number(high[1]) + Math.max(...protection[1]!.split(",").map(Number)),
-    );
-  }
-  return (Math.max(0, free - reserved) + active + inactive) * pageSize;
+// What the kernel's own shares are of, near enough: the memory free or
+// holding file cache it can take back, as MemAvailable estimates it.
+export function memoryOf(meminfo: string) {
+  return memoryField(meminfo, "MemAvailable");
 }
 
 export function pageSizeOf(smaps: string) {
@@ -257,17 +244,16 @@ export function createWriteback(options: {
   }
 
   async function sample() {
-    const [meminfo, vmstat, zoneinfo, disk] = await Promise.all([
+    const [meminfo, vmstat, disk] = await Promise.all([
       read("proc/meminfo"),
       read("proc/vmstat"),
-      read("proc/zoneinfo"),
       readDisk(),
     ]);
-    if (!vmstat || !zoneinfo || stopped) return;
-    const memory = dirtyableMemory(vmstat, zoneinfo, pageSize);
+    if (!meminfo || !vmstat || stopped) return;
+    const memory = memoryOf(meminfo);
     if (memory === null) return;
 
-    const backlog = meminfo ? backlogOf(meminfo) : null;
+    const backlog = backlogOf(meminfo);
     const written = vmPages(vmstat, "nr_written");
     const backgroundPages = vmPages(vmstat, "nr_dirty_background_threshold");
     const background =
@@ -290,7 +276,12 @@ export function createWriteback(options: {
     const wanted = limitsFor(rate, memory, pageSize);
     const ceiling =
       disk && !backingChanged ? limitsFor(Infinity, memory, pageSize) : wanted;
-    const mustLower = applied !== null && exceeds(applied, ceiling);
+    // Memory moves all the time: only a limit well above the ceiling comes
+    // down at once.
+    const mustLower =
+      applied !== null &&
+      exceeds(applied, ceiling) &&
+      differs(ceiling, applied);
     if (applying) return;
     if (!mustLower && applied && (rate === null || !differs(wanted, applied)))
       return;
@@ -302,22 +293,19 @@ export function createWriteback(options: {
   }
 
   async function initialize() {
-    const [smaps, vmstat, zoneinfo, background, limit, disk] =
-      await Promise.all([
-        read("proc/self/smaps"),
-        read("proc/vmstat"),
-        read("proc/zoneinfo"),
-        read(backgroundPath),
-        read(dirtyPath),
-        readDisk(),
-      ]);
+    const [smaps, meminfo, background, limit, disk] = await Promise.all([
+      read("proc/self/smaps"),
+      read("proc/meminfo"),
+      read(backgroundPath),
+      read(dirtyPath),
+      readDisk(),
+    ]);
     if (stopped) return;
     if (smaps) pageSize = pageSizeOf(smaps);
     backingDisk = disk?.disk ?? null;
-    const memory =
-      vmstat && zoneinfo ? dirtyableMemory(vmstat, zoneinfo, pageSize) : null;
+    const memory = meminfo ? memoryOf(meminfo) : null;
     if (memory === null) {
-      log("Not limiting what waits to be written: no dirtyable memory reading");
+      log("Not limiting what waits to be written: no /proc/meminfo");
       return;
     }
     const found = {

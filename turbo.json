@@ -21,8 +21,7 @@
     },
     "test:containers": {
       "dependsOn": ["^build"],
-      "cache": false,
-      "passThroughEnv": ["SANCTUM_TEST_HOST_WRITEBACK"]
+      "cache": false
     },
     "typecheck": {
       "dependsOn": ["^build"]

@@ -129,4 +129,3 @@ jobs:
       - run: pnpm test:containers -- $(printf 'test/%s.docker.ts ' $TESTS)
         env:
           TESTS: ${{ matrix.tests }}
-          SANCTUM_TEST_HOST_WRITEBACK: ${{ matrix.tests == 'host-writeback' && '1' || '' }}
