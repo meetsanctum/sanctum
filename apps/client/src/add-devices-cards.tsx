@@ -4,7 +4,7 @@ import type {
   JoinedDevice,
   Room,
 } from "@meetsanctum/app-sdk";
-import { Button, Input, Problem, SegmentedControl } from "@meetsanctum/ui-sdk";
+import { Button, Input, SegmentedControl } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { Check, CircleAlert } from "lucide-react";
 import {
@@ -19,7 +19,8 @@ import {
 } from "react";
 
 import { productName } from "./brand";
-import { CoreError, coreJson } from "./core-fetch";
+import { Problem } from "./components/ui/problem";
+import { coreJson } from "./core-fetch";
 import {
   DeviceIcon,
   problemReason,
@@ -84,9 +85,7 @@ export function stageText(joined: JoinedDevice, device?: DeviceInfo) {
 
 type Tone = "neutral" | "success" | "error";
 
-// A card's tint runs out before its foot, where a problem with Blink or a
-// new room appears in red: red words on a tint laid over the glass fall below
-// 4.5 : 1, and on the glass alone they keep it.
+// A card's tint runs out before its foot.
 const tones: Record<Tone, string> = {
   neutral:
     "from-white/12 to-white/0 to-85% inset-shadow-[0_1px_0_rgb(255_255_255/0.1),0_0_0_1px_rgb(255_255_255/0.12)]",
@@ -263,12 +262,7 @@ function BlinkButton(props: { device: DeviceInfo }) {
       timer.current = window.setTimeout(() => setBlinking(false), 2_500);
     } catch (error) {
       setBlinking(false);
-      // Its app reached for it and it didn't answer.
-      setProblem(
-        error instanceof CoreError && error.code === "app_failed"
-          ? "Check that it has power, then press Blink again."
-          : problemReason(error),
-      );
+      setProblem(problemReason(error));
     }
   };
   return (

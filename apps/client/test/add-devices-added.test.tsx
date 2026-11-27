@@ -170,18 +170,24 @@ describe("Add devices, with a device it added", () => {
     expect(blink.textContent).toBe("Blinking…");
     expect(blink.disabled).toBe(true);
 
-    const answered = vi.mocked(coreJson).getMockImplementation()!;
-    vi.mocked(coreJson).mockImplementation(async (path, init) => {
-      if (path === "/api/devices/identify") {
-        throw new CoreError(503, "unavailable");
-      }
-      return answered(path, init);
-    });
     await act(async () => vi.advanceTimersByTime(2_500));
     expect(blink.textContent).toBe("Blink");
-    await act(async () => blink.click());
-    expect(page().querySelector("[role=alert]")).not.toBeNull();
-    expect(blink.textContent).toBe("Blink");
+    for (const error of [
+      new CoreError(503, "unavailable"),
+      new CoreError(500, "app_failed"),
+    ]) {
+      vi.mocked(coreJson).mockRejectedValueOnce(error);
+      await act(async () => blink.click());
+      const alert = page().querySelector("[role=alert]")!;
+      expect(
+        [...alert.querySelectorAll("p")].map((line) => line.textContent),
+      ).toEqual([
+        "Kitchen sensor didn't blink",
+        "Sanctum ran into a problem. Try again in a moment.",
+      ]);
+      expect(blink.textContent).toBe("Blink");
+      expect(blink.disabled).toBe(false);
+    }
   });
 
   it("offers no Blink for a device that can't show itself", async () => {

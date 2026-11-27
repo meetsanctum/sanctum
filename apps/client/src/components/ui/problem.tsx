@@ -1,6 +1,6 @@
-import { cn } from "cn";
 import { CircleAlert } from "lucide-react";
-import type { ReactNode } from "react";
+
+import { Alert, AlertDescription, AlertTitle } from "./alert";
 
 /**
  * What went wrong, said in what failed: a red sign, then what happened in
@@ -11,34 +11,24 @@ import type { ReactNode } from "react";
  */
 export function Problem(props: {
   /** What happened to what: "Light 25 didn't blink". */
-  title: ReactNode;
+  title: string;
   /** Why, where it is known, and what to do. */
-  children?: ReactNode;
-  id?: string;
+  children?: string;
   /** Places it, such as across a row of buttons; never restyles it. */
   className?: string;
 }) {
   return (
-    <div
-      id={props.id}
-      role="alert"
-      className={cn(
-        "flex items-start gap-2.5 rounded-md bg-card px-3.5 py-3 text-start text-card-foreground select-text",
-        props.className,
-      )}
-    >
+    <Alert className={props.className}>
       <CircleAlert
         aria-hidden="true"
         className="mt-px size-4.5 shrink-0 text-destructive"
       />
-      <div className="min-w-0">
-        <p className="m-0 text-sm leading-5 font-semibold">{props.title}</p>
+      <div className="min-w-0 wrap-anywhere">
+        <AlertTitle>{props.title}</AlertTitle>
         {props.children && (
-          <p className="m-0 mt-0.5 text-[13px] leading-[18px] text-muted-foreground">
-            {props.children}
-          </p>
+          <AlertDescription>{props.children}</AlertDescription>
         )}
       </div>
-    </div>
+    </Alert>
   );
 }

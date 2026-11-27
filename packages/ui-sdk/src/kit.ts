@@ -14,7 +14,6 @@ export * from "./light-picker";
 export * from "./page-bar";
 export * from "./page-section";
 export * from "./presses";
-export * from "./problem";
 export * from "./reduce-effects";
 export * from "./reduce-motion";
 export * from "./section-button";

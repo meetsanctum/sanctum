@@ -12,6 +12,7 @@ import {
 
 import { JoinedCard, type CardWork } from "./add-devices-cards";
 import { foundKey } from "./add-devices-found";
+import { Problem } from "./components/ui/problem";
 import { KnotLoader } from "./knot-loader";
 import { knotPath } from "./knot";
 import { plural } from "./plural";
@@ -67,13 +68,15 @@ export function JoiningPage(props: {
   // The line under the heading while it waits, and once it has stopped
   // with nothing to show.
   const isFailed = !isLooking && state.why === "failed";
-  const line = isWaiting
-    ? `${kind} can join for ${lasting(props.seconds)}. When the time is up, you can start again.`
-    : isFailed
-      ? props.failure
-      : !isLooking
-        ? `${kind} can't join right now. Start again to give them another ${lasting(props.seconds)}.`
-        : null;
+  const activeFailure = state.kind === "open" ? props.failure : null;
+  const line =
+    isWaiting && !activeFailure
+      ? `${kind} can join for ${lasting(props.seconds)}. When the time is up, you can start again.`
+      : isFailed
+        ? props.failure
+        : !isLooking
+          ? `${kind} can't join right now. Start again to give them another ${lasting(props.seconds)}.`
+          : null;
   const gone = useGoneLine(line);
   const at = useMoveUp(isWaiting, line);
   const entrances = useCardEntrances(new Set(joined.map(foundKey)), isWaiting);
@@ -167,11 +170,16 @@ export function JoiningPage(props: {
             </p>
           );
         })}
+        {activeFailure && (
+          <Problem title="Couldn't start looking" className="mt-2 max-w-105">
+            {activeFailure}
+          </Problem>
+        )}
         <span
           ref={at.button}
-          className={cn("flex", isWaiting ? "mt-5" : "mt-3.5")}
+          className={cn("flex gap-2", isWaiting ? "mt-5" : "mt-3.5")}
         >
-          {isLooking ? (
+          {isLooking && (
             <Button
               variant="outline"
               disabled={state.kind === "opening"}
@@ -179,12 +187,13 @@ export function JoiningPage(props: {
             >
               Stop looking
             </Button>
-          ) : (
+          )}
+          {(!isLooking || activeFailure) && (
             <Button
               variant={props.isDonePrimary ? "outline" : "default"}
               onClick={props.onStartAgain}
             >
-              {state.why === "failed" ? "Try again" : "Start again"}
+              {props.failure ? "Try again" : "Start again"}
             </Button>
           )}
         </span>

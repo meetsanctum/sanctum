@@ -1,5 +1,5 @@
 {
-  "version": "0.1.44",
+  "version": "0.1.43",
   "react": "19.3.1",
   "exports": {
     "@meetsanctum/ui-sdk": [
@@ -51,7 +51,6 @@
       "PowerButton",
       "PressCaptureListener",
       "PressGroup",
-      "Problem",
       "RunWidgetAction",
       "ScrollArea",
       "SectionButton",
@@ -2904,7 +2903,6 @@
       "export * from \"./page-bar\";",
       "export * from \"./page-section\";",
       "export * from \"./presses\";",
-      "export * from \"./problem\";",
       "export * from \"./reduce-effects\";",
       "export * from \"./reduce-motion\";",
       "export * from \"./section-button\";",
@@ -3050,15 +3048,6 @@
       "export declare function capturePresses(bridge: Pick<CoreBridge, \"json\" | \"live\">, device: string, listener: PressCaptureListener, app?: string): {",
       "    stop(): Promise<void>;",
       "};"
-    ],
-    "problem.d.ts": [
-      "import type { ReactNode } from \"react\";",
-      "export declare function Problem(props: {",
-      "    title: ReactNode;",
-      "    children?: ReactNode;",
-      "    id?: string;",
-      "    className?: string;",
-      "}): import(\"react\").JSX.Element;"
     ],
     "reduce-effects.d.ts": [
       "export declare function useReducedEffects(): boolean;"

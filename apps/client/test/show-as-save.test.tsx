@@ -241,9 +241,13 @@ describe.each(["Settings", "Add devices"])("saving Show as in %s", (where) => {
     await act(async () => replies[1]!(windowDevice));
     await act(async () => refusals[0]!(new TypeError("Failed to fetch")));
     expect(document.body.textContent).toContain("Hall window");
-    expect(document.body.textContent).not.toContain(
-      "Can't reach Sanctum. Try again.",
-    );
+    if (where === "Add devices") {
+      expect(document.querySelector("[role=dialog] [role=alert]")).toBeNull();
+    } else {
+      expect(document.body.textContent).not.toContain(
+        "Can't reach Sanctum. Try again.",
+      );
+    }
   });
 
   if (where === "Add devices") {

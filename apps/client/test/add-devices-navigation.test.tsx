@@ -118,17 +118,41 @@ describe("Add devices navigation while requests finish", () => {
     expect(dialog().querySelector("h2")!.textContent).toBe("Add devices");
   });
 
-  it("keeps the radio page and reports a failed stop when going back", async () => {
-    await show();
-    await click("Zigbee");
-    vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(500, "app_failed"));
-    await click("Back to Add devices");
+  it.each(["Back to Add devices", "Stop looking"])(
+    "reports a failed stop from %s and lets the user retry",
+    async (control) => {
+      await show();
+      await click("Zigbee");
+      vi.mocked(coreJson).mockRejectedValueOnce(
+        new CoreError(500, "app_failed"),
+      );
+      await click(control);
 
-    expect(dialog().querySelector("h2")!.textContent).toBe("Zigbee");
-    expect(dialog().querySelector("[role=alert]")).not.toBeNull();
-    await click("Back to Add devices");
-    expect(dialog().querySelector("h2")!.textContent).toBe("Add devices");
-  });
+      expect(dialog().querySelector("h2")!.textContent).toBe("Zigbee");
+      expect(dialog().querySelector("h3")!.textContent).toContain(
+        "Looking for devices",
+      );
+      const alert = dialog().querySelector("[role=alert]")!;
+      expect(
+        [...alert.querySelectorAll("p")].map((line) => line.textContent),
+      ).toEqual([
+        "Looking didn't stop",
+        "Sanctum ran into a problem. Try again in a moment.",
+      ]);
+      expect(pairing.until).not.toBeNull();
+
+      await click(control);
+      expect(pairing.until).toBeNull();
+      expect(dialog().querySelector("[role=alert]")).toBeNull();
+      if (control === "Back to Add devices") {
+        expect(dialog().querySelector("h2")!.textContent).toBe("Add devices");
+      } else {
+        expect(dialog().querySelector("h3")!.textContent).toBe(
+          "Stopped looking",
+        );
+      }
+    },
+  );
 
   it("stops a reopened radio after an earlier overlay's close finishes late", async () => {
     await show();
@@ -144,6 +168,24 @@ describe("Add devices navigation while requests finish", () => {
     expect(closes()).toHaveLength(1);
     expect(pairing.until).toBeNull();
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("lets a retried start expire after an earlier stop finishes", async () => {
+    await show();
+    pairing = { ...pairing, until: "2026-10-29T12:02:00.000Z" };
+    await act(async () => live.publish({ type: "pairing", pairing }));
+    vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(500, "app_failed"));
+    await click("Zigbee");
+
+    const reply = pendingReply<PairingInfo>();
+    vi.mocked(coreJson).mockReturnValueOnce(reply.promise);
+    await click("Stop looking");
+    await click("Try again");
+    await act(async () => reply.resolve({ ...pairing, until: null }));
+
+    expect(dialog().querySelector("h3")!.textContent).toContain("4:00");
+    await act(async () => vi.advanceTimersByTime(240_000));
+    expect(dialog().querySelector("h3")!.textContent).toBe("Time's up");
   });
 
   it("finishes an earlier pairing open and close before reopening", async () => {

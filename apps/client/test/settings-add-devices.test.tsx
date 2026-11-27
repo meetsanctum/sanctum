@@ -248,21 +248,53 @@ describe("Settings → Add devices", () => {
     ).toBe("LightSetting up…");
   });
 
-  it("says when the radio can't let devices join", async () => {
-    await show(admin);
-    await act(async () => button("Add devices").click());
-    vi.mocked(coreJson).mockImplementationOnce(async () => {
-      throw new CoreError(503, "unavailable");
-    });
+  it.each([
+    {
+      code: "unavailable",
+      status: 503,
+      alreadyLooking: false,
+      reason: "Zigbee isn't running, so its devices can't join now.",
+    },
+    {
+      code: "app_failed",
+      status: 500,
+      alreadyLooking: false,
+      reason: "Sanctum couldn't let devices join. Try again in a moment.",
+    },
+    {
+      code: "app_failed",
+      status: 500,
+      alreadyLooking: true,
+      reason: "Sanctum couldn't let devices join. Try again in a moment.",
+    },
+  ])(
+    "reports $code starting pairing (active countdown: $alreadyLooking) and lets the user retry",
+    async ({ code, status, alreadyLooking, reason }) => {
+      await show(admin);
+      await act(async () => button("Add devices").click());
+      if (alreadyLooking) {
+        setPairing({ ...pairing, until: "2026-10-29T12:02:00.000Z" });
+        await act(async () => live.publish({ type: "pairing", pairing }));
+      }
+      vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(status, code));
 
-    await way("Zigbee");
+      await way("Zigbee");
 
-    expect(
-      document.querySelector("[role=dialog] [role=alert]")!.textContent,
-    ).toBe("Zigbee isn't running, so its devices can't join now.");
-    expect(document.querySelector("[role=dialog] h3")?.textContent).toBe(
-      "Couldn't start looking",
-    );
-    expect(button("Try again")).toBeDefined();
-  });
+      const dialog = document.querySelector("[role=dialog]")!;
+      const heading = () => dialog.querySelector("h3")?.textContent;
+      const alert = () => dialog.querySelector("[role=alert]");
+      expect(alert()?.textContent).toContain(reason);
+      if (alreadyLooking) {
+        expect(heading()).toBe("2:00• left. Looking for devices…");
+        expect(alert()?.textContent).toContain("Couldn't start looking");
+        expect(button("Stop looking").disabled).toBe(false);
+      } else {
+        expect(heading()).toBe("Couldn't start looking");
+      }
+
+      await act(async () => button("Try again").click());
+      expect(heading()).toBe("4:00• left. Looking for devices…");
+      expect(alert()).toBeNull();
+    },
+  );
 });

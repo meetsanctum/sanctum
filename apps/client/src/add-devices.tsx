@@ -6,12 +6,7 @@ import type {
   PairingInfo,
   Room,
 } from "@meetsanctum/app-sdk";
-import {
-  Button,
-  Problem,
-  ScrollArea,
-  type LiveFeed,
-} from "@meetsanctum/ui-sdk";
+import { Button, ScrollArea, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { ChevronLeft } from "lucide-react";
 import {
@@ -28,6 +23,7 @@ import { FoundPage, foundKey } from "./add-devices-found";
 import { JoiningPage, type JoiningState } from "./add-devices-joining";
 import { OfferedAppSheet } from "./add-devices-offer";
 import { productName } from "./brand";
+import { Problem } from "./components/ui/problem";
 import { CoreError, coreJson } from "./core-fetch";
 import { problemReason, updateDevice } from "./device-parts";
 import { EditDevice, type Editing } from "./edit-device";
@@ -119,8 +115,6 @@ export function AddDevices(props: {
   const [opening, setOpening] = useState(false);
   // Whether someone stopped devices joining, rather than the time running out.
   const [stopped, setStopped] = useState(false);
-  // Whether the radio could not start letting devices join.
-  const [failed, setFailed] = useState(false);
   // The core's clock less this one's, so the countdown keeps the core's time.
   const offset = useRef(0);
   // Which time the overlay was opened; an answer for an earlier one is late.
@@ -195,10 +189,7 @@ export function AddDevices(props: {
       const current = session.current;
       needsClose.current = true;
       setOpening(true);
-      setStopped(false);
-      setFailed(false);
       setStopFailed(false);
-      setProblem(undefined);
       setOpenError(undefined);
       try {
         let startedAt = Date.now();
@@ -207,6 +198,10 @@ export function AddDevices(props: {
           // A preceding overlay's close may have finished while this open
           // was queued. This radio still needs to be stopped when we leave.
           needsClose.current = true;
+          if (current === session.current) {
+            setStopped(false);
+            setProblem(undefined);
+          }
           startedAt = Date.now();
           requested = pairingRevision.current;
           return coreJson<Opened>("/api/devices/pairing/open", {
@@ -220,7 +215,6 @@ export function AddDevices(props: {
         if (requested === pairingRevision.current) receivePairing(opened);
       } catch (error) {
         if (current !== session.current) return;
-        setFailed(true);
         setOpenError({ error });
       } finally {
         if (current === session.current) setOpening(false);
@@ -236,6 +230,7 @@ export function AddDevices(props: {
       await close();
       if (current === session.current) {
         setStopped(true);
+        setOpenError(undefined);
       }
     } catch (error) {
       if (current === session.current)
@@ -329,7 +324,6 @@ export function AddDevices(props: {
     setOffered(undefined);
     setStopFailed(false);
     setStopped(false);
-    setFailed(false);
     setProblem(undefined);
     setOpenError(undefined);
     setSince(undefined);
@@ -520,7 +514,7 @@ export function AddDevices(props: {
         ? { kind: "open", secondsLeft }
         : {
             kind: "closed",
-            why: failed ? "failed" : stopped ? "stopped" : "time",
+            why: openError ? "failed" : stopped ? "stopped" : "time",
           };
   // Done leads once a device is added, unless a card still asks or adds,
   // which closing would stop. After looking stops, it also leads while a

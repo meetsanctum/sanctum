@@ -377,6 +377,36 @@ describe("Settings → Devices", () => {
     expect(container.textContent).toContain("No lights any more");
   });
 
+  it.each([
+    ["Rename", "Save", "/api/devices/update", "Light wasn't renamed"],
+    [
+      "Keep history",
+      "Delete history",
+      "/api/history/keep",
+      "Light's history wasn't deleted",
+    ],
+    ["Remove", "Remove", "/api/devices/remove", "Light wasn't removed"],
+  ])(
+    "says what failed when submitting %s",
+    async (choice, submit, path, title) => {
+      await show(admin);
+      await choose("Light: more", choice);
+      vi.mocked(coreJson).mockRejectedValueOnce(
+        new CoreError(404, "not_found"),
+      );
+
+      await act(async () => button(submit).click());
+
+      expect(coreJson).toHaveBeenLastCalledWith(path, expect.anything());
+      const dialog = document.querySelector("[role=dialog]")!;
+      const alert = dialog.querySelector("[role=alert]")!;
+      expect(
+        [...alert.querySelectorAll("p")].map((line) => line.textContent),
+      ).toEqual([title, "It isn't there any more."]);
+      expect(button(submit).disabled).toBe(false);
+    },
+  );
+
   it("does not offer force for another device when an earlier removal fails late", async () => {
     devices.push(light("second", "Light 2"));
     await show(admin);

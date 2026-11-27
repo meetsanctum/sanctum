@@ -2,7 +2,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
 
-import { Problem } from "../src/problem";
+import { Problem } from "../src/components/ui/problem";
 
 // A problem says what happened, then why and what to do, behind a sign a
 // screen reader skips, on the card's fill, its words selectable.
