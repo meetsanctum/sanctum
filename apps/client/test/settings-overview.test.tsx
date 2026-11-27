@@ -280,7 +280,7 @@ describe("Settings' first page", () => {
       "Apps2 apps · 1 update waiting",
       "AI Agents2 agents",
       "AI ModelsQwen3 8B on Office Mac",
-      "ClientsThis device and 2 others",
+      "Linked DevicesThis device and 2 others",
       "SystemCan't check right now",
     ]);
     expect(row("System").getAttribute("aria-label")).toBe(
@@ -308,7 +308,7 @@ describe("Settings' first page", () => {
       "Apps1 app",
       "AI AgentsNone yet",
       "AI ModelsNone yet",
-      "ClientsThis device",
+      "Linked DevicesThis device",
       "SystemCan't check right now",
     ]);
   });
@@ -327,12 +327,16 @@ describe("Settings' first page", () => {
 
   it("updates the client count on the shell's next refresh", async () => {
     await show();
-    expect(row("Clients").textContent).toBe("ClientsThis device and 2 others");
+    expect(row("Linked Devices").textContent).toBe(
+      "Linked DevicesThis device and 2 others",
+    );
 
     clients = [maya.client, tablet];
     await act(async () => live.refresh());
 
-    expect(row("Clients").textContent).toBe("ClientsThis device and 1 other");
+    expect(row("Linked Devices").textContent).toBe(
+      "Linked DevicesThis device and 1 other",
+    );
   });
 
   it("opens each area's page", async () => {
@@ -346,7 +350,7 @@ describe("Settings' first page", () => {
       "Maintenance",
       "Activity",
       "Apps",
-      "Clients",
+      "Linked Devices",
       "System",
     ]) {
       await act(async () => row(area).click());
@@ -376,7 +380,7 @@ describe("an area's page", () => {
     expect(back.textContent).toBe("Settings");
     expect(
       [...container.querySelectorAll("h1, h2")].map((each) => each.textContent),
-    ).toEqual(["Clients"]);
+    ).toEqual(["Linked Devices"]);
     expect(container.textContent).toContain("Add a shared device");
 
     await act(async () => back.click());

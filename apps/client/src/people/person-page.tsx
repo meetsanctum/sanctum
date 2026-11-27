@@ -439,7 +439,7 @@ function Devices(props: {
 }) {
   const clock = useHomeClock();
   return (
-    <Section id={`${props.person.id}-devices`} title="Devices">
+    <Section id={`${props.person.id}-devices`} title="Linked Devices">
       {props.devices.length === 0 ? (
         <p className={`m-0 ${label}`}>
           No device is signed in as {firstName(props.person.name)}.

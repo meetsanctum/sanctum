@@ -645,15 +645,15 @@ describe("connected now", () => {
     await render();
     const connected = section("status-connected");
     expect(connected.querySelector("h2 + span")?.textContent).toBe(
-      "0 of 1 client",
+      "0 of 1 linked device",
     );
     expect(connected.querySelectorAll("li")).toHaveLength(0);
   });
-  it("lists the clients with a live connection, this device first", async () => {
+  it("lists the linked devices with a live connection, this device first", async () => {
     await render();
     const connected = section("status-connected");
     expect(connected.querySelector("h2 + span")?.textContent).toBe(
-      "2 of 3 clients",
+      "2 of 3 linked devices",
     );
     expect(
       [...connected.querySelectorAll("li")].map((row) => row.textContent),
@@ -663,13 +663,13 @@ describe("connected now", () => {
     ]);
   });
 
-  it("says Connected now in Settings → Clients", () => {
+  it("says In use now in Settings → Linked Devices", () => {
     expect(
       clientDetail(
         clock,
         client({ connectedSince: today("07:12"), lastSeenAt: today("07:12") }),
         undefined,
       ),
-    ).toBe("Personal · macOS · Connected now");
+    ).toBe("Personal · macOS · In use now");
   });
 });

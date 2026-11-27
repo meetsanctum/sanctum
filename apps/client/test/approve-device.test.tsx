@@ -15,7 +15,7 @@ vi.mock("../src/core-fetch", async (importOriginal) => ({
   coreJson: vi.fn(),
 }));
 
-// Adding a shared device from Settings → Clients: type its code, wait while
+// Adding a shared device from Settings → Linked Devices: type its code, wait while
 // the home checks the device, then name and approve it.
 
 const started = { requestId: "request-1", exchangeId: "exchange-1" };

@@ -45,13 +45,13 @@ setting. To have less movement in Sanctum, turn on Reduce motion here.
 
 ## Turning them on
 
-1. Open **Settings → Clients**, on any device.
+1. Open **Settings → Linked Devices**, on any device.
 2. Press **⋮** beside the device you want to change.
 3. Choose **Effects and motion**, then switch **Reduce effects** or
    **Reduce motion** on or off.
 
 Any device can change any other's, so you can set a wall display from your
-computer without touching it. Its row in Clients shows the saved settings,
+computer without touching it. Its row in Linked Devices shows the saved settings,
 such as "Reduced effects and motion". A device with a live connection
 applies the change right away. Otherwise, it applies the change the next
 time it checks for updates, such as when it reconnects.

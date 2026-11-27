@@ -76,10 +76,26 @@ describe("a client's detail", () => {
     ).toBe("Seen on 28 Oct");
   });
 
-  it("names its person, or the household, its platform and when it was seen", () => {
+  it("names its person, or the household, its platform and the day it was used", () => {
     expect(clientDetail(clock, tablet, undefined, now)).toBe(
-      "Shared · Web browser · Never seen",
+      "Shared · Web browser · Not used yet",
     );
+    expect(
+      clientDetail(
+        clock,
+        { ...tablet, lastSeenAt: "2026-10-28T03:00:00Z" },
+        undefined,
+        now,
+      ),
+    ).toBe("Shared · Web browser · Used today");
+    expect(
+      clientDetail(
+        clock,
+        { ...tablet, connectedSince: "2026-10-28T03:00:00Z" },
+        undefined,
+        now,
+      ),
+    ).toBe("Shared · Web browser · In use now");
     expect(clientDetail(clock, macbook, maya, now)).toBe(
       "Maya · macOS · This device",
     );
@@ -95,13 +111,13 @@ describe("a client's detail", () => {
     (reduceEffects, reduceMotion, said) => {
       const client = { ...tablet, reduceEffects, reduceMotion };
       expect(clientDetail(clock, client, undefined, now)).toBe(
-        `Shared · Web browser · Never seen${said}`,
+        `Shared · Web browser · Not used yet${said}`,
       );
     },
   );
 });
 
-describe("Settings → Clients", () => {
+describe("Settings → Linked Devices", () => {
   let root: Root;
   let container: HTMLDivElement;
   let drawing: unknown[];
@@ -120,6 +136,8 @@ describe("Settings → Clients", () => {
           return [shownMacbook, shownTablet];
         case "/api/people":
           return [maya];
+        case "/api/auth/clients/revoke":
+          return undefined;
         case "/api/auth/clients/drawing":
           drawing.push(init.json);
           shownTablet = {
@@ -176,6 +194,42 @@ describe("Settings → Clients", () => {
     await act(async () => item.click());
   }
 
+  it("signs a device out from its menu, saying what that means, but never this one", async () => {
+    await act(async () =>
+      document
+        .querySelector<HTMLButtonElement>(
+          `button[aria-label="${macbook.name}: more"]`,
+        )!
+        .dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+        ),
+    );
+    expect(
+      [...document.querySelectorAll("[role=menuitem]")].map(
+        (item) => item.textContent,
+      ),
+    ).toEqual(["Rename", "Effects and motion"]);
+    await act(async () =>
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      ),
+    );
+
+    await editClient(tablet.name, "Sign out");
+    const dialog = document.querySelector("[role=dialog]")!;
+    expect(dialog.querySelector("h2")?.textContent).toBe(
+      `Sign out ${tablet.name}?`,
+    );
+    expect(dialog.textContent).toContain(
+      "To use it again, choose your home on it, then Everyone at home, and approve its new code.",
+    );
+    await act(async () => button("Sign out").click());
+    expect(coreJson).toHaveBeenCalledWith(
+      "/api/auth/clients/revoke",
+      expect.objectContaining({ json: { id: tablet.id } }),
+    );
+  });
+
   // A setting's switch, by its label.
   function toggle(setting: string) {
     const label = [...document.querySelectorAll("[role=dialog] label")].find(
@@ -226,7 +280,7 @@ describe("Settings → Clients", () => {
     expect(isOn("Reduce effects")).toBe(false);
     expect(isOn("Reduce motion")).toBe(true);
     expect(container.textContent).toContain(
-      "Shared · Web browser · Never seen · Reduced motion",
+      "Shared · Web browser · Not used yet · Reduced motion",
     );
 
     await act(async () => button("Done").click());
@@ -325,7 +379,7 @@ describe("Settings → Clients", () => {
     shownTablet = { ...tablet, ...(old as unknown as Partial<ClientInfo>) };
     await refreshClients();
     expect(container.textContent).toContain(
-      "Shared · Web browser · Never seen",
+      "Shared · Web browser · Not used yet",
     );
     expect(container.textContent).not.toContain("Reduced");
     await editClient("Kitchen tablet", "Effects and motion");
@@ -358,7 +412,7 @@ describe("Settings → Clients", () => {
     expect(container.textContent).toContain("Maya's MacBook");
     expect(container.textContent).toContain("Kitchen tablet");
     expect(container.textContent).toContain(
-      "Shared · Web browser · Never seen",
+      "Shared · Web browser · Not used yet",
     );
   });
 

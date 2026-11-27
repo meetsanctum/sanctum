@@ -50,7 +50,7 @@ then your new one twice, and choose **Change password**.
 
 Your current password is checked on your Mac before anything changes, and
 neither password leaves it. Your other devices stay signed in. To sign one
-out, choose **Sign out** beside it under **Devices**.
+out, choose **Sign out** beside it under **Linked Devices**.
 
 Change password shows only on your own page, on your own device. On someone
 else's page, and on a shared device, it is **Reset password**.
@@ -78,4 +78,5 @@ Both ask first and say what ends. Your home always keeps one person who signs
 in: the last sign-in can't be removed, and the page says so.
 
 To sign out just one phone or computer, choose **Sign out** beside it under
-**Devices** on its person's page.
+**Linked Devices** on its person's page, or in **Settings → Linked
+Devices**.

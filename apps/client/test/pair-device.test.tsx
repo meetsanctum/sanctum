@@ -271,7 +271,7 @@ describe("a shared device's pairing screen", () => {
     ).not.toBeNull();
     expect(container.textContent).toContain("Waiting for approval");
     expect(container.textContent).toContain(
-      "On a device that’s already connected to Maya's home, open Settings → Clients.",
+      "On a device that’s already connected to Maya's home, open Settings → Linked Devices.",
     );
     expect(requests).toEqual([
       expect.objectContaining({

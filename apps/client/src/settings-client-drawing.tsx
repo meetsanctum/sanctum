@@ -14,7 +14,7 @@ import {
 import { coreJson } from "./core-fetch";
 import { isDrawingChoices } from "./effects";
 
-// Settings → Clients → a client's Effects and motion: Reduce effects and
+// Settings → Linked Devices → a client's Effects and motion: Reduce effects and
 // Reduce motion for that client, each a switch of its own, applied as set.
 // Any client sets any client's, as with its name.
 
@@ -34,7 +34,7 @@ export function drawnText(client: ClientInfo) {
 type DrawingChange = Omit<SetClientDrawing, "id">;
 
 export function ClientDrawing(props: {
-  /** The client whose drawing is open, as Clients last read it. */
+  /** The client whose drawing is open, as the list last read it. */
   client?: ClientInfo;
   onClose: () => void;
   /** The switch that was saved, as the core says it now is. */

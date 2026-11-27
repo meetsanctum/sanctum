@@ -65,7 +65,7 @@ const pageTitles: Record<string, string> = {
   [agentsSettingsPage]: agentsTitle,
   [canUseSettingsPage]: canUseTitle,
   [modelsSettingsPage]: modelsTitle,
-  [clientsSettingsPage]: "Clients",
+  [clientsSettingsPage]: "Linked Devices",
   [systemSettingsPage]: "System",
 };
 

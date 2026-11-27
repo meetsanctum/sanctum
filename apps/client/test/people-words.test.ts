@@ -132,7 +132,7 @@ describe("a person's devices", () => {
     expect(at("2026-11-26T07:00:00Z")).toBe("Used yesterday");
     expect(at("2026-11-03T07:00:00Z")).toBe("Used on 3 Nov");
     expect(usedText(clock, client({ connectedSince: now.toISOString() }))).toBe(
-      "Used today",
+      "In use now",
     );
     expect(usedText(clock, client({ current: true }))).toBe("This device");
     expect(usedText(clock, client({}))).toBe("Not used yet");

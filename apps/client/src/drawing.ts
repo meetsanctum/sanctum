@@ -5,7 +5,7 @@ import { chooseDrawing, isDrawingChoices } from "./effects";
 import { getShell } from "./shell";
 
 // Reduce effects and Reduce motion for this client, as set on any client
-// (Settings → Clients): the core keeps them, and they arrive in Me, and this
+// (Settings → Linked Devices): the core keeps them, and they arrive in Me, and this
 // device keeps a copy, so its first frame and the screens before it is
 // paired draw as set too.
 
