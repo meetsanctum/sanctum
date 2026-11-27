@@ -245,6 +245,24 @@ describe("what keeps an app from being added", () => {
         kind: "space",
         needs: 256 * mebibyte,
         free: (1900 - 200 - 1536) * mebibyte,
+        toFree: (256 - (1900 - 200 - 1536)) * mebibyte,
+      },
+    ]);
+    // Short of what updates keep, nothing is left, and the way to it counts.
+    expect(
+      shortfallsOf(app, {
+        pagesNeed: null,
+        host: {
+          ...tight,
+          storage: { ...tight.storage, free: 1000 * mebibyte },
+        },
+      }),
+    ).toEqual([
+      {
+        kind: "space",
+        needs: 256 * mebibyte,
+        free: 0,
+        toFree: (256 + 200 + 1536 - 1000) * mebibyte,
       },
     ]);
   });
@@ -260,7 +278,27 @@ describe("what keeps an app from being added", () => {
       shortfallsOf(app, { pagesNeed: null, host, capacity: counted }),
     ).toEqual([
       { kind: "memory", needs: 416 * mebibyte, free: 100 * mebibyte },
-      { kind: "space", needs: 64 * mebibyte, free: 32 * mebibyte },
+      {
+        kind: "space",
+        needs: 64 * mebibyte,
+        free: 32 * mebibyte,
+        toFree: 32 * mebibyte,
+      },
+    ]);
+    // Where nothing is left, how far short the manager says it is.
+    expect(
+      shortfallsOf(app, {
+        pagesNeed: null,
+        host,
+        capacity: {
+          ...counted,
+          memoryFreeMb: 1024,
+          dataFreeBytes: 0,
+          dataShortBytes: 1100 * mebibyte,
+        },
+      }),
+    ).toEqual([
+      { kind: "space", needs: 64 * mebibyte, free: 0, toFree: 1100 * mebibyte },
     ]);
     // A disk it can't say about holds nothing back.
     expect(

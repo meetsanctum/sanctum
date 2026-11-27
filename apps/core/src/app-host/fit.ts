@@ -91,6 +91,7 @@ export function shortfallsOf(
         kind: "space",
         needs: dataNeeds,
         free: dataFree,
+        toFree: capacity.dataShortBytes ?? dataNeeds - dataFree,
       });
     }
     return shortfalls;
@@ -113,8 +114,15 @@ export function shortfallsOf(
           sum + Math.max(0, image.sizeMb * mebibyte - image.bytes),
         0,
       );
-    const free = Math.max(0, storage.free - promised - keptForUpdates);
-    if (needs > free) shortfalls.push({ kind: "space", needs, free });
+    const spare = storage.free - promised - keptForUpdates;
+    if (needs > spare) {
+      shortfalls.push({
+        kind: "space",
+        needs,
+        free: Math.max(0, spare),
+        toFree: needs - spare,
+      });
+    }
   }
   return shortfalls;
 }

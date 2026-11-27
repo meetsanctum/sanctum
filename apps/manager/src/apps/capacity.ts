@@ -166,12 +166,18 @@ export function createCapacity(options: {
   ) {
     const { memoryFreeMb, additionalServicesMb, servicesMemoryMb } =
       await memory(held, app, request.services);
+    const dataNeedsMb = dataNeededMb(request.dataMb, disk.sizeMb(app));
+    const spare = disk.spare(app);
     return {
       memoryNeedsMb: request.memoryMb + additionalServicesMb,
       memoryFreeMb,
       servicesMemoryMb,
-      dataNeedsMb: dataNeededMb(request.dataMb, disk.sizeMb(app)),
+      dataNeedsMb,
       dataFreeBytes: disk.room(app),
+      // How much would have to be freed for its data to fit, which the room
+      // left, never below zero, can't say once it's gone.
+      dataShortBytes:
+        spare === null ? null : Math.max(0, dataNeedsMb * mebibyte - spare),
     };
   }
 

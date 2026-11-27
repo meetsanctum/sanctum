@@ -10,7 +10,7 @@ import {
   Unplug,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import { productName } from "./brand";
 import { Section, SettingsPageBar } from "./components";
@@ -360,9 +360,25 @@ function StorageLoading() {
   );
 }
 
+// Shows the card it was opened at once its cards are there, the first time
+// only, so the page stays where someone scrolls it after.
+function useOpenedAt(card: string | undefined, isLoading: boolean) {
+  const shown = useRef(false);
+  useEffect(() => {
+    if (!card || shown.current || isLoading) return;
+    const heading = document.getElementById(`status-${card}`);
+    if (!heading) return;
+    shown.current = true;
+    (heading.closest("section") ?? heading).scrollIntoView({ block: "start" });
+  }, [card, isLoading]);
+}
+
 /** The System page: the verdict, then Sanctum with Restart and Shut down, its updates, its storage with Free up space, memory, the last 24 hours, network and the clients connected now. */
 export function SystemPage(props: {
   apps: readonly AppInfo[];
+  // The card it opens at, by its id after "status-", as an Add sheet's Free
+  // up space opens it at Storage.
+  card?: string;
   core: CoreStatus;
   // Whether an update is running, for the connection veil's words.
   onUpdating: (updating: boolean) => void;
@@ -380,6 +396,8 @@ export function SystemPage(props: {
   const unit = useTemperatureUnit() ?? "celsius";
   const host = failed ? null : status?.host;
   const isLoading = !status && !failed;
+
+  useOpenedAt(props.card, isLoading);
 
   useEffect(() => onUpdating(update.running), [onUpdating, update.running]);
   useEffect(() => () => onUpdating(false), [onUpdating]);

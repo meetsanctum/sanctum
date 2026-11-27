@@ -47,7 +47,11 @@ async function ledger(
 const moods = { app: "sanctum.moods", memoryMb: 128, isRunning: false };
 const add = { memoryMb: 128, dataMb: 256, services: [] };
 const noImage = () => 0;
-const plenty = { room: () => 10 * gibibyte, sizeMb: noImage };
+const plenty = {
+  room: () => 10 * gibibyte,
+  spare: () => 10 * gibibyte,
+  sizeMb: noImage,
+};
 
 describe("what's left for apps", () => {
   it("counts every app held, the services that run and what's reserved", async () => {
@@ -119,15 +123,43 @@ describe("reserving what an add needs", () => {
       capacity.reserve("sanctum.weather", add, [], {
         ...plenty,
         room: () => 100 * mebibyte,
+        spare: () => 100 * mebibyte,
       }),
     ).rejects.toThrow(
       "sanctum.weather needs 256 MB for its data, and only 100 MB can be spared",
     );
   });
 
+  it("says how far short the disk is, though the room left stops at none", async () => {
+    const { capacity } = await ledger();
+    const short = {
+      room: () => 0,
+      spare: () => -900 * mebibyte,
+      sizeMb: noImage,
+    };
+
+    await expect(
+      capacity.check("sanctum.weather", add, [], short),
+    ).resolves.toMatchObject({
+      dataNeedsMb: 256,
+      dataFreeBytes: 0,
+      dataShortBytes: (256 + 900) * mebibyte,
+    });
+    await expect(
+      capacity.check("sanctum.weather", add, [], plenty),
+    ).resolves.toMatchObject({ dataShortBytes: 0 });
+    await expect(
+      capacity.check("sanctum.weather", add, [], {
+        room: () => null,
+        spare: () => null,
+        sizeMb: noImage,
+      }),
+    ).resolves.toMatchObject({ dataFreeBytes: null, dataShortBytes: null });
+  });
+
   it("asks no data of an image it kept, which its start uses as it is", async () => {
     const { capacity } = await ledger();
-    const kept = { room: () => 0, sizeMb: () => 256 };
+    const kept = { room: () => 0, spare: () => -mebibyte, sizeMb: () => 256 };
 
     await expect(
       capacity.check("sanctum.weather", { ...add, dataMb: 512 }, [], kept),
@@ -247,6 +279,8 @@ describe("its routes", () => {
       available: async () => ({
         room: (except?: string) =>
           Math.max(0, freeBytes - capacity.reservedData(sizeMb, except)),
+        spare: (except?: string) =>
+          freeBytes - capacity.reservedData(sizeMb, except),
         sizeMb,
       }),
     } as AppImages;
@@ -310,6 +344,7 @@ describe("its routes", () => {
         servicesMemoryMb: 0,
         dataNeedsMb: 0,
         dataFreeBytes: 0,
+        dataShortBytes: 0,
       },
       "sanctum.zigbee": {
         memoryNeedsMb: 416,
@@ -317,6 +352,7 @@ describe("its routes", () => {
         servicesMemoryMb: 288,
         dataNeedsMb: 256,
         dataFreeBytes: 0,
+        dataShortBytes: 256 * mebibyte,
       },
     });
     const reserved = await instance.inject({

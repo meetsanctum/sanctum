@@ -8,7 +8,13 @@ import { Button } from "@meetsanctum/ui-sdk";
 import { Check } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import { addProblemOf, AppSize, Asks, shortfallWords } from "../add-app-sheet";
+import {
+  addProblemOf,
+  AppSize,
+  Asks,
+  shortfallWords,
+  useShortfallFix,
+} from "../add-app-sheet";
 import { AppIcon } from "../app-icon";
 import { productName } from "../brand";
 import {
@@ -46,6 +52,8 @@ export function AddSanctum(props: {
   onAppAdded: (app: AppInfo) => void;
   // Closes the sheet and opens Ollama's page.
   onOpenOllama?: () => void;
+  // Closes the sheet, as on the way to what keeps Ollama from being added.
+  onClose: () => void;
   // A request under way, which closing the sheet waits for.
   busy: boolean;
   onBusy: (busy: boolean) => void;
@@ -55,6 +63,13 @@ export function AddSanctum(props: {
   const [model, setModel] = useState("");
   const [problem, setProblem] = useState<string>();
   const { busy, onBusy } = props;
+  const offered = phase.kind === "add" ? phase.app : undefined;
+  const [short] = offered?.shortfalls ?? [];
+  const blocked = short && offered && shortfallWords(short, offered.name);
+  const toFix = useShortfallFix(blocked?.fix, () => {
+    props.onClose();
+    return true;
+  });
   // Ollama added here has no model yet, and may not answer while its image
   // downloads: the sheet stays on the step to download one.
   const isAddedHere = useRef(false);
@@ -172,8 +187,6 @@ export function AddSanctum(props: {
 
   if (phase.kind === "add") {
     const { app } = phase;
-    const [short] = app?.shortfalls ?? [];
-    const blocked = short && app && shortfallWords(short, app.name);
     return (
       <div className="flex flex-col gap-5">
         <DialogHeader>
@@ -200,10 +213,10 @@ export function AddSanctum(props: {
               compact
             />
             {blocked && (
-              <p role="alert" className="m-0 text-sm">
-                <span className="font-medium">{blocked.title}</span>{" "}
-                {blocked.line}
-              </p>
+              <div role="alert" className="flex flex-col gap-1 text-sm">
+                <p className="m-0 font-medium">{blocked.title}</p>
+                <p className="m-0">{blocked.line}</p>
+              </div>
             )}
           </>
         ) : (
@@ -219,13 +232,19 @@ export function AddSanctum(props: {
         )}
         <DialogFooter>
           {back}
-          <Button
-            type="button"
-            disabled={!app || !!blocked || busy}
-            onClick={() => void addOllama()}
-          >
-            Add Ollama
-          </Button>
+          {blocked && toFix ? (
+            <Button type="button" disabled={busy} onClick={() => void toFix()}>
+              {blocked.fix.label}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              disabled={!app || !!blocked || busy}
+              onClick={() => void addOllama()}
+            >
+              Add Ollama
+            </Button>
+          )}
         </DialogFooter>
       </div>
     );
