@@ -76,8 +76,14 @@ const buttonVariants = cva(
         // Settings: quieter than the ink until it's under the pointer, and
         // it takes the pointer's moves rather than the page's scroll.
         grip: "cursor-grab touch-none text-muted-foreground hover:bg-foreground/8 hover:text-foreground active:cursor-grabbing active:bg-foreground/12",
+        // The outline's hairline with red words, and no red tint: a tint of
+        // the words' own colour pulls the ground towards them, below 4.5 : 1
+        // on a card. By day it keeps the outline's White fill; in Evening it
+        // has none, as the outline's faint fill would also take it below
+        // 4.5 : 1 on a card. Under the pointer the hairline turns red and the
+        // fill stays, so the words keep their contrast.
         destructive:
-          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
+          "border-border bg-background text-destructive shadow-xs reduce-effects:shadow-none hover:border-destructive hover:text-destructive aria-expanded:border-destructive dark:border-input dark:bg-transparent dark:hover:border-destructive",
         // Text in the action colour, Light blue on Carbon.
         link: "text-(--action) underline-offset-4 hover:underline",
         // A card pressed whole, on glass: White at 12% fading to 6% with a
