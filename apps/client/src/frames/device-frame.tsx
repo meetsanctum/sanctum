@@ -73,13 +73,7 @@ export function DeviceFrame(props: {
               ? `${possessive(name)} ${props.title} stopped working`
               : `${possessive(name)} ${props.title} didn't open`
           }
-          line={[
-            phase === "late" && "It didn't answer in time.",
-            phase === "files" && "Its files didn't load.",
-            `What ${name} adds to the home keeps working.`,
-          ]
-            .filter(Boolean)
-            .join(" ")}
+          line={`What ${name} adds to the home keeps working.`}
           action={
             <Button variant="outline" onClick={shown.tryAgain}>
               Try again
@@ -90,7 +84,7 @@ export function DeviceFrame(props: {
         shown.showsLoader && (
           <div role="status" className="flex items-center gap-3">
             <KnotLoader className="size-7 shrink-0 text-(--secondary)" />
-            <p className="m-0 text-muted-foreground">Opening {props.title}</p>
+            <p className="m-0 text-muted-foreground">Opening {props.title}…</p>
           </div>
         )
       )}
