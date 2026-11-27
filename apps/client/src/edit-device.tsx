@@ -1,5 +1,5 @@
 import type { DeviceInfo, HistoryKept } from "@meetsanctum/app-sdk";
-import { Button, Input } from "@meetsanctum/ui-sdk";
+import { Button, Input, Problem } from "@meetsanctum/ui-sdk";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { productName } from "./brand";
@@ -13,7 +13,7 @@ import {
 } from "./components/ui/dialog";
 import { CoreError, coreJson } from "./core-fetch";
 import type { EditAction } from "./device-menu";
-import { deviceProblem, updateDevice } from "./device-parts";
+import { problemReason, updateDevice } from "./device-parts";
 
 // Renaming a device, no longer keeping its history and removing it, from
 // Settings → Devices and Needs attention.
@@ -106,7 +106,7 @@ export function EditDevice(props: {
         setStuck(error.code === "unavailable" ? "unavailable" : "unanswered");
         return;
       }
-      setProblem(deviceProblem(error));
+      setProblem(problemReason(error));
     }
   };
 
@@ -158,9 +158,17 @@ export function EditDevice(props: {
             />
           )}
           {problem && (
-            <p role="alert" className="m-0 text-sm text-destructive">
+            <Problem
+              title={
+                editing?.action === "rename"
+                  ? `${device?.name} wasn't renamed`
+                  : editing?.action === "forget"
+                    ? `${device?.name}'s history wasn't deleted`
+                    : `${device?.name} wasn't removed`
+              }
+            >
               {problem}
-            </p>
+            </Problem>
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={props.onClose}>

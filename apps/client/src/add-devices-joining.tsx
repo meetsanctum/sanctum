@@ -1,6 +1,7 @@
 import type { DeviceInfo, JoinedDevice } from "@meetsanctum/app-sdk";
 import { Button, isMotionReduced } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
+import { CircleAlert } from "lucide-react";
 import {
   useEffect,
   useLayoutEffect,
@@ -52,6 +53,8 @@ export function JoiningPage(props: {
   // How long it lets devices join each time.
   seconds: number;
   onStop: () => void;
+  /** Why looking couldn't start, said under its heading. */
+  failure: string | null;
   onStartAgain: () => void;
   work: CardWork;
 }) {
@@ -63,11 +66,14 @@ export function JoiningPage(props: {
   const kind = props.name ? `${props.name} devices` : "New devices";
   // The line under the heading while it waits, and once it has stopped
   // with nothing to show.
+  const isFailed = !isLooking && state.why === "failed";
   const line = isWaiting
     ? `${kind} can join for ${lasting(props.seconds)}. When the time is up, you can start again.`
-    : !isLooking && state.why !== "failed"
-      ? `${kind} can't join right now. Start again to give them another ${lasting(props.seconds)}.`
-      : null;
+    : isFailed
+      ? props.failure
+      : !isLooking
+        ? `${kind} can't join right now. Start again to give them another ${lasting(props.seconds)}.`
+        : null;
   const gone = useGoneLine(line);
   const at = useMoveUp(isWaiting, line);
   const entrances = useCardEntrances(new Set(joined.map(foundKey)), isWaiting);
@@ -116,6 +122,13 @@ export function JoiningPage(props: {
           >
             {isLooking ? (
               <KnotLoader className="size-21" />
+            ) : isFailed ? (
+              // A problem's sign where the knot would hold still.
+              <CircleAlert
+                aria-hidden="true"
+                strokeWidth={1.5}
+                className="size-21 text-destructive"
+              />
             ) : (
               <svg
                 viewBox="0 0 14 14"
@@ -144,6 +157,7 @@ export function JoiningPage(props: {
               key={words}
               ref={isFading ? at.gone : at.line}
               aria-hidden={isFading || undefined}
+              role={isFailed && !isFading ? "alert" : undefined}
               className={cn(
                 "m-0 mt-2 max-w-105 text-[14.5px] leading-[1.5] text-(--silver)",
                 isFading && "pointer-events-none absolute opacity-0",

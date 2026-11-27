@@ -58,11 +58,11 @@ describe("Settings → Add devices", () => {
     await way("Zigbee");
     vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(500, "app_failed"));
     await act(async () => button("Done").click());
-    expect(
-      document.querySelector("[role=dialog] [role=alert]")?.textContent,
-    ).toBe(
-      "Sanctum could not stop new devices joining. They can until the time is up.",
-    );
+    const alert = document.querySelector("[role=dialog] [role=alert]")!;
+    expect([...alert.querySelectorAll("p")].map((p) => p.textContent)).toEqual([
+      "Looking didn't stop",
+      "Devices can still join until the time is up.",
+    ]);
     expect(pairing.until).not.toBeNull();
 
     // Never stuck: the network closes by itself, and leaving tries once more.
@@ -259,7 +259,7 @@ describe("Settings → Add devices", () => {
 
     expect(
       document.querySelector("[role=dialog] [role=alert]")!.textContent,
-    ).toBe("It isn't running, so it can't let devices join now.");
+    ).toBe("Zigbee isn't running, so its devices can't join now.");
     expect(document.querySelector("[role=dialog] h3")?.textContent).toBe(
       "Couldn't start looking",
     );

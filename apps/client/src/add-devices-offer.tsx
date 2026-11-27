@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import { AddAppSheet } from "./add-app-sheet";
 import { coreJson } from "./core-fetch";
+import { problemReason } from "./device-parts";
 
 // An app the home could add that finds its devices on the home's network is
 // offered in Add devices once some of them announce themselves: its card
@@ -26,7 +27,7 @@ export function OfferedAppSheet(props: {
   onClose: () => void;
   restoreFocus: () => void;
   /** Its sheet couldn't be read. */
-  onProblem: (problem: string) => void;
+  onProblem: (problem: { title: string; reason: string }) => void;
 }) {
   const { offer, onClose, onProblem } = props;
   const appId = offer.app;
@@ -42,15 +43,18 @@ export function OfferedAppSheet(props: {
         if (found) setApp(found);
         else onClose();
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!isCurrent) return;
-        onProblem("That did not work. Try again.");
+        onProblem({
+          title: `${offer.name}'s details didn't load`,
+          reason: problemReason(error),
+        });
         onClose();
       });
     return () => {
       isCurrent = false;
     };
-  }, [appId, onClose, onProblem]);
+  }, [appId, offer.name, onClose, onProblem]);
 
   return (
     <AddAppSheet
