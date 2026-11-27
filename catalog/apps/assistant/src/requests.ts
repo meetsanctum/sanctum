@@ -169,7 +169,7 @@ function lightsReply(
   }
   return {
     text: words.missedLights(
-      changed ? words.someChanged : words.nothingChanged,
+      changed ? words.changed(subject, state) : words.nothingChanged,
       missed.map((light) => light.name),
       missed.every(offline),
     ),

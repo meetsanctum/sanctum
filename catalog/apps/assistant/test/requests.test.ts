@@ -250,7 +250,7 @@ describe("the Assistant's requests", () => {
           tools: answering([lit("Desk Lamp"), lit("Shelf", "offline")]),
         })
       ).replies,
-    ).toEqual([{ text: "Some lights changed. Shelf didn't answer." }]);
+    ).toEqual([{ text: "Office lights on. Shelf didn't answer." }]);
     expect(
       (
         await ask("lights on", {
@@ -308,7 +308,7 @@ describe("the Assistant's requests", () => {
       },
     });
     expect(replies).toEqual([
-      { text: "Some lights changed. Shelf couldn't be changed." },
+      { text: "All lights at 40%. Shelf couldn't be changed." },
     ]);
   });
 
@@ -414,7 +414,7 @@ describe("the Assistant's requests", () => {
   it("can't set timers, and says what it does for anything else", async () => {
     expect(await ask("set a timer for five minutes")).toEqual({
       calls: [],
-      replies: [{ text: "I can't set timers." }],
+      replies: [{ text: "I can't set timers yet." }],
     });
     const { calls, replies } = await ask("play some music");
     expect(calls.map(({ name }) => name)).toEqual(["home_overview"]);
@@ -439,7 +439,7 @@ describe("the Assistant's requests", () => {
     ]);
     expect(
       (await ask("stell einen Timer", { language: "de" })).replies,
-    ).toEqual([{ text: "Ich kann keine Timer stellen." }]);
+    ).toEqual([{ text: "Ich kann noch keine Timer stellen." }]);
   });
 
   it("says it isn't allowed when whoever asked has left the home", async () => {

@@ -29,7 +29,6 @@ export type Replies = {
     names: readonly string[],
     allOffline: boolean,
   ): string;
-  someChanged: string;
   nothingChanged: string;
   putBack: string;
   somePutBack: string;
@@ -104,7 +103,6 @@ const en: Replies = {
       (count) => `${count} more`,
       allOffline ? " didn't answer." : " couldn't be changed.",
     ),
-  someChanged: "Some lights changed.",
   nothingChanged: "Nothing changed.",
   putBack: "Put back.",
   somePutBack: "Some lights were put back.",
@@ -118,7 +116,7 @@ const en: Replies = {
   },
   changedSince: "Nothing put back: it changed since.",
   cannotPutBack: "There's nothing I can put back.",
-  noTimers: "I can't set timers.",
+  noTimers: "I can't set timers yet.",
   notInARoom: "I'm not in a room yet. Choose my room in Settings, Devices.",
   whichRoom: "Which room's lights? Say the room too.",
   whichNamed: (kind, name) => `Which ${kind}? More than one is named ${name}.`,
@@ -171,7 +169,6 @@ const de: Replies = {
           ? " konnten nicht geändert werden."
           : " konnte nicht geändert werden.",
     ),
-  someChanged: "Einige Lichter wurden geändert.",
   nothingChanged: "Nichts geändert.",
   putBack: "Zurückgestellt.",
   somePutBack: "Einige Lichter wurden zurückgestellt.",
@@ -186,7 +183,7 @@ const de: Replies = {
   },
   changedSince: "Nichts zurückgestellt: es wurde inzwischen geändert.",
   cannotPutBack: "Da kann ich nichts zurückstellen.",
-  noTimers: "Ich kann keine Timer stellen.",
+  noTimers: "Ich kann noch keine Timer stellen.",
   notInARoom:
     "Ich bin noch in keinem Raum. Wähle meinen Raum unter Settings, Devices.",
   whichRoom: "Welcher Raum? Sag den Raum mit dazu.",
