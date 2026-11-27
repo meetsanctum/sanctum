@@ -4,11 +4,10 @@ import {
   type StaticManifest,
 } from "@meetsanctum/app-sdk";
 import { Button, type LiveFeed } from "@meetsanctum/ui-sdk";
-import { RotateCw } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { AppIcon, plainIcon } from "./app-icon";
-import { AppNotice, NoticeCard } from "./app-state";
+import { AppNotice } from "./app-state";
 import { coreJson } from "./core-fetch";
 
 // The page the shell draws for an app that brings no page of its own, such
@@ -67,7 +66,6 @@ export function DefaultAppPage(props: {
   const summary =
     typeof manifest?.summary === "string" ? manifest.summary.trim() : "";
   const isDriver = !!manifest?.driver;
-  const isAdding = app.state === "starting" && app.run?.isAdding;
   return (
     <div className="flex grow flex-col-reverse justify-between gap-8 sm:flex-row sm:items-end sm:p-10">
       <div className="flex flex-col items-start gap-1">
@@ -82,21 +80,13 @@ export function DefaultAppPage(props: {
         </Button>
       </div>
       <div className="flex w-full flex-col gap-3 sm:w-96 sm:self-center">
-        {isAdding ? (
-          <NoticeCard
-            Icon={RotateCw}
-            title={`Adding ${app.name}`}
-            line="It starts by itself."
-          />
-        ) : (
-          <AppNotice
-            app={app}
-            permissionsAre="settings"
-            deviceCount={props.deviceCount}
-            openSettings={props.openSettings}
-            openStatus={props.openStatus}
-          />
-        )}
+        <AppNotice
+          app={app}
+          permissionsAre="settings"
+          deviceCount={props.deviceCount}
+          openSettings={props.openSettings}
+          openStatus={props.openStatus}
+        />
         {(summary || isDriver) && (
           <section className="flex flex-col gap-4 rounded-lg bg-card/80 p-6">
             <div className="flex items-center gap-3">

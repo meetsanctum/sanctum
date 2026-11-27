@@ -5,7 +5,7 @@ import {
   type AppRunUpdate,
   type PermissionInfo,
 } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, useReducedMotion } from "@meetsanctum/ui-sdk";
 import {
   Hourglass,
   Info,
@@ -14,7 +14,7 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { productName } from "./brand";
 import { coreJson } from "./core-fetch";
@@ -325,7 +325,19 @@ function noticeOf(
     }
     case "restarting":
     case "starting":
-      return app.run?.isFirstStart === true
+      // A first start shows on its pages, which open as it's added; its
+      // settings say it beside their head.
+      if (isAdding(app)) {
+        return permissionsAre === "below"
+          ? null
+          : {
+              Icon: RotateCw,
+              title: `Adding ${name}`,
+              line: "It opens here once it's running.",
+              isUnderWay: true,
+            };
+      }
+      return app.run?.isFirstStart === true && permissionsAre === "below"
         ? null
         : {
             Icon: RotateCw,
@@ -357,12 +369,16 @@ export function AppNotice(props: {
 }) {
   const { app, permissionsAre } = props;
   const onItsSettings = permissionsAre === "below";
-  if (!onItsSettings && looksRunning(app)) return null;
+  if (!onItsSettings && looksRunning(app) && !isFirstStarting(app)) {
+    return null;
+  }
   const notice = noticeOf(app, permissionsAre, props.deviceCount ?? 0);
   if (!notice) return null;
   const { Icon, title, line } = notice;
   let action: ReactNode = null;
-  if (app.state === "off") {
+  if ("isUnderWay" in notice) {
+    action = null;
+  } else if (app.state === "off") {
     action = <TurnOnButton app={app} />;
   } else if (app.state === "failed") {
     action = <RestartButton app={app} />;
@@ -386,7 +402,58 @@ export function AppNotice(props: {
       title={title}
       line={line}
       action={action}
+      isUnderWay={"isUnderWay" in notice}
     />
+  );
+}
+
+// On its way up for the first time, not as an update: its pages say so,
+// though they show as for a running app meanwhile.
+function isFirstStarting(app: AppInfo) {
+  return (
+    (app.state === "starting" || app.state === "restarting") &&
+    app.run?.isFirstStart === true &&
+    app.run.update?.stage !== "updating" &&
+    app.run.update?.stage !== "goingBack"
+  );
+}
+
+/**
+ * Whether it's on its way up for the first time and nothing has gone wrong
+ * yet: its pages say it's being added until it runs.
+ */
+function isAdding(app: AppInfo) {
+  return (
+    isFirstStarting(app) && app.state === "starting" && !app.run?.lastFailure
+  );
+}
+
+// A bar for a step whose length nobody knows: a segment that slides across
+// and starts again, moved by its transform alone, and held still in the
+// middle under Reduce motion, as an app's own steps show.
+function UnderWayBar(props: { label: string }) {
+  const segment = useRef<HTMLSpanElement>(null);
+  const isStill = useReducedMotion();
+  useEffect(() => {
+    if (isStill || !segment.current?.animate) return;
+    // The segment is 30% of the track: from wholly before it to wholly past.
+    const sliding = segment.current.animate(
+      [{ transform: "translateX(-100%)" }, { transform: "translateX(334%)" }],
+      { duration: 1600, easing: "ease-in-out", iterations: Infinity },
+    );
+    return () => sliding.cancel();
+  }, [isStill]);
+  return (
+    <div
+      className="mt-2 h-1.5 overflow-hidden rounded-full bg-foreground/10"
+      role="progressbar"
+      aria-label={props.label}
+    >
+      <span
+        ref={segment}
+        className={`block h-full w-[30%] rounded-full bg-foreground ${isStill ? "ml-[35%]" : ""}`}
+      />
+    </div>
   );
 }
 
@@ -397,6 +464,8 @@ export function NoticeCard(props: {
   title: string;
   line: string;
   action?: ReactNode;
+  /** Something under way whose length nobody knows, shown with its bar. */
+  isUnderWay?: boolean;
 }) {
   const { Icon } = props;
   return (
@@ -415,6 +484,7 @@ export function NoticeCard(props: {
         <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
           {props.line}
         </span>
+        {props.isUnderWay && <UnderWayBar label={props.title} />}
       </span>
       {props.action}
     </div>

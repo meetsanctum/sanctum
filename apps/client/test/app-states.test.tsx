@@ -240,10 +240,52 @@ describe("its notice", () => {
     );
   });
 
-  it("has nothing to say of one on its first way up, even in its settings", async () => {
+  it("leaves a first start to its settings' head there", async () => {
     await notice(app("starting", { since, isFirstStart: true }), "below");
 
     expect(status()).toBeNull();
+  });
+
+  it("says on its pages that it's being added, with a bar and nothing to press", async () => {
+    await notice(app("starting", { since, isFirstStart: true }));
+
+    expect(status()?.textContent).toContain("Adding Weather");
+    expect(status()?.textContent).toContain("It opens here once it's running.");
+    expect(
+      status()
+        ?.querySelector('[role="progressbar"]')
+        ?.getAttribute("aria-label"),
+    ).toBe("Adding Weather");
+    expect(status()?.querySelector("button")).toBeNull();
+  });
+
+  it("says why a first start failed on its pages, as it starts again", async () => {
+    for (const state of ["starting", "restarting"] as const) {
+      await notice(
+        app(state, {
+          since,
+          isFirstStart: true,
+          failures: 1,
+          lastFailure: "failed_start",
+        }),
+      );
+
+      expect(status()?.textContent).toContain("Weather is restarting");
+      expect(status()?.textContent).toContain(
+        "It didn't start, and it starts again by itself.",
+      );
+      expect(status()?.querySelector('[role="progressbar"]')).toBeNull();
+    }
+  });
+
+  it("goes once it runs, leaving nothing in its place", async () => {
+    await notice(app("starting", { since, isFirstStart: true }));
+    expect(status()).not.toBeNull();
+
+    await notice(app("running"));
+
+    expect(status()).toBeNull();
+    expect(host.textContent).toBe("");
   });
 
   it("says what it waits for, and that it starts by itself", async () => {
