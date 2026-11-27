@@ -75,22 +75,15 @@ function answerOf(result: {
   content: readonly { type: string; text?: string }[];
   isError?: boolean;
   structuredContent?: unknown;
-  _meta?: Record<string, unknown>;
 }): AiToolAnswer {
   const details = result.structuredContent as { error?: unknown } | null;
   const error = details?.error;
-  const settings = result._meta?.settings;
   return {
     text: result.content
       .flatMap((part) => (part.type === "text" && part.text ? [part.text] : []))
       .join("\n"),
     isError: result.isError === true,
     ...(result.isError && typeof error === "string" ? { error } : {}),
-    ...(result.isError &&
-    Array.isArray(settings) &&
-    settings.every((setting) => typeof setting === "string")
-      ? { settings }
-      : {}),
   };
 }
 

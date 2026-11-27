@@ -350,6 +350,51 @@ it("blocks implicit undo only for the device that ran the mood", () => {
   expect(changes.last(tablet)).toMatchObject({ id: next });
 });
 
+it("lets a mood stop an implicit undo only for the hour changes are kept", () => {
+  let at = new Date("2026-11-27T12:00:00Z");
+  const changes = createAgentChanges({
+    isActiveAgent: () => true,
+    now: () => at,
+  });
+  const tablet = { id: assistant.id, requestClientId: "tablet" };
+  const light = {
+    device: "lamp",
+    capability: "light",
+    kind: "light" as const,
+    at,
+    before: { on: false },
+    asked: { on: true },
+  };
+  changes.record(tablet, [light]);
+  at = new Date("2026-11-27T12:30:00Z");
+  changes.recordMood(tablet);
+  expect(changes.last(tablet)).toBe("mood");
+
+  // An hour after the mood, nothing of it or before it is kept.
+  at = new Date("2026-11-27T13:31:00Z");
+  expect(changes.last(tablet)).toBeUndefined();
+});
+
+it("leaves an MCP agent's own changes to put back after it runs a mood", async () => {
+  const { client } = await household();
+  const lit = await call(client, "lights", {
+    place: { kind: "home" },
+    set: { brightness: 10 },
+  });
+  expect(lit.isError).toBe(false);
+  const change = lit.content.change as string;
+  expect(change).toEqual(expect.any(String));
+  await settled();
+  const [relax] = await moodsSeen(client);
+  const ran = await call(client, "run", { app: relax!.app, key: relax!.key });
+  expect(ran.isError).toBe(false);
+  await settled();
+
+  const restored = await call(client, "restore", { change });
+  expect(restored.isError).toBe(false);
+  expect(restored.content).toMatchObject({ change });
+});
+
 describe("an app's action that runs moods", () => {
   const manifest = () => toStaticManifest(moods);
   type Action = ReturnType<typeof manifest>["actions"][number];

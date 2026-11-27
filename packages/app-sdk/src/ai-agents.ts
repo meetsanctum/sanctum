@@ -26,10 +26,8 @@ export const aiAssistantPermission = "ai.assistant";
 export type AiToolAnswer = {
   text: string;
   isError: boolean;
-  /** The tool's error code, when it returned one. */
+  /** The tool's error code, when it refused, such as `not_allowed`. */
   error?: string;
-  /** Where a person can change the settings that blocked a tool. */
-  settings?: readonly string[];
 };
 
 /** Reading the activity log: who did what, when and why. */

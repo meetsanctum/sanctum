@@ -728,29 +728,21 @@ describe("the Assistant's moods", () => {
   it.each([
     [
       "not_allowed",
-      "“Run a mood” needs “Control your lights”, which is switched off for AI agents in Settings, What AI Agents Can Use.",
-      ["Settings, What AI Agents Can Use"],
-      "Ich darf diese Stimmung nicht starten. Prüfe die Freigabe in Settings, What AI Agents Can Use.",
-    ],
-    [
-      "not_allowed",
-      "“Run a scene” is switched off for AI agents in Example's settings.",
-      ["Example's settings"],
-      "Ich darf diese Stimmung nicht starten. Prüfe die Freigabe in Example's settings.",
+      "“Run a mood” is switched off for AI agents in Moods' settings.",
+      "Ich darf diese Stimmung nicht starten. Das lässt sich in den Einstellungen von Moods einschalten.",
     ],
     [
       "timeout",
       "The app didn't answer in time.",
-      undefined,
       "Die App hat nicht rechtzeitig geantwortet.",
     ],
   ])(
-    "reports the actual mood failure in German (%s, %s)",
-    async (error, toolText, settings, text) => {
+    "says in German why a mood didn't run (%s)",
+    async (error, toolText, text) => {
       const { replies } = await ask("stell die Stimmung auf Abend", {
         language: "de",
         tools: {
-          run: () => ({ text: toolText, isError: true, error, settings }),
+          run: () => ({ text: toolText, isError: true, error }),
           entities: () =>
             json({ entities: [mood("office-abend", "Abend", "room-office")] }),
         },

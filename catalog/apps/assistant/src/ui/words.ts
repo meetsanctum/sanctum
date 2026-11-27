@@ -73,6 +73,9 @@ export function firstTry(language: RequestLanguage, room: string) {
 export const assignSpeakerRoom =
   "Assign a room to a smart speaker to try a command.";
 
+/** Beside Ready, when the home's moods didn't fit what speech can learn. */
+export const moodsLeftOut = "Moods can't be used by voice: too many names.";
+
 /** What the first card says when every online smart speaker is muted. */
 export const mutedWords = {
   title: "Microphones off",

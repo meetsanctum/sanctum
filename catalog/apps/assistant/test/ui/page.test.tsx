@@ -291,6 +291,22 @@ describe("the Assistant's page", () => {
     expect(text()).not.toContain("Microphones off");
   });
 
+  it("says moods can't be used by voice when they were left out", async () => {
+    const { client } = fakeClient({
+      hearing: {
+        state: "ready",
+        language: "en",
+        activeLanguage: "en",
+        leftOut: ["mood"],
+      },
+      devices: [office],
+    });
+    await show(client);
+
+    expect(text()).toContain("Ready in English");
+    expect(text()).toContain("Moods can't be used by voice: too many names.");
+  });
+
   it("names each step while it gets ready, and follows it live", async () => {
     const { client, push } = fakeClient({
       hearing: { state: "downloading", language: "en", activeLanguage: null },

@@ -145,10 +145,7 @@ const isUsable = (offer: AiOfferInfo) => offer.on && offer.missing.length === 0;
 // for the core's areas.
 function notAllowed(canUse: AiCanUse, offer: AiOfferInfo, appName: string) {
   const where = settingsOf(appName);
-  const refused = (message: string, settings = [where]) => ({
-    ...toolError("not_allowed", message),
-    _meta: { settings },
-  });
+  const refused = (message: string) => toolError("not_allowed", message);
   if (!offer.on) {
     return refused(
       `“${offer.title}” is switched off for AI agents in ${where}.`,
@@ -161,11 +158,10 @@ function notAllowed(canUse: AiCanUse, offer: AiOfferInfo, appName: string) {
     );
   }
   const needs = blocked.map(({ title }) => `“${title}”`).join(" and ");
-  const settings = [...new Set(blocked.map((need) => need.where))];
+  const wheres = [...new Set(blocked.map((need) => need.where))];
   const are = blocked.length > 1 ? "are" : "is";
   return refused(
-    `“${offer.title}” needs ${needs}, which ${are} switched off for AI agents in ${settings.join(" and ")}.`,
-    settings,
+    `“${offer.title}” needs ${needs}, which ${are} switched off for AI agents in ${wheres.join(" and ")}.`,
   );
 }
 

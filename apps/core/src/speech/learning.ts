@@ -105,6 +105,8 @@ export function createLearning(options: {
   let admitted = false;
   // Keep the last lesson the service acknowledged in case it loses its grammar.
   let learned: HomeLesson | null = null;
+  // The blanks a lesson was taught without, to fit what can be learned.
+  const leftOutOf = new WeakMap<HomeLesson, SentenceBlank[]>();
   let recovering = false;
   let admissionProblem: HearingFailure | null = null;
   let managerFailed = false;
@@ -147,7 +149,13 @@ export function createLearning(options: {
       activeLanguage === language &&
       (submitted === null || submitted === language)
     ) {
-      return { state: "ready", language, activeLanguage };
+      const leftOut = learned ? leftOutOf.get(learned) : undefined;
+      return {
+        state: "ready",
+        language,
+        activeLanguage,
+        ...(leftOut ? { leftOut } : {}),
+      };
     }
     const current = progress?.language === language ? progress : null;
     if (current?.problem) return failed(current.problem);
@@ -198,6 +206,7 @@ export function createLearning(options: {
         options.log(
           `speech: the home's ${language} lesson is too large with moods; learning the other sentences`,
         );
+        leftOutOf.set(withoutMoods, ["mood"]);
         return withoutMoods;
       }
     }

@@ -41,8 +41,8 @@ export type Replies = {
   moodSet(mood: string, room: string): string;
   /** No mood of that name where it was asked for. */
   noSuchMood(mood: string, room: string | null): string;
-  /** `run` refused: its own words and where the settings are. */
-  cannotRunMood(toolWords: string, settings?: readonly string[]): string;
+  /** `run` refused: its own words, or the app whose settings decide it. */
+  cannotRunMood(toolWords: string, appName: string): string;
   duplicateMood(mood: string, room: string | null): string;
   /** Several rooms have a mood of that name, and none was said. */
   whichMoodRoom(mood: string): string;
@@ -212,12 +212,9 @@ const de: Replies = {
     room
       ? `${room}: keine Stimmung „${mood}“.`
       : `Es gibt keine Stimmung „${mood}“.`,
-  cannotRunMood: (_toolWords, settings) => {
-    const refused = "Ich darf diese Stimmung nicht starten.";
-    return settings?.length
-      ? `${refused} Prüfe die Freigabe in ${list(settings, "und")}.`
-      : refused;
-  },
+  // Where it's decided is the app's settings, whose words are English.
+  cannotRunMood: (_toolWords, appName) =>
+    `Ich darf diese Stimmung nicht starten. Das lässt sich in den Einstellungen von ${appName} einschalten.`,
   duplicateMood: (mood, room) =>
     room
       ? `${room}: Mehrere Stimmungen heißen „${mood}“.`

@@ -132,7 +132,7 @@ describe("what speech recognition learns", () => {
     }
   });
 
-  it("learns the light sentences when the mood vocabulary exceeds the budget", async () => {
+  it("learns without the mood sentences when moods don't fit, and says so", async () => {
     const describe = vi.spyOn(words, "describeLanguages").mockResolvedValue([]);
     const teach = vi
       .spyOn(words, "train")
@@ -159,6 +159,25 @@ describe("what speech recognition learns", () => {
         templates: ["turn on [the] {light}"],
         lists: { light: ["Desk Lamp"] },
       });
+      // Ready, and the Assistant's page can say moods were left out.
+      await vi.waitFor(() =>
+        expect(learning.hearing()).toMatchObject({
+          state: "ready",
+          leftOut: ["mood"],
+        }),
+      );
+
+      // Fewer moods fit again, and it hears every sentence.
+      names.mood = ["Evening"];
+      learning.changed();
+      await vi.waitFor(() =>
+        expect(teach.mock.lastCall?.[0].lesson.lists).toMatchObject({
+          mood: ["Evening"],
+        }),
+      );
+      await vi.waitFor(() =>
+        expect(learning.hearing()).not.toHaveProperty("leftOut"),
+      );
     } finally {
       learning.stop();
       teach.mockRestore();

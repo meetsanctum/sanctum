@@ -20,8 +20,8 @@ export type Overview = {
 export type ToolFailure = {
   ok: false;
   words: string;
+  /** The tool's code when it refused, such as `not_allowed`. */
   error?: string;
-  settings?: readonly string[];
 };
 export type ToolResult = { ok: true; value: unknown } | ToolFailure;
 
@@ -49,7 +49,6 @@ export async function callTool(
       ok: false,
       words: answer.text,
       error: answer.error,
-      settings: answer.settings,
     };
   }
   return { ok: true, value: JSON.parse(answer.text) as unknown };

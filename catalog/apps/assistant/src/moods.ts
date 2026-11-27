@@ -18,6 +18,8 @@ import { callTool, type Overview, type ToolFailure } from "./tools.js";
 /** A mood as the entities tool gives it: which app keeps it, and its room. */
 export type Mood = {
   app: string;
+  /** The app's name, as its settings are called. */
+  appName: string | null;
   key: string;
   name: string;
   state: { placeId: string };
@@ -89,7 +91,7 @@ export async function runMood(
     return {
       text:
         ran.error === "not_allowed"
-          ? words.cannotRunMood(ran.words, ran.settings)
+          ? words.cannotRunMood(ran.words, mood.appName ?? mood.app)
           : words.failed(ran.words, ran.error),
     };
   }
