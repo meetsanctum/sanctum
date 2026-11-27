@@ -1,4 +1,6 @@
 import type { AppInfo, ModelsInfo } from "@meetsanctum/app-sdk";
+import { dayText } from "@meetsanctum/app-sdk/clock";
+import { number } from "@meetsanctum/app-sdk/words";
 import { Button, SegmentedControl } from "@meetsanctum/ui-sdk";
 import { LineChart, type DaysLineChartProps } from "@meetsanctum/ui-sdk/charts";
 import { useId, useState } from "react";
@@ -49,7 +51,7 @@ function withOthers(
 
 const sum = (tokens: readonly (number | null)[]) =>
   tokens.reduce<number>((total, each) => total + (each ?? 0), 0);
-const count = (value: number) => value.toLocaleString();
+const count = (value: number) => number("en", value);
 
 // The top of the scale: 1, 2 or 5 times a power of ten, at least the most.
 function niceTop(most: number) {
@@ -69,12 +71,7 @@ function scaleText(value: number) {
 // UTC, which says it whatever the device's own time zone.
 const startOf = (day: string) => Date.parse(`${day}T00:00:00Z`);
 
-const dateText = (start: number) =>
-  new Date(start).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
+const dateText = (start: number) => dayText(start, "UTC");
 
 function Chart(props: {
   series: DaysLineChartProps["series"];

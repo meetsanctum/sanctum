@@ -19,6 +19,14 @@ describe("the language catalog", () => {
     });
   });
 
+  it("writes each language in a locale of its own", () => {
+    for (const id of languageIds) {
+      const { locale } = languages[id];
+      expect(Intl.getCanonicalLocales(locale)).toEqual([locale]);
+      expect(new Intl.Locale(locale).language).toBe(id);
+    }
+  });
+
   it("speaks each language in a voice of that language", () => {
     for (const id of speechLanguages) {
       expect(languages[id].voice).toMatch(new RegExp(`^${id}_[A-Z]{2}-`));

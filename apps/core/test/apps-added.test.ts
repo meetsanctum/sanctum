@@ -345,6 +345,14 @@ describe("the apps a home could add", () => {
         ],
       }),
       manifestOf("sanctum.moods", { name: "Moods" }),
+      ...[2, 10].map((number) =>
+        manifestOf(`sanctum.example-${number}`, {
+          name: `Example ${number}`,
+          permissions: [
+            { id: "services:zigbee2mqtt", reason: "To run it.", needed: true },
+          ],
+        }),
+      ),
     ].map((manifest) => [manifest.id, manifest]),
   );
 
@@ -520,6 +528,19 @@ describe("the apps a home could add", () => {
     );
     added.push("sanctum.zigbee");
     expect(await apps.findWithPermission("services:zigbee2mqtt")).toBeNull();
+  });
+
+  it("offers the first matching app by numeric name order", async () => {
+    const matches = ["sanctum.example-10", "sanctum.example-2"];
+    const { apps } = available({
+      shipped: matches,
+      added: [],
+      staged: matches,
+    });
+
+    expect(await apps.findWithPermission("services:zigbee2mqtt")).toMatchObject(
+      { id: "sanctum.example-2" },
+    );
   });
 
   it("can't tell yet while the one it finds can't be added, or nothing is staged", async () => {

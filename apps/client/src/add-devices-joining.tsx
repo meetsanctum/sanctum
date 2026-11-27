@@ -13,7 +13,7 @@ import { JoinedCard, type CardWork } from "./add-devices-cards";
 import { foundKey } from "./add-devices-found";
 import { KnotLoader } from "./knot-loader";
 import { knotPath } from "./knot";
-import { plural } from "./plural";
+import { plural } from "@meetsanctum/app-sdk/words";
 
 // Add devices' page of one radio, such as Zigbee, which lets new devices
 // join while it is open. Until one joins, the page is calm and centred: the
@@ -31,7 +31,7 @@ export function countdown(seconds: number) {
 /** How long a radio lets devices join, in words: "4 minutes". */
 const lasting = (seconds: number) => {
   const minutes = Math.round(seconds / 60);
-  return plural(minutes, "minute");
+  return plural("en", minutes, { one: "# minute", other: "# minutes" });
 };
 
 export type JoiningState =

@@ -142,7 +142,7 @@ export type SmartSettings = {
   off: { device: string; capability: string }[];
 };
 
-// By name, then by id, so the same light takes the same colour each time.
+// Keep the same name and id order for assigning colours to saved moods.
 const byName = (a: Light, b: Light) =>
   a.device.name.localeCompare(b.device.name) ||
   a.capability.id.localeCompare(b.capability.id) ||
