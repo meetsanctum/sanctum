@@ -25,6 +25,7 @@ import {
   hearingWords,
   languageNames,
   listeningAudio,
+  mutedWords,
   speakerLine,
 } from "./words";
 
@@ -58,13 +59,13 @@ function StepBar(props: { label: string }) {
     <div className="flex flex-col gap-1.5">
       <span className="text-sm font-medium">{props.label}</span>
       <div
-        className="h-1.5 overflow-hidden bg-foreground/10"
+        className="h-1.5 overflow-hidden rounded-full bg-foreground/10"
         role="progressbar"
         aria-label={props.label}
       >
         <span
           ref={segment}
-          className={`block h-full w-[30%] bg-foreground ${isStill ? "ml-[35%]" : ""}`}
+          className={`block h-full w-[30%] rounded-full bg-foreground ${isStill ? "ml-[35%]" : ""}`}
         />
       </div>
     </div>
@@ -94,9 +95,16 @@ function HearingLine(props: { hearing: Hearing }) {
 function HearingCard(props: {
   hearing: Hearing;
   room: string | null;
+  /** Whether every smart speaker's microphones are off. */
+  allMuted: boolean;
   page: PageProps;
 }) {
-  const { hearing, page, room } = props;
+  const { page, room } = props;
+  // Ready to hear, but nothing listens: the microphones say so first.
+  if (props.allMuted && props.hearing.state === "ready") {
+    return <MutedCard />;
+  }
+  const { hearing } = props;
   const words = hearingWords(hearing);
   const id = useId();
   return (
@@ -137,6 +145,24 @@ function HearingCard(props: {
           </Button>
         </div>
       )}
+    </section>
+  );
+}
+
+function MutedCard() {
+  const id = useId();
+  return (
+    <section
+      aria-labelledby={id}
+      aria-live="polite"
+      className={`${card} gap-2.5 p-5`}
+    >
+      <h2 id={id} className="m-0 text-xl leading-7 font-semibold">
+        {mutedWords.title}
+      </h2>
+      <p className="m-0 text-sm leading-5 text-muted-foreground">
+        {mutedWords.help}
+      </p>
     </section>
   );
 }
@@ -315,10 +341,30 @@ function MainPage(page: PageProps) {
   const choose = async (language: RequestLanguage) =>
     setChoiceFailed(!(await assistant.choose(language)));
   const { language, activeLanguage } = hearing;
+  const allMuted =
+    speakers.length > 0 &&
+    speakers.every((speaker) => listeningAudio(speaker)?.state?.muted);
+  const hearingCard = (
+    <HearingCard
+      hearing={hearing}
+      room={room}
+      allMuted={allMuted}
+      page={page}
+    />
+  );
+  // Without a smart speaker there is one thing to do: add one.
+  if (hearing.state === "no_speaker") {
+    return (
+      <>
+        <PageBar title="Assistant" />
+        {hearingCard}
+      </>
+    );
+  }
   return (
     <>
       <PageBar title="Assistant" />
-      <HearingCard hearing={hearing} room={room} page={page} />
+      {hearingCard}
       <PageSection id="assistant-setup" title="Setup">
         <Row
           icon={<icons.ListChecks aria-hidden="true" className="size-4" />}
@@ -347,9 +393,6 @@ function MainPage(page: PageProps) {
           <p className={help}>
             It listens and replies in one language. Switching takes a few
             minutes.
-            {activeLanguage &&
-              activeLanguage !== language &&
-              ` ${languageNames[activeLanguage]} keeps working until then.`}
           </p>
           {choiceFailed && <LanguageChangeError />}
         </div>

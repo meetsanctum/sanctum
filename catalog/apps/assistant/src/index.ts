@@ -46,7 +46,7 @@ export const app = defineApp({
   permissions: [
     {
       id: aiAssistantPermission,
-      reason: "To do what you ask, with what AI agents may use.",
+      reason: "To do what you ask by voice or in writing.",
       needed: true,
     },
     {

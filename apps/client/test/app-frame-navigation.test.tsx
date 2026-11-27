@@ -151,6 +151,8 @@ it("opens Add devices and restores Setup's Try it parameters on return", async (
   await waitFor(() =>
     expect(said).toContainEqual({ type: "show", page: "setup", params: {} }),
   );
+  // The page says its title, which Back then names.
+  await send(port, { type: "bar", title: "Setup", actions: [], revision: 1 });
 
   await send(port, { type: "addDevices", returnParams: { step: "try" } });
   await waitFor(() => {
@@ -164,7 +166,7 @@ it("opens Add devices and restores Setup's Try it parameters on return", async (
   });
   await act(async () => {
     container
-      .querySelector<HTMLButtonElement>('button[aria-label="Back to Example"]')!
+      .querySelector<HTMLButtonElement>('button[aria-label="Back to Setup"]')!
       .click();
   });
   const returned = await connect();

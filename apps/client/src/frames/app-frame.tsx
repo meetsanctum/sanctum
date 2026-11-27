@@ -32,7 +32,8 @@ export function AppFrame(props: {
   openSettings: () => void;
   /** Opens a device's detail, one the app may read, as the bridge checks. */
   openDevice: (device: string) => void;
-  addDevices: (returnParams?: PageParams) => void;
+  /** Opens Add devices, saying the page's title for Back on the way out. */
+  addDevices: (returnParams?: PageParams, title?: string) => void;
   mode: FrameContext["mode"];
   /** How the household reads things: its unit, its zone and its hours. */
   household: FrameHousehold | undefined;
@@ -45,6 +46,8 @@ export function AppFrame(props: {
   const [bar, setBar] = useState<Extract<FrameEvent, { type: "bar" }>>();
   const title = bar?.title;
   const latest = useRef(props);
+  const latestTitle = useRef(title);
+  latestTitle.current = title;
   const pageRevision = useRef(0);
   useLayoutEffect(() => {
     if (latest.current.shown !== props.shown) pageRevision.current++;
@@ -76,7 +79,10 @@ export function AppFrame(props: {
         case "openDevice":
           return latest.current.openDevice(event.device);
         case "addDevices":
-          return latest.current.addDevices(event.returnParams);
+          return latest.current.addDevices(
+            event.returnParams,
+            latestTitle.current,
+          );
       }
     },
   });

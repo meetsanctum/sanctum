@@ -295,7 +295,7 @@ function HomePageWithDevices({
                 const tile = devices.tiles.find((each) => each.deviceId === id);
                 if (tile) openAppDevice(tile);
               }}
-              addDevices={(returnParams) =>
+              addDevices={(returnParams, title) =>
                 setRoutes((current) => {
                   if (current.at(-1) !== route) return current;
                   const origin = returnParams
@@ -307,7 +307,11 @@ function HomePageWithDevices({
                     {
                       app: settingsApp.id,
                       page: devicesSettingsPage,
-                      params: { add: "true" },
+                      // Back names the page it returns to.
+                      params: {
+                        add: "true",
+                        ...(title ? { from: title } : {}),
+                      },
                     },
                   ];
                 })

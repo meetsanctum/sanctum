@@ -236,7 +236,8 @@ describe("the Assistant's page", () => {
       finishDevices([office, speaker("removed", "Removed Speaker", null)]),
     );
 
-    expect(text()).toContain("Ready in English");
+    // Its one speaker is muted now, which the card says over ready.
+    expect(text()).toContain("Microphones off");
     expect(text()).toContain("Office SpeakerStudy · Microphones off");
     expect(text()).not.toContain("Removed Speaker");
   });
@@ -249,10 +250,35 @@ describe("the Assistant's page", () => {
     const props = await show(client);
 
     expect(text()).toContain("No smart speaker yet");
-    expect(text()).not.toContain("Smart speakers");
+    // One thing to do: nothing else until a speaker listens.
+    for (const section of [
+      "Smart speakers",
+      "Setup",
+      "Language",
+      "What you can say",
+    ]) {
+      expect(text()).not.toContain(section);
+    }
     expect(button("Add a smart speaker").dataset.variant).toBe("default");
     await press("Add a smart speaker");
     expect(props.addDevices).toHaveBeenCalledOnce();
+  });
+
+  it("says the microphones are off when every speaker is muted, over ready", async () => {
+    const { client, push } = fakeClient({
+      hearing: { state: "ready", language: "en", activeLanguage: "en" },
+      devices: [
+        speaker("office-speaker", "Office Speaker", "office", { muted: true }),
+      ],
+    });
+    await show(client);
+
+    expect(text()).toContain("Microphones off");
+    expect(text()).not.toContain("Ready in English");
+
+    push({ type: "device", id: "office-speaker", device: office });
+    expect(text()).toContain("Ready in English");
+    expect(text()).not.toContain("Microphones off");
   });
 
   it("names each step while it gets ready, and follows it live", async () => {
@@ -381,8 +407,9 @@ describe("the Assistant's page", () => {
     });
     expect(text()).toContain("Switching to Deutsch");
     expect(text()).toContain("English keeps working until then.");
-    expect(select.closest("section")?.textContent).toContain(
-      "English keeps working until then.",
+    // Said once, on the card.
+    expect(select.closest("section")?.textContent).not.toContain(
+      "keeps working",
     );
     expect(text()).toContain("“Turn off the lights”");
     expect(text()).not.toContain("Deutsch keeps working");

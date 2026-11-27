@@ -76,7 +76,8 @@ export function useSettingsNavigation(
     parent?.app === settingsApp.id
       ? settingsPageTitle(parent.page, parent.params, apps)
       : route?.page === devicesSettingsPage && route.app === settingsApp.id
-        ? apps.find((app) => app.id === parent?.app)?.name
+        ? (route.params.from ??
+          apps.find((app) => app.id === parent?.app)?.name)
         : undefined;
 
   return {
