@@ -14,10 +14,20 @@ import { everyWhileShown } from "../while-shown";
 // The host this client is paired with: its id and its home's, last known
 // address, token and CA pin, kept by the shell.
 
+let selected: StoredHost | null = null;
+
 // Points every core request at the host, and its token at that host only.
 export function selectHost(host: StoredHost) {
+  selected = host;
   setCoreBaseUrl(host.url);
   setCredential({ url: host.url, token: host.token, pin: host.pin });
+}
+
+// The host this device holds, as it knows it: what changing a password
+// binds its proof to, so a host that only passes the exchange on can't use
+// it.
+export function selectedHost(): StoredHost | null {
+  return selected;
 }
 
 // Stores the client a claim, sign-in or pairing created, with the home and

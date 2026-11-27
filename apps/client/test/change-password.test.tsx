@@ -1,0 +1,290 @@
+// @vitest-environment jsdom
+import type {
+  ClientInfo,
+  LoginInfo,
+  Me,
+  PersonInfo,
+} from "@meetsanctum/auth-protocol";
+import { createLiveFeed } from "@meetsanctum/ui-sdk";
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { changePassword, PasswordChangeError } from "../src/auth/password";
+import { CoreError, coreJson } from "../src/core-fetch";
+import { PersonPage } from "../src/people/person-page";
+import { deferred } from "./deferred";
+
+// Changing your own password from your own page: Change password takes
+// Reset password's place there, the dialog checks the new password before
+// anything is sent, says what went wrong beside its cause, can't be closed
+// while it saves, and the page says the password changed.
+
+vi.mock("../src/auth/password", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/auth/password")>()),
+  changePassword: vi.fn(),
+}));
+vi.mock("../src/core-fetch", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/core-fetch")>()),
+  coreJson: vi.fn(),
+}));
+
+const alex: PersonInfo = {
+  id: "alex",
+  name: "Alex Keller",
+  avatar: null,
+  colour: "#c5cdac",
+};
+const maya: PersonInfo = {
+  id: "maya",
+  name: "Maya Keller",
+  avatar: null,
+  colour: "#b9defc",
+};
+
+function client(changes: Partial<ClientInfo>): ClientInfo {
+  return {
+    id: "laptop",
+    name: "Alex's MacBook",
+    kind: "personal",
+    platform: "macos",
+    personId: "alex",
+    createdAt: "2026-11-01T10:00:00Z",
+    lastSeenAt: new Date().toISOString(),
+    connectedSince: null,
+    current: true,
+    reduceEffects: false,
+    reduceMotion: false,
+    ...changes,
+  };
+}
+
+const laptop = client({});
+const me: Me = { client: laptop, person: alex };
+const logins: LoginInfo[] = [
+  { personId: "alex", username: "alex" },
+  { personId: "maya", username: "maya" },
+];
+
+let container: HTMLDivElement;
+let root: Root;
+const live = createLiveFeed();
+
+beforeEach(() => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+    },
+  );
+  vi.mocked(coreJson).mockImplementation(async (path) => {
+    if (path === "/api/people") return [alex, maya] as never;
+    if (path === "/api/auth/logins") return logins as never;
+    if (path === "/api/auth/clients") return [laptop] as never;
+    if (path === "/api/auth/invites" || path === "/api/auth/agents") {
+      return [] as never;
+    }
+    throw new Error(`unexpected ${path}`);
+  });
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+});
+
+afterEach(async () => {
+  await act(async () => root.unmount());
+  container.remove();
+  vi.unstubAllGlobals();
+  vi.resetAllMocks();
+});
+
+async function show(personId = "alex", viewer: Me | undefined = me) {
+  await act(async () =>
+    root.render(
+      <PersonPage
+        live={live}
+        personId={personId}
+        me={viewer}
+        back={() => {}}
+      />,
+    ),
+  );
+}
+
+const buttons = () => [...document.querySelectorAll("button")];
+const button = (text: string) =>
+  buttons().find(
+    (each) =>
+      each.textContent === text || each.getAttribute("aria-label") === text,
+  );
+const dialog = () => document.querySelector('[role="dialog"]');
+
+async function click(text: string) {
+  const found = button(text);
+  expect(found, text).toBeDefined();
+  await act(async () => found!.click());
+}
+
+const setValue = Object.getOwnPropertyDescriptor(
+  HTMLInputElement.prototype,
+  "value",
+)!.set!;
+
+function field(label: string) {
+  const found = [...document.querySelectorAll("label")].find(
+    (each) => each.textContent === label,
+  )?.control as HTMLInputElement | undefined;
+  expect(found, label).toBeInstanceOf(HTMLInputElement);
+  return found!;
+}
+
+async function fill(label: string, value: string) {
+  const input = field(label);
+  await act(async () => {
+    setValue.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  return input;
+}
+
+async function submit() {
+  const found = dialog()?.querySelector<HTMLButtonElement>(
+    'button[type="submit"]',
+  );
+  expect(found).toBeDefined();
+  await act(async () => found!.click());
+}
+
+async function fillAll(current: string, next: string, repeated = next) {
+  await fill("Current password", current);
+  await fill("New password", next);
+  await fill("Repeat new password", repeated);
+}
+
+const problemOf = (input: HTMLInputElement) =>
+  input
+    .getAttribute("aria-describedby")
+    ?.split(" ")
+    .map((id) => document.getElementById(id))
+    .find((each) => each?.getAttribute("role") === "alert")?.textContent;
+
+describe("Change password", () => {
+  it("takes Reset password's place on your own page only", async () => {
+    await show();
+    expect(button("Change password")).toBeDefined();
+    expect(button("Reset password")).toBeUndefined();
+    expect(container.textContent).toContain(
+      "You stay in People but can’t sign in. Your devices sign out at once.",
+    );
+
+    await show("maya");
+    expect(button("Change password")).toBeUndefined();
+    expect(button("Reset password")).toBeDefined();
+  });
+
+  it("isn't offered on a shared device, which is no one's", async () => {
+    await show("alex", {
+      client: client({ id: "tablet", kind: "shared", personId: null }),
+      person: null,
+    });
+    expect(button("Change password")).toBeUndefined();
+    expect(button("Reset password")).toBeDefined();
+  });
+
+  it("checks the new password on this device first", async () => {
+    await show();
+    await click("Change password");
+    expect(dialog()?.textContent).toContain("Change your password");
+    expect(document.activeElement).toBe(field("Current password"));
+
+    await fillAll("old password", "short");
+    await submit();
+    expect(problemOf(field("New password"))).toBe("Use at least 8 characters.");
+    // The problem takes the hint's place.
+    expect(dialog()?.textContent).not.toContain("At least 8 characters.");
+
+    await fillAll("old password", "staple battery horse", "staple battery");
+    await submit();
+    expect(problemOf(field("Repeat new password"))).toBe(
+      "Enter the same password twice.",
+    );
+    expect(changePassword).not.toHaveBeenCalled();
+  });
+
+  it("keeps a wrong current password, selected, and says so beside it", async () => {
+    vi.mocked(changePassword).mockRejectedValue(
+      new PasswordChangeError("wrong_password"),
+    );
+    await show();
+    await click("Change password");
+    await fillAll("not my password", "staple battery horse");
+    await submit();
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+
+    const current = field("Current password");
+    expect(problemOf(current)).toBe(
+      "That password doesn’t match. Check it and try again.",
+    );
+    expect(current.getAttribute("aria-invalid")).toBe("true");
+    expect(document.activeElement).toBe(current);
+    expect(current.selectionStart).toBe(0);
+    expect(current.selectionEnd).toBe("not my password".length);
+    expect(field("New password").value).toBe("staple battery horse");
+  });
+
+  it("says what went wrong above the buttons when it isn't a field's fault", async () => {
+    vi.mocked(changePassword).mockRejectedValue(
+      new CoreError(429, "too_many_attempts"),
+    );
+    await show();
+    await click("Change password");
+    await fillAll("old password", "staple battery horse");
+    await submit();
+    expect(dialog()?.querySelector('[role="alert"]')?.textContent).toBe(
+      "Too many attempts from this device. Try again in 15 minutes.",
+    );
+  });
+
+  it("can't be closed while it saves, then says the password changed", async () => {
+    const saving = deferred<void>();
+    vi.mocked(changePassword).mockReturnValue(saving.promise);
+    await show();
+    const trigger = button("Change password")!;
+    await act(async () => trigger.click());
+    await fillAll("old password", "staple battery horse");
+    await act(async () =>
+      dialog()!
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true })),
+    );
+
+    expect(changePassword).toHaveBeenCalledWith(
+      expect.objectContaining({
+        current: "old password",
+        next: "staple battery horse",
+      }),
+    );
+    expect(dialog()?.textContent).toContain("Changing…");
+    expect(button("Cancel")?.disabled).toBe(true);
+    expect(button("Close")).toBeUndefined();
+    await act(async () =>
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      ),
+    );
+    expect(dialog()).not.toBeNull();
+
+    await act(async () => saving.resolve());
+    expect(dialog()).toBeNull();
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(
+      "Changed just now",
+    );
+    // The dialog hands focus back once it has gone.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(document.activeElement).toBe(button("Change password"));
+  });
+});

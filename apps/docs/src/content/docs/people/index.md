@@ -1,6 +1,6 @@
 ---
 title: People and signing in
-description: Add the people who live in your home, invite them to sign in on their Mac, and remove them.
+description: Add the people who live in your home, invite them to sign in on their Mac, change your password, and remove them.
 sidebar:
   order: 1
 ---
@@ -42,6 +42,19 @@ end it without making another, choose **Cancel invite** and confirm.
 After five wrong tries, a code stops working for 15 minutes, even if the
 next try is right. Then it works again.
 
+## Change your password
+
+On a Mac signed in as you, open your own page in **Settings → People** and
+choose **Change password** under **Sign-In**. Enter your current password,
+then your new one twice, and choose **Change password**.
+
+Your current password is checked on your Mac before anything changes, and
+neither password leaves it. Your other devices stay signed in. To sign one
+out, choose **Sign out** beside it under **Devices**.
+
+Change password shows only on your own page, on your own device. On someone
+else's page, and on a shared device, it is **Reset password**.
+
 ## Reset a password
 
 If someone forgets their password, open their page and choose **Reset
@@ -53,10 +66,13 @@ and confirm.
 
 ## Remove a sign-in or a person
 
+Both are at the foot of the person's page, each with a line on what it
+does.
+
 - **Remove sign-in** keeps the person in People. Their phones and
   computers sign out at once.
-- **Remove _name_** at the foot of their page removes the person, their
-  sign-in, their devices and the AI agents they added.
+- **Remove _name_** removes the person, their sign-in, their devices and the
+  AI agents they added.
 
 Both ask first and say what ends. Your home always keeps one person who signs
 in: the last sign-in can't be removed, and the page says so.

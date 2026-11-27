@@ -228,7 +228,7 @@ it("adds a person and opens their Settings page using the returned ID", async ()
   );
 });
 
-it("offers the same password reset on personal and shared devices", async () => {
+it("offers Change password on your own page and Reset password elsewhere", async () => {
   vi.mocked(coreJson).mockImplementation(async (path) => {
     if (path === "/api/people") return [maya.person] as never;
     if (path === "/api/auth/logins") {
@@ -243,14 +243,20 @@ it("offers the same password reset on personal and shared devices", async () => 
     }
     throw new Error(`unexpected ${path}`);
   });
-  for (const me of [maya, { client: tablet, person: null }]) {
-    await show({ page: "person", params: { id: "maya" }, me });
-    expect(
-      [...container.querySelectorAll("button")].some(
-        (button) => button.textContent === "Reset password",
-      ),
-    ).toBe(true);
-  }
+  const buttons = () =>
+    [...container.querySelectorAll("button")].map(
+      (button) => button.textContent,
+    );
+  await show({ page: "person", params: { id: "maya" }, me: maya });
+  expect(buttons()).toContain("Change password");
+  expect(buttons()).not.toContain("Reset password");
+  await show({
+    page: "person",
+    params: { id: "maya" },
+    me: { client: tablet, person: null },
+  });
+  expect(buttons()).toContain("Reset password");
+  expect(buttons()).not.toContain("Change password");
 });
 
 describe("Settings' first page", () => {
