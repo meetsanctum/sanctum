@@ -17,7 +17,10 @@ import type { SpeechAudio } from "./wyoming.js";
 // second cuts the first short on it, so the rest wait their turn in order. The address is the gate, as nothing
 // that fetches it can sign in; the port answers only the home's own network
 // and nothing but these addresses. The sound streams as it is spoken, so a
-// speaker starts after the first sentence, not the last.
+// speaker starts before the last sentence is made: once a lead of sound is
+// ready, or all of it if that's shorter. Starting on a short first sentence
+// left the speaker silent mid-reply while a long second one was still being
+// made on a busy host.
 
 /** The IPv4 subnet of the host interface used to reach speakers. */
 export function speakerNetwork(host: string, cidr: string) {
@@ -41,6 +44,13 @@ function ipv4Of(address: string | undefined) {
   const ipv4 = address?.replace(/^::ffff:/, "");
   return ipv4 && isIPv4(ipv4) ? ipv4 : null;
 }
+
+/**
+ * How much sound is made before a speaker is told to play it, in ms. Speech
+ * comes a sentence at a time, at two to three times the speed it's said on a
+ * Pi 4, so this much ahead covers the next sentence's making.
+ */
+export const readyLeadMs = 2_000;
 
 /** How long an address waits for its speaker. */
 export const announcementKeptMs = 60_000;
@@ -344,7 +354,10 @@ export function createAnnouncements(options: {
             announcement.rate = audio.rate;
             announcement.samples += audio.samples.length;
             append(encoder.push(audio.samples));
-            if (encoder.hasFrames()) sounded(true);
+            const lead = (audio.rate * readyLeadMs) / 1000;
+            if (encoder.hasFrames() && announcement.samples >= lead) {
+              sounded(true);
+            }
           }
           if (announcement.stop.signal.aborted) return false;
           if (!encoder || announcement.samples === 0) {
@@ -374,8 +387,8 @@ export function createAnnouncements(options: {
         /** Whether FLAC encoding finished successfully. */
         encoded,
         /**
-         * Whether there is sound to play: true once the first of it is
-         * encoded, false if the speech failed before any.
+         * Whether there is sound to play: true once `readyLeadMs` of it, or
+         * all of it, is encoded, false if the speech failed before then.
          */
         ready,
         /**

@@ -358,6 +358,49 @@ describe("the Assistant's requests", () => {
     ]);
   });
 
+  it("chimes when a room comes on by its rule, which keeps some lights off", async () => {
+    const answering = (lights: object[]) => ({
+      lights: () => json({ change: "c1", lights }),
+    });
+    const tools = answering([
+      lit("Desk Lamp"),
+      lit("Strip"),
+      lit("Ceiling Light", "skipped", "kept_off"),
+      lit("Test Light", "skipped", "kept_off"),
+    ]);
+    expect((await ask("turn on the office lights", { tools })).replies).toEqual(
+      [{ text: "Office lights on.", confirmation: true }],
+    );
+    expect(
+      (
+        await ask("turn on the office lights", {
+          tools: answering([
+            lit("Desk Lamp", "skipped", "already"),
+            lit("Ceiling Light", "skipped", "kept_off"),
+          ]),
+        })
+      ).replies,
+    ).toEqual([{ text: "Office lights already on." }]);
+    expect(
+      (
+        await ask("turn on the office lights", {
+          tools: answering([lit("Ceiling Light", "skipped", "kept_off")]),
+        })
+      ).replies,
+    ).toEqual([{ text: "Nothing changed." }]);
+    expect(
+      (
+        await ask("turn on the office lights", {
+          tools: answering([
+            lit("Desk Lamp"),
+            lit("Ceiling Light", "skipped", "kept_off"),
+            lit("Shelf", "offline"),
+          ]),
+        })
+      ).replies,
+    ).toEqual([{ text: "Office lights on. Shelf didn't answer." }]);
+  });
+
   it("says which lights couldn't take a brightness change", async () => {
     const { replies } = await ask("set all lights to 40%", {
       tools: {

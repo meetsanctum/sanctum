@@ -119,6 +119,10 @@ const already = (light: LightAnswer) =>
 const offline = (light: LightAnswer) => light.result === "offline";
 const off = (light: LightAnswer) =>
   light.result === "skipped" && light.why === "off";
+// A light the room's rule keeps off when the room comes on, as its Lights
+// tile does: what was asked, not one that missed.
+const keptOff = (light: LightAnswer) =>
+  light.result === "skipped" && light.why === "kept_off";
 
 // What the lights tool did, in a reply.
 function lightsReply(
@@ -138,9 +142,19 @@ function lightsReply(
     return { text: words.allOff(subject) };
   }
   const changed = lights.some(done);
-  const missed = lights.filter((light) => !done(light) && !already(light));
+  const missed = lights.filter(
+    (light) => !done(light) && !already(light) && !keptOff(light),
+  );
   if (missed.length === 0) {
-    return { text: words.changed(subject, state), confirmation: true };
+    if (changed) {
+      return { text: words.changed(subject, state), confirmation: true };
+    }
+    // Nothing switched: those that are on already are, the rest kept off.
+    return {
+      text: lights.some(already)
+        ? words.already(subject, state)
+        : words.nothingChanged,
+    };
   }
   if (!changed && missed.every(off)) {
     return { text: words.nothingChanged };

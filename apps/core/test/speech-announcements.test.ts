@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AnnouncementRefused,
   createAnnouncements,
+  readyLeadMs,
   speakerNetwork,
   type Announcements,
 } from "../src/speech/announcements.js";
@@ -156,6 +157,56 @@ describe("createAnnouncements", () => {
     expect(await made.encoded).toBe(true);
     expect(body.subarray(0, 4).toString()).toBe("fLaC");
     expect(body.length).toBeGreaterThan(42);
+  });
+
+  it("says it's ready once a lead of sound is made, or all of it", async () => {
+    const served = await started();
+    const rate = 22_050;
+    const isReady = async (made: { ready: Promise<boolean> }) =>
+      Promise.race([
+        made.ready,
+        new Promise<"waiting">((resolve) =>
+          setTimeout(() => resolve("waiting"), 50),
+        ),
+      ]);
+
+    // A short first sentence waits for the next before the speaker is told.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const short = served.create(
+      "speaker",
+      network,
+      4180,
+      speech([rate / 2, rate * 3], gate),
+    );
+    expect(await isReady(short)).toBe("waiting");
+    release();
+    expect(await short.ready).toBe(true);
+
+    // A first sentence longer than the lead is played at once.
+    let releaseLong!: () => void;
+    const gateLong = new Promise<void>((resolve) => (releaseLong = resolve));
+    const long = served.create(
+      "other speaker",
+      network,
+      4180,
+      speech([(rate * readyLeadMs) / 1000 + 4_096, rate], gateLong),
+    );
+    try {
+      expect(await isReady(long)).toBe(true);
+    } finally {
+      releaseLong();
+    }
+
+    // All of a reply shorter than the lead is ready once it's made.
+    const brief = served.create(
+      "third speaker",
+      network,
+      4180,
+      speech([4_096, 4_096]),
+    );
+    expect(await brief.ready).toBe(true);
+    expect(await brief.encoded).toBe(true);
   });
 
   it("has the rest wait their turn on a speaker, in order, until what's before them has played", async () => {
