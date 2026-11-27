@@ -1,5 +1,5 @@
 {
-  "version": "0.1.42",
+  "version": "0.1.43",
   "react": "19.3.1",
   "exports": {
     "@meetsanctum/ui-sdk": [
@@ -30,6 +30,8 @@
       "InputOTPGroup",
       "InputOTPSeparator",
       "InputOTPSlot",
+      "Language",
+      "LanguageEntry",
       "LevelSlider",
       "LightControls",
       "LightPicker",
@@ -57,6 +59,7 @@
       "SegmentedControl",
       "SegmentedOption",
       "Slider",
+      "SpeechLanguage",
       "SwipePage",
       "SwipePages",
       "Switch",
@@ -88,12 +91,15 @@
       "frameBridge",
       "isFrameHello",
       "isMotionReduced",
+      "languageIds",
+      "languages",
       "lightColour",
       "mainPage",
       "pressGroups",
       "pressLabel",
       "pressTitle",
       "shownReading",
+      "speechLanguages",
       "startFrame",
       "temperatureUnitOf",
       "tileIconOf",
@@ -2890,6 +2896,7 @@
       "export * from \"./contact-icons\";",
       "export * from \"./device-tile\";",
       "export * from \"./home-clock\";",
+      "export * from \"./languages\";",
       "export * from \"./level-slider\";",
       "export * from \"./light-controls\";",
       "export * from \"./light-picker\";",
@@ -2921,6 +2928,9 @@
       "export { ToggleGroup, ToggleGroupItem } from \"./components/ui/toggle-group\";",
       "export { startFrame } from \"./frame/runtime\";",
       "export * from \"./frame/protocol\";"
+    ],
+    "languages.d.ts": [
+      "export { languageIds, languages, speechLanguages, type Language, type LanguageEntry, type SpeechLanguage, } from \"@meetsanctum/app-sdk/languages\";"
     ],
     "level-slider.d.ts": [
       "import { type ReactNode } from \"react\";",

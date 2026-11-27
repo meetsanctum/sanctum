@@ -72,6 +72,7 @@ export * from "./device-problems.js";
 export * from "./discovery.js";
 export * from "./found-devices.js";
 export * from "./lan.js";
+export * from "./languages.js";
 export * from "./device-categories.js";
 export * from "./device-maintenance.js";
 export * from "./device-pages.js";

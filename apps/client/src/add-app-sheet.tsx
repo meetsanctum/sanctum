@@ -279,6 +279,7 @@ export function AddAppSheet(props: {
         >
           <DialogHeader className="gap-3">
             <AppIcon
+              appId={app.id}
               icon={app.icon ?? plainIcon}
               className="size-12 [&_svg]:size-7"
             />

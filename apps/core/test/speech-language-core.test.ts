@@ -3,6 +3,7 @@ import {
   assistantAppId,
   defineAction,
   defineApp,
+  languages,
   registerPermission,
   type AppContext,
   type AssistantRequest,
@@ -12,7 +13,6 @@ import {
 import { expect, it, vi } from "vitest";
 import { z } from "zod";
 
-import { voices } from "../src/speech/speech.js";
 import { base, running, useCleanUps } from "./app-apart-support.js";
 import { openLive } from "./devices-support.js";
 import { fakeManager } from "./manager-support.js";
@@ -283,7 +283,7 @@ it("learns the language the Assistant sets at once, and asks and replies in it",
     });
     expect(home.said).toContainEqual({
       type: "synthesize",
-      data: { text: "Das Licht ist an.", voice: { name: voices.de } },
+      data: { text: "Das Licht ist an.", voice: { name: languages.de.voice } },
     });
     expect(home.asked.at(-1)).toEqual({ text: words, language: "de" });
     expect(

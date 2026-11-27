@@ -4,7 +4,7 @@ import {
   type AssistantRequest,
   type AssistantRequestInput,
   type ListenRefusal,
-  type RequestLanguage,
+  type SpeechLanguage,
   type RequestReply,
 } from "@meetsanctum/app-sdk";
 
@@ -41,7 +41,7 @@ export const spokenPhrases = {
     en: "Sorry, that didn't work",
     de: "Das hat leider nicht geklappt",
   },
-} as const satisfies Record<string, Record<RequestLanguage, string>>;
+} as const satisfies Record<string, Record<SpeechLanguage, string>>;
 
 /**
  * Hears a run's words and stops listening once speech ends: null when nothing
@@ -51,7 +51,7 @@ export const spokenPhrases = {
 export type Transcriber = (run: {
   sound: AsyncIterable<Buffer>;
   stopListening(): void;
-  language: RequestLanguage;
+  language: SpeechLanguage;
   signal: AbortSignal;
 }) => Promise<SpeechTranscript | string | null>;
 
@@ -103,10 +103,10 @@ export function createSpokenRequests(options: {
   // home's language, or speech recognition isn't ready.
   notHearing?: () => "no_sentences" | "no_speech_to_text";
   // The language speech recognition hears in: the home's one language.
-  language: () => RequestLanguage;
+  language: () => SpeechLanguage;
   // What the speaker says for speech outside the Assistant's sentences, or
   // null for nothing.
-  notUnderstood?: (language: RequestLanguage) => string | null;
+  notUnderstood?: (language: SpeechLanguage) => string | null;
   speaker: (device: string) => Speaker | null;
   // Whether `driver` still drives the device and runs.
   drives: (driver: string, device: string) => boolean;
@@ -130,7 +130,7 @@ export function createSpokenRequests(options: {
         reply(input: {
           device: string;
           text: string;
-          language: RequestLanguage;
+          language: SpeechLanguage;
           confirmation?: boolean;
           signal?: AbortSignal;
           onPlayback?: (finished: boolean) => void;
@@ -138,7 +138,7 @@ export function createSpokenRequests(options: {
         speak(input: {
           device: string;
           text: string;
-          language: RequestLanguage;
+          language: SpeechLanguage;
           actor: { kind: "app"; id: string };
           finishing: true;
           confirmation?: boolean;
@@ -222,7 +222,7 @@ export function createSpokenRequests(options: {
   async function sayLate(
     request: Asking,
     reply: RequestReply,
-    language: RequestLanguage,
+    language: SpeechLanguage,
   ) {
     if (!isCurrent(request)) return false;
     const speech = options.speech();
@@ -256,7 +256,7 @@ export function createSpokenRequests(options: {
   async function prepareReply(
     run: HeardRun,
     reply: RequestReply,
-    language: RequestLanguage,
+    language: SpeechLanguage,
     signal: AbortSignal,
     placeholder = false,
   ) {

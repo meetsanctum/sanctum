@@ -209,6 +209,7 @@ function DidntOpen(props: {
       <EmptyHeader>
         <EmptyMedia className="relative">
           <AppIcon
+            appId={props.app.id}
             icon={props.app.icon ?? plainIcon}
             className="opacity-40 grayscale-60"
           />

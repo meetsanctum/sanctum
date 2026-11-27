@@ -3,7 +3,7 @@ import {
   assistantAppId,
   defineApp,
   earlierExchangeSchema,
-  requestLanguages,
+  languageIds,
   toStaticManifest,
 } from "@meetsanctum/app-sdk";
 import { manifestDigest } from "@meetsanctum/app-sdk/package";
@@ -106,7 +106,7 @@ async function checkTakeover(protocol: number) {
   // Both runners take the client's name. Protocol 25 also takes history.
   const legacy = z.strictObject({
     text: z.string(),
-    language: z.enum(requestLanguages),
+    language: z.enum(languageIds),
     clientName: z.string().min(1),
   });
   const legacyRequestSchema =

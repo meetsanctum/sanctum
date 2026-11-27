@@ -1,4 +1,4 @@
-import type { RequestLanguage } from "./requests.js";
+import type { Language, SpeechLanguage } from "./languages.js";
 import type { SentenceBlank } from "./sentences.js";
 
 // How speech recognition is doing for the home's smart speakers, in the
@@ -40,9 +40,9 @@ export type HearingFailure = (typeof hearingFailures)[number];
 
 export type Hearing = {
   /** The home's selected language. */
-  language: RequestLanguage;
+  language: Language;
   /** What speakers can hear now, or null while they cannot listen. */
-  activeLanguage: RequestLanguage | null;
+  activeLanguage: SpeechLanguage | null;
   /**
    * The blanks whose sentences speech recognition learned without, as the
    * home has more of their names than it can learn with the rest, such as

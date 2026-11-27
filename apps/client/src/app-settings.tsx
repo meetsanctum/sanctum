@@ -222,6 +222,7 @@ export function AppPage(props: {
       <div ref={start} className="flex shrink-0 flex-col gap-3">
         <div className="flex items-center gap-3">
           <AppIcon
+            appId={app.id}
             icon={app.icon ?? plainIcon}
             className="size-12 [&_svg]:size-7"
           />

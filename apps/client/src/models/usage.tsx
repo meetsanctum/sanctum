@@ -254,7 +254,11 @@ export function AppsUsing(props: {
               return (
                 <li key={app.id} className="flex items-center gap-3">
                   {installed?.icon && (
-                    <AppIcon icon={installed.icon} className="size-8" />
+                    <AppIcon
+                      appId={installed.id}
+                      icon={installed.icon}
+                      className="size-8"
+                    />
                   )}
                   <span className="flex min-w-0 flex-1 flex-col gap-px leading-tight">
                     <span className="truncate text-sm font-medium">

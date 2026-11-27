@@ -91,6 +91,7 @@ export function DefaultAppPage(props: {
           <section className="flex flex-col gap-4 rounded-lg bg-card/80 p-6">
             <div className="flex items-center gap-3">
               <AppIcon
+                appId={app.id}
                 icon={defaultPageIcon(app)}
                 className="size-11 [&_svg]:size-6"
               />
