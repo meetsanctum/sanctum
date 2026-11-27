@@ -300,12 +300,14 @@ export type InviteEnded = "expired" | "cancelled";
 /**
  * A person's invite: an invite to sign in for someone without a sign-in,
  * or a reset for someone who forgot their password, whose current one keeps
- * working until the code is used. One per person at most.
+ * working until the code is used. One per person at most. Beside it, a
+ * recovery code: a reset with no end the person makes for themselves, on
+ * their own device, and only their own devices list.
  */
 export type InviteInfo = {
   id: string;
   personId: string;
-  kind: "invite" | "reset";
+  kind: "invite" | "reset" | "recovery";
   createdAt: string;
   endsAt: string;
   /** Why the invite ended, or none while it is active. */

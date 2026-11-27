@@ -372,6 +372,50 @@ describe("joining with an invite code", () => {
   });
 });
 
+describe("Forgot your password?", () => {
+  const forgotField = () =>
+    container.querySelector<HTMLInputElement>(
+      'input[aria-label="Recovery code or password code"]',
+    )!;
+
+  it("asks for a recovery or password code, and says who can make one", async () => {
+    await click("Just me");
+    await click("Forgot your password?");
+
+    expect(title()).toBe("Forgot your password?");
+    expect(container.textContent).toContain(
+      "Enter your recovery code, or a password code someone at home made for you.",
+    );
+    expect(container.textContent).toContain(
+      "No code? Someone at home can make you one on your page in Settings → People.",
+    );
+    expect(document.activeElement).toBe(forgotField());
+    await click("Back");
+    expect(title()).toBe("Sign in to Office");
+  });
+
+  it("welcomes the person back to choose a new password, and signs in", async () => {
+    vi.mocked(checkInviteCode).mockResolvedValue(checked("mayak"));
+    await click("Just me");
+    await click("Forgot your password?");
+    await type(forgotField(), "K7QXM4PD");
+
+    expect(title()).toBe("Welcome back, Maya Keller");
+    expect(container.textContent).toContain(
+      "Choose a new password. It never leaves this device.",
+    );
+    await fill("New password", "staple battery horse");
+    await fill("Repeat new password", "staple battery horse");
+    await click("Sign in");
+    expect(finishJoin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        username: "mayak",
+        password: "staple battery horse",
+      }),
+    );
+  });
+});
+
 describe("a suggested username", () => {
   it("is the first name, as a username", () => {
     expect(suggestedUsername("Maya Keller")).toBe("maya");

@@ -5,13 +5,15 @@ import type { ReactNode, Ref } from "react";
 
 import { Row, Section } from "../components";
 import type { SignIn } from "./data";
-import { untilText } from "./words";
+import { madeText, untilText } from "./words";
 
 // A person's Sign-In card: one thing per row, what it is on the left and
 // its value or its actions on the right, as each device's row is. Someone
 // who signs in has a Username row and a Password row; on your own page
 // Password offers Change password, on anyone else's Reset password. A code
-// waiting for a new password is a row of its own. Someone who doesn't sign
+// waiting for a new password is a row of its own, and on your own page so is
+// your recovery code, which lets you back in if you forget your password and
+// no device is signed in as you. Someone who doesn't sign
 // in, or whose invite is waiting or ended, has one row about it. Removing a
 // sign-in is at the page's foot, with removing the person.
 
@@ -47,7 +49,7 @@ export function SignInCard(props: {
   stale: boolean;
   changeTrigger?: Ref<HTMLButtonElement>;
   onChangePassword: () => void;
-  onInvite: (kind: "invite" | "reset") => void;
+  onInvite: (kind: InviteInfo["kind"]) => void;
   onCancelCode: (code: InviteInfo, trigger: HTMLButtonElement) => void;
 }) {
   const clock = useHomeClock();
@@ -99,6 +101,21 @@ export function SignInCard(props: {
               : !reset &&
                 small("Reset password", () => props.onInvite("reset"))}
           </CardRow>
+          {props.own && (
+            <CardRow
+              title="Recovery code"
+              detail={
+                signIn.recovery
+                  ? madeText(clock, signIn.recovery.createdAt)
+                  : "Lets you back in if you forget your password"
+              }
+              wrapDetail
+            >
+              {small(signIn.recovery ? "Make a new code" : "Make a code", () =>
+                props.onInvite("recovery"),
+              )}
+            </CardRow>
+          )}
           {reset && (
             <CardRow
               title="Password code"

@@ -44,7 +44,9 @@ import { useAuthAttempt } from "./use-auth-attempt";
 // checked as its last character lands, then Welcome, where the person
 // chooses how they'll sign in. Their password never leaves this device.
 // After a reset, the same steps choose a new password, the username kept
-// unless they change it.
+// unless they change it. Forgot your password? on the sign-in screen opens
+// the same steps for a recovery code or a code someone at home made, and
+// welcomes the person back.
 
 const half = pairingCodeLength / 2;
 const slots = Array.from({ length: pairingCodeLength }, (_, index) => index);
@@ -64,6 +66,8 @@ type Step =
 
 export function JoinHome(props: {
   host: FoundHost;
+  // Opened from Forgot your password?, for a recovery or password code.
+  forgot?: boolean;
   onBack: () => void;
   onJoined: (host: StoredHost) => void;
 }) {
@@ -87,6 +91,7 @@ export function JoinHome(props: {
   return (
     <EnterCode
       host={props.host}
+      forgot={props.forgot}
       notice={notice}
       onBack={props.onBack}
       onChecked={(code, checkedHost) => {
@@ -116,6 +121,7 @@ function codeProblemText(error: unknown) {
 
 function EnterCode(props: {
   host: FoundHost;
+  forgot?: boolean;
   notice?: string;
   onBack: () => void;
   onChecked: (code: CheckedCode, checkedHost: CheckedHost) => void;
@@ -161,8 +167,12 @@ function EnterCode(props: {
 
   return (
     <Sheet
-      title={`Join ${props.host.name}`}
-      subtitle="Enter the invite code someone at home gave you."
+      title={props.forgot ? "Forgot your password?" : `Join ${props.host.name}`}
+      subtitle={
+        props.forgot
+          ? "Enter your recovery code, or a password code someone at home made for you."
+          : "Enter the invite code someone at home gave you."
+      }
       back={{
         onBack: () => {
           attempt.cancel();
@@ -180,7 +190,9 @@ function EnterCode(props: {
         <div className="flex flex-col items-center gap-2">
           <InputOTP
             ref={input}
-            aria-label="Invite code"
+            aria-label={
+              props.forgot ? "Recovery code or password code" : "Invite code"
+            }
             aria-describedby={problem ? `${hintId} ${problemId}` : hintId}
             aria-invalid={problem ? true : undefined}
             maxLength={pairingCodeLength}
@@ -221,6 +233,12 @@ function EnterCode(props: {
         </div>
         {working && <SheetStatus>Checking the code…</SheetStatus>}
         {problem && <SheetProblem id={problemId}>{problem}</SheetProblem>}
+        {props.forgot && (
+          <p className="m-0 pt-2 text-center text-[13px] leading-[18px] text-balance text-muted-foreground">
+            No code? Someone at home can make you one on your page in Settings →
+            People.
+          </p>
+        )}
       </form>
     </Sheet>
   );
@@ -303,10 +321,16 @@ function Welcome(props: {
       <SheetProblem id={problemId}>{problem.text}</SheetProblem>
     ) : null;
 
+  // Someone who already signs in chooses a new password.
+  const back = current !== null;
   return (
     <Sheet
-      title={`Welcome, ${person.name}`}
-      subtitle={`Choose how you’ll sign in to ${props.host.name}. Your password never leaves this device.`}
+      title={back ? `Welcome back, ${person.name}` : `Welcome, ${person.name}`}
+      subtitle={
+        back
+          ? "Choose a new password. It never leaves this device."
+          : `Choose how you’ll sign in to ${props.host.name}. Your password never leaves this device.`
+      }
       back={{
         disabled: working,
         onBack: () => {
@@ -332,7 +356,7 @@ function Welcome(props: {
         />
         {problemLine("username")}
         <SheetField
-          label="Password"
+          label={back ? "New password" : "Password"}
           type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
@@ -344,7 +368,7 @@ function Welcome(props: {
         />
         {problemLine("password")}
         <SheetField
-          label="Repeat password"
+          label={back ? "Repeat new password" : "Repeat password"}
           type="password"
           value={repeated}
           onChange={(event) => setRepeated(event.target.value)}
@@ -363,7 +387,13 @@ function Welcome(props: {
             className="mt-3 w-full"
             disabled={working}
           >
-            {working ? <Busy>Joining…</Busy> : "Join"}
+            {working ? (
+              <Busy>{back ? "Signing in…" : "Joining…"}</Busy>
+            ) : back ? (
+              "Sign in"
+            ) : (
+              "Join"
+            )}
           </Button>
           <p className="m-0 text-center text-[13px] leading-[18px] text-muted-foreground">
             You’ll see {props.host.name}’s dashboard next.

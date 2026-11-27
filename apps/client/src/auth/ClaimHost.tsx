@@ -10,13 +10,15 @@ import {
   problemText,
   type CredentialProblem,
 } from "./messages";
-import { rememberSignIn } from "./session";
+import { SaveRecovery } from "./SaveRecovery";
+import { rememberSignIn, selectHost } from "./session";
 import { Busy, Sheet, SheetActions, SheetField, SheetProblem } from "./sheet";
 import { StorageNotice, useSecureStorage } from "./SignIn";
 import { useAuthAttempt } from "./use-auth-attempt";
 
 // Setting up a new host: the first person joins its household. The password
-// is registered on this device and never sent.
+// is registered on this device and never sent. Then they save a recovery
+// code, for if they forget it.
 export function ClaimHost(props: {
   host: FoundHost;
   onBack: () => void;
@@ -29,6 +31,10 @@ export function ClaimHost(props: {
   const [repeated, setRepeated] = useState("");
   const [problem, setProblem] = useState<CredentialProblem>();
   const [working, setWorking] = useState(false);
+  const [claimed, setClaimed] = useState<{
+    stored: StoredHost;
+    personId: string;
+  }>();
   const secure = useSecureStorage();
   const attempt = useAuthAttempt();
   const problemId = useId();
@@ -62,13 +68,26 @@ export function ClaimHost(props: {
         signal,
       );
       signal.throwIfAborted();
-      props.onClaimed(stored);
+      // The recovery code is made as this device, signed in now.
+      selectHost(stored);
+      setClaimed({ stored, personId: signedIn.person.id });
     } catch (error) {
       if (signal.aborted) return;
       setProblem({ text: problemText(error) });
       setWorking(false);
     }
   };
+
+  if (claimed) {
+    return (
+      <SaveRecovery
+        personId={claimed.personId}
+        person={name.trim()}
+        username={username}
+        onContinue={() => props.onClaimed(claimed.stored)}
+      />
+    );
+  }
 
   const problemLine = (field: CredentialProblem["field"]) =>
     problem && problem.field === field ? (

@@ -61,11 +61,27 @@ as you, so the old one isn't needed. See
 Change password shows only on your own page, on your own device. On someone
 else's page, and on a shared device, it is **Reset password**.
 
+## Your recovery code
+
+A recovery code lets you choose a new password if you forget yours, even
+when no device is signed in as you and no one else at home signs in. The
+first person in a home gets one when setting it up.
+
+To make one, open your own page and choose **Make a code** beside
+**Recovery code**, under **Sign-In**. Copy it into a password manager, or
+choose **Print** and keep the page with your important papers: you can't see
+it again after you close it. Anyone who has it can choose a new password for
+you.
+
+**Make a new code** makes another and ends the one you had. The code works
+once, and a password you set yourself leaves it working. Only your own
+devices show it, never someone else's or a shared device.
+
 ## Reset a password
 
 If someone forgets their password, open their page and choose **Reset
 password**. Give them the new code: in the Mac app, they choose **Just
-me**, then **I have an invite code**, enter it and choose a new password.
+me**, then **Forgot your password?**, enter it and choose a new password.
 Their current password keeps working until the code is used, so a reset
 started by mistake changes nothing. To end the code, choose **Cancel code**
 and confirm. It also ends if they change or choose a new password

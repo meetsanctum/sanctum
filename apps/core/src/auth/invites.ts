@@ -26,12 +26,13 @@ import {
   type RedeemStart,
   type RedeemStarted,
 } from "@meetsanctum/auth-protocol";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { randomInt, randomUUID } from "node:crypto";
 
 import type { RecordActivity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
 import type { People } from "../people/people.js";
+import { personalCaller } from "./callers.js";
 import { clientInfo, type Clients, type Principal } from "./clients.js";
 import { codeLookups } from "./code-lookups.js";
 import { AuthError } from "./errors.js";
@@ -84,6 +85,10 @@ type Choosing = {
 
 type Invite = typeof authInvites.$inferSelect;
 
+// A recovery code has no end of its own: it lasts until it's used or
+// replaced. Its row still has a date, far enough away never to arrive.
+const recoveryMs = 100 * 365 * 24 * 60 * 60_000;
+
 export function createInvites(
   db: CoreDatabase,
   options: {
@@ -121,11 +126,30 @@ export function createInvites(
       : undefined;
   }
 
+  // A person's invite or reset; their recovery code stands beside it.
   function inviteOf(personId: string) {
     return db
       .select()
       .from(authInvites)
-      .where(eq(authInvites.personId, personId))
+      .where(
+        and(
+          eq(authInvites.personId, personId),
+          ne(authInvites.kind, "recovery"),
+        ),
+      )
+      .get();
+  }
+
+  function recoveryOf(personId: string) {
+    return db
+      .select()
+      .from(authInvites)
+      .where(
+        and(
+          eq(authInvites.personId, personId),
+          eq(authInvites.kind, "recovery"),
+        ),
+      )
       .get();
   }
 
@@ -159,12 +183,24 @@ export function createInvites(
   }
 
   function checkMake(
+    principal: Principal,
     personId: string,
     kind: InviteInfo["kind"],
     replacesInviteId: string | undefined,
   ) {
     if (!people.get(personId)) {
       throw new AuthError("not_found");
+    }
+    // A recovery code is made by its own person, on their own device, and
+    // replaces the one they had.
+    if (kind === "recovery") {
+      if (personalCaller(principal) !== personId) {
+        throw new AuthError("forbidden");
+      }
+      if (!loginOf(personId)) {
+        throw new AuthError("invite_kind_changed");
+      }
+      return;
     }
     if ((kind === "reset") !== Boolean(loginOf(personId))) {
       throw new AuthError("invite_kind_changed");
@@ -216,9 +252,19 @@ export function createInvites(
   }
 
   return {
-    // Lists active and ended invites with their status.
-    list(): InviteInfo[] {
-      return db.select().from(authInvites).all().map(info);
+    // Lists active and ended invites with their status. A recovery code is
+    // listed only to its own person's devices.
+    list(principal: Principal): InviteInfo[] {
+      const own =
+        principal.client.kind === "personal" ? principal.person?.id : undefined;
+      return db
+        .select()
+        .from(authInvites)
+        .all()
+        .filter(
+          (invite) => invite.kind !== "recovery" || invite.personId === own,
+        )
+        .map(info);
     },
 
     // Restoring a backup must not bring back previously issued codes.
@@ -236,7 +282,7 @@ export function createInvites(
       address: string,
       input: InviteStart,
     ): InviteStarted {
-      checkMake(input.personId, input.kind, input.replacesInviteId);
+      checkMake(principal, input.personId, input.kind, input.replacesInviteId);
       const inviteId = randomUUID();
       // A lookup no invite holds, ended ones included, since those keep
       // theirs to tell a late code it ended.
@@ -279,9 +325,10 @@ export function createInvites(
       if (!entry || entry.clientId !== principal.client.id) {
         throw new AuthError("expired");
       }
+      let replaced: string | undefined;
       const made = db.transaction(() => {
         const kind = entry.inviteKind;
-        checkMake(entry.personId, kind, entry.replacesInviteId);
+        checkMake(principal, entry.personId, kind, entry.replacesInviteId);
         const holder = db
           .select({ personId: authInvites.personId })
           .from(authInvites)
@@ -293,8 +340,19 @@ export function createInvites(
           throw new AuthError("expired");
         }
         const at = now();
+        // An invite or reset replaces the last one; a recovery code, the
+        // last recovery code.
+        const recovery = kind === "recovery";
+        replaced = (recovery ? recoveryOf : inviteOf)(entry.personId)?.id;
         db.delete(authInvites)
-          .where(eq(authInvites.personId, entry.personId))
+          .where(
+            and(
+              eq(authInvites.personId, entry.personId),
+              recovery
+                ? eq(authInvites.kind, "recovery")
+                : ne(authInvites.kind, "recovery"),
+            ),
+          )
           .run();
         const invite = db
           .insert(authInvites)
@@ -306,21 +364,23 @@ export function createInvites(
             registrationRecord: input.registrationRecord,
             keyStretching: input.keyStretching,
             createdAt: at,
-            expiresAt: new Date(at.getTime() + inviteMs),
+            expiresAt: new Date(
+              at.getTime() + (kind === "recovery" ? recoveryMs : inviteMs),
+            ),
           })
           .returning()
           .get();
         record({
           action: "invite.create",
           outcome: "ok",
-          reason: kind === "reset" ? "reset" : undefined,
+          reason: kind === "invite" ? undefined : kind,
           personId: principal.person?.id,
           clientId: principal.client.id,
           subjectId: entry.personId,
         });
         return invite;
       });
-      choosing.drop((choice) => choice.personId === entry.personId);
+      choosing.drop((choice) => choice.inviteId === replaced);
       return info(made);
     },
 
@@ -529,7 +589,7 @@ export function createInvites(
           !person ||
           invite.registrationRecord !== entry.record ||
           endingOf(invite) ||
-          (invite.kind === "reset") !== Boolean(loginOf(entry.personId))
+          (invite.kind !== "invite") !== Boolean(loginOf(entry.personId))
         ) {
           choosing.take(input.redeemId, address);
           throw new AuthError("invite_ended");
@@ -556,7 +616,7 @@ export function createInvites(
         record({
           action: "invite.redeem",
           outcome: "ok",
-          reason: invite.kind === "reset" ? "reset" : undefined,
+          reason: invite.kind === "invite" ? undefined : invite.kind,
           personId: invite.personId,
           clientId: client.id,
           address,

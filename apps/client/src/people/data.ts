@@ -93,19 +93,29 @@ export function usePeople(live: LiveFeed, includeClients = false) {
 
 /** How a person stands with signing in. */
 export type SignIn =
-  | { state: "signs-in"; username: string; reset: InviteInfo | null }
+  | {
+      state: "signs-in";
+      username: string;
+      reset: InviteInfo | null;
+      // Listed only on the person's own devices.
+      recovery: InviteInfo | null;
+    }
   | { state: "invited"; invite: InviteInfo }
   | { state: "invite-ended"; ended: InviteEnded }
   | { state: "none" };
 
 export function signInOf(data: PeopleData, personId: string): SignIn {
   const login = data.logins.find((each) => each.personId === personId);
-  const invite = data.invites.find((each) => each.personId === personId);
+  const mine = data.invites.filter((each) => each.personId === personId);
+  // A recovery code stands beside an invite or reset.
+  const invite = mine.find((each) => each.kind !== "recovery");
+  const recovery = mine.find((each) => each.kind === "recovery");
   if (login) {
     return {
       state: "signs-in",
       username: login.username,
       reset: invite?.kind === "reset" && !invite.ended ? invite : null,
+      recovery: recovery && !recovery.ended ? recovery : null,
     };
   }
   if (invite?.kind === "invite") {
