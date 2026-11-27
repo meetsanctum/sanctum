@@ -6,9 +6,13 @@ import {
   type AgentSetupStatus,
   type AgentTokenCollected,
   type CancelAgentSetup,
+  type CancelInvite,
   type ClaimFinish,
   type ClaimStart,
   type CollectAgentToken,
+  type InviteFinish,
+  type InviteInfo,
+  type InviteStart,
   type Me,
   type PairAnswer,
   type PairApprove,
@@ -19,6 +23,10 @@ import {
   type PairRequest,
   type PasswordFinish,
   type PasswordStart,
+  type RedeemCheck,
+  type RedeemFinish,
+  type RedeemRegister,
+  type RedeemStart,
   type RemoveLogin,
   type RenameClient,
   type RevokeClient,
@@ -112,6 +120,37 @@ const schemas = {
     keyStretching: stretching,
   }) satisfies z.ZodType<SetLoginFinish>,
   removeLogin: z.object({ personId: id }) satisfies z.ZodType<RemoveLogin>,
+  inviteStart: z.object({
+    personId: id,
+    registrationRequest: message,
+  }) satisfies z.ZodType<InviteStart>,
+  inviteFinish: z.object({
+    registrationId: id,
+    registrationRecord: message,
+    keyStretching: stretching,
+  }) satisfies z.ZodType<InviteFinish>,
+  cancelInvite: z.object({ personId: id }) satisfies z.ZodType<CancelInvite>,
+  redeemStart: z.object({
+    lookup: z.string().max(8),
+    startLoginRequest: message,
+  }) satisfies z.ZodType<RedeemStart>,
+  redeemCheck: z.object({
+    redeemId: id,
+    finishLoginRequest: message,
+    binding: message,
+  }) satisfies z.ZodType<RedeemCheck>,
+  redeemRegister: z.object({
+    redeemId: id,
+    username,
+    registrationRequest: message,
+  }) satisfies z.ZodType<RedeemRegister>,
+  redeemFinish: z.object({
+    redeemId: id,
+    registrationRecord: message,
+    keyStretching: stretching,
+    binding: message,
+    client: newClient,
+  }) satisfies z.ZodType<RedeemFinish>,
   passwordStart: z.object({
     startLoginRequest: message,
     registrationRequest: message,
@@ -374,6 +413,59 @@ export async function registerAuth(
     );
     return reply.code(204).send();
   });
+
+  // Invites: any client makes, lists and cancels them; redeeming one needs
+  // no token, as signing in doesn't.
+  const invites = auth.invites;
+  app.get("/api/auth/invites", async (request): Promise<InviteInfo[]> => {
+    principal(request);
+    return invites.list();
+  });
+  app.post("/api/auth/invites/start", async (request) =>
+    invites.start(
+      principal(request),
+      address(request),
+      parse(schemas.inviteStart, request.body),
+    ),
+  );
+  app.post("/api/auth/invites/finish", async (request): Promise<InviteInfo> =>
+    invites.finish(
+      principal(request),
+      address(request),
+      parse(schemas.inviteFinish, request.body),
+    ),
+  );
+  app.post("/api/auth/invites/cancel", async (request, reply) => {
+    invites.cancel(
+      principal(request),
+      parse(schemas.cancelInvite, request.body),
+    );
+    return reply.code(204).send();
+  });
+  app.post("/api/auth/invites/redeem/start", open, async (request) =>
+    invites.redeemStart(
+      address(request),
+      parse(schemas.redeemStart, request.body),
+    ),
+  );
+  app.post("/api/auth/invites/redeem/check", open, async (request) =>
+    invites.redeemCheck(
+      address(request),
+      parse(schemas.redeemCheck, request.body),
+    ),
+  );
+  app.post("/api/auth/invites/redeem/register", open, async (request) =>
+    invites.redeemRegister(
+      address(request),
+      parse(schemas.redeemRegister, request.body),
+    ),
+  );
+  app.post("/api/auth/invites/redeem/finish", open, async (request) =>
+    invites.redeemFinish(
+      address(request),
+      parse(schemas.redeemFinish, request.body),
+    ),
+  );
 
   app.post("/api/auth/password/start", async (request) =>
     logins.passwordStart(

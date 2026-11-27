@@ -414,6 +414,13 @@
       "when": 1795719752811,
       "tag": "0058_pairing-exchange",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "6",
+      "when": 1795739810667,
+      "tag": "0059_invites",
+      "breakpoints": true
     }
   ]
 }

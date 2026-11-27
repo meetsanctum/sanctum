@@ -149,7 +149,7 @@ export type SignInFinish = {
 
 export type SignedIn = {
   token: string;
-  /** The host's MAC over itself and the token; sign-in only, since a claim has nothing to check yet. */
+  /** The host's MAC over itself and the token. Omitted for initial claims. */
   confirmation?: string;
   client: ClientInfo;
   person: PersonInfo;
@@ -277,6 +277,84 @@ export type PasswordFinish = {
   keyStretching: number;
 };
 
+// Inviting a person to sign in (invites.ts). Any client makes, lists and
+// cancels invites; redeeming one needs no token, as signing in doesn't.
+
+/**
+ * Why an invite that wasn't used ended. Too many wrong codes don't end one:
+ * its code rests for a while, so nobody else can end it by guessing.
+ */
+export type InviteEnded = "expired" | "cancelled";
+
+/**
+ * A person's invite: an invite to sign in for someone without a sign-in,
+ * or a reset for someone who forgot their password, whose current one keeps
+ * working until the code is used. One per person at most.
+ */
+export type InviteInfo = {
+  personId: string;
+  kind: "invite" | "reset";
+  createdAt: string;
+  endsAt: string;
+  /** Why the invite ended, or none while it is active. */
+  ended: InviteEnded | null;
+};
+
+export type InviteStart = { personId: string; registrationRequest: string };
+export type InviteStarted = RegistrationStarted & {
+  /** The code's first characters, which find the invite. */
+  lookup: string;
+};
+export type InviteFinish = {
+  registrationId: string;
+  registrationRecord: string;
+  keyStretching: number;
+};
+export type CancelInvite = { personId: string };
+
+// Redeeming takes four calls: OPAQUE's first round with the code's secret,
+// the check that the code and the home are right (the person then sees whose
+// invite it is), the new password's registration, and the end, which saves
+// the new sign-in and creates the device's personal client.
+export type RedeemStart = { lookup: string; startLoginRequest: string };
+export type RedeemStarted = {
+  redeemId: string;
+  loginResponse: string;
+  /** The key-stretching version to use when proving the code. */
+  keyStretching: number;
+};
+export type RedeemCheck = {
+  redeemId: string;
+  finishLoginRequest: string;
+  binding: string;
+};
+export type RedeemChecked = {
+  /** The checked code's, for choosing the username and password. */
+  redeemId: string;
+  person: PersonInfo;
+  /** A reset's current username, which the person may keep. */
+  username: string | null;
+};
+export type RedeemRegister = {
+  redeemId: string;
+  username: string;
+  registrationRequest: string;
+};
+export type RedeemRegistered = {
+  registrationResponse: string;
+  /** The canonical username to use in the finish binding. */
+  username: string;
+};
+export type RedeemFinish = {
+  redeemId: string;
+  registrationRecord: string;
+  keyStretching: number;
+  /** The device's MAC over the host, the username and the new record. */
+  binding: string;
+  client: NewClient;
+};
+export type RedeemFinished = SignedIn & { confirmation: string };
+
 export type AuthErrorCode =
   | "invalid_request"
   | "invalid_client_token"
@@ -294,6 +372,8 @@ export type AuthErrorCode =
   | "claimed"
   | "username_taken"
   | "last_login"
+  // An invite code that was right but can no longer be redeemed.
+  | "invite_ended"
   | "too_many_attempts"
   | "busy"
   | "host_starting"

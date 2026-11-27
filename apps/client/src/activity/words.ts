@@ -595,6 +595,34 @@ function setupEntry(clock: HomeClock, entry: ActivityInfo): Words | null {
       return said(`Removed ${name ? `${name}'s` : "a"} sign-in`);
     case "password.change":
       return said(`Changed ${name ? `${name}'s` : "a"} password`);
+    case "invite.create":
+      return said(
+        entry.reason === "reset"
+          ? `Made ${name ?? "someone"} a code for a new password`
+          : `Invited ${name ?? "someone"} to sign in`,
+      );
+    case "invite.cancel":
+      return said(`Cancelled ${name ? `${name}'s` : "an"} invite`);
+    case "invite.redeem":
+      if (entry.outcome === "ok") {
+        return said(
+          entry.reason === "reset"
+            ? "Chose a new password with a code"
+            : "Joined with an invite code",
+        );
+      }
+      // A right code from a device that wasn't connected directly, one
+      // tried too often, or a check that didn't go through.
+      return {
+        title:
+          entry.reason === "channel_mismatch"
+            ? `A device using an invite code wasn't connected to ${productName} directly`
+            : entry.reason === "too_many_attempts"
+              ? `${name ? `${name}'s` : "An"} invite code was tried too often`
+              : "An invite code didn't check",
+        detail: by,
+        problem: true,
+      };
     case "sign-in":
       return entry.outcome === "ok"
         ? said("Signed in")

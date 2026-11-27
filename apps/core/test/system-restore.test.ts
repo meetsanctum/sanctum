@@ -4,11 +4,12 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { authPairingRequests } from "../src/auth/schema.js";
+import { authInvites, authPairingRequests } from "../src/auth/schema.js";
 import { loadHomeId } from "../src/places/places.js";
 import { home } from "../src/places/schema.js";
 import { restoreMarkerFile } from "../src/system/restore.js";
 import { updatePendingFile } from "../src/update-pending.js";
+import { addPerson, invite } from "./invite-support.js";
 import { approve, checked, device } from "./pairing-support.js";
 import {
   claimed,
@@ -105,6 +106,23 @@ describe("a restore from a backup", () => {
     expect((await get(after, "/api/auth/status")).json()).toMatchObject({
       claimed: true,
     });
+  });
+
+  it("drops invite and password reset codes from the backup", async () => {
+    const before = await testCore();
+    const admin = await claimed(before);
+    const person = await addPerson(before, admin.token, "Jonas");
+    expect((await invite(before, admin.token, person.id)).info?.kind).toBe(
+      "invite",
+    );
+    expect(
+      (await invite(before, admin.token, admin.person.id)).info?.kind,
+    ).toBe("reset");
+    await writeFile(join(before.dataDir, restoreMarkerFile), marker);
+
+    const after = await testCore({ dataDir: before.dataDir });
+
+    expect(after.db.select().from(authInvites).all()).toEqual([]);
   });
 
   it("keeps the home's id, on the same host or another", async () => {

@@ -22,7 +22,7 @@ import {
   type SignInStarted,
 } from "@meetsanctum/auth-protocol";
 import * as opaque from "@serenity-kit/opaque";
-import { and, count, eq, isNotNull } from "drizzle-orm";
+import { and, count, eq, gt, isNotNull, isNull } from "drizzle-orm";
 
 import type { RecordActivity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
@@ -31,7 +31,8 @@ import { personalCaller } from "./callers.js";
 import { clientInfo, type Clients, type Principal } from "./clients.js";
 import { AuthError } from "./errors.js";
 import { createPendingStore, type Limiter, type Limits } from "./limits.js";
-import { authLogins, authServer } from "./schema.js";
+import { createOpaqueServer } from "./opaque-server.js";
+import { authInvites, authLogins, authServer } from "./schema.js";
 
 // Claiming the host, logins and signing in, all through OPAQUE: devices
 // register and check passwords, and the host never sees one.
@@ -106,15 +107,6 @@ export function loadServerSetup(db: CoreDatabase, now: () => Date) {
     .get()!.serverSetup;
 }
 
-// OPAQUE's server functions throw on malformed messages.
-function protocol<T>(step: () => T) {
-  try {
-    return step();
-  } catch {
-    throw new AuthError("invalid_request");
-  }
-}
-
 export function createLogins(
   db: CoreDatabase,
   options: {
@@ -135,6 +127,7 @@ export function createLogins(
   },
 ) {
   const { serverSetup, people, clients, limiter, record, now } = options;
+  const server = createOpaqueServer(serverSetup, limiter);
   const pending = createPendingStore<Pending>({
     limits: options.limits,
     now: () => now().getTime(),
@@ -174,43 +167,9 @@ export function createLogins(
 
   const personal = personalCaller;
 
-  function registrationResponse(name: string, registrationRequest: string) {
-    limiter.work();
-    return protocol(() =>
-      opaque.server.createRegistrationResponse({
-        serverSetup,
-        userIdentifier: name,
-        registrationRequest,
-      }),
-    ).registrationResponse;
-  }
-
-  function startLogin(
-    name: string,
-    record: string | null,
-    startLoginRequest: string,
-  ) {
-    limiter.work();
-    return protocol(() =>
-      opaque.server.startLogin({
-        serverSetup,
-        registrationRecord: record,
-        startLoginRequest,
-        userIdentifier: name,
-      }),
-    );
-  }
-
-  // The session key, or none when the device's last message does not check.
-  function finishLogin(serverLoginState: string, finishLoginRequest: string) {
-    limiter.work();
-    try {
-      return opaque.server.finishLogin({ serverLoginState, finishLoginRequest })
-        .sessionKey;
-    } catch {
-      return undefined;
-    }
-  }
+  const registrationResponse = server.registrationResponse;
+  const startLogin = server.startLogin;
+  const finishLogin = server.finishLogin;
 
   function take<K extends Pending["kind"]>(
     kind: K,
@@ -436,15 +395,27 @@ export function createLogins(
         if (holder && holder.personId !== entry.personId) {
           throw new AuthError("username_taken");
         }
+        const at = now();
         const values = {
           username: entry.username,
           registrationRecord: input.registrationRecord,
           keyStretching: input.keyStretching,
-          updatedAt: now(),
+          updatedAt: at,
         };
         db.insert(authLogins)
           .values({ personId: entry.personId, ...values })
           .onConflictDoUpdate({ target: authLogins.personId, set: values })
+          .run();
+        db.update(authInvites)
+          .set({ endedReason: "cancelled", endedAt: at })
+          .where(
+            and(
+              eq(authInvites.personId, entry.personId),
+              eq(authInvites.kind, "invite"),
+              isNull(authInvites.endedReason),
+              gt(authInvites.expiresAt, at),
+            ),
+          )
           .run();
         record({
           action: "login.set",
@@ -472,6 +443,9 @@ export function createLogins(
         if (isClaimed(db) && countLogins(db) === 0) {
           throw new AuthError("last_login");
         }
+        db.delete(authInvites)
+          .where(eq(authInvites.personId, input.personId))
+          .run();
         record({
           action: "login.remove",
           outcome: "ok",

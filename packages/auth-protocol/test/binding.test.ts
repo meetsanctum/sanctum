@@ -2,6 +2,9 @@ import * as opaque from "@serenity-kit/opaque";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
+  inviteCheckBinding,
+  inviteConfirmation,
+  inviteFinishBinding,
   newPairingSecret,
   pairingBinding,
   pairingConfirmation,
@@ -14,6 +17,9 @@ import {
   verifySignInConfirmation,
   verifyPairingBinding,
   verifyPairingConfirmation,
+  verifyInviteCheckBinding,
+  verifyInviteConfirmation,
+  verifyInviteFinishBinding,
 } from "../src/index.js";
 
 const fast = {
@@ -328,6 +334,67 @@ describe("the pairing exchange", () => {
     const confirmation = await pairingConfirmation(keys.host!, host, ids, "");
     expect(
       await verifyPairingBinding(keys.host!, host, ids, confirmation),
+    ).toBe(false);
+  });
+});
+
+describe("an invite's bindings", () => {
+  it("check out for the host the device saw, and for nothing else", async () => {
+    const setup = opaque.server.createSetup();
+    const keys = signIn(setup, register(setup, "K7QXM4"), "K7QXM4");
+    const record = "the-new-password-record";
+    const check = await inviteCheckBinding(keys.device!, host);
+    const finish = await inviteFinishBinding(
+      keys.device!,
+      host,
+      "jonas",
+      record,
+    );
+    const confirmation = await inviteConfirmation(keys.host!, host, "token");
+
+    expect(await verifyInviteCheckBinding(keys.host!, host, check)).toBe(true);
+    expect(
+      await verifyInviteFinishBinding(
+        keys.host!,
+        host,
+        "jonas",
+        record,
+        finish,
+      ),
+    ).toBe(true);
+    expect(
+      await verifyInviteConfirmation(keys.device!, host, "token", confirmation),
+    ).toBe(true);
+    // Another username, another record or another host doesn't check.
+    expect(
+      await verifyInviteFinishBinding(keys.host!, host, "maya", record, finish),
+    ).toBe(false);
+    expect(
+      await verifyInviteFinishBinding(
+        keys.host!,
+        host,
+        "jonas",
+        "other",
+        finish,
+      ),
+    ).toBe(false);
+    expect(
+      await verifyInviteCheckBinding(
+        keys.host!,
+        { ...host, pin: "interceptor-pin" },
+        check,
+      ),
+    ).toBe(false);
+    // Nor does a MAC made for another exchange: an invite's check is not a
+    // sign-in, and a sign-in's confirmation is not an invite's.
+    expect(await verifySignInBinding(keys.host!, host, check)).toBe(false);
+    expect(
+      await verifyInviteConfirmation(
+        keys.device!,
+        host,
+        "token",
+        await signInConfirmation(keys.host!, host, "token"),
+      ),
     ).toBe(false);
   });
 });

@@ -14,6 +14,7 @@ import {
   isClaimed,
   loadServerSetup,
 } from "./logins.js";
+import { createInvites } from "./invites.js";
 import { createPairing } from "./pairing.js";
 
 // Auth: the module of the core that turns each request's credential into a
@@ -77,6 +78,16 @@ export async function createAuth(
     onClaimed: () => options.onClaimed?.(),
     now,
   });
+  const invites = createInvites(db, {
+    serverSetup: loadServerSetup(db, now),
+    people: options.people,
+    clients,
+    limiter,
+    limits: options.limits,
+    record,
+    host: logins.host,
+    now,
+  });
   const pairing = createPairing(db, {
     clients,
     record,
@@ -137,17 +148,19 @@ export async function createAuth(
       }));
     },
     // Signs every device out after a restore from a backup: every client and
-    // token is revoked and every pairing request dropped, inside the
-    // restore's transaction. Returns how many devices it signed out.
+    // token is revoked, and outstanding codes are dropped inside the restore's
+    // transaction. Returns how many devices it signed out.
     signOutEveryone(at: Date) {
       const count = clients.revokeAll(at);
       pairing.dropAll();
       agentSetups.dropAll();
+      invites.dropAll();
       return count;
     },
     authenticate: clients.authenticate,
     clients,
     logins,
+    invites,
     pairing,
     agentSetups,
     connections,

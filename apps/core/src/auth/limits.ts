@@ -187,6 +187,20 @@ export function createPendingStore<T extends { address: string }>(
       return entry.value;
     },
 
+    // The entry, left in place, for a step that may be repeated before the
+    // last one takes it, such as choosing a username that turns out taken.
+    peek(id: string, address: string): T | undefined {
+      const entry = entries.get(id);
+      if (
+        !entry ||
+        entry.expiresAt <= now() ||
+        addressKey(entry.value.address) !== addressKey(address)
+      ) {
+        return undefined;
+      }
+      return entry.value;
+    },
+
     // Drops every entry a predicate matches, such as a removed login's.
     drop(matches: (value: T) => boolean) {
       for (const [id, entry] of entries) {
