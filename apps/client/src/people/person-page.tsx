@@ -253,7 +253,11 @@ export function PersonPage(props: {
           onOpenChange={setChanging}
           username={signIn.username}
           trigger={changeTrigger}
-          onChanged={() => setChanged(true)}
+          onChanged={() => {
+            setChanged(true);
+            // A code for a new password waiting for you ended with it.
+            void refresh();
+          }}
         />
       )}
       <InviteDialog

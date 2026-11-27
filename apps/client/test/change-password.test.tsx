@@ -406,6 +406,22 @@ describe("Forgot your password?", () => {
     );
   });
 
+  it("reads the page again, as a waiting code for a new password ended", async () => {
+    invites = [resetCode()];
+    vi.mocked(choosePassword).mockImplementation(async () => {
+      invites = [];
+    });
+    await show();
+    expect(button("Cancel code")).toBeDefined();
+    await click("Change password");
+    await click("Forgot your password?");
+    await fill("New password", "staple battery horse");
+    await fill("Repeat new password", "staple battery horse");
+    await submit();
+
+    expect(button("Cancel code")).toBeUndefined();
+  });
+
   it("asks for the current password again next time", async () => {
     await show();
     await click("Change password");
