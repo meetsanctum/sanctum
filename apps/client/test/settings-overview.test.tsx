@@ -182,7 +182,8 @@ it("adds a person and opens their Settings page using the returned ID", async ()
     if (
       path === "/api/auth/logins" ||
       path === "/api/auth/invites" ||
-      path === "/api/auth/clients"
+      path === "/api/auth/clients" ||
+      path === "/api/auth/agents"
     )
       return [] as never;
     if (path === "/api/people/add" && init?.method === "POST") {

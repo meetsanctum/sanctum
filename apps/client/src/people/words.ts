@@ -2,7 +2,11 @@ import {
   calendarDaysBetween,
   type HomeClock,
 } from "@meetsanctum/app-sdk/clock";
-import type { ClientInfo } from "@meetsanctum/auth-protocol";
+import type {
+  AgentInfo,
+  ClientInfo,
+  PersonInfo,
+} from "@meetsanctum/auth-protocol";
 
 import type { SignIn } from "./data";
 
@@ -92,4 +96,20 @@ export function signsOutText(devices: readonly ClientInfo[]) {
     lines.push("This device signs out now.");
   }
   return lines.join(" ");
+}
+
+/**
+ * The AI agents a person added, which go with them: "Maya's AI agent
+ * Claude is removed." Nothing when they added none.
+ */
+export function agentsGoText(agents: readonly AgentInfo[], person: PersonInfo) {
+  const names = agents
+    .filter(({ addedBy }) => addedBy.kind === "person")
+    .filter(({ addedBy }) => addedBy.id === person.id)
+    .map(({ name }) => name);
+  if (names.length === 0) return null;
+  const whose = `${firstName(person.name)}’s`;
+  return names.length === 1
+    ? `${whose} AI agent ${names[0]} is removed.`
+    : `${whose} AI agents ${listed(names)} are removed.`;
 }

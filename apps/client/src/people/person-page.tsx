@@ -25,7 +25,13 @@ import {
   usePeople,
   type SignIn,
 } from "./data";
-import { firstName, signsOutText, untilText, usedText } from "./words";
+import {
+  agentsGoText,
+  firstName,
+  signsOutText,
+  untilText,
+  usedText,
+} from "./words";
 
 // A person's page in Settings → People: their name and colour, how they
 // sign in, the devices signed in as them, and at its foot removing them.
@@ -114,7 +120,7 @@ export function PersonPage(props: {
           : `${name} stays in People.`,
         signsOutText(devices),
         codeEnds,
-        removePerson && `Any agents ${name} added are removed and lose access.`,
+        removePerson && agentsGoText(snapshot.agents, target),
         removePerson && `To add ${name} again, use Add a person.`,
       ]
         .filter(Boolean)

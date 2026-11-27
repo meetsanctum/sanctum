@@ -1,4 +1,5 @@
 import type {
+  AgentInfo,
   ClientInfo,
   InviteEnded,
   InviteInfo,
@@ -11,7 +12,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { coreJson } from "../core-fetch";
 
 // What Settings → People reads: the household, who signs in and their
-// invites, and on a person's page the clients, for their devices. It reads
+// invites, and on a person's page the clients and AI agents, for their
+// devices and what goes with them. It reads
 // again when the shell refreshes, when the activity log says a person
 // changed, and after a change made here; nothing runs while it is still.
 
@@ -22,7 +24,9 @@ export type PeopleData = {
 };
 
 export function usePeople(live: LiveFeed, includeClients = false) {
-  const [data, setData] = useState<PeopleData & { clients: ClientInfo[] }>();
+  const [data, setData] = useState<
+    PeopleData & { clients: ClientInfo[]; agents: AgentInfo[] }
+  >();
   const [failed, setFailed] = useState(false);
   const refreshId = useRef(0);
   const lastApplied = useRef(0);
@@ -30,14 +34,15 @@ export function usePeople(live: LiveFeed, includeClients = false) {
   const refresh = useCallback(async () => {
     const id = ++refreshId.current;
     try {
-      const [people, logins, invites, clients] = await Promise.all([
+      const [people, logins, invites, clients, agents] = await Promise.all([
         coreJson<PersonInfo[]>("/api/people"),
         coreJson<LoginInfo[]>("/api/auth/logins"),
         coreJson<InviteInfo[]>("/api/auth/invites"),
         includeClients ? coreJson<ClientInfo[]>("/api/auth/clients") : [],
+        includeClients ? coreJson<AgentInfo[]>("/api/auth/agents") : [],
       ]);
       // An older read that answers late never replaces a newer one.
-      const loaded = { people, logins, invites, clients };
+      const loaded = { people, logins, invites, clients, agents };
       if (id >= lastApplied.current) {
         lastApplied.current = id;
         setData(loaded);

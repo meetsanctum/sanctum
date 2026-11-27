@@ -9,6 +9,7 @@ import {
   type PeopleData,
 } from "../src/people/data";
 import {
+  agentsGoText,
   firstName,
   peopleSummary,
   signInLine,
@@ -168,5 +169,29 @@ describe("the household's names", () => {
     expect(untilText(clock, "2026-11-30T08:00:00Z", now)).toBe(
       "on 30 Nov at 09:00",
     );
+  });
+});
+
+describe("removing a person", () => {
+  it("names the AI agents they added, and nothing when they added none", () => {
+    const agent = (id: string, name: string, by: string) => ({
+      id,
+      name,
+      platform: "macos" as const,
+      addedBy: { kind: "person" as const, id: by, name: null },
+      createdAt: "2026-11-20T10:00:00Z",
+      lastSeenAt: null,
+    });
+    const maya = household.people[1]!;
+    expect(agentsGoText([agent("a", "Claude", "maya")], maya)).toBe(
+      "Maya’s AI agent Claude is removed.",
+    );
+    expect(
+      agentsGoText(
+        [agent("a", "Claude", "maya"), agent("b", "Codex", "maya")],
+        maya,
+      ),
+    ).toBe("Maya’s AI agents Claude and Codex are removed.");
+    expect(agentsGoText([agent("a", "Claude", "alex")], maya)).toBeNull();
   });
 });

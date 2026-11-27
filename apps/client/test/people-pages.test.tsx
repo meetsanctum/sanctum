@@ -135,6 +135,18 @@ beforeEach(() => {
     if (path === "/api/people") return people as never;
     if (path === "/api/auth/logins") return logins as never;
     if (path === "/api/auth/invites") return invites as never;
+    if (path === "/api/auth/agents") {
+      return [
+        {
+          id: "claude",
+          name: "Claude",
+          platform: "macos",
+          addedBy: { kind: "person", id: "maya", name: "Maya Keller" },
+          createdAt: "2026-11-20T10:00:00Z",
+          lastSeenAt: null,
+        },
+      ] as never;
+    }
     if (path === "/api/auth/clients") {
       if (clientsUnavailable) throw new Error("The device list is unavailable");
       return clients as never;
@@ -406,9 +418,7 @@ describe("a person's page", () => {
     await act(async () => button("Remove Sam")!.click());
     const alert = document.querySelector('[role="dialog"]')!;
     expect(alert.textContent).toContain("To add Sam again, use Add a person.");
-    expect(alert.textContent).toContain(
-      "Any agents Sam added are removed and lose access.",
-    );
+    expect(alert.textContent).not.toContain("AI agent");
     expect(alert.textContent).toContain("The invite code stops working.");
     expect(alert.textContent).not.toContain("sign-in ends");
     await confirm("Remove");
