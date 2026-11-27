@@ -200,6 +200,7 @@ describe("reserving what an add needs", () => {
       await capacity.check("sanctum.zigbee", request, [], plenty),
     ).toMatchObject({
       memoryNeedsMb: 416,
+      servicesMemoryMb: 288,
     });
     await capacity.reserve("sanctum.zigbee", request, [], plenty);
     const held = [{ app: "sanctum.zigbee", memoryMb: 128, isRunning: true }];
@@ -208,6 +209,9 @@ describe("reserving what an add needs", () => {
 
     // A different app wanted the service when Zigbee's container started.
     wanted.push("mosquitto", "zigbee2mqtt");
+    expect(
+      await capacity.check("sanctum.zigbee", request, [], plenty),
+    ).toMatchObject({ memoryNeedsMb: 128, servicesMemoryMb: 288 });
     capacity.started("sanctum.zigbee");
     expect(await capacity.freeMb(held)).toBe(1024 - 416);
     wanted.length = 0;
@@ -303,12 +307,14 @@ describe("its routes", () => {
       "sanctum.weather": {
         memoryNeedsMb: 128,
         memoryFreeMb: 896,
+        servicesMemoryMb: 0,
         dataNeedsMb: 0,
         dataFreeBytes: 0,
       },
       "sanctum.zigbee": {
         memoryNeedsMb: 416,
         memoryFreeMb: 896,
+        servicesMemoryMb: 288,
         dataNeedsMb: 256,
         dataFreeBytes: 0,
       },

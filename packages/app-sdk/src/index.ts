@@ -378,17 +378,12 @@ export type AvailableApp = {
   memory: number;
   data: number;
   /**
-   * What it brings to the home, counted from its manifest: whether it's a
-   * driver, which brings devices, and how many widgets, room sections,
-   * pages in a device's detail and workflow pieces.
+   * The memory allowance of its services, in MB. Null when the manager
+   * cannot say, absent when there are no services.
    */
-  adds: {
-    devices: boolean;
-    widgets: number;
-    roomSections: number;
-    devicePages: number;
-    pieces: number;
-  };
+  servicesMemory?: number | null;
+  /** Whether it's a driver, which brings devices. */
+  adds: { devices: boolean };
   shortfalls: AppShortfall[];
   /**
    * When someone removed it, if they did, and until when its own data is

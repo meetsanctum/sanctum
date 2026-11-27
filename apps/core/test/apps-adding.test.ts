@@ -51,13 +51,7 @@ const esphome: AvailableApp = {
   requests: [],
   memory: 128,
   data: 256,
-  adds: {
-    devices: true,
-    widgets: 0,
-    roomSections: 0,
-    devicePages: 1,
-    pieces: 2,
-  },
+  adds: { devices: true },
   shortfalls: [],
 };
 

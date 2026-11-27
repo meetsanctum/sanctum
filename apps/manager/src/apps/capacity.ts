@@ -133,11 +133,18 @@ export function createCapacity(options: {
     for (const mb of byApp.values()) free -= mb;
     const totalMb = total / mebibyte;
     for (const name of counted) free -= serviceMemoryMb(name, totalMb);
-    let servicesMb = 0;
+    let additionalServicesMb = 0;
+    let servicesMemoryMb = 0;
     for (const name of withServiceDependencies(services)) {
-      if (!counted.has(name)) servicesMb += serviceMemoryMb(name, totalMb);
+      const mb = serviceMemoryMb(name, totalMb);
+      servicesMemoryMb += mb;
+      if (!counted.has(name)) additionalServicesMb += mb;
     }
-    return { memoryFreeMb: Math.max(0, Math.floor(free)), servicesMb };
+    return {
+      memoryFreeMb: Math.max(0, Math.floor(free)),
+      additionalServicesMb,
+      servicesMemoryMb,
+    };
   }
 
   /** The memory left overall, in MB. */
@@ -157,14 +164,12 @@ export function createCapacity(options: {
     held: readonly HeldApp[],
     disk: Awaited<ReturnType<AppImages["available"]>>,
   ) {
-    const { memoryFreeMb, servicesMb } = await memory(
-      held,
-      app,
-      request.services,
-    );
+    const { memoryFreeMb, additionalServicesMb, servicesMemoryMb } =
+      await memory(held, app, request.services);
     return {
-      memoryNeedsMb: request.memoryMb + servicesMb,
+      memoryNeedsMb: request.memoryMb + additionalServicesMb,
       memoryFreeMb,
+      servicesMemoryMb,
       dataNeedsMb: dataNeededMb(request.dataMb, disk.sizeMb(app)),
       dataFreeBytes: disk.room(app),
     };
@@ -213,8 +218,12 @@ export function createCapacity(options: {
     /** Refuses a start the room left can't hold beside the others. */
     async assertFits(app: string, memoryMb: number, held: readonly HeldApp[]) {
       const services = othersOpen().find((each) => each.app === app)?.services;
-      const { memoryFreeMb, servicesMb } = await memory(held, app, services);
-      assertMemory(app, memoryMb + servicesMb, memoryFreeMb);
+      const { memoryFreeMb, additionalServicesMb } = await memory(
+        held,
+        app,
+        services,
+      );
+      assertMemory(app, memoryMb + additionalServicesMb, memoryFreeMb);
     },
 
     // Hold the admission turn until the service is saved and counts as wanted.
@@ -224,12 +233,12 @@ export function createCapacity(options: {
       save: () => Promise<void>,
     ) {
       return inTurn(async () => {
-        const { memoryFreeMb, servicesMb } = await memory(
+        const { memoryFreeMb, additionalServicesMb } = await memory(
           await held(),
           undefined,
           [name],
         );
-        assertMemory(name, servicesMb, memoryFreeMb);
+        assertMemory(name, additionalServicesMb, memoryFreeMb);
         await save();
       });
     },

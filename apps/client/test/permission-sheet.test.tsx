@@ -102,6 +102,35 @@ afterEach(async () => {
 });
 
 describe("the sheet that asks for a permission", () => {
+  it.each([
+    ["lan:tcp:7000", "on port 7000", []],
+    [
+      "lan:tcp:49152-65535",
+      "on any port from 49152 to 65535",
+      ["devices.read:motion"],
+    ],
+  ] as const)(
+    "shows the scope of %s before Allow",
+    async (id, scope, other) => {
+      app = {
+        ...app,
+        requests: [
+          ...app.requests,
+          request(id, "To talk to devices it found."),
+        ],
+      };
+      await render();
+      await act(async () => {
+        void ask(app.id, [id, ...other]);
+      });
+
+      expect(dialog()?.textContent).toContain(
+        `Only the devices it found, ${scope}. To talk to devices it found.`,
+      );
+      expect(granted()).toEqual([]);
+    },
+  );
+
   it("asks for one in Sanctum's words, with the app's reason, and Allow turns it on", async () => {
     let answer: boolean | undefined;
     await act(async () => {
@@ -140,13 +169,13 @@ describe("the sheet that asks for a permission", () => {
     });
 
     expect(dialog()?.querySelector("h2")?.textContent).toBe(
-      "Allow Moods to see your remotes' presses and keep its own automations?",
+      "Allow Moods to see your remotes' presses and keep its own workflows?",
     );
     expect(
       [...dialog()!.querySelectorAll("li")].map((each) => each.textContent),
     ).toEqual([
       "See your remotes' pressesSo a press of a remote can run the mood you chose.",
-      "Keep its own automationsSo presses and motion run what you chose for them.",
+      "Keep its own workflowsSo presses and motion run what you chose for them.",
     ]);
     expect(dialog()?.textContent).toContain(
       "You can switch them off again in Moods settings.",
@@ -180,7 +209,7 @@ describe("the sheet that asks for a permission", () => {
     );
     // What was turned on stays on, and the sheet asks for the rest.
     expect(dialog()?.querySelector("h2")?.textContent).toBe(
-      "Allow Moods to keep its own automations?",
+      "Allow Moods to keep its own workflows?",
     );
     expect(answer).toBeUndefined();
     // Another ask meanwhile waits, and leaves this sheet as it is.

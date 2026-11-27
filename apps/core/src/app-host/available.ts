@@ -1,4 +1,4 @@
-import type { AvailableApp, StaticManifest } from "@meetsanctum/app-sdk";
+import type { AvailableApp } from "@meetsanctum/app-sdk";
 
 import type { AppCapacity } from "../manager-answers.js";
 import type { AppNeed } from "../manager.js";
@@ -11,20 +11,6 @@ import { keptForMs, type RemovedApps } from "./removed.js";
 // added, each at the version the manager staged for it, with what it asks
 // for and what keeps it from being added now. One not staged yet, as just
 // after an update, waits for its package to be listed.
-
-// What it brings to the home, as its add sheet counts it.
-function addsOf({ driver, provides }: StaticManifest): AvailableApp["adds"] {
-  return {
-    devices: driver !== null,
-    widgets: provides.widgets.length,
-    roomSections: provides.roomSections.length,
-    devicePages: provides.devicePages.length,
-    pieces:
-      provides.triggers.length +
-      provides.conditions.length +
-      provides.steps.length,
-  };
-}
 
 export function createAvailableApps(options: {
   // The apps this core's image ships.
@@ -106,7 +92,7 @@ export function createAvailableApps(options: {
             requests: manifest.permissions,
             memory: manifest.runtime.memory,
             data: manifest.runtime.data,
-            adds: addsOf(manifest),
+            adds: { devices: manifest.driver !== null },
             shortfalls: [],
             ...removedOf(appId),
           },
@@ -120,18 +106,26 @@ export function createAvailableApps(options: {
     }
     if (apps.length > 0) {
       const need = options.need ?? needOf;
+      const offers = apps.map((offer) => ({
+        ...offer,
+        need: { app: offer.app.id, ...need(offer.app) },
+      }));
       const capacity = await options
-        .capacity?.(apps.map(({ app }) => ({ app: app.id, ...need(app) })))
+        .capacity?.(offers.map(({ need }) => need))
         .catch(() => null);
       const host = apps.some(({ app }) => !capacity?.[app.id])
         ? await options.host().catch(() => null)
         : null;
-      for (const { app, pkg, pagesNeed } of apps) {
+      for (const { app, pkg, pagesNeed, need } of offers) {
+        const room = capacity?.[app.id];
         app.shortfalls = shortfallsOf(pkg.apart.manifest, {
           pagesNeed,
           host,
-          capacity: capacity?.[app.id],
+          capacity: room,
         });
+        if (need.services.length > 0) {
+          app.servicesMemory = room?.servicesMemoryMb ?? null;
+        }
       }
     }
     return {

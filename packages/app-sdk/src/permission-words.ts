@@ -50,6 +50,12 @@ export type PermissionWords = {
   title: string;
   /** A line under it where one helps, such as who may hold it. */
   detail: string | null;
+  /**
+   * Which one it is, where permissions share a title and detail, as a
+   * network's ports do: an app's settings add it to tell their switches
+   * apart, while the Add sheet shows them as one.
+   */
+  specifics?: string;
   icon: PermissionIcon;
 };
 
@@ -86,11 +92,20 @@ const controls: Record<CapabilityKind, [string, PermissionIcon, string?]> = {
   ],
 };
 
-// The services the manager runs, by the names their makers give them.
-const serviceNames: Record<string, string> = {
-  zigbee2mqtt: "Zigbee2MQTT",
-  mosquitto: "Mosquitto",
-  ollama: "Ollama",
+// The services the manager runs: those a household knows by what they do,
+// and the rest by the names their makers give them.
+const services: Record<string, [string, PermissionIcon]> = {
+  zigbee2mqtt: ["Use your Zigbee stick", "radio-tower"],
+  ollama: ["Run AI models at home", "sparkles"],
+};
+const serviceNames: Record<string, string> = { mosquitto: "Mosquitto" };
+
+/**
+ * What a service keeps on Sanctum beyond the app's own data, where it's more,
+ * as AI models are.
+ */
+export const serviceStorageWords: Readonly<Record<string, string>> = {
+  ollama: "A few GB per model",
 };
 
 // The standard types other apps read, by what they hold.
@@ -131,7 +146,7 @@ const fixed: Record<string, PermissionWords> = {
     icon: "square-plus",
   },
   "workflows.manage": {
-    title: "Keep its own automations",
+    title: "Keep its own workflows",
     detail: null,
     icon: "workflow",
   },
@@ -172,17 +187,22 @@ export function permissionWords(id: string): PermissionWords {
   }
   const range = lanRange(id);
   if (range !== null) {
-    return words(
-      "Talk to devices on your network",
-      "network",
-      range.from === range.to
-        ? `Port ${range.from}, to the devices it found`
-        : `Any port from ${range.from} to ${range.to}, on the devices it found`,
-    );
+    return {
+      ...words(
+        "Talk to devices on your network",
+        "network",
+        "Only the devices it found",
+      ),
+      specifics:
+        range.from === range.to
+          ? `on port ${range.from}`
+          : `on any port from ${range.from} to ${range.to}`,
+    };
   }
   if (kind === "services" && rest) {
+    if (Object.hasOwn(services, rest)) return words(...services[rest]!);
     const name = Object.hasOwn(serviceNames, rest) ? serviceNames[rest]! : rest;
-    return words(`Use ${name}`, "radio-tower", "Only Sanctum's own apps");
+    return words(`Use ${name}`, "radio-tower");
   }
   if (kind === "entities.read" && rest) {
     return words(

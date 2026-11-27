@@ -68,7 +68,7 @@ export function createEsphomeApp(options: DriverOptions = {}) {
     permissions: [
       {
         id: "devices.register",
-        reason: "To add your ESPHome devices and keep their state.",
+        reason: "To add your ESPHome devices and show what they're doing.",
         needed: true,
       },
       {
@@ -78,7 +78,7 @@ export function createEsphomeApp(options: DriverOptions = {}) {
       },
       {
         id: lanPermission(6053),
-        reason: "To talk to the ESPHome devices it found.",
+        reason: "To control them and read their sensors.",
         needed: true,
       },
     ],

@@ -220,13 +220,7 @@ it("opens the app's settings after adding it from a hardware offer", async () =>
     requests: [],
     memory: 128,
     data: 256,
-    adds: {
-      devices: true,
-      widgets: 0,
-      roomSections: 0,
-      devicePages: 0,
-      pieces: 0,
-    },
+    adds: { devices: true },
     shortfalls: [],
   };
   const offer: HardwareOffer = {
@@ -246,7 +240,7 @@ it("opens the app's settings after adding it from a hardware offer", async () =>
   const sheet = document.querySelector('[role="dialog"]');
   expect(sheet?.textContent).toContain("A Zigbee stick was plugged in");
   const add = [...sheet!.querySelectorAll("button")].find(
-    (button) => button.textContent === "Add Example",
+    (button) => button.textContent === "Add",
   );
   await act(async () => add!.click());
 

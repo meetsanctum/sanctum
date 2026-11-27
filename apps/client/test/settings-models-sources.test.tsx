@@ -355,7 +355,9 @@ describe("AI model source dialogs", () => {
     expect(document.body.textContent).toContain(
       "Add the Ollama app, then download a model on its page.",
     );
-    expect(document.body.textContent).toContain("Use Ollama");
+    expect(document.body.textContent).toContain("Run AI models at home");
+    expect(document.body.textContent).toContain("MemoryAbout 4.1 GB");
+    expect(document.body.textContent).toContain("StorageA few GB per model");
     await click(button("Add Ollama"));
     expect(page.requests).toContainEqual([
       "POST",

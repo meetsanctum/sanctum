@@ -35,13 +35,7 @@ const example: AvailableApp = {
   requests: [],
   memory: 128,
   data: 256,
-  adds: {
-    devices: true,
-    widgets: 0,
-    roomSections: 0,
-    devicePages: 0,
-    pieces: 0,
-  },
+  adds: { devices: true },
   shortfalls: [],
 };
 const added = { ...zigbee, id: "sanctum.example", name: "Example" };
@@ -150,7 +144,11 @@ describe("an app offered for devices found", () => {
     await show();
     await press("Example");
 
-    await press("Add Example");
+    await act(async () =>
+      [...sheet()!.querySelectorAll("button")]
+        .find((each) => each.textContent === "Add")!
+        .click(),
+    );
 
     expect(coreJson).toHaveBeenCalledWith("/api/apps/add", {
       method: "POST",

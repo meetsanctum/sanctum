@@ -16,19 +16,23 @@ describe("a permission's words", () => {
     ["devices.read:motion", "Know when there's motion", "activity"],
     ["devices.read:sensor", "See what your sensors read", "thermometer"],
     ["devices.register", "Bring devices into your home", "square-plus"],
-    ["workflows.manage", "Keep its own automations", "workflow"],
+    ["workflows.manage", "Keep its own workflows", "workflow"],
     ["net:api.open-meteo.com", "Reach api.open-meteo.com", "globe"],
     ["entities.read:weather.forecast", "Read the forecast", "share-2"],
   ])("names %s “%s”", (id, title, icon) => {
     expect(permissionWords(id)).toEqual({ title, detail: null, icon });
   });
 
-  it("says who may hold a service", () => {
+  it("names a service by what it does, or by its maker's name", () => {
     expect(permissionWords("services:zigbee2mqtt")).toEqual({
-      title: "Use Zigbee2MQTT",
-      detail: "Only Sanctum's own apps",
+      title: "Use your Zigbee stick",
+      detail: null,
       icon: "radio-tower",
     });
+    expect(permissionWords("services:ollama").title).toBe(
+      "Run AI models at home",
+    );
+    expect(permissionWords("services:mosquitto").title).toBe("Use Mosquitto");
     expect(permissionWords("services:redis").title).toBe("Use redis");
   });
 

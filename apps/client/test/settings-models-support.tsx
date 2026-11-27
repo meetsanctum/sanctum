@@ -76,6 +76,10 @@ const ollamaOffer = {
       startsOn: false,
     },
   ],
+  memory: 128,
+  data: 256,
+  servicesMemory: 4096,
+  adds: { devices: false },
   shortfalls: [],
 };
 let root: Root;

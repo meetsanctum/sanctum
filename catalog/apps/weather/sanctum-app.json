@@ -14,14 +14,14 @@
   "permissions": [
     {
       "id": "places.location",
-      "reason": "To fetch the forecast and sun times for where you live.",
+      "reason": "To get the forecast and sun times there.",
       "needed": true,
       "asked": null,
       "startsOn": false
     },
     {
       "id": "net:api.open-meteo.com",
-      "reason": "To fetch the forecast. Only your home's position is sent.",
+      "reason": "Only your home's location and time zone are sent, to get the forecast.",
       "needed": true,
       "asked": null,
       "startsOn": false

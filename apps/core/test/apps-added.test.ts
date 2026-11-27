@@ -358,8 +358,9 @@ describe("the apps a home could add", () => {
             dataFreeBytes: 0,
           },
           [zigbee]: {
-            memoryNeedsMb: 544,
+            memoryNeedsMb: 256,
             memoryFreeMb: 512,
+            servicesMemoryMb: 288,
             dataNeedsMb: 512,
             dataFreeBytes: null,
           },
@@ -367,15 +368,17 @@ describe("the apps a home could add", () => {
       },
     });
 
-    expect(await apps.list()).toMatchObject([
+    const list = await apps.list();
+    expect(list).toMatchObject([
       { id: weather, shortfalls: [] },
       {
         id: zigbee,
-        shortfalls: [
-          { kind: "memory", needs: 544 * mebibyte, free: 512 * mebibyte },
-        ],
+        // Already counted for admission, still shown on the sheet.
+        servicesMemory: 288,
+        shortfalls: [],
       },
     ]);
+    expect(list[0]).not.toHaveProperty("servicesMemory");
   });
 
   it("counts the services granted before the app was removed", () => {
@@ -410,13 +413,7 @@ describe("the apps a home could add", () => {
         requests: [],
         memory: 128,
         data: 256,
-        adds: {
-          devices: false,
-          widgets: 0,
-          roomSections: 0,
-          devicePages: 0,
-          pieces: 0,
-        },
+        adds: { devices: false },
         shortfalls: [],
       },
       {
@@ -436,13 +433,8 @@ describe("the apps a home could add", () => {
         ],
         memory: 256,
         data: 512,
-        adds: {
-          devices: false,
-          widgets: 0,
-          roomSections: 0,
-          devicePages: 0,
-          pieces: 0,
-        },
+        servicesMemory: null,
+        adds: { devices: false },
         shortfalls: [{ kind: "pages", needs: "pages" }],
       },
     ]);

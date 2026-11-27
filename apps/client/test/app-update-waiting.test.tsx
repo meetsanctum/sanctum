@@ -151,6 +151,27 @@ describe("an update that waits", () => {
     expect(coreJson).not.toHaveBeenCalled();
   });
 
+  it("shows each new LAN port or range before the update is approved", async () => {
+    await show({
+      ...app(),
+      waiting: {
+        ...waiting,
+        needs: ["lan:tcp:7000", "lan:tcp:49152-65535"].map((id) => ({
+          ...waiting.needs[0]!,
+          id,
+          reason: "To talk to devices it found.",
+        })),
+      },
+    });
+    await press("Review");
+
+    const rows = dialog()!.querySelectorAll("li");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.textContent).toContain("on port 7000");
+    expect(rows[1]?.textContent).toContain("on any port from 49152 to 65535");
+    expect(coreJson).not.toHaveBeenCalled();
+  });
+
   it("changes nothing on Not now", async () => {
     await show(app());
     await press("Review");

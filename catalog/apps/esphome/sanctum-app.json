@@ -73,7 +73,7 @@
   "permissions": [
     {
       "id": "devices.register",
-      "reason": "To add your ESPHome devices and keep their state.",
+      "reason": "To add your ESPHome devices and show what they're doing.",
       "needed": true,
       "asked": null,
       "startsOn": false
@@ -87,7 +87,7 @@
     },
     {
       "id": "lan:tcp:6053",
-      "reason": "To talk to the ESPHome devices it found.",
+      "reason": "To control them and read their sensors.",
       "needed": true,
       "asked": null,
       "startsOn": false

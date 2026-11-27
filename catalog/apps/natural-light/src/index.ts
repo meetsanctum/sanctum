@@ -63,12 +63,12 @@ export function createNaturalLightApp(options: NaturalLightOptions = {}) {
     permissions: [
       {
         id: placesLocationPermission,
-        reason: "To follow the sun where your home is.",
+        reason: "To know when the sun rises and sets there.",
         needed: true,
       },
       {
         id: controlPermission("light"),
-        reason: "To bring the lights that follow it to the light of the day.",
+        reason: "To match your lights' colour to daylight.",
         needed: true,
       },
       // Its page lists lights by room, and lists them all together without
