@@ -604,9 +604,13 @@ export function useDevices(live: LiveFeed) {
           const failed = new Set(
             result.failed.map((each) => tileKey(each.device, each.capability)),
           );
-          const failedCommands = commands.filter(([key]) => failed.has(key));
+          const untracked = new Set(failed);
+          const failedCommands = commands.filter(([key]) =>
+            untracked.delete(key),
+          );
           forget(failedCommands);
           failOnce(failedCommands);
+          fail([...untracked]);
           confirmation?.delivered(result.switched, failed);
           return result;
         } catch (error) {
@@ -620,7 +624,7 @@ export function useDevices(live: LiveFeed) {
       };
       return inTurn(place, request);
     },
-    [send, followLights, forget, failOnce, ask, switchLights, inTurn],
+    [send, followLights, forget, failOnce, fail, ask, switchLights, inTurn],
   );
 
   // Read whenever the shell refreshes its live feed, which it first does

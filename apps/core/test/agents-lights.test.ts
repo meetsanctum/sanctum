@@ -2,6 +2,7 @@ import {
   controlPermission,
   defineAction,
   defineApp,
+  turnOnType,
 } from "@meetsanctum/app-sdk";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { z } from "zod";
@@ -222,7 +223,24 @@ describe("AI agents' lights", () => {
   });
 
   it("brings the room up at a brightness while none of its lights is on", async () => {
-    const { client, room, lamp, reading } = await household();
+    const { core, client, room, lamp, reading } = await household();
+    core.entities.publish(examplePackage.app.id, {
+      type: turnOnType.id,
+      key: "living",
+      name: "Living room",
+      state: {
+        placeId: room.id,
+        until: null,
+        lights: [
+          { device: lamp, capability: "light", state: { on: false } },
+          {
+            device: reading,
+            capability: "light",
+            state: { on: true, brightness: 70 },
+          },
+        ],
+      },
+    });
 
     const answer = await call(client, "lights", {
       place: room,
@@ -230,12 +248,15 @@ describe("AI agents' lights", () => {
     });
     await settled();
 
-    for (const light of [lamp, reading]) {
-      expect(results(answer)[light]).toMatchObject({
-        result: done,
-        state: { on: true, brightness: 30 },
-      });
-    }
+    expect(results(answer)[lamp]).toMatchObject({
+      result: "skipped",
+      why: "kept_off",
+      state: { on: false },
+    });
+    expect(results(answer)[reading]).toMatchObject({
+      result: done,
+      state: { on: true, brightness: 30 },
+    });
   });
 
   it("brings every light to a white, at the level of those that are on", async () => {
@@ -259,8 +280,40 @@ describe("AI agents' lights", () => {
     });
   });
 
-  it("brings every light to a colour at the brightness asked", async () => {
+  it("brings colour lights to a colour without changing the room's brightness", async () => {
     const { core, token, client, room, lamp, reading } = await household();
+    await command(core, token, lamp, "light", { on: true, brightness: 60 });
+    await settled();
+
+    const answer = await call(client, "lights", {
+      place: room,
+      set: { hue: 220, saturation: 80 },
+    });
+    expect(answer.isError).toBe(false);
+    for (const light of [lamp, reading]) {
+      expect(results(answer)[light]).toMatchObject({
+        result: done,
+        state: { on: true, brightness: 60, hue: 220, saturation: 80 },
+      });
+    }
+  });
+
+  it("brings colour lights to a colour at the brightness asked", async () => {
+    const { core, token, client, room, lamp, reading } = await household();
+    await radio.add("plain-1", "light", "Plain light", undefined, {
+      brightness: true,
+      colorTemperature: null,
+      color: false,
+    });
+    const plain = (await devicesSeenBy(core, token)).find(
+      (device: { driverName: string }) => device.driverName === "Plain light",
+    ).id as string;
+    await post(
+      core,
+      "/api/devices/update",
+      { id: plain, roomId: room.id },
+      { token },
+    );
     await command(core, token, lamp, "light", { on: true, brightness: 60 });
     await settled();
 
@@ -270,6 +323,15 @@ describe("AI agents' lights", () => {
     });
     await settled();
 
+    expect(answer.content.lights).toContainEqual(
+      expect.objectContaining({
+        device: plain,
+        result: "skipped",
+        why: "unsupported",
+        ignored: ["color"],
+        state: expect.objectContaining({ on: false }),
+      }),
+    );
     for (const light of [lamp, reading]) {
       expect(results(answer)[light]).toMatchObject({
         result: done,
@@ -318,6 +380,8 @@ describe("AI agents' lights", () => {
       { place: room },
       { place: room, to: "on", set: { brightness: 10 } },
       { place: room, set: {} },
+      { place: room, set: { hue: 220 } },
+      { place: room, set: { hue: 220, saturation: 80, colorTemperature: 250 } },
     ]) {
       expect(await call(client, "lights", input)).toMatchObject({
         isError: true,
@@ -328,6 +392,38 @@ describe("AI agents' lights", () => {
 });
 
 describe("putting an AI agent's change back", () => {
+  it.each([
+    { hue: 360, saturation: 79.8 },
+    { hue: 359.8, saturation: 79.8 },
+  ])(
+    "confirms and restores a colour reported in whole degrees and percentages (%j)",
+    async (set) => {
+      const { core, client, lamp } = await household();
+      await radio.press("lamp-1", { on: true, brightness: 60 });
+      radio.confirms = false;
+      const changed = await call(client, "lights", {
+        place: {
+          kind: "lights",
+          lights: [{ device: lamp, capability: "light" }],
+        },
+        set,
+      });
+      await radio.press("lamp-1", { hue: 0, saturation: 80 });
+      expect(core.devices.get(lamp, {})?.capabilities[0]).toMatchObject({
+        sync: "synced",
+        state: { hue: 0, saturation: 80 },
+      });
+
+      radio.confirms = true;
+      const restored = await call(client, "restore", {
+        change: changed.content.change,
+      });
+      expect(restored.content.changed).toMatchObject([
+        { result: done, state: { on: true, colorTemperature: 370 } },
+      ]);
+    },
+  );
+
   it("restores a temperature when the light reports it without a colour mode", async () => {
     const { client, lamp } = await household();
     const changed = await call(client, "lights", {
@@ -466,7 +562,12 @@ describe("putting an AI agent's change back", () => {
 
   it("puts lights back as they were, and says the same when asked again", async () => {
     const { core, token, client, room, lamp, reading } = await household();
-    await command(core, token, lamp, "light", { on: true, brightness: 40 });
+    await command(core, token, lamp, "light", {
+      on: true,
+      brightness: 40,
+      hue: 220,
+      saturation: 80,
+    });
     await settled();
 
     const changed = await call(client, "lights", {
@@ -485,7 +586,13 @@ describe("putting an AI agent's change back", () => {
     );
     expect(byDevice[lamp]).toMatchObject({
       result: done,
-      state: { on: true, brightness: 40 },
+      state: {
+        on: true,
+        brightness: 40,
+        colorMode: "color",
+        hue: 220,
+        saturation: 80,
+      },
     });
     expect(byDevice[reading]).toMatchObject({
       result: done,

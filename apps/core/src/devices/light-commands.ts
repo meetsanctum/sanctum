@@ -47,10 +47,7 @@ export const keyOf = (device: string, capability: string) =>
 
 // What of a set a light can take: a brightness where it dims, a colour
 // temperature within its range, a colour where it has colour; or nothing.
-export function fieldsOf(
-  { capability }: Light,
-  set: LightCommand,
-): LightCommand {
+function fieldsOf({ capability }: Light, set: LightCommand): LightCommand {
   const { features } = capability;
   const fields: LightCommand = {};
   if (features.brightness && set.brightness !== undefined) {

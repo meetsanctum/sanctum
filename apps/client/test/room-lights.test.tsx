@@ -299,6 +299,34 @@ describe("a room's Lights tile", () => {
     ]);
   });
 
+  it("shows the lit light's colour when an off light remembers a different colour", async () => {
+    devices = [
+      officeLight(
+        "desk",
+        { on: false, colorMode: "color", hue: 220, saturation: 100 },
+        withColour,
+      ),
+      officeLight(
+        "shelf",
+        {
+          on: true,
+          brightness: 60,
+          colorMode: "color",
+          hue: 0,
+          saturation: 100,
+        },
+        withColour,
+      ),
+    ];
+    await show();
+    await click(button("Lights in Office, 1 of 2 on · 60%"));
+    await click(button("Colour", dialog()!));
+    expect(button("Red", dialog()!)?.getAttribute("aria-pressed")).toBe("true");
+    expect(button("Blue", dialog()!)?.getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+  });
+
   it("offers only power while every light can do no more than switch", async () => {
     devices = [
       officeLight("desk", { on: true }, plainLight),

@@ -247,6 +247,28 @@ describe("POST /api/devices/lights with a set", () => {
     });
   });
 
+  it("keeps the power and level of an unconfirmed turn-on when a new colour is picked", async () => {
+    const { core, token, living } = await home();
+    const place = { kind: "room", id: living };
+    await radio.press("lamp-1", { on: true, brightness: 35 });
+    radio.confirms = false;
+    await lights(core, token, { place, set: { hue: 220, saturation: 100 } });
+
+    // The ceiling light still reports off after the first request.
+    await radio.press("ceiling-1", { on: false });
+    radio.confirms = true;
+    radio.received.length = 0;
+    await lights(core, token, { place, set: { hue: 220, saturation: 65 } });
+
+    expect(asked()["ceiling-1"]).toEqual({
+      on: true,
+      brightness: 35,
+      hue: 220,
+      saturation: 65,
+    });
+    await settled();
+  });
+
   it.each([
     ["no level", undefined],
     ["a retained zero level", 0],

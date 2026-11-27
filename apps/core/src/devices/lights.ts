@@ -30,7 +30,6 @@ import type { CommandChange, Devices } from "./devices.js";
 import type { HoldDirection, Holds, Remote } from "./holds.js";
 import {
   canDim,
-  fieldsOf,
   isOn,
   keyOf,
   lookOf,
@@ -137,14 +136,26 @@ const request = z.union([
 /** What an AI agent asks of a place's lights. */
 type LightsAsk =
   | { to: "on" | "off" | "brighter" | "dimmer"; set?: undefined }
+  | { to?: undefined; set: LightSetting };
+
+type LightSetting =
   | {
-      to?: undefined;
-      set: {
-        brightness?: number;
-        colorTemperature?: number;
-        hue?: number;
-        saturation?: number;
-      };
+      brightness: number;
+      colorTemperature?: never;
+      hue?: never;
+      saturation?: never;
+    }
+  | {
+      brightness?: number;
+      colorTemperature: number;
+      hue?: never;
+      saturation?: never;
+    }
+  | {
+      brightness?: number;
+      colorTemperature?: never;
+      hue: number;
+      saturation: number;
     };
 
 type SetField = "brightness" | "colorTemperature" | "color";
@@ -374,12 +385,8 @@ export function createLights(options: {
     return { on, ...(await sendAll(switching, send)) };
   }
 
-  // Sets a place's lights together, as a room's Lights tile and its detail
-  // do. A brightness adjusts the look the place has: while any light is on,
-  // only those that are on change, so dimming a mood leaves the lights it
-  // keeps off alone; while none is, the place comes on as its rooms' rules
-  // say, at that level, and 0 turns them off. A colour or a white is the
-  // look the place is to have, so every light takes it (colourWith).
+  // The room tile sends the same commands as an agent. It only needs the
+  // commands from the plan and the total number of lights reached.
   async function setWith(
     place: LightsPlace,
     set: LightsSet,
@@ -390,21 +397,11 @@ export function createLights(options: {
       return switchWith(place, "off", view, send);
     }
     const lights = lightsIn(place, view);
-    if (set.brightness === undefined) {
-      return colourWith(lights, set, send);
-    }
-    const lit = lights.filter(isOn);
-    const sending = lit.length
-      ? lit.flatMap((light) => {
-          const command = fieldsOf(light, set);
-          return Object.keys(command).length ? [{ light, command }] : [];
-        })
-      : turningOn(lights).map(({ light, command }) => {
-          const fields = fieldsOf(light, set);
-          return { light, command: withSettings(command, fields) };
-        });
+    const sending = planSet(lights, set).flatMap(({ light, command }) =>
+      command ? [{ light, command }] : [],
+    );
     const result = await sendAll(sending, send);
-    return { on: lit.length > 0 || result.switched > 0, ...result };
+    return { on: lights.some(isOn) || result.switched > 0, ...result };
   }
 
   // What a light that is off comes on with when a colour or a white is
@@ -412,13 +409,10 @@ export function createLights(options: {
   // the place is even; while none is, the rule's look for the lights its
   // rules bring on and the level of those for the others, or as with
   // nothing to go by where the rules give none.
-  function comingOnFor(lights: readonly Light[]) {
-    const lit = lights.filter(isOn);
-    const byRule = new Map(
-      lit.length
-        ? []
-        : turningOn(lights).map(({ light, command }) => [light, command]),
-    );
+  function comingOnFor(
+    lit: readonly Light[],
+    byRule: ReadonlyMap<Light, LightCommand>,
+  ) {
     const levels = (
       lit.length
         ? lit.filter(canDim).map((light) => light.capability.state?.brightness)
@@ -444,32 +438,6 @@ export function createLights(options: {
           : { on: true });
   }
 
-  // A colour or a white for every light in a place, those that are off
-  // included, even where a room's rule keeps them off: choosing the look
-  // means the whole place in it. Each light that is off comes on as
-  // comingOnFor says. A white brings on a fixed-white light and sets a
-  // colour-only light to zero saturation. A colour leaves a light that
-  // can't show it as it is.
-  async function colourWith(
-    lights: readonly Light[],
-    set: Exclude<LightsSet, { brightness: number }>,
-    send: (light: Light, command: LightCommand) => Promise<unknown>,
-  ): Promise<LightsResult> {
-    const comingOn = comingOnFor(lights);
-    const sending = lights.flatMap((light) => {
-      const fields = lookOf(light, set);
-      const takes = Object.keys(fields).length > 0;
-      if (isOn(light)) return takes ? [{ light, command: fields }] : [];
-      if (!takes && set.colorTemperature === undefined) return [];
-      return [{ light, command: withSettings(comingOn(light), fields) }];
-    });
-    const result = await sendAll(sending, send);
-    return {
-      on: lights.some(isOn) || result.switched > 0,
-      ...result,
-    };
-  }
-
   // Steps each light that can dim one way, from the level last asked of it,
   // or where a remote's hold left it once it says so.
   async function stepWith(
@@ -492,6 +460,7 @@ export function createLights(options: {
   // What an AI agent's ask does to each light in the place that answers: a
   // command, or why it's left alone.
   function planFor(lights: readonly Light[], ask: LightsAsk): Planned[] {
+    if (ask.set) return planSet(lights, ask.set);
     if (ask.to === "off") {
       return lights.map((light) =>
         isOn(light)
@@ -511,35 +480,31 @@ export function createLights(options: {
         };
       });
     }
-    // Turning on and setting go by each room's rule for the lights that are
-    // off, as its lights button does; one the rule keeps off stays off.
-    const comingOn = new Map(
-      turningOn(lights).map(({ light, command }) => [
-        keyOf(light.device.id, light.capability.id),
-        command,
-      ]),
+    const byRule = new Map(
+      turningOn(lights).map(({ light, command }) => [light, command]),
     );
-    const ruleFor = (light: Light) =>
-      comingOn.get(keyOf(light.device.id, light.capability.id));
-    if (ask.to === "on") {
-      return lights.map((light) => {
-        if (isOn(light)) return { light, why: "already" };
-        const command = ruleFor(light);
-        return command ? { light, command } : { light, why: "kept_off" };
-      });
-    }
-    // A set does as on a room's Lights tile. A colour or a white is the
-    // look the place is to have: every light that is off comes on with it,
-    // those its room's rule keeps off too, at the level asked or as
-    // comingOnFor says. A brightness alone adjusts the look the place has:
-    // while any light is on, only those change; while none is, the place
-    // comes on by its rooms' rules at it.
-    const set = ask.set!;
+    return lights.map((light) => {
+      if (isOn(light)) return { light, why: "already" };
+      const command = byRule.get(light);
+      return command ? { light, command } : { light, why: "kept_off" };
+    });
+  }
+
+  // Colour and white bring on lights that can show them, even ones the
+  // room's rule keeps off. A white also brings on fixed-white lights.
+  // Brightness alone changes lights that are on or brings up a dark
+  // place according to its rooms' rules.
+  function planSet(lights: readonly Light[], set: LightSetting): Planned[] {
+    const lit = lights.filter(isOn);
+    const byRule = new Map(
+      lit.length
+        ? []
+        : turningOn(lights).map(({ light, command }) => [light, command]),
+    );
     const look =
       set.colorTemperature !== undefined || set.hue !== undefined
-        ? comingOnFor(lights)
+        ? comingOnFor(lit, byRule)
         : undefined;
-    const anyOn = lights.some(isOn);
     return lights.map((light): Planned => {
       const fields = lookOf(light, set);
       const ignored = (
@@ -557,9 +522,27 @@ export function createLights(options: {
       );
       const partly = ignored.length > 0 ? { ignored } : {};
       const takes = Object.keys(fields).length > 0;
-      // A light that's on gets only what was asked, so a mood's colour
-      // stays when only its brightness was.
       if (isOn(light)) {
+        const { capability } = light;
+        // A replacement look also replaces the retry, so send the power
+        // and level still pending with it.
+        if (
+          look &&
+          takes &&
+          capability.sync === "pending" &&
+          capability.desired?.on === true
+        ) {
+          return {
+            light,
+            command: withSettings(
+              { on: true, brightness: capability.desired.brightness },
+              fields,
+            ),
+            ...partly,
+          };
+        }
+        // A lit light gets only what was asked, so a brightness change
+        // keeps its colour.
         return takes
           ? { light, command: fields, ...partly }
           : { light, why: "unsupported", ignored };
@@ -576,8 +559,8 @@ export function createLights(options: {
           ...partly,
         };
       }
-      if (anyOn) return { light, why: "off" };
-      const rule = ruleFor(light);
+      if (lit.length) return { light, why: "off" };
+      const rule = byRule.get(light);
       if (!rule) return { light, why: "kept_off" };
       return { light, command: withSettings(rule, fields), ...partly };
     });

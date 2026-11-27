@@ -151,10 +151,7 @@ export function createCoreTools(options: CoreToolsOptions) {
     z.strictObject({
       place: lightsPlace,
       set: z.union([
-        z.strictObject({
-          brightness,
-          colorTemperature: colorTemperature.optional(),
-        }),
+        z.strictObject({ brightness }),
         z.strictObject({ brightness: brightness.optional(), colorTemperature }),
         z.strictObject({
           brightness: brightness.optional(),
@@ -172,8 +169,8 @@ export function createCoreTools(options: CoreToolsOptions) {
       description: [
         "Change lights: a room's, a floor's, a zone's, the whole home's, or chosen lights by device and capability, with the ids home_overview gives.",
         "`to` turns them on or off, or steps them brighter or dimmer by a fifth of their range, as a dimmer's press does; dimmer leaves lights that are off alone.",
-        "`set` sets a brightness from 1 to 100, with a white as a colour temperature in mireds (1,000,000 divided by kelvin: 370 is warm white, 250 is neutral) or a colour as hue (0 to 360) and saturation (0 to 100), each kept within what a light can do, as the room's Lights tile does.",
-        "A white or a colour is the look the place is to have: every light takes it, those that are off too, even ones the room's rule keeps off, at the level asked or else at the level of the lights that are on.",
+        "`set` sets a brightness from 1 to 100, a white as a colour temperature in mireds (1,000,000 divided by kelvin: 370 is warm white, 250 is neutral), or a colour as hue (0 to 360) and saturation (0 to 100). Brightness is optional when setting a white or a colour.",
+        "A colour reaches lights that can show it, even those that are off. A white also turns on fixed-white lights. The lights come on at the level asked or else at the level of the lights that are on, even if the room's rule would keep them off.",
         "A brightness alone adjusts the look the place has: while any light is on, only those change, so a mood's other lights stay off; while none is, the place comes on as turning on does, at that level. To light every light brightly, set a white with the brightness.",
         "Turning on goes by the room's own rule, as its lights button does, such as a mood's look or natural light's.",
         "The answer lists every light: sent, confirmed, skipped with why, or offline, and a `change` that restore puts back.",

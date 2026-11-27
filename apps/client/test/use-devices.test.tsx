@@ -503,6 +503,41 @@ describe("commands from here", () => {
     ]);
   });
 
+  it("marks every light the core says failed to take a room white", async () => {
+    act(() => {
+      devices.apply({ type: "places", places });
+      showLight("fixed-on", 60);
+      showLight("tunable-white", 60, "synced", false, true);
+    });
+    const result = deferred<LightsResult>();
+    client.lights.mockReturnValue(result.promise);
+    let setting!: Promise<LightsResult>;
+    act(() => {
+      setting = devices.setLights({ kind: "room", id: "room" }, devices.tiles, {
+        colorTemperature: 333,
+      });
+      showLight("tunable-white", 60, "pending", false, true);
+      showLight("tunable-white", 60, "conflict", false, true);
+    });
+    await act(async () => {
+      result.resolve({
+        on: false,
+        switched: 0,
+        failed: [
+          { device: "fixed-on", capability: "light" },
+          { device: "tunable-white", capability: "light" },
+        ],
+      });
+      await setting;
+    });
+    expect(
+      devices.tiles.map(({ deviceId, failures }) => [deviceId, failures]),
+    ).toEqual([
+      ["fixed-on", 1],
+      ["tunable-white", 1],
+    ]);
+  });
+
   it.each([true, false])(
     "reports a late room failure once only if all deliveries fail to confirm (%s)",
     async (allFail) => {
