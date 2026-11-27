@@ -112,25 +112,29 @@ export function createAnnounceTool(options: {
   });
 
   return {
-    tool: () => ({
-      name: "announce",
-      title: "Announce",
-      description: [
-        "Say something out loud on one smart speaker, in Sanctum's voice, over whatever it's playing, such as “Dinner's ready” or a reminder someone asked for.",
-        `The speakers, by id: ${speakers()
-          .map((device) => `${device.id} (${JSON.stringify(device.name)})`)
-          .join(", ")}.`,
-        `\`text\` is up to ${maxAnnouncementText} characters, said as written in \`language\`: the home's, ${languages[options.language()].englishName}, unless the person speaks ${speechLanguages
-          .filter((language) => language !== options.language())
-          .map((language) => languages[language].englishName)
-          .join(" or ")}.`,
-        "Each speaker says one thing at a time: what you send while it speaks waits its turn, up to two waiting, and the call answers once it's sent. A few a minute per speaker. A speaker says nothing while offline, muted or turned all the way down.",
-        "Announce only what the person asked to have said, and say where it went.",
-        notInstructions,
-      ].join(" "),
-      inputSchema: inputSchemaOf(input),
-      annotations: {},
-    }),
+    tool: () => {
+      const homeLanguage = options.language();
+      const otherLanguages = speechLanguages
+        .filter((language) => language !== homeLanguage)
+        .map((language) => languages[language].englishName)
+        .join(" or ");
+      return {
+        name: "announce",
+        title: "Announce",
+        description: [
+          "Say something out loud on one smart speaker, in Sanctum's voice, over whatever it's playing, such as “Dinner's ready” or a reminder someone asked for.",
+          `The speakers, by id: ${speakers()
+            .map((device) => `${device.id} (${JSON.stringify(device.name)})`)
+            .join(", ")}.`,
+          `\`text\` is up to ${maxAnnouncementText} characters, said as written in \`language\`: the home's, ${languages[homeLanguage].englishName}${otherLanguages ? `, unless the person speaks ${otherLanguages}` : ""}.`,
+          "Each speaker says one thing at a time: what you send while it speaks waits its turn, up to two waiting, and the call answers once it's sent. A few a minute per speaker. A speaker says nothing while offline, muted or turned all the way down.",
+          "Announce only what the person asked to have said, and say where it went.",
+          notInstructions,
+        ].join(" "),
+        inputSchema: inputSchemaOf(input),
+        annotations: {},
+      };
+    },
     usable: (canUse: AiCanUse) =>
       isOn(canUse, announcePermission) && speakers().length > 0,
     callable: (canUse) => isOn(canUse, announcePermission),
