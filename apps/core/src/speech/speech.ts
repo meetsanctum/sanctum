@@ -1,4 +1,10 @@
-import type { Actor, DeviceInfo } from "@meetsanctum/app-sdk";
+import {
+  languages,
+  speechLanguages,
+  type Actor,
+  type DeviceInfo,
+  type SpeechLanguage,
+} from "@meetsanctum/app-sdk";
 
 import { TimedOut, withTimeout } from "../app-host/errors.js";
 import { announcementCapability } from "../devices/announce.js";
@@ -7,19 +13,13 @@ import { speakerNetwork, type Announcements } from "./announcements.js";
 import { listeningRunMs } from "./listening.js";
 import { synthesize, type SpeechAudio } from "./wyoming.js";
 
-// What Sanctum says out loud, in the home's one voice per language. Piper,
+// What Sanctum says out loud, in each language's one voice from the catalog
+// (app-sdk's languages.ts). Piper,
 // a service the manager runs, turns the words into speech; the core encodes
 // it and serves it to the smart speaker that plays it (announcements.ts).
 // Piper runs when the home can use announcements or spoken replies.
 
-/** The voices Sanctum speaks in, each trained on recordings free to use. */
-export const voices = {
-  en: "en_US-norman-medium",
-  de: "de_DE-thorsten-medium",
-} as const;
-export type SpeechLanguage = keyof typeof voices;
 type KeptPhrase = { language: SpeechLanguage; text: string };
-export const speechLanguages = Object.keys(voices) as SpeechLanguage[];
 
 /** The service the manager runs for it. */
 export const speechService = "piper";
@@ -167,7 +167,7 @@ export function createSpeech(options: {
             const spoken = synthesize({
               ...at,
               text: ".",
-              voice: voices[language],
+              voice: languages[language].voice,
               idleMs: 120_000,
               signal,
             });
@@ -361,7 +361,7 @@ export function createSpeech(options: {
       synthesize({
         ...at,
         text,
-        voice: voices[language],
+        voice: languages[language].voice,
         idleMs: speechIdleMs,
         signal,
       });

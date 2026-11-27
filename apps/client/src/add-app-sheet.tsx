@@ -34,9 +34,9 @@ import { formatBytes } from "./system-status";
 // so no app can misstate what it asks for. What keeps it from being added
 // is its title in place of the question, with what would help in place of
 // the lists, and its button, in place of Add, closes the sheet onto the page
-// where that's done. Its other optional permissions are asked where they're first
-// used, as for every app. Add grants what's listed and starts it, and the
-// sheet closes onto its settings.
+// where that's done. Its other optional permissions are asked where they're
+// first used, as for every app. Add grants what's listed and starts the app.
+// Each caller decides what to open after the sheet closes.
 
 const mebibyte = 1024 * 1024;
 
@@ -348,6 +348,7 @@ export function AddAppSheet(props: {
         >
           <DialogHeader className="gap-3">
             <AppIcon
+              appId={app.id}
               icon={app.icon ?? plainIcon}
               className="size-12 [&_svg]:size-7"
             />

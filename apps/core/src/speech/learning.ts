@@ -5,7 +5,7 @@ import {
   type AssistantSentences,
   type Hearing,
   type HearingFailure,
-  type RequestLanguage,
+  type SpeechLanguage,
   type SentenceBlank,
 } from "@meetsanctum/app-sdk";
 
@@ -45,9 +45,9 @@ type Manager = Pick<
   "serviceConnection" | "wantServiceForCore" | "releaseServiceForCore"
 >;
 
-type HomeLesson = Lesson & { language: RequestLanguage };
+type HomeLesson = Lesson & { language: SpeechLanguage };
 type LessonProgress = {
-  language: RequestLanguage;
+  language: SpeechLanguage;
   problem?: HearingFailure;
   phase?: "downloading" | "learning";
 };
@@ -60,7 +60,7 @@ function endpointOf(url: string) {
 }
 
 function lessonWithNames(
-  language: RequestLanguage,
+  language: SpeechLanguage,
   templates: readonly string[],
   names: Record<SentenceBlank, string[]>,
 ): HomeLesson {
@@ -88,7 +88,7 @@ export function createLearning(options: {
   sentences: () => AssistantSentences | null;
   // The home's names for each blank.
   names: () => Record<SentenceBlank, string[]>;
-  language: () => RequestLanguage;
+  language: () => SpeechLanguage;
   // Whether a smart speaker in the home listens.
   speakersListen: () => boolean;
   // For tests: how long after the last change it retrains.
@@ -111,11 +111,11 @@ export function createLearning(options: {
   let admissionProblem: HearingFailure | null = null;
   let managerFailed = false;
   let progress: LessonProgress | null = null;
-  const cachedLanguages = new Set<RequestLanguage>();
+  const cachedLanguages = new Set<SpeechLanguage>();
   let shown: string | null = null;
   let changing: AbortController | null = null;
   let teaching: AbortController | null = null;
-  let submitted: RequestLanguage | null = null;
+  let submitted: SpeechLanguage | null = null;
   let teachAgain = false;
   let retrain: NodeJS.Timeout | undefined;
   let looking: NodeJS.Timeout | undefined;
@@ -125,7 +125,7 @@ export function createLearning(options: {
     return options.sentences()?.[options.language()] ?? null;
   }
 
-  function hearsIn(): RequestLanguage | null {
+  function hearsIn(): SpeechLanguage | null {
     return learned && !recovering && !managerFailed ? learned.language : null;
   }
 

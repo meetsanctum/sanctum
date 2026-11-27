@@ -601,6 +601,9 @@ function setupEntry(clock: HomeClock, entry: ActivityInfo): Words | null {
       return said(`Removed ${name ? `${name}'s` : "a"} sign-in`);
     case "password.change":
       return said(`Changed ${name ? `${name}'s` : "a"} password`);
+    // On a device signed in as them, without the old password.
+    case "password.choose":
+      return said("Chose a new password without the old one");
     case "invite.create":
       return said(
         entry.reason === "reset"

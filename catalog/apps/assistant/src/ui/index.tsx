@@ -1,8 +1,4 @@
-import type {
-  DeviceInfo,
-  Hearing,
-  RequestLanguage,
-} from "@meetsanctum/app-sdk";
+import type { DeviceInfo, Hearing, SpeechLanguage } from "@meetsanctum/app-sdk";
 import {
   Button,
   NativeSelect,
@@ -11,6 +7,8 @@ import {
   PageSection,
   defineAppUi,
   icons,
+  languages,
+  speechLanguages,
   useReducedMotion,
   type PageProps,
 } from "@meetsanctum/ui-sdk";
@@ -23,7 +21,6 @@ import {
   examples,
   firstTry,
   hearingWords,
-  languageNames,
   listeningAudio,
   moodsLeftOut,
   mutedWords,
@@ -39,7 +36,6 @@ import {
 
 const help = "m-0 text-[13px] leading-[18px] text-muted-foreground";
 const card = "flex flex-col gap-3 rounded-xl bg-foreground/5 p-4";
-const languages = Object.keys(languageNames) as RequestLanguage[];
 
 // A bar for a step whose length nobody knows: a segment that slides across
 // and starts again, moved by its transform alone, and held still in the
@@ -73,13 +69,13 @@ function StepBar(props: { label: string }) {
   );
 }
 
-function Ready(props: { language: RequestLanguage; leftOut?: string[] }) {
+function Ready(props: { language: SpeechLanguage; leftOut?: string[] }) {
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-2">
         <icons.Check aria-hidden="true" className="size-4 shrink-0" />
         <span className="text-sm font-medium">
-          Ready in {languageNames[props.language]}
+          Ready in {languages[props.language].name}
         </span>
       </div>
       {props.leftOut?.includes("mood") && (
@@ -244,9 +240,9 @@ function Speakers(props: {
 
 function LanguageMenu(props: {
   id: string;
-  language: RequestLanguage;
+  language: SpeechLanguage;
   isChoosing: boolean;
-  onChoose: (language: RequestLanguage) => void;
+  onChoose: (language: SpeechLanguage) => void;
 }) {
   return (
     <NativeSelect
@@ -255,12 +251,12 @@ function LanguageMenu(props: {
       value={props.language}
       disabled={props.isChoosing}
       onChange={(event) =>
-        props.onChoose(event.currentTarget.value as RequestLanguage)
+        props.onChoose(event.currentTarget.value as SpeechLanguage)
       }
     >
-      {languages.map((language) => (
+      {speechLanguages.map((language) => (
         <NativeSelectOption key={language} value={language} lang={language}>
-          {languageNames[language]}
+          {languages[language].name}
         </NativeSelectOption>
       ))}
     </NativeSelect>
@@ -268,7 +264,7 @@ function LanguageMenu(props: {
 }
 
 function Examples(props: {
-  language: RequestLanguage;
+  language: SpeechLanguage;
   room: string | null;
   withAnythingElse?: boolean;
 }) {
@@ -342,7 +338,7 @@ function MainPage(page: PageProps) {
       </>
     );
   }
-  const choose = async (language: RequestLanguage) =>
+  const choose = async (language: SpeechLanguage) =>
     setChoiceFailed(!(await assistant.choose(language)));
   const { language, activeLanguage } = hearing;
   const onlineSpeakers = speakers.filter(
@@ -423,7 +419,7 @@ function SetupPage(page: PageProps) {
   const assistant = useAssistant();
   const { hearing, speakers, roomName } = assistant;
   const [step, setStep] = useState<1 | 2>(page.params.step === "try" ? 2 : 1);
-  const [chosen, setChosen] = useState<RequestLanguage>();
+  const [chosen, setChosen] = useState<SpeechLanguage>();
   const [choiceFailed, setChoiceFailed] = useState(false);
   const titleId = useId();
   const room = firstRoom(speakers, roomName);

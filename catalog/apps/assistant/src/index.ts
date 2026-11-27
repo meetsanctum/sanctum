@@ -5,7 +5,7 @@ import {
   defineApp,
   placesReadPermission,
   readPermission,
-  requestLanguages,
+  speechLanguages,
 } from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
@@ -25,7 +25,7 @@ const language = defineAction({
   id: "assistant.language",
   title: "Language",
   tier: "write",
-  input: z.object({ language: z.enum(requestLanguages) }),
+  input: z.object({ language: z.enum(speechLanguages) }),
   output: z.object({}),
   async run(ctx, input) {
     await ctx.speech.setLanguage(input.language);

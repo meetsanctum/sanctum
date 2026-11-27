@@ -201,7 +201,9 @@ export function AddSanctum(props: {
         {app ? (
           <>
             <div className="flex items-center gap-3 rounded-md bg-card px-4 py-3">
-              {app.icon && <AppIcon icon={app.icon} className="size-10" />}
+              {app.icon && (
+                <AppIcon appId={app.id} icon={app.icon} className="size-10" />
+              )}
               <span className="flex min-w-0 flex-col gap-0.5 leading-tight">
                 <span className="text-sm font-medium">{app.name}</span>
                 {app.summary && (
