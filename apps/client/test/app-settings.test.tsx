@@ -469,11 +469,12 @@ describe("an app's settings page", () => {
     });
 
     const title = "Talk to devices on your network";
-    const rangeDetail = "Any port from 49152 to 65535, on the devices it found";
+    const rangeDetail =
+      "Only the devices it found, on any port from 49152 to 65535";
     expect(
-      switchFor(`${title}. Port 6053, to the devices it found`).getAttribute(
-        "aria-checked",
-      ),
+      switchFor(
+        `${title}. Only the devices it found, on port 6053`,
+      ).getAttribute("aria-checked"),
     ).toBe("true");
     const rangeSwitch = switchFor(`${title}. ${rangeDetail}`);
     expect(rangeSwitch.getAttribute("aria-checked")).toBe("true");

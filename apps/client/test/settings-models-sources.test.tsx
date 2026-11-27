@@ -355,7 +355,7 @@ describe("AI model source dialogs", () => {
     expect(document.body.textContent).toContain(
       "Add the Ollama app, then download a model on its page.",
     );
-    expect(document.body.textContent).toContain("Use Ollama");
+    expect(document.body.textContent).toContain("Run AI models on Sanctum");
     await click(button("Add Ollama"));
     expect(page.requests).toContainEqual([
       "POST",

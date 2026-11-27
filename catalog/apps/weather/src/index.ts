@@ -39,12 +39,12 @@ export function createWeatherApp(options: WeatherOptions = {}) {
     permissions: [
       {
         id: placesLocationPermission,
-        reason: "To fetch the forecast and sun times for where you live.",
+        reason: "To get the forecast and sun times there.",
         needed: true,
       },
       {
         id: netPermission(openMeteoHost),
-        reason: "To fetch the forecast. Only your home's position is sent.",
+        reason: "Only your home's location is sent, to get the forecast.",
         needed: true,
       },
     ],

@@ -127,11 +127,15 @@ export function createAvailableApps(options: {
         ? await options.host().catch(() => null)
         : null;
       for (const { app, pkg, pagesNeed } of apps) {
+        const room = capacity?.[app.id];
         app.shortfalls = shortfallsOf(pkg.apart.manifest, {
           pagesNeed,
           host,
-          capacity: capacity?.[app.id],
+          capacity: room,
         });
+        // What its services take beyond its own container, for its sheet.
+        const servicesMb = room ? room.memoryNeedsMb - need(app).memoryMb : 0;
+        if (servicesMb > 0) app.servicesMemory = servicesMb;
       }
     }
     return {

@@ -54,7 +54,7 @@ export function createAppleHomeDevicesApp(options: DriverOptions = {}) {
     permissions: [
       {
         id: "devices.register",
-        reason: "To add your Apple TVs and show what they play.",
+        reason: "To add your Apple TVs and HomePods and show what they play.",
         needed: true,
       },
       {
@@ -69,13 +69,14 @@ export function createAppleHomeDevicesApp(options: DriverOptions = {}) {
       },
       {
         id: lanPermission(airplayPort),
-        reason: "To pair with your Apple TVs.",
+        reason:
+          "To pair with your Apple TVs, control them and see what they play.",
         needed: true,
       },
       {
         id: lanRangePermission(lanRangePorts.from, lanRangePorts.to),
         reason:
-          "To control your Apple TVs and see what they play, on the ports each hands out.",
+          "To pair with your Apple TVs, control them and see what they play.",
         needed: true,
       },
     ],

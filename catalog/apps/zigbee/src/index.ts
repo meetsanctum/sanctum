@@ -65,12 +65,12 @@ export function createZigbeeApp(options: BridgeOptions = {}) {
     permissions: [
       {
         id: "services:zigbee2mqtt",
-        reason: "To reach your Zigbee devices through the stick.",
+        reason: "To talk to your Zigbee devices.",
         needed: true,
       },
       {
         id: "devices.register",
-        reason: "To add your Zigbee devices and keep their state.",
+        reason: "To add your Zigbee devices and show what they're doing.",
         needed: true,
       },
     ],

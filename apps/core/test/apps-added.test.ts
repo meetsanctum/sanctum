@@ -367,15 +367,19 @@ describe("the apps a home could add", () => {
       },
     });
 
-    expect(await apps.list()).toMatchObject([
+    const list = await apps.list();
+    expect(list).toMatchObject([
       { id: weather, shortfalls: [] },
       {
         id: zigbee,
+        // What its service takes besides its own memory, for its sheet.
+        servicesMemory: 288,
         shortfalls: [
           { kind: "memory", needs: 544 * mebibyte, free: 512 * mebibyte },
         ],
       },
     ]);
+    expect(list[0]).not.toHaveProperty("servicesMemory");
   });
 
   it("counts the services granted before the app was removed", () => {

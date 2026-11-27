@@ -63,7 +63,8 @@ describe("reaching devices on the network", () => {
     ]);
     expect(permissionWords("lan:tcp:6053")).toEqual({
       title: "Talk to devices on your network",
-      detail: "Port 6053, to the devices it found",
+      detail: "Only the devices it found",
+      specifics: "on port 6053",
       icon: "network",
     });
   });
@@ -106,7 +107,8 @@ describe("reaching devices on the network", () => {
     }
     expect(permissionWords("lan:tcp:49152-65535")).toEqual({
       title: "Talk to devices on your network",
-      detail: "Any port from 49152 to 65535, on the devices it found",
+      detail: "Only the devices it found",
+      specifics: "on any port from 49152 to 65535",
       icon: "network",
     });
   });

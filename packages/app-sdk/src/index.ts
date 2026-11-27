@@ -378,6 +378,11 @@ export type AvailableApp = {
   memory: number;
   data: number;
   /**
+   * The memory the services it starts take besides, in MB, as Ollama's for
+   * its AI models, where the manager says.
+   */
+  servicesMemory?: number;
+  /**
    * What it brings to the home, counted from its manifest: whether it's a
    * driver, which brings devices, and how many widgets, room sections,
    * pages in a device's detail and workflow pieces.

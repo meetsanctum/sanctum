@@ -82,7 +82,7 @@ export default defineApp({
     },
     {
       id: "devices.control:light",
-      reason: "To set your lights when a mood runs.",
+      reason: "To set your lights when you choose a mood.",
       needed: true,
     },
     {

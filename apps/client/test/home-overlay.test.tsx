@@ -246,7 +246,7 @@ it("opens the app's settings after adding it from a hardware offer", async () =>
   const sheet = document.querySelector('[role="dialog"]');
   expect(sheet?.textContent).toContain("A Zigbee stick was plugged in");
   const add = [...sheet!.querySelectorAll("button")].find(
-    (button) => button.textContent === "Add Example",
+    (button) => button.textContent === "Add",
   );
   await act(async () => add!.click());
 

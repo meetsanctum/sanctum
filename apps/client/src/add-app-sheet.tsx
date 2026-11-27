@@ -1,11 +1,14 @@
 import {
   permissionWords,
+  serviceStorageWords,
   type AppInfo,
   type AppShortfall,
   type AvailableApp,
   type PermissionInfo,
+  type PermissionWords,
 } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
+import { HardDrive, MemoryStick, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 
 import { AppIcon, plainIcon } from "./app-icon";
@@ -14,7 +17,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "./components/ui/dialog";
@@ -23,8 +25,9 @@ import { permissionIconOf } from "./permission-icons";
 
 // The sheet that adds an app the home could add, before any of its code
 // runs: what it needs to work, each in Sanctum's words with the app's
-// reason, then what it starts with that it could do without, what it adds
-// and the memory it takes. Every word is Sanctum's, drawn from the manifest,
+// reason, then what it starts with that it could do without, and the memory
+// and storage it takes, side by side above Cancel and Add, the same on every
+// sheet. Every word is Sanctum's, drawn from the manifest,
 // so no app can misstate what it asks for. What keeps it from being added
 // says so in place of the lists, with what would help, and Add can't be
 // pressed. Its other optional permissions are asked where they're first
@@ -42,39 +45,66 @@ export function sizeWords(bytes: number) {
   return `${Math.max(0, Math.floor(megabytes))} MB`;
 }
 
-const counted = ["no", "a", "two", "three", "four", "five", "six"];
-
-// "a widget", "two workflow pieces".
-function many(count: number, one: string, more = `${one}s`) {
-  const number = counted[count] ?? String(count);
-  return `${number} ${count === 1 ? one : more}`;
+/** The memory it may use, with the services it starts, in words. */
+export function memoryWords(app: AvailableApp) {
+  const megabytes = app.memory + (app.servicesMemory ?? 0);
+  return `Up to ${sizeWords(megabytes * mebibyte)}`;
 }
 
-function list(words: readonly string[]) {
-  if (words.length <= 1) return words.join("");
-  return `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`;
+/** What it keeps on Sanctum, its services' where they keep more. */
+export function storageWords(app: AvailableApp) {
+  const service = app.requests
+    .filter((request) => request.needed || request.startsOn)
+    .map((request) => serviceOf(request.id))
+    .find(
+      (name) => name !== undefined && Object.hasOwn(serviceStorageWords, name),
+    );
+  return service
+    ? serviceStorageWords[service]!
+    : `Up to ${sizeWords(app.data * mebibyte)}`;
 }
 
-/** What it adds to the home and the memory it takes, in one or two sentences. */
-export function addsWords(app: AvailableApp) {
-  const { adds } = app;
-  const parts = [
-    ...(adds.devices ? ["devices"] : []),
-    ...(adds.widgets > 0 ? [many(adds.widgets, "widget")] : []),
-    ...(adds.roomSections > 0 ? [many(adds.roomSections, "room section")] : []),
-    ...(adds.devicePages > 0
-      ? [
-          many(
-            adds.devicePages,
-            "page in a device's detail",
-            "pages in devices' detail",
-          ),
-        ]
-      : []),
-    ...(adds.pieces > 0 ? [many(adds.pieces, "workflow piece")] : []),
-  ];
-  const runs = `It uses up to ${app.memory} MB of memory.`;
-  return parts.length > 0 ? `It adds ${list(parts)}. ${runs}` : runs;
+const serviceOf = (permission: string) =>
+  permission.startsWith("services:")
+    ? permission.slice("services:".length)
+    : undefined;
+
+/** Its memory and storage, side by side, the same on every sheet. */
+export function AppSize(props: { app: AvailableApp }) {
+  return (
+    <>
+      <SizeBadge
+        icon={MemoryStick}
+        label="Memory"
+        value={memoryWords(props.app)}
+      />
+      <SizeBadge
+        icon={HardDrive}
+        label="Storage"
+        value={storageWords(props.app)}
+      />
+    </>
+  );
+}
+
+function SizeBadge(props: { icon: LucideIcon; label: string; value: string }) {
+  const Icon = props.icon;
+  return (
+    <div className="flex min-w-0 items-center gap-2 rounded-md bg-muted px-2.5 py-2">
+      <Icon
+        aria-hidden="true"
+        className="size-4 shrink-0 text-muted-foreground"
+      />
+      <span className="flex min-w-0 flex-col leading-tight">
+        <span className="text-[11px] leading-[14px] font-medium text-muted-foreground">
+          {props.label}
+        </span>
+        <span className="text-[13px] leading-[18px] font-medium text-foreground">
+          {props.value}
+        </span>
+      </span>
+    </div>
+  );
 }
 
 /** What keeps it from being added, and what would help, in words. */
@@ -126,15 +156,28 @@ export function addProblemOf(error: unknown, app: AvailableApp) {
   }
 }
 
-/** What an app asks for, each with Sanctum's words for it and its reason. */
+/**
+ * What an app asks for, each with Sanctum's words for it and its reason.
+ * Those that read the same, as two of a network's ports do, are one row.
+ */
 export function Asks(props: { requests: readonly PermissionInfo[] }) {
+  const rows = new Map<
+    string,
+    { id: string; words: PermissionWords; reason: string }
+  >();
+  for (const request of props.requests) {
+    const words = permissionWords(request.id);
+    const key = JSON.stringify([words.title, words.detail, request.reason]);
+    if (!rows.has(key)) {
+      rows.set(key, { id: request.id, words, reason: request.reason });
+    }
+  }
   return (
     <ul className="m-0 flex list-none flex-col gap-3 p-0">
-      {props.requests.map((request) => {
-        const words = permissionWords(request.id);
+      {[...rows.values()].map(({ id, words, reason }) => {
         const Icon = permissionIconOf[words.icon];
         return (
-          <li key={request.id} className="flex items-start gap-3">
+          <li key={id} className="flex items-start gap-3">
             <span
               aria-hidden="true"
               className="flex size-8 shrink-0 items-center justify-center rounded-full bg-foreground/8 text-foreground"
@@ -147,7 +190,7 @@ export function Asks(props: { requests: readonly PermissionInfo[] }) {
               </span>
               <span className="text-[13px] leading-[18px] font-medium">
                 {words.detail && `${words.detail}. `}
-                {request.reason}
+                {reason}
               </span>
             </span>
           </li>
@@ -259,7 +302,6 @@ export function AddAppSheet(props: {
                       <Asks requests={startsOn} />
                     </>
                   )}
-                  <p className="m-0">{addsWords(app)}</p>
                 </div>
               </DialogDescription>
             )}
@@ -269,21 +311,26 @@ export function AddAppSheet(props: {
               {problem}
             </p>
           )}
-          <DialogFooter>
+          {/* Its size, then Cancel and Add under it in the same two
+              columns, so every sheet ends alike. */}
+          <div className="grid grid-cols-2 gap-2">
+            <AppSize app={app} />
             <Button
               variant="outline"
+              className="mt-2"
               disabled={pending !== undefined}
               onClick={() => void close()}
             >
               Cancel
             </Button>
             <Button
+              className="mt-2"
               disabled={pending !== undefined || blocked !== undefined}
               onClick={() => void add()}
             >
-              {pending === "add" ? "Adding…" : `Add ${app.name}`}
+              {pending === "add" ? "Adding…" : "Add"}
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       )}
     </Dialog>

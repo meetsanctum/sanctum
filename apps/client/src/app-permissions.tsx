@@ -3,6 +3,7 @@ import {
   permissionWords,
   type AppInfo,
   type PermissionInfo,
+  type PermissionWords,
 } from "@meetsanctum/app-sdk";
 import { Button, Switch } from "@meetsanctum/ui-sdk";
 import { useState } from "react";
@@ -28,6 +29,11 @@ import { permissionIconOf } from "./permission-icons";
 // answers with the app as it is now, which the shell takes for everything
 // that shows it. An app that acts as the household's AI assistant links
 // straight to What AI agents can use, which limits what it can do.
+
+/** A permission's detail with which one it is, as a port: "…, on port 7000". */
+function detailOf(words: PermissionWords) {
+  return [words.detail, words.specifics].filter(Boolean).join(", ") || null;
+}
 
 /** What went wrong switching a permission, in words, by the core's code. */
 export function problemOf(
@@ -86,6 +92,7 @@ export function PermissionsSection(props: {
       <ul className="m-0 flex list-none flex-col gap-3 p-0">
         {app.requests.map((request) => {
           const words = permissionWords(request.id);
+          const detail = detailOf(words);
           const Icon = permissionIconOf[words.icon];
           const granted =
             pending?.id === request.id
@@ -104,7 +111,7 @@ export function PermissionsSection(props: {
                     rather than cut it short, on a phone too. */}
                 <span className="text-sm font-medium">{words.title}</span>
                 <span className="text-[13px] leading-[18px] font-medium text-muted-foreground">
-                  {words.detail && `${words.detail}. `}
+                  {detail && `${detail}. `}
                   {request.reason}
                   {/* While it's off, when the app asks for it. */}
                   {!granted && request.asked && ` Asked ${request.asked}.`}
@@ -118,9 +125,7 @@ export function PermissionsSection(props: {
               <Switch
                 // Two permissions may share a title, as two ports do: the
                 // detail tells their switches apart.
-                aria-label={
-                  words.detail ? `${words.title}. ${words.detail}` : words.title
-                }
+                aria-label={detail ? `${words.title}. ${detail}` : words.title}
                 checked={granted}
                 disabled={pending !== undefined}
                 onCheckedChange={(next) => {
@@ -161,8 +166,8 @@ export function PermissionsSection(props: {
                 Turn off “{permissionWords(asking.id).title}” for {app.name}?
               </DialogTitle>
               <DialogDescription>
-                {permissionWords(asking.id).detail &&
-                  `${permissionWords(asking.id).detail}. `}
+                {detailOf(permissionWords(asking.id)) &&
+                  `${detailOf(permissionWords(asking.id))}. `}
                 {app.name} needs it to work. It pauses until you turn this back
                 on.
               </DialogDescription>

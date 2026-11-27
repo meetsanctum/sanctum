@@ -161,7 +161,7 @@ describe("a stick plugged in", () => {
     await show();
     expect(callsTo("/api/apps/add")).toEqual([]);
 
-    await act(async () => button("Add Example")!.click());
+    await act(async () => button("Add")!.click());
 
     expect(callsTo("/api/apps/add")).toEqual([
       [
@@ -178,7 +178,7 @@ describe("a stick plugged in", () => {
     const adding = deferred<never>();
     await show();
     vi.mocked(coreJson).mockReturnValueOnce(adding.promise);
-    await act(async () => button("Add Example")!.click());
+    await act(async () => button("Add")!.click());
 
     await hear({ type: "offer", offer: null });
     expect(dialog()).not.toBeNull();

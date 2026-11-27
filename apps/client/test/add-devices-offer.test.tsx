@@ -150,7 +150,11 @@ describe("an app offered for devices found", () => {
     await show();
     await press("Example");
 
-    await press("Add Example");
+    await act(async () =>
+      [...sheet()!.querySelectorAll("button")]
+        .find((each) => each.textContent === "Add")!
+        .click(),
+    );
 
     expect(coreJson).toHaveBeenCalledWith("/api/apps/add", {
       method: "POST",

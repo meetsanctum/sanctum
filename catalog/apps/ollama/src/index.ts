@@ -224,7 +224,7 @@ export function createOllamaApp(options: { fetch?: typeof fetch } = {}) {
     permissions: [
       {
         id: "services:ollama",
-        reason: "To run AI models on Sanctum.",
+        reason: "To answer what's asked without it leaving your home.",
         needed: true,
       },
     ],
