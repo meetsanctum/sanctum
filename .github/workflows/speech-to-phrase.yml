@@ -8,7 +8,6 @@ on:
   pull_request:
     paths: &image-paths
       - "deploy/speech-to-phrase/**"
-      - "packages/app-sdk/src/recognition-models.json"
       - ".github/workflows/speech-to-phrase.yml"
   push:
     branches: [main]
@@ -50,13 +49,6 @@ jobs:
             -e PYTHONPATH=/usr/src/src:/usr/src \
             -v "$PWD/deploy/speech-to-phrase:/checks:ro" \
             sanctum-speech-to-phrase:check -m unittest discover -s /checks
-      - name: Check the language catalog's recognition models
-        run: |
-          docker run --rm --entrypoint python3 \
-            -e PYTHONPATH=/usr/src \
-            -v "$PWD/deploy/speech-to-phrase:/checks:ro" \
-            sanctum-speech-to-phrase:check /checks/recognition_models.py |
-            diff -u packages/app-sdk/src/recognition-models.json -
       - name: Read the pinned model cache key
         id: model
         run: |

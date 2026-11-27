@@ -1,7 +1,5 @@
-import { languages } from "@meetsanctum/app-sdk/languages";
-
-import { stacked } from "../stack.js";
 import type { ServiceSpec } from "./containers.js";
+import { stacked } from "../stack.js";
 
 // Piper on the host, which turns the core's words into speech for smart
 // speakers to play. It speaks Wyoming over TCP and keeps the voices it
@@ -16,6 +14,8 @@ export const piperImage = "rhasspy/wyoming-piper:2.5.4";
 const port = 10200;
 export const piperUrl = `tcp://${stacked("sanctum-piper")}:${port}`;
 export const piperData = stacked("sanctum-piper-data");
+// Trained only on public-domain recordings, as every voice Sanctum asks for.
+export const piperVoice = "en_US-norman-medium";
 
 /** What it holds with one medium voice loaded, and room for a second. */
 export const piperMemoryMb = 512;
@@ -25,7 +25,7 @@ export function piperSpec(): ServiceSpec {
     image: piperImage,
     // The image's entrypoint already listens on every address at this port
     // and keeps voices in /data.
-    cmd: ["--voice", languages.en.voice],
+    cmd: ["--voice", piperVoice],
     volumes: [{ name: piperData, target: "/data" }],
     memoryMb: piperMemoryMb,
   };

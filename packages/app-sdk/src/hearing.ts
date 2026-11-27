@@ -1,4 +1,4 @@
-import type { SpeechLanguage } from "./languages.js";
+import type { Language, SpeechLanguage } from "./languages.js";
 import type { SentenceBlank } from "./sentences.js";
 
 // How speech recognition is doing for the home's smart speakers, in the
@@ -40,7 +40,7 @@ export type HearingFailure = (typeof hearingFailures)[number];
 
 export type Hearing = {
   /** The home's selected language. */
-  language: SpeechLanguage;
+  language: Language;
   /** What speakers can hear now, or null while they cannot listen. */
   activeLanguage: SpeechLanguage | null;
   /**

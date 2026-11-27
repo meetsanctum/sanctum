@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { speechLanguages, type SpeechLanguage } from "./languages.js";
+import { languageIds, type Language } from "./languages.js";
 
 // The sentences Sanctum's Assistant understands when someone speaks to a
 // smart speaker, per language: the core teaches them to speech recognition,
@@ -19,7 +19,7 @@ import { speechLanguages, type SpeechLanguage } from "./languages.js";
 export const sentenceBlanks = ["room", "floor", "light", "mood"] as const;
 export type SentenceBlank = (typeof sentenceBlanks)[number];
 
-export type AssistantSentences = Partial<Record<SpeechLanguage, string[]>>;
+export type AssistantSentences = Partial<Record<Language, string[]>>;
 
 export const sentenceLimits = {
   /** Templates in one language. */
@@ -198,7 +198,7 @@ export function sentenceIssues(
 }
 
 export const assistantSentencesSchema = z.partialRecord(
-  z.enum(speechLanguages),
+  z.enum(languageIds),
   z
     .array(z.string().trim().min(1).max(sentenceLimits.length))
     .min(1)
@@ -210,13 +210,13 @@ export const assistantSentencesSchema = z.partialRecord(
  * Assistant's sentences, such as "I can only help with lights and moods":
  * the Assistant's, since it knows what it understands. Silence gets nothing.
  */
-export type NotUnderstood = Partial<Record<SpeechLanguage, string>>;
+export type NotUnderstood = Partial<Record<Language, string>>;
 
 /** How long a not-understood reply is at most. */
 export const notUnderstoodMaxLength = 200;
 
 export const notUnderstoodSchema = z.partialRecord(
-  z.enum(speechLanguages),
+  z.enum(languageIds),
   z.string().max(notUnderstoodMaxLength).trim().min(1),
 ) satisfies z.ZodType<NotUnderstood>;
 
@@ -232,7 +232,7 @@ export function notUnderstoodIssues(
     ];
   }
   return Object.keys(parsed.data)
-    .filter((language) => !sentences?.[language as SpeechLanguage])
+    .filter((language) => !sentences?.[language as Language])
     .map(
       (language) =>
         `It says what it didn't understand in ${language}, but has no ${language} sentences`,

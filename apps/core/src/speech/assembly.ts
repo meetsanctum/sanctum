@@ -4,6 +4,7 @@ import {
   moodType,
   speechLanguages,
   type Hearing,
+  type Language,
   type SpeechLanguage,
 } from "@meetsanctum/app-sdk";
 
@@ -33,7 +34,7 @@ export function assembleSpeakerAudio(
       speechRetrainAfterMs?: number;
     },
   options: Pick<HearingOptions, "devices" | "apps" | "record"> & {
-    places: HearingOptions["places"] & { language(): SpeechLanguage };
+    places: HearingOptions["places"] & { language(): Language };
     canUse: Pick<AgentsCanUse, "areaOn">;
     // The home's moods, by the standard type whatever app keeps them.
     entities: Pick<Entities, "list">;

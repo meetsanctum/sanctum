@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { speechLanguages, type SpeechLanguage } from "./languages.js";
+import { languageIds, type Language } from "./languages.js";
 
 // A request: what someone types to Sanctum, or says to a smart speaker. The
 // core opens a turn for it and hands it to Sanctum's Assistant, the
@@ -18,15 +18,6 @@ import { speechLanguages, type SpeechLanguage } from "./languages.js";
 
 /** The app every request goes to. */
 export const assistantAppId = "sanctum.assistant";
-
-/** @deprecated Use `speechLanguages` for the current list. */
-export const requestLanguages = [
-  "en",
-  "de",
-] as const satisfies readonly SpeechLanguage[];
-
-/** @deprecated Use `SpeechLanguage` for the current set. */
-export type RequestLanguage = (typeof requestLanguages)[number];
 
 /** How long a request, or a reply, is at most. */
 export const requestTextMaxLength = 2_000;
@@ -74,7 +65,7 @@ export type RequestRoom = { id: string; name: string };
 /** A request before the core adds its earlier exchanges. */
 export type AssistantRequestInput = {
   text: string;
-  language: SpeechLanguage;
+  language: Language;
 } & (
   | { from: RequestFrom<"client">; room: null }
   | {
@@ -149,7 +140,7 @@ const nameSchema = z.string().min(1).max(128);
 
 export const assistantPromptSchema = z.strictObject({
   text: z.string().trim().min(1).max(requestTextMaxLength),
-  language: z.enum(speechLanguages),
+  language: z.enum(languageIds),
 });
 
 const requestWordsSchema = assistantPromptSchema.extend({

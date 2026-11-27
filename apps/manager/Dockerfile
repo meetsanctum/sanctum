@@ -9,14 +9,11 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 # The dependencies' patches, which installing applies.
 COPY patches patches
 COPY apps/manager/package.json apps/manager/package.json
-COPY packages/app-sdk/package.json packages/app-sdk/package.json
-COPY packages/app-sdk/bin packages/app-sdk/bin
 COPY packages/typescript-config/package.json packages/typescript-config/package.json
 RUN pnpm install --filter @meetsanctum/manager... --frozen-lockfile
 
 FROM deps AS build
 COPY packages/typescript-config packages/typescript-config
-COPY packages/app-sdk packages/app-sdk
 COPY apps/manager apps/manager
 RUN pnpm --filter @meetsanctum/manager... build
 RUN pnpm --filter @meetsanctum/manager deploy --prod --legacy /out
