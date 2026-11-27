@@ -166,7 +166,7 @@ export const authAgentSetups = sqliteTable(
 );
 
 export const inviteKinds = ["invite", "reset"] as const;
-export const inviteEndings = ["wrong_code", "cancelled"] as const;
+export const inviteEndings = ["cancelled"] as const;
 
 // Invites to sign in, and password resets: one per person at most. The
 // inviting device draws the code's secret and registers it through OPAQUE,

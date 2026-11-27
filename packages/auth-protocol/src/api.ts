@@ -280,8 +280,11 @@ export type PasswordFinish = {
 // Inviting a person to sign in (invites.ts). Any client makes, lists and
 // cancels invites; redeeming one needs no token, as signing in doesn't.
 
-/** Why an invite that wasn't used ended. */
-export type InviteEnded = "expired" | "wrong_code" | "cancelled";
+/**
+ * Why an invite that wasn't used ended. Too many wrong codes don't end one:
+ * its code rests for a while, so nobody else can end it by guessing.
+ */
+export type InviteEnded = "expired" | "cancelled";
 
 /**
  * A person's invite: an invite to sign in for someone without a sign-in,

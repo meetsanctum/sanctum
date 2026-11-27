@@ -17,9 +17,11 @@ import {
 export const inviteMs = 24 * 60 * 60_000;
 
 /**
- * How many challenges the core issues for an invite before a cooldown.
- * OPAQUE fails a wrong code on the device, which sends nothing more, so the
- * core counts challenges it issues. A successful check clears the count.
+ * How many tries a code gets before it rests for the sign-in limiter's
+ * window. OPAQUE fails a wrong code on the device, which sends nothing more,
+ * so the core counts the tries it starts; a right code clears the count.
+ * Resting, rather than ending, keeps someone guessing lookups from ending
+ * other people's invites.
  */
 export const inviteTries = 5;
 
