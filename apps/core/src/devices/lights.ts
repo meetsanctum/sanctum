@@ -385,8 +385,10 @@ export function createLights(options: {
     return { on, ...(await sendAll(switching, send)) };
   }
 
-  // The room tile sends the same commands as an agent. It only needs the
-  // commands from the plan and the total number of lights reached.
+  // Sets a place's lights together, as a room's Lights tile and its detail
+  // do, with the same plan as an AI agent's set (planSet): a colour or a
+  // white for every light, a brightness for those that are on or the place
+  // brought up by its rules. A brightness of 0 turns them off.
   async function setWith(
     place: LightsPlace,
     set: LightsSet,

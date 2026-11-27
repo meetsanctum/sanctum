@@ -142,10 +142,10 @@ an agent can:
   or set their brightness, a white or a colour. It can do this for a room,
   a floor, a zone, the whole home or chosen lights, as the room's Lights
   tile does. Turning lights on goes by the room's own rule. Setting just
-  the brightness changes lights that are on. If all are off, the room's
-  rule chooses which lights come on at that brightness. A colour reaches
-  lights that can show it, including those that are off. A white also
-  turns on fixed-white lights.
+  the brightness changes the lights that are on. If all are off, the
+  room's rule chooses which lights come on at that brightness. A white
+  brings every light to it, including those that are off, and a colour
+  every light that can show one.
 - **Use your apps:** run a mood, or have lights follow natural light, for
   example.
 - **Put its own change back:** a light it changed goes back to how it was,
