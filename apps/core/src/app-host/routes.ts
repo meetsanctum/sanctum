@@ -7,7 +7,7 @@ import {
   type AppRemoval,
   type AvailableApp,
   type HardwareOffer,
-  type Language,
+  type SpeechLanguage,
   type StaticManifest,
 } from "@meetsanctum/app-sdk";
 import type { FastifyInstance } from "fastify";
@@ -134,7 +134,7 @@ export function registerAppRoutes(
     authenticate: Auth["authenticate"];
     // The home's language for speech, which typed requests are in unless
     // they say otherwise.
-    language: () => Language;
+    language: () => SpeechLanguage;
   },
 ) {
   const { host, available, adding, removing, deleting, offers, gate } = options;

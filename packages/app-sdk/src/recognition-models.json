@@ -1,0 +1,10 @@
+{
+  "en": {
+    "backend": "nemo",
+    "model": "stt_en_parakeet_tdt_ctc_110m"
+  },
+  "de": {
+    "backend": "nemo",
+    "model": "stt_de_citrinet_1024"
+  }
+}

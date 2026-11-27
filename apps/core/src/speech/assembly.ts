@@ -4,7 +4,6 @@ import {
   moodType,
   speechLanguages,
   type Hearing,
-  type Language,
   type SpeechLanguage,
 } from "@meetsanctum/app-sdk";
 
@@ -34,7 +33,7 @@ export function assembleSpeakerAudio(
       speechRetrainAfterMs?: number;
     },
   options: Pick<HearingOptions, "devices" | "apps" | "record"> & {
-    places: HearingOptions["places"] & { language(): Language };
+    places: HearingOptions["places"] & { language(): SpeechLanguage };
     canUse: Pick<AgentsCanUse, "areaOn">;
     // The home's moods, by the standard type whatever app keeps them.
     entities: Pick<Entities, "list">;
@@ -98,10 +97,13 @@ export function assembleSpeakerAudio(
         : (learning?.wanted() ?? false),
     // What the Assistant says for speech it didn't understand, kept ready
     // like "One moment".
-    keptPhrases: () =>
-      Object.entries(assistant()?.notUnderstood ?? {}).map(
-        ([language, text]) => ({ language: language as SpeechLanguage, text }),
-      ),
+    keptPhrases: () => {
+      const replies = assistant()?.notUnderstood;
+      return speechLanguages.flatMap((language) => {
+        const text = replies?.[language];
+        return text === undefined ? [] : [{ language, text }];
+      });
+    },
   });
   const hearing = assembleHearing({
     ...options,

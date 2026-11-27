@@ -39,6 +39,17 @@ The Speech-to-Phrase workflow publishes it for amd64 and arm64 to
 `speech-to-phrase-v*` tag. It changes only when this folder does, so
 it keeps a version of its own.
 
+The SDK's language catalog uses the models reported by the image. To refresh
+the catalog's model list after building the image, run this from the repository root.
+
+```bash
+docker run --rm --entrypoint python3 \
+  -e PYTHONPATH=/usr/src \
+  -v "$PWD/deploy/speech-to-phrase:/checks:ro" \
+  sanctum-speech-to-phrase /checks/recognition_models.py \
+  > packages/app-sdk/src/recognition-models.json
+```
+
 ## Licences
 
 - **Speech-to-Phrase** and the recognition library it vendors are under the

@@ -1,4 +1,4 @@
-import type { Language, TemperatureUnit } from "@meetsanctum/app-sdk";
+import type { SpeechLanguage, TemperatureUnit } from "@meetsanctum/app-sdk";
 import type { HourCycle } from "@meetsanctum/app-sdk/clock";
 import {
   index,
@@ -41,7 +41,7 @@ export const home = sqliteTable("home", {
   hourCycle: text("hour_cycle").$type<HourCycle>().notNull().default("24h"),
   // The home's one language for speech, which Sanctum's Assistant sets:
   // what smart speakers hear and Sanctum's voice says.
-  language: text("language").$type<Language>().notNull().default("en"),
+  language: text("language").$type<SpeechLanguage>().notNull().default("en"),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
 
