@@ -14,6 +14,9 @@ it.each(["unknown-glyph", "constructor"])(
 
 describe("approved app artwork", () => {
   it.each([
+    ["tv", "graphite", "apple-home-devices"],
+    ["cpu", "graphite", "esphome"],
+    ["cpu", "iris", "ollama"],
     ["settings", "graphite", "settings"],
     ["swatch-book", "ember", "moods"],
     ["sparkles", "blossom", "automations"],
