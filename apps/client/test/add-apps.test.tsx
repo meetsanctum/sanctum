@@ -166,7 +166,7 @@ describe("Add apps", () => {
       row.textContent?.startsWith("See your smart speakers"),
     );
     expect(speakerPermission?.textContent).toContain(
-      "See whether their microphones are muted and when they last heard their wake word. To list your smart speakers on its page.",
+      "Whether their microphones are muted and when they last heard their wake word. To list your smart speakers on its page.",
     );
     expect(sheet.textContent).toContain(
       "It starts with this too, which you can switch off in its settings:",

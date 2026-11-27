@@ -88,7 +88,7 @@
   "permissions": [
     {
       "id": "ai.assistant",
-      "reason": "To turn on or dim your lights when you ask.",
+      "reason": "To control your lights when you ask.",
       "needed": true,
       "asked": null,
       "startsOn": false

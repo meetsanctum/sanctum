@@ -46,7 +46,7 @@ export const app = defineApp({
   permissions: [
     {
       id: aiAssistantPermission,
-      reason: "To turn on or dim your lights when you ask.",
+      reason: "To control your lights when you ask.",
       needed: true,
     },
     {

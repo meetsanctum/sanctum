@@ -614,7 +614,7 @@ describe("What AI agents can use", () => {
       "aria-describedby",
     );
     expect(document.getElementById(detailId!)?.textContent).toBe(
-      "See whether their microphones are muted and when they last heard their wake word",
+      "Whether their microphones are muted and when they last heard their wake word",
     );
   });
 

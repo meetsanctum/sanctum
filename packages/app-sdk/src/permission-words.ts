@@ -67,7 +67,7 @@ const reads: Record<CapabilityKind, [string, PermissionIcon, string?]> = {
   audio: [
     "See your smart speakers",
     "mic",
-    "See whether their microphones are muted and when they last heard their wake word",
+    "Whether their microphones are muted and when they last heard their wake word",
   ],
 };
 
