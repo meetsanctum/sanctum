@@ -181,8 +181,15 @@ function scaled(bytes: number, base: number) {
 }
 
 /** Storage in decimal units, as Finder counts it. */
-export function formatBytes(bytes: number) {
-  if (bytes > 0 && bytes < 1000) return "under 1 KB";
+export function formatBytes(bytes: number, rounding?: "up") {
+  if (bytes > 0 && bytes < 1000) {
+    return rounding === "up" ? "1 KB" : "under 1 KB";
+  }
+  if (rounding === "up" && bytes >= 1000) {
+    // Round the same three significant digits up for a cleanup target.
+    const place = 10 ** (Math.floor(Math.log10(bytes)) - 2);
+    bytes = Math.ceil(bytes / place) * place;
+  }
   return scaled(bytes, 1000);
 }
 

@@ -2,22 +2,17 @@ import type {
   DeviceInfo,
   Hearing,
   HearingFailure,
-  RequestLanguage,
+  SpeechLanguage,
 } from "@meetsanctum/app-sdk";
+import { languages } from "@meetsanctum/ui-sdk";
 
-// What the Assistant's page says: each language by its own name, what to
-// say in it, and how speech recognition is getting on, as plain steps.
-
-/** Each language as it calls itself, in the order the menu lists them. */
-export const languageNames: Record<RequestLanguage, string> = {
-  en: "English",
-  de: "Deutsch",
-};
+// What the Assistant's page says: what to say in each language, and how
+// speech recognition is getting on, as plain steps.
 
 const germanRoomCommand = "Mach das Licht aus";
 
 /** A few things to say, in the language the Assistant listens in. */
-export function examples(language: RequestLanguage, room: string | null) {
+export function examples(language: SpeechLanguage, room: string | null) {
   // A German room takes an article its name decides, so its examples name
   // one that's sure.
   const place = room ?? "Kitchen";
@@ -66,7 +61,7 @@ export function examples(language: RequestLanguage, room: string | null) {
 }
 
 /** The first thing to try, in a room the household has. */
-export function firstTry(language: RequestLanguage, room: string) {
+export function firstTry(language: SpeechLanguage, room: string) {
   return language === "de" ? germanRoomCommand : `Turn off the ${room} lights`;
 }
 
@@ -122,7 +117,7 @@ const failures: Record<
 /** What the first card says about hearing, or null for the shell to say. */
 export function hearingWords(hearing: Hearing): HearingWords | null {
   const { activeLanguage } = hearing;
-  const name = languageNames[hearing.language];
+  const name = languages[hearing.language].name;
   if (hearing.state === "failed") {
     return hearing.failure === "assistant_off"
       ? null
@@ -148,13 +143,13 @@ export function hearingWords(hearing: Hearing): HearingWords | null {
   return activeLanguage && activeLanguage !== hearing.language
     ? {
         title: `Switching to ${name}`,
-        help: `${languageNames[activeLanguage]} keeps working until then.`,
+        help: `${languages[activeLanguage].name} keeps working until then.`,
         step,
       }
     : {
         title: "Getting ready to listen",
         help: activeLanguage
-          ? `You can still speak ${languageNames[activeLanguage]}.`
+          ? `You can still speak ${languages[activeLanguage].name}.`
           : "This takes a few minutes. Until then, your smart speakers won't respond.",
         step,
       };

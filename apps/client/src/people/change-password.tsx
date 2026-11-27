@@ -1,8 +1,19 @@
 import { Button } from "@meetsanctum/ui-sdk";
-import { useId, useRef, useState, type FormEvent, type RefObject } from "react";
+import {
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 
 import { problemText, newPasswordProblem } from "../auth/messages";
-import { changePassword, PasswordChangeError } from "../auth/password";
+import {
+  changePassword,
+  choosePassword,
+  PasswordChangeError,
+} from "../auth/password";
 import { Busy, SheetField, SheetProblem } from "../auth/sheet";
 import { useAuthAttempt } from "../auth/use-auth-attempt";
 import { productName } from "../brand";
@@ -21,7 +32,9 @@ import { CoreError } from "../core-fetch";
 // one is checked on this device before anything changes, and the other
 // devices signed in as you stay signed in, which the dialog says, with where
 // to sign one out. While it saves it can't be closed. If the final reply is
-// lost, it says the change could not be confirmed.
+// lost, it says the change could not be confirmed. Forgot your password?
+// turns it into Choose a new password, without the current one: this device
+// is signed in as you, which is proof enough.
 
 type Field = "current" | "password";
 type Problem = { field?: Field; text: string };
@@ -68,7 +81,9 @@ export function ChangePassword(props: {
   const [password, setPassword] = useState("");
   const [problem, setProblem] = useState<Problem>();
   const [working, setWorking] = useState(false);
+  const [forgot, setForgot] = useState(false);
   const currentInput = useRef<HTMLInputElement>(null);
+  const newInput = useRef<HTMLInputElement>(null);
   const attempt = useAuthAttempt();
   const { open } = props;
 
@@ -81,8 +96,16 @@ export function ChangePassword(props: {
       setPassword("");
       setProblem(undefined);
       setWorking(false);
+      setForgot(false);
     }
   }
+
+  const forget = () => {
+    setForgot(true);
+    setCurrent("");
+    setProblem(undefined);
+    requestAnimationFrame(() => newInput.current?.focus());
+  };
 
   const close = () => {
     if (working) return;
@@ -99,7 +122,9 @@ export function ChangePassword(props: {
     setWorking(true);
     const signal = attempt.start();
     try {
-      await changePassword({ current, next: password, signal });
+      await (forgot
+        ? choosePassword({ next: password, signal })
+        : changePassword({ current, next: password, signal }));
       signal.throwIfAborted();
       setWorking(false);
       props.onOpenChange(false);
@@ -134,6 +159,7 @@ export function ChangePassword(props: {
       autoComplete: string;
       autoFocus?: boolean;
       revealable?: boolean;
+      after?: ReactNode;
     },
   ) => {
     // A problem takes the hint's place, so the two never say the same twice.
@@ -144,7 +170,13 @@ export function ChangePassword(props: {
         label={text}
         hint={hasProblem ? undefined : options.hint}
         problemId={hasProblem ? problemId : undefined}
-        ref={name === "current" ? currentInput : undefined}
+        ref={
+          name === "current"
+            ? currentInput
+            : name === "password"
+              ? newInput
+              : undefined
+        }
         type="password"
         revealable={options.revealable}
         value={value}
@@ -158,6 +190,7 @@ export function ChangePassword(props: {
         }}
       >
         {problemLine(name)}
+        {options.after}
       </SheetField>
     );
   };
@@ -186,10 +219,13 @@ export function ChangePassword(props: {
       >
         <form onSubmit={submit} className="flex flex-col gap-5">
           <DialogHeader>
-            <DialogTitle>Change your password</DialogTitle>
+            <DialogTitle>
+              {forgot ? "Choose a new password" : "Change your password"}
+            </DialogTitle>
             <DialogDescription>
-              Your password never leaves this device. Your other devices stay
-              signed in. To sign one out, use Sign out under Linked Devices.
+              {forgot
+                ? "This device is signed in as you, so you don’t need your old password. Your new one never leaves this device. Your other devices stay signed in."
+                : "Your password never leaves this device. Your other devices stay signed in. To sign one out, use Sign out under Linked Devices."}
             </DialogDescription>
           </DialogHeader>
           <input
@@ -200,10 +236,23 @@ export function ChangePassword(props: {
             hidden
           />
           <div className="flex flex-col gap-4">
-            {field("current", "Current password", current, setCurrent, {
-              autoComplete: "current-password",
-              autoFocus: true,
-            })}
+            {!forgot &&
+              field("current", "Current password", current, setCurrent, {
+                autoComplete: "current-password",
+                autoFocus: true,
+                after: (
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="-ms-2.5 self-start"
+                    disabled={working}
+                    onClick={forget}
+                  >
+                    Forgot your password?
+                  </Button>
+                ),
+              })}
             {field("password", "New password", password, setPassword, {
               hint: "At least 8 characters.",
               autoComplete: "new-password",

@@ -1,4 +1,4 @@
-import type { RequestLanguage } from "@meetsanctum/app-sdk";
+import type { SpeechLanguage } from "@meetsanctum/app-sdk";
 
 import type { NewActivityEntry } from "../activity/activity.js";
 import type { AppHost } from "../app-host/host.js";
@@ -36,9 +36,9 @@ export function assembleHearing(options: {
   transcriber?: () => Transcriber | null;
   // Why nothing hears runs, when nothing does.
   notHearing?: () => NotHearing;
-  language?: () => RequestLanguage;
+  language?: () => SpeechLanguage;
   // What a speaker says for speech outside the Assistant's sentences.
-  notUnderstood?: (language: RequestLanguage) => string | null;
+  notUnderstood?: (language: SpeechLanguage) => string | null;
   record: (entry: NewActivityEntry) => void;
   now?: () => number;
   log: (message: string) => void;

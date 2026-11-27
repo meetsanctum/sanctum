@@ -114,9 +114,18 @@ body {
   -webkit-app-region: drag;
 }
 
+/* A button's hit area can reach past its edge, drawn by a pseudo-element
+   (Button's bar and back sizes, and icon-sm): it is pressable there too,
+   not a handle for the window. */
 [data-platform="macos"]
   :is(.top-bar, .overlay-header, .sidebar-top)
-  :is(button, a, input) {
+  :is(button, a, input),
+[data-platform="macos"]
+  :is(.top-bar, .overlay-header, .sidebar-top)
+  button::before,
+[data-platform="macos"]
+  :is(.top-bar, .overlay-header, .sidebar-top)
+  button::after {
   -webkit-app-region: no-drag;
 }
 

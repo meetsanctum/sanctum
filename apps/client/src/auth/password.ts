@@ -2,9 +2,12 @@ import {
   keyStretching,
   normalisePassword,
   passwordChangeBinding,
+  type PasswordChooseFinish,
+  type PasswordChooseStart,
   type PasswordFinish,
   type PasswordStart,
   type PasswordStarted,
+  type RegistrationStarted,
 } from "@meetsanctum/auth-protocol";
 
 import { CoreError, coreJson, currentCredential } from "../core-fetch";
@@ -16,7 +19,8 @@ import { loadOpaque } from "./device";
 // through OPAQUE and registers the new one in the same two calls, so neither
 // leaves the device. The proof is bound to the host this device holds and to
 // the new record. A wrong current password fails here, on the device, and
-// nothing more is sent.
+// nothing more is sent. Choosing a new one when you've forgotten the
+// current one registers it alone: this device's sign-in is the proof.
 
 export class PasswordChangeError extends Error {
   constructor(
@@ -28,11 +32,9 @@ export class PasswordChangeError extends Error {
 
 const requestTimeoutMs = 10_000;
 
-export async function changePassword(input: {
-  current: string;
-  next: string;
-  signal?: AbortSignal;
-}) {
+// Check that the device still holds the same host before each request.
+// Each request's signal follows the caller's cancellation and a deadline.
+function exchange(signal: AbortSignal | undefined) {
   const host = currentCredential();
   if (!host) throw new PasswordChangeError("no_host");
   // Over HTTPS the new registration response needs the shell's pinned
@@ -45,12 +47,35 @@ export async function changePassword(input: {
     throw new PasswordChangeError("unchecked");
 
   const requestSignal = () => {
-    input.signal?.throwIfAborted();
+    signal?.throwIfAborted();
     if (currentCredential() !== host || coreBaseUrl() !== host.url)
       throw new PasswordChangeError("no_host");
     const deadline = AbortSignal.timeout(requestTimeoutMs);
-    return input.signal ? AbortSignal.any([input.signal, deadline]) : deadline;
+    return signal ? AbortSignal.any([signal, deadline]) : deadline;
   };
+  return { host, requestSignal };
+}
+
+async function finishPassword(
+  path: string,
+  json: PasswordFinish | PasswordChooseFinish,
+  signal: AbortSignal,
+  callerSignal: AbortSignal | undefined,
+) {
+  try {
+    await coreJson(path, { method: "POST", signal, json });
+  } catch (error) {
+    if (error instanceof CoreError || callerSignal?.aborted) throw error;
+    throw new PasswordChangeError("unconfirmed");
+  }
+}
+
+export async function changePassword(input: {
+  current: string;
+  next: string;
+  signal?: AbortSignal;
+}) {
+  const { host, requestSignal } = exchange(input.signal);
 
   const opaque = await loadOpaque();
   input.signal?.throwIfAborted();
@@ -84,21 +109,52 @@ export async function changePassword(input: {
     host,
     registrationRecord,
   );
-  const signal = requestSignal();
-  try {
-    await coreJson("/api/auth/password/finish", {
+  await finishPassword(
+    "/api/auth/password/finish",
+    {
+      changeId: started.changeId,
+      finishLoginRequest: proof.finishLoginRequest,
+      binding,
+      registrationRecord,
+      keyStretching: keyStretching.version,
+    } satisfies PasswordFinish,
+    requestSignal(),
+    input.signal,
+  );
+}
+
+export async function choosePassword(input: {
+  next: string;
+  signal?: AbortSignal;
+}) {
+  const { requestSignal } = exchange(input.signal);
+  const opaque = await loadOpaque();
+  input.signal?.throwIfAborted();
+  const next = normalisePassword(input.next);
+  const { clientRegistrationState, registrationRequest } =
+    opaque.client.startRegistration({ password: next });
+  const started = await coreJson<RegistrationStarted>(
+    "/api/auth/password/choose/start",
+    {
       method: "POST",
-      signal,
-      json: {
-        changeId: started.changeId,
-        finishLoginRequest: proof.finishLoginRequest,
-        binding,
-        registrationRecord,
-        keyStretching: keyStretching.version,
-      } satisfies PasswordFinish,
-    });
-  } catch (error) {
-    if (error instanceof CoreError || input.signal?.aborted) throw error;
-    throw new PasswordChangeError("unconfirmed");
-  }
+      signal: requestSignal(),
+      json: { registrationRequest } satisfies PasswordChooseStart,
+    },
+  );
+  const { registrationRecord } = opaque.client.finishRegistration({
+    clientRegistrationState,
+    registrationResponse: started.registrationResponse,
+    password: next,
+    keyStretching: keyStretching.profile,
+  });
+  await finishPassword(
+    "/api/auth/password/choose/finish",
+    {
+      registrationId: started.registrationId,
+      registrationRecord,
+      keyStretching: keyStretching.version,
+    } satisfies PasswordChooseFinish,
+    requestSignal(),
+    input.signal,
+  );
 }

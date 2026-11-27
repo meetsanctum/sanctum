@@ -128,6 +128,11 @@ export type RegistrationStarted = {
   registrationId: string;
   registrationResponse: string;
 };
+export type RegistrationFinish = {
+  registrationId: string;
+  registrationRecord: string;
+  keyStretching: number;
+};
 
 export type ClaimStart = { username: string; registrationRequest: string };
 export type ClaimFinish = {
@@ -251,11 +256,7 @@ export type SetLoginStart = {
   username: string;
   registrationRequest: string;
 };
-export type SetLoginFinish = {
-  registrationId: string;
-  registrationRecord: string;
-  keyStretching: number;
-};
+export type SetLoginFinish = RegistrationFinish;
 export type RemoveLogin = { personId: string };
 
 /** `GET /api/auth/logins`: who signs in, and with which username. */
@@ -279,6 +280,13 @@ export type PasswordFinish = {
   registrationRecord: string;
   keyStretching: number;
 };
+
+// Choosing a new password on a device signed in as you, when you've
+// forgotten the current one: the device registers the new one, and the
+// sign-in it holds is the proof. The answer to the start is a
+// RegistrationStarted.
+export type PasswordChooseStart = { registrationRequest: string };
+export type PasswordChooseFinish = RegistrationFinish;
 
 // Inviting a person to sign in (invites.ts). Any client makes, lists and
 // cancels invites; redeeming one needs no token, as signing in doesn't.
@@ -315,11 +323,7 @@ export type InviteStarted = RegistrationStarted & {
   /** The code's first characters, which find the invite. */
   lookup: string;
 };
-export type InviteFinish = {
-  registrationId: string;
-  registrationRecord: string;
-  keyStretching: number;
-};
+export type InviteFinish = RegistrationFinish;
 export type CancelInvite = { personId: string; inviteId: string };
 
 // Redeeming takes four calls: OPAQUE's first round with the code's secret,

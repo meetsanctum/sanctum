@@ -40,8 +40,8 @@ vi.mock("../src/core-fetch", async () => ({
 }));
 
 const info: AppInfo = {
-  id: "sanctum.esphome",
-  name: "ESPHome",
+  id: "sanctum.example",
+  name: "Example",
   version: "0.2.0",
   icon: null,
   pages: [],
@@ -82,7 +82,7 @@ const show = (onEscape: () => void, shown: DeviceInfo = device) =>
     root.render(
       <DeviceFrame
         app={app}
-        page="esphome.device"
+        page="example.device"
         title="Device"
         device={shown}
         household={undefined}
@@ -124,7 +124,7 @@ describe("a device page in its frame", () => {
     await show(() => {});
     const { port, said } = await hello();
     await vi.waitFor(() => expect(said[0]?.type).toBe("setup"));
-    expect(said[0]).toMatchObject({ page: "esphome.device", device });
+    expect(said[0]).toMatchObject({ page: "example.device", device });
     expect(frame().style.height).toBe("0px");
     port.postMessage({ type: "size", height: 240 });
     port.postMessage({ type: "ready" });
@@ -158,10 +158,22 @@ describe("a device page in its frame", () => {
     await show(() => {});
     await vi.waitFor(() =>
       expect(container.textContent).toContain(
-        "This page needs an update of ESPHome",
+        "This page needs an update of Example",
       ),
     );
     expect(container.querySelector("iframe")).toBeNull();
     expect(container.querySelector("header")).toBeNull();
+  });
+
+  it("offers to try again when the device page's files are missing", async () => {
+    answers.pages = () =>
+      Promise.reject(new CoreError(404, "not_found", { error: "not_found" }));
+    await show(() => {});
+    expect(container.querySelector("[role=status]")?.textContent).toBe(
+      "Example's Device didn't openWhat Example adds to the home keeps working.Try again",
+    );
+    expect(container.querySelector("[role=status] button")?.textContent).toBe(
+      "Try again",
+    );
   });
 });

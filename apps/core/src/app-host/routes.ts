@@ -7,7 +7,7 @@ import {
   type AppRemoval,
   type AvailableApp,
   type HardwareOffer,
-  type RequestLanguage,
+  type Language,
   type StaticManifest,
 } from "@meetsanctum/app-sdk";
 import type { FastifyInstance } from "fastify";
@@ -134,7 +134,7 @@ export function registerAppRoutes(
     authenticate: Auth["authenticate"];
     // The home's language for speech, which typed requests are in unless
     // they say otherwise.
-    language: () => RequestLanguage;
+    language: () => Language;
   },
 ) {
   const { host, available, adding, removing, deleting, offers, gate } = options;
@@ -160,8 +160,7 @@ export function registerAppRoutes(
   });
 
   // Adding one is the household's to choose, like its grants, on every
-  // client. Its sheet closes onto its settings, which say how its first
-  // start goes as it does.
+  // client. Return its current state so the client can show it immediately.
   app.post("/api/apps/add", async (request): Promise<AppInfo> => {
     const parsed = toAdd.safeParse(request.body);
     if (!parsed.success) throw new ActionCallError("invalid_request");

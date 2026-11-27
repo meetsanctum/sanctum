@@ -67,6 +67,7 @@ export function StickOffer(props: {
   live: LiveFeed;
   /** Whether the core answers now. */
   isOnline: boolean;
+  apps: readonly AppInfo[];
   onAdded: (app: AppInfo) => void;
 }) {
   const offer = useHardwareOffer(props.live, props.isOnline);
@@ -80,6 +81,7 @@ export function StickOffer(props: {
     <OfferedApp
       key={shown.id}
       offer={shown}
+      apps={props.apps}
       onAdding={() => setAdding(shown)}
       onDone={() => setAdding(undefined)}
       onAdded={props.onAdded}
@@ -89,6 +91,7 @@ export function StickOffer(props: {
 
 function OfferedApp(props: {
   offer: HardwareOffer;
+  apps: readonly AppInfo[];
   onAdding: () => void;
   // Added, or closed, which lets an ended offer go.
   onDone: () => void;
@@ -128,6 +131,7 @@ function OfferedApp(props: {
   return (
     <AddAppSheet
       app={app}
+      apps={props.apps}
       offerId={offer.id}
       onAdding={props.onAdding}
       lead={
@@ -139,6 +143,10 @@ function OfferedApp(props: {
         setApp(undefined);
         props.onDone();
         props.onAdded(added);
+      }}
+      onCloseForFix={() => {
+        setApp(undefined);
+        props.onDone();
       }}
       onClose={async () => {
         try {
