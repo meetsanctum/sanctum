@@ -9,6 +9,7 @@ import {
   normaliseUsername,
   pairingCodeAlphabet,
   pairingLookupLength,
+  recoveryCodeVersion,
   verifyInviteCheckBinding,
   verifyInviteFinishBinding,
   type CancelInvite,
@@ -191,8 +192,7 @@ export function createInvites(
     if (!people.get(personId)) {
       throw new AuthError("not_found");
     }
-    // A recovery code is made by its own person, on their own device, and
-    // replaces the one they had.
+    // A recovery code is made by its own person, on their own device.
     if (kind === "recovery") {
       if (personalCaller(principal) !== personId) {
         throw new AuthError("forbidden");
@@ -200,7 +200,12 @@ export function createInvites(
       if (!loginOf(personId)) {
         throw new AuthError("invite_kind_changed");
       }
-      return;
+      const current = recoveryOf(personId);
+      const activeId = current && !endingOf(current) ? current.id : undefined;
+      if (activeId !== replacesInviteId) {
+        throw new AuthError("invite_changed");
+      }
+      return current;
     }
     if ((kind === "reset") !== Boolean(loginOf(personId))) {
       throw new AuthError("invite_kind_changed");
@@ -209,6 +214,7 @@ export function createInvites(
     if (current && !endingOf(current) && current.id !== replacesInviteId) {
       throw new AuthError("invite_changed");
     }
+    return current;
   }
 
   function username(value: string) {
@@ -283,6 +289,12 @@ export function createInvites(
       input: InviteStart,
     ): InviteStarted {
       checkMake(principal, input.personId, input.kind, input.replacesInviteId);
+      if (
+        input.kind === "recovery" &&
+        input.recoveryVersion !== recoveryCodeVersion
+      ) {
+        throw new AuthError("invalid_request");
+      }
       const inviteId = randomUUID();
       // A lookup no invite holds, ended ones included, since those keep
       // theirs to tell a late code it ended.
@@ -328,13 +340,18 @@ export function createInvites(
       let replaced: string | undefined;
       const made = db.transaction(() => {
         const kind = entry.inviteKind;
-        checkMake(principal, entry.personId, kind, entry.replacesInviteId);
+        replaced = checkMake(
+          principal,
+          entry.personId,
+          kind,
+          entry.replacesInviteId,
+        )?.id;
         const holder = db
-          .select({ personId: authInvites.personId })
+          .select({ id: authInvites.id })
           .from(authInvites)
           .where(eq(authInvites.lookup, entry.lookup))
           .get();
-        if (holder && holder.personId !== entry.personId) {
+        if (holder && holder.id !== replaced) {
           // Another invite took the lookup meanwhile: the device draws a
           // new code.
           throw new AuthError("expired");
@@ -342,18 +359,9 @@ export function createInvites(
         const at = now();
         // An invite or reset replaces the last one; a recovery code, the
         // last recovery code.
-        const recovery = kind === "recovery";
-        replaced = (recovery ? recoveryOf : inviteOf)(entry.personId)?.id;
-        db.delete(authInvites)
-          .where(
-            and(
-              eq(authInvites.personId, entry.personId),
-              recovery
-                ? eq(authInvites.kind, "recovery")
-                : ne(authInvites.kind, "recovery"),
-            ),
-          )
-          .run();
+        if (replaced) {
+          db.delete(authInvites).where(eq(authInvites.id, replaced)).run();
+        }
         const invite = db
           .insert(authInvites)
           .values({
@@ -609,6 +617,16 @@ export function createInvites(
           .onConflictDoUpdate({ target: authLogins.personId, set: values })
           .run();
         db.delete(authInvites).where(eq(authInvites.id, invite.id)).run();
+        if (invite.kind === "recovery") {
+          // An earlier reset must not replace the password chosen here.
+          const reset = inviteOf(invite.personId);
+          if (reset?.kind === "reset" && !endingOf(reset)) {
+            db.update(authInvites)
+              .set({ endedReason: "cancelled", endedAt: values.updatedAt })
+              .where(eq(authInvites.id, reset.id))
+              .run();
+          }
+        }
         const { client, token } = clients.createPersonal({
           ...input.client,
           personId: invite.personId,

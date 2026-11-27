@@ -16,24 +16,49 @@ const first = Array.from({ length: half }, (_, index) => index);
 const second = first.map((index) => index + half);
 
 export function PairingCode(props: { code: string | undefined }) {
+  const length = props.code?.length ?? pairingCodeLength;
   return (
     <InputOTPDisplay
       data-slot="pairing-code"
       value={props.code ?? ""}
-      maxLength={pairingCodeLength}
-      className="w-100 max-w-full"
+      maxLength={length}
+      className={
+        length > pairingCodeLength
+          ? "w-100 max-w-full flex-col"
+          : "w-100 max-w-full"
+      }
     >
+      <CodeSlots length={length} />
+    </InputOTPDisplay>
+  );
+}
+
+export function CodeSlots({ length }: { length: number }) {
+  if (length === pairingCodeLength) return <CodeRow offset={0} />;
+  return Array.from({ length: length / pairingCodeLength }, (_, row) => (
+    <div
+      key={row}
+      className="flex w-full items-center justify-center gap-2 max-sm:gap-1"
+    >
+      <CodeRow offset={row * pairingCodeLength} />
+    </div>
+  ));
+}
+
+function CodeRow({ offset }: { offset: number }) {
+  return (
+    <>
       <InputOTPGroup>
         {first.map((index) => (
-          <InputOTPSlot key={index} index={index} />
+          <InputOTPSlot key={index} index={offset + index} />
         ))}
       </InputOTPGroup>
       <InputOTPSeparator />
       <InputOTPGroup>
         {second.map((index) => (
-          <InputOTPSlot key={index} index={index} />
+          <InputOTPSlot key={index} index={offset + index} />
         ))}
       </InputOTPGroup>
-    </InputOTPDisplay>
+    </>
   );
 }

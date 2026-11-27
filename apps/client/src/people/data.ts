@@ -79,6 +79,7 @@ export function usePeople(live: LiveFeed, includeClients = false) {
     const now = Date.now();
     let nextExpiry = Infinity;
     for (const invite of data?.invites ?? []) {
+      if (invite.kind === "recovery") continue;
       const expires = Date.parse(invite.endsAt);
       if (!invite.ended && expires > now)
         nextExpiry = Math.min(nextExpiry, expires);

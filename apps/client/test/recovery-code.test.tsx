@@ -20,7 +20,7 @@ import { printRecoveryCode, recoverySheet } from "../src/people/print-recovery";
 
 // A recovery code: a row on your own Sign-In card only, a dialog that shows
 // the code once with Copy code and Print, and a step right after setting up
-// a home that offers one, which Continue never waits on.
+// a home where Continue is available while the code is being made.
 
 vi.mock("../src/core-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/core-fetch")>()),
@@ -65,6 +65,8 @@ const logins: LoginInfo[] = [
   { personId: "alex", username: "alex" },
   { personId: "maya", username: "maya" },
 ];
+const code = "UK7QXM4PD23456789ABCDEFGHJKMNPQR";
+const formattedCode = "UK7Q-XM4P-D234-5678-9ABC-DEFG-HJKM-NPQR";
 
 function recoveryCode(createdAt = new Date().toISOString()): InviteInfo {
   return {
@@ -101,7 +103,7 @@ beforeEach(() => {
     throw new Error(`unexpected ${path}`);
   });
   vi.mocked(makeInvite).mockResolvedValue({
-    code: "K7QXM4PD",
+    code,
     info: recoveryCode(),
   });
   container = document.createElement("div");
@@ -113,7 +115,9 @@ afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   vi.resetAllMocks();
+  vi.useRealTimers();
 });
 
 async function show(personId = "alex") {
@@ -165,30 +169,60 @@ describe("your recovery code", () => {
     expect(dialog()?.textContent).not.toContain("Your earlier code");
     // The boxes show the code; its text is only for screen readers.
     expect(dialog()?.querySelector(".sr-only")?.textContent).toContain(
-      "K7QX-M4PD",
+      formattedCode,
     );
+    const slots = dialog()!.querySelectorAll('[data-slot="input-otp-slot"]');
+    expect([...slots].map((slot) => slot.textContent).join("")).toBe(code);
     await click("Print");
     expect(printRecoveryCode).toHaveBeenCalledWith(
       expect.objectContaining({
         person: alex.name,
         username: "alex",
-        code: "K7QX-M4PD",
+        code: formattedCode,
       }),
     );
   });
 
-  it("says a new code ends the earlier one", async () => {
+  it("asks before replacing a saved code", async () => {
+    vi.setSystemTime(new Date(2026, 10, 27, 12));
     invites = [recoveryCode()];
     await show();
     expect(container.textContent).toContain("Made today");
     await click("Make a new code");
 
+    expect(makeInvite).not.toHaveBeenCalled();
+    expect(dialog()?.querySelector("h2")?.textContent).toBe(
+      "Replace your recovery code?",
+    );
+    expect(dialog()?.textContent).toContain(
+      "The previous code will stop working as soon as the new one is made.",
+    );
+    await click("Cancel");
+    expect(makeInvite).not.toHaveBeenCalled();
+    await click("Make a new code");
+    await click("Make new code");
+
+    expect(makeInvite).toHaveBeenCalledWith(
+      { personId: alex.id, kind: "recovery", replacesInviteId: invites[0]!.id },
+      expect.any(AbortSignal),
+    );
     expect(dialog()?.querySelector("h2")?.textContent).toBe(
       "Your new recovery code",
     );
     expect(dialog()?.textContent).toContain(
       "Your earlier code no longer works.",
     );
+  });
+
+  it("does not schedule an expiry refresh for a saved recovery code", async () => {
+    vi.setSystemTime(new Date("2026-11-27T12:00:00Z"));
+    invites = [recoveryCode("2026-11-06T12:00:00Z")];
+    const timeout = vi.spyOn(globalThis, "setTimeout");
+    await show();
+    expect(button("Make a new code")).toBeDefined();
+    expect(
+      timeout.mock.calls.some(([, delay]) => (delay ?? 0) > 2 ** 31 - 1),
+    ).toBe(false);
   });
 });
 
@@ -198,15 +232,47 @@ describe("the printed page", () => {
       clock: homeClock({ timeZone: "Europe/Berlin" }),
       person: "Alex <Keller>",
       username: "alex",
-      code: "K7QX-M4PD",
+      code: formattedCode,
       madeAt: "2026-11-27T10:00:00Z",
     });
     expect(sheet).toContain("Alex &lt;Keller&gt;");
-    expect(sheet).toContain("K7QX-M4PD");
+    const page = new DOMParser().parseFromString(sheet, "text/html");
+    expect(page.querySelector(".code")?.textContent).toBe(formattedCode);
     expect(sheet).toContain("Choose Just me, then Forgot your password?");
     expect(sheet).toContain(
       "Anyone with it can choose a new password for you.",
     );
+    expect(sheet).toContain("Restoring a backup also invalidates this code.");
+  });
+
+  it("prints the generated page and removes it when printing ends", async () => {
+    const { printRecoveryCode: print } = await vi.importActual<
+      typeof import("../src/people/print-recovery")
+    >("../src/people/print-recovery");
+    const append = document.body.append.bind(document.body);
+    const printPage = vi.fn();
+    vi.spyOn(document.body, "append").mockImplementationOnce((...nodes) => {
+      append(...nodes);
+      const frame = nodes[0] as HTMLIFrameElement;
+      const page = frame.contentWindow!;
+      vi.spyOn(page, "focus").mockImplementation(() => {});
+      vi.spyOn(page, "print").mockImplementation(() => {
+        printPage(page.document.querySelector(".code")?.textContent);
+      });
+    });
+
+    print({
+      clock: homeClock({ timeZone: "Europe/Berlin" }),
+      person: alex.name,
+      username: "alex",
+      code: formattedCode,
+      madeAt: "2026-11-27T10:00:00Z",
+    });
+
+    expect(printPage).toHaveBeenCalledExactlyOnceWith(formattedCode);
+    const frame = document.body.querySelector("iframe")!;
+    frame.contentWindow!.dispatchEvent(new Event("afterprint"));
+    expect(frame.isConnected).toBe(false);
   });
 });
 
@@ -250,5 +316,36 @@ describe("saving a recovery code after setting up a home", () => {
     expect(button("Print")).toBeUndefined();
     await click("Continue");
     expect(onContinue).toHaveBeenCalledOnce();
+  });
+
+  it("continues and cancels the request while code creation is still pending", async () => {
+    vi.mocked(makeInvite).mockReturnValue(new Promise(() => {}));
+    const onContinue = await render();
+    const signal = vi.mocked(makeInvite).mock.calls[0]![1]!;
+
+    expect(container.textContent).toContain("Making a code…");
+    expect(signal.aborted).toBe(false);
+    await click("Continue");
+    expect(onContinue).toHaveBeenCalledOnce();
+    expect(signal.aborted).toBe(true);
+  });
+
+  it("announces the manual-copy fallback when clipboard access fails", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
+    });
+    try {
+      await render();
+      await click("Copy code");
+
+      expect(container.querySelector('[role="status"]')?.textContent).toBe(
+        "Couldn’t copy the code. Copy it manually from the text above.",
+      );
+      expect(window.getSelection()?.toString()).toBe(formattedCode);
+    } finally {
+      Reflect.deleteProperty(navigator, "clipboard");
+      window.getSelection()?.removeAllRanges();
+    }
   });
 });

@@ -51,14 +51,14 @@ p { margin: 0; color: #45474b; }
 <body><main>
 <h1>${escape(productName)} recovery code</h1>
 <dl>${rows}</dl>
-<div class="code">${escape(input.code)}</div>
+<div class="code">${escape(input.code).split("-").join("-<wbr>")}</div>
 <h2>If you forget your password</h2>
 <ol>
 <li>Open ${escape(productName)} on your Mac and choose your home.</li>
 <li>Choose Just me, then Forgot your password?</li>
 <li>Enter this code, then choose a new password.</li>
 </ol>
-<p>The code works once. Making a new code on your page in Settings → People ends this one.</p>
+<p>The code works once. Making a new code on your page in Settings → People ends this one. Restoring a backup also invalidates this code.</p>
 <p>Keep this page with your important papers. Anyone with it can choose a new password for you.</p>
 </main></body></html>`;
 }

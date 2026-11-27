@@ -1,16 +1,13 @@
 import {
   isUsername,
+  normaliseInviteCode,
   normaliseUsername,
   pairingCodeAlphabet,
   pairingCodeLength,
+  recoveryCodeLength,
+  recoveryCodePrefix,
 } from "@meetsanctum/auth-protocol";
-import {
-  Button,
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSeparator,
-  InputOTPSlot,
-} from "@meetsanctum/ui-sdk";
+import { Button, InputOTP } from "@meetsanctum/ui-sdk";
 import { useId, useRef, useState, type FormEvent } from "react";
 
 import { Avatar } from "../components";
@@ -28,6 +25,7 @@ import {
   problemText,
   type CredentialProblem,
 } from "./messages";
+import { CodeSlots } from "./pairing-code";
 import { rememberSignIn } from "./session";
 import {
   Busy,
@@ -47,9 +45,6 @@ import { useAuthAttempt } from "./use-auth-attempt";
 // unless they change it. Forgot your password? on the sign-in screen opens
 // the same steps for a recovery code or a code someone at home made, and
 // welcomes the person back.
-
-const half = pairingCodeLength / 2;
-const slots = Array.from({ length: pairingCodeLength }, (_, index) => index);
 
 // A suggested username from a name: Maya Keller is maya.
 export function suggestedUsername(name: string) {
@@ -133,9 +128,24 @@ function EnterCode(props: {
   const input = useRef<HTMLInputElement>(null);
   const problemId = useId();
   const hintId = useId();
+  const longCode = props.forgot && code.startsWith(recoveryCodePrefix);
+
+  const filterCode = (typed: string) => {
+    const upper = typed.toUpperCase().trimStart();
+    const prefix =
+      props.forgot && upper.startsWith(recoveryCodePrefix)
+        ? recoveryCodePrefix
+        : "";
+    const characters = [...upper]
+      .filter((char) => pairingCodeAlphabet.includes(char))
+      .join("");
+    return prefix
+      ? prefix + characters.slice(0, recoveryCodeLength - prefix.length)
+      : characters.slice(0, pairingCodeLength);
+  };
 
   const check = async (typed: string) => {
-    if (working || typed.length < pairingCodeLength) return;
+    if (working || !normaliseInviteCode(typed)) return;
     setProblem(undefined);
     setWorking(true);
     const signal = attempt.start();
@@ -195,40 +205,31 @@ function EnterCode(props: {
             }
             aria-describedby={problem ? `${hintId} ${problemId}` : hintId}
             aria-invalid={problem ? true : undefined}
-            maxLength={pairingCodeLength}
+            maxLength={props.forgot ? recoveryCodeLength : pairingCodeLength}
+            containerClassName={longCode ? "flex-col" : undefined}
             value={code}
             readOnly={working}
-            filter={(typed) =>
-              [...typed.toUpperCase()]
-                .filter((char) => pairingCodeAlphabet.includes(char))
-                .join("")
-            }
+            filter={filterCode}
             onChange={(next) => {
               setCode(next);
               setProblem(undefined);
+              void check(next);
             }}
-            onComplete={(full: string) => void check(full)}
             enterKeyHint="go"
             autoComplete="one-time-code"
             autoFocus
           >
-            <InputOTPGroup>
-              {slots.slice(0, half).map((index) => (
-                <InputOTPSlot key={index} index={index} />
-              ))}
-            </InputOTPGroup>
-            <InputOTPSeparator />
-            <InputOTPGroup>
-              {slots.slice(half).map((index) => (
-                <InputOTPSlot key={index} index={index} />
-              ))}
-            </InputOTPGroup>
+            <CodeSlots
+              length={longCode ? recoveryCodeLength : pairingCodeLength}
+            />
           </InputOTP>
           <p
             id={hintId}
             className="m-0 text-center text-[13px] leading-[18px] text-muted-foreground"
           >
-            The code has 8 letters and digits, such as K7QX-M4PD.
+            {props.forgot
+              ? "Recovery codes start with U. Password codes have 8 letters and digits."
+              : "The code has 8 letters and digits, such as K7QX-M4PD."}
           </p>
         </div>
         {working && <SheetStatus>Checking the code…</SheetStatus>}

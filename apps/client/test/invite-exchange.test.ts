@@ -3,6 +3,8 @@ import {
   inviteConfirmation,
   inviteFinishBinding,
   keyStretching,
+  pairingCodeAlphabet,
+  recoveryCodeVersion,
 } from "@meetsanctum/auth-protocol";
 import { client } from "@serenity-kit/opaque";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -68,65 +70,74 @@ function expectRequest(
 }
 
 describe("the client invite exchange", () => {
-  it("finishes registration and combines the issued lookup with the registered secret", async () => {
-    setCoreBaseUrl(url);
-    const signal = new AbortController().signal;
-    const info = {
-      id: "invite-id",
-      personId: person.id,
-      kind: "invite",
-      createdAt: "2026-11-26T10:00:00Z",
-      endsAt: "2026-11-27T10:00:00Z",
-      ended: null,
-    };
-    fetchResponse
-      .mockResolvedValueOnce(
-        Response.json({
-          registrationId: "issued-id",
-          registrationResponse: "registration-response",
-          lookup: "K7",
-        }),
-      )
-      .mockResolvedValueOnce(Response.json(info));
-
-    const made = await makeInvite(
-      { personId: person.id, kind: "invite" },
-      signal,
-    );
-    const secret = vi.mocked(client.startRegistration).mock.calls[0]![0]
-      .password;
-    expect(secret).toMatch(/^[A-Z2-9]{6}$/);
-    expect(client.finishRegistration).toHaveBeenCalledWith({
-      clientRegistrationState: "registration-state",
-      registrationResponse: "registration-response",
-      password: secret,
-      keyStretching: keyStretching.profile,
-    });
-    expect(made).toEqual({ code: `K7${secret}`, info });
-    expect(fetchResponse).toHaveBeenCalledTimes(2);
-    expectRequest(
-      1,
-      "start",
-      {
+  it.each(["invite", "recovery"] as const)(
+    "combines the issued lookup with the registered %s secret",
+    async (kind) => {
+      setCoreBaseUrl(url);
+      const signal = new AbortController().signal;
+      const info = {
+        id: "invite-id",
         personId: person.id,
-        kind: "invite",
-        registrationRequest: "registration-request",
-      },
-      signal,
-      "Bearer stored-token",
-    );
-    expectRequest(
-      2,
-      "finish",
-      {
-        registrationId: "issued-id",
-        registrationRecord: "registration-record",
-        keyStretching: keyStretching.version,
-      },
-      signal,
-      "Bearer stored-token",
-    );
-  });
+        kind,
+        createdAt: "2026-11-26T10:00:00Z",
+        endsAt: "2026-11-27T10:00:00Z",
+        ended: null,
+      };
+      fetchResponse
+        .mockResolvedValueOnce(
+          Response.json({
+            registrationId: "issued-id",
+            registrationResponse: "registration-response",
+            lookup: "K7",
+          }),
+        )
+        .mockResolvedValueOnce(Response.json(info));
+
+      const made = await makeInvite({ personId: person.id, kind }, signal);
+      const secret = vi.mocked(client.startRegistration).mock.calls[0]![0]
+        .password;
+      const recovery = kind === "recovery";
+      expect(secret).toMatch(
+        new RegExp(`^[${pairingCodeAlphabet}]{${recovery ? 29 : 6}}$`),
+      );
+      if (recovery) {
+        expect(
+          secret.length * Math.log2(pairingCodeAlphabet.length),
+        ).toBeGreaterThanOrEqual(128);
+      }
+      expect(client.finishRegistration).toHaveBeenCalledWith({
+        clientRegistrationState: "registration-state",
+        registrationResponse: "registration-response",
+        password: secret,
+        keyStretching: keyStretching.profile,
+      });
+      expect(made).toEqual({ code: `${recovery ? "U" : ""}K7${secret}`, info });
+      expect(fetchResponse).toHaveBeenCalledTimes(2);
+      expectRequest(
+        1,
+        "start",
+        {
+          personId: person.id,
+          kind,
+          ...(recovery && { recoveryVersion: recoveryCodeVersion }),
+          registrationRequest: "registration-request",
+        },
+        signal,
+        "Bearer stored-token",
+      );
+      expectRequest(
+        2,
+        "finish",
+        {
+          registrationId: "issued-id",
+          registrationRecord: "registration-record",
+          keyStretching: keyStretching.version,
+        },
+        signal,
+        "Bearer stored-token",
+      );
+    },
+  );
 
   it.each([true, false])(
     "redeems at the chosen home and verifies its confirmation (%s)",

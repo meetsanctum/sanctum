@@ -124,6 +124,7 @@ const schemas = {
   inviteStart: z.object({
     personId: id,
     kind: z.enum(["invite", "reset", "recovery"]),
+    recoveryVersion: z.number().int().optional(),
     replacesInviteId: id.optional(),
     registrationRequest: message,
   }) satisfies z.ZodType<InviteStart>,

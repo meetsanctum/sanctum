@@ -1,21 +1,22 @@
 import { formatInviteCode } from "@meetsanctum/auth-protocol";
 import { Button, useHomeClock } from "@meetsanctum/ui-sdk";
 import { Copy, KeyRound, Printer } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { makeInvite } from "../people/invites";
 import { printRecoveryCode } from "../people/print-recovery";
 import { PairingCode } from "./pairing-code";
 import { Sheet, SheetActions, SheetStatus } from "./sheet";
 import { useAuthAttempt } from "./use-auth-attempt";
+import { useCopyCode } from "./use-copy-code";
 
 // Right after setting up a home, the first person saves a recovery code: if
 // they forget their password, it lets them choose a new one, even when no
 // device is signed in as them and no one else signs in. This device makes
-// it and shows it once, to copy or print. Continue never waits on it: the
-// code can be made again on their page.
+// it and shows it once, to copy or print. Continue is available while the
+// request is pending. The person can make a code on their page.
 
-type Made = { code: string; madeAt: string };
+type Made = { code: string; madeAt: string; signal: AbortSignal };
 
 export function SaveRecovery(props: {
   personId: string;
@@ -27,8 +28,7 @@ export function SaveRecovery(props: {
   const attempt = useAuthAttempt();
   const [made, setMade] = useState<Made>();
   const [failed, setFailed] = useState(false);
-  const [copy, setCopy] = useState<"copied" | "failed">();
-  const codeText = useRef<HTMLSpanElement>(null);
+  const clipboard = useCopyCode();
   const { personId } = props;
 
   useEffect(() => {
@@ -36,7 +36,7 @@ export function SaveRecovery(props: {
     makeInvite({ personId, kind: "recovery" }, signal).then(
       (invite) => {
         if (!signal.aborted)
-          setMade({ code: invite.code, madeAt: invite.info.createdAt });
+          setMade({ code: invite.code, madeAt: invite.info.createdAt, signal });
       },
       () => {
         if (!signal.aborted) setFailed(true);
@@ -47,17 +47,6 @@ export function SaveRecovery(props: {
   }, [personId]);
 
   const formatted = made ? formatInviteCode(made.code) : "";
-  const copyCode = async () => {
-    try {
-      await navigator.clipboard.writeText(formatted);
-      setCopy("copied");
-    } catch {
-      setCopy("failed");
-      if (codeText.current)
-        window.getSelection()?.selectAllChildren(codeText.current);
-    }
-  };
-
   return (
     <Sheet
       glyph={KeyRound}
@@ -80,13 +69,13 @@ export function SaveRecovery(props: {
                   copying by hand if Copy code fails. */}
               <p
                 className={
-                  copy === "failed"
+                  clipboard.status === "failed"
                     ? "m-0 text-sm tracking-wider select-all"
                     : "sr-only"
                 }
               >
                 <span className="sr-only">The code is </span>
-                <span ref={codeText}>{formatted}</span>
+                <span ref={clipboard.codeText}>{formatted}</span>
               </p>
             </div>
             <p className="m-0 text-center text-[15px] leading-[21px] text-balance">
@@ -94,9 +83,12 @@ export function SaveRecovery(props: {
               important papers.
             </p>
             <div className="flex justify-center gap-2">
-              <Button variant="outline" onClick={() => void copyCode()}>
+              <Button
+                variant="outline"
+                onClick={() => void clipboard.copy(formatted, made.signal)}
+              >
                 <Copy data-icon="inline-start" aria-hidden="true" />
-                {copy === "copied" ? "Copied" : "Copy code"}
+                {clipboard.status === "copied" ? "Copied" : "Copy code"}
               </Button>
               <Button
                 variant="outline"
@@ -114,14 +106,16 @@ export function SaveRecovery(props: {
                 Print
               </Button>
             </div>
-            <p role="status" className="sr-only">
-              {copy === "copied" ? "Copied" : ""}
+            <p
+              role="status"
+              className={
+                clipboard.status === "failed"
+                  ? "m-0 text-center text-sm text-muted-foreground"
+                  : "sr-only"
+              }
+            >
+              {clipboard.message}
             </p>
-            {copy === "failed" && (
-              <p className="m-0 text-center text-sm text-muted-foreground">
-                Couldn’t copy the code. Copy it manually from the text above.
-              </p>
-            )}
           </>
         )}
         <SheetActions>
@@ -129,8 +123,10 @@ export function SaveRecovery(props: {
             variant="default"
             size="lg"
             className="w-full"
-            disabled={!made && !failed}
-            onClick={props.onContinue}
+            onClick={() => {
+              attempt.cancel();
+              props.onContinue();
+            }}
           >
             Continue
           </Button>

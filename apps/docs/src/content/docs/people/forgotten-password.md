@@ -35,6 +35,9 @@ If you saved a recovery code, use it on any Mac:
 The code works once. Make a new one on your page afterwards; see
 [Your recovery code](/people/#your-recovery-code).
 
+Restoring a backup invalidates saved recovery codes. Make a new one after
+you sign in again.
+
 ## With a code from someone at home
 
 If no device is signed in as you, someone else at home can make you a code

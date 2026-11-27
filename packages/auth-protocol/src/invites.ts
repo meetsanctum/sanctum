@@ -3,13 +3,16 @@
 // username and password there. The code is a one-time password: its first
 // characters are a lookup the core gives, the rest a secret the inviting
 // device draws and registers through OPAQUE, so the core never sees it.
-// Typing it checks the home as signing in does. Codes use the pairing code's
-// alphabet and shape, so they read and type the same.
+// Typing it checks the home as signing in does. Invites and resets use the
+// pairing code's shape. Recovery codes use a longer secret.
 
 import {
   formatPairingCode,
   newPairingSecret,
   normalisePairingCode,
+  pairingCodeAlphabet,
+  pairingLookupLength,
+  randomCode,
   splitPairingCode,
 } from "./pairing.js";
 
@@ -34,14 +37,46 @@ export const inviteChooseMs = 10 * 60_000;
 /** The inviting device's secret: the code's characters after the lookup. */
 export const newInviteSecret = newPairingSecret;
 
+// U is outside the short code's alphabet, so typing a recovery code never
+// submits its first eight characters as an invite or reset.
+export const recoveryCodePrefix = "U";
+export const recoveryCodeLength = 32;
+export const recoveryCodeVersion = 2;
+
+/** A long-lived code draws 29 characters, giving over 128 bits of entropy. */
+export function newRecoverySecret() {
+  return randomCode(
+    recoveryCodeLength - recoveryCodePrefix.length - pairingLookupLength,
+  );
+}
+
 /** A typed code as the core reads it, or none when it can't be one. */
-export const normaliseInviteCode = normalisePairingCode;
+export function normaliseInviteCode(value: string) {
+  const code = value.toUpperCase().replace(/[\s-]/g, "");
+  if (!code.startsWith(recoveryCodePrefix)) return normalisePairingCode(code);
+  return code.length === recoveryCodeLength &&
+    [...code.slice(recoveryCodePrefix.length)].every((char) =>
+      pairingCodeAlphabet.includes(char),
+    )
+    ? code
+    : null;
+}
 
 /** The lookup the core finds the invite by, and the secret it checks. */
-export const splitInviteCode = splitPairingCode;
+export function splitInviteCode(code: string) {
+  return splitPairingCode(
+    code.startsWith(recoveryCodePrefix)
+      ? code.slice(recoveryCodePrefix.length)
+      : code,
+  );
+}
 
-/** The code as people read it: `K7QX-M4PD`. */
-export const formatInviteCode = formatPairingCode;
+/** The code as people read it, in groups of four. */
+export function formatInviteCode(code: string) {
+  return code.startsWith(recoveryCodePrefix)
+    ? (code.match(/.{1,4}/g) ?? []).join("-")
+    : formatPairingCode(code);
+}
 
 /**
  * The name an invite's code is registered under, which OPAQUE's key for it

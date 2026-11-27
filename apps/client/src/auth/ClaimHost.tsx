@@ -11,7 +11,7 @@ import {
   type CredentialProblem,
 } from "./messages";
 import { SaveRecovery } from "./SaveRecovery";
-import { rememberSignIn, selectHost } from "./session";
+import { rememberSignIn } from "./session";
 import { Busy, Sheet, SheetActions, SheetField, SheetProblem } from "./sheet";
 import { StorageNotice, useSecureStorage } from "./SignIn";
 import { useAuthAttempt } from "./use-auth-attempt";
@@ -68,8 +68,6 @@ export function ClaimHost(props: {
         signal,
       );
       signal.throwIfAborted();
-      // The recovery code is made as this device, signed in now.
-      selectHost(stored);
       setClaimed({ stored, personId: signedIn.person.id });
     } catch (error) {
       if (signal.aborted) return;

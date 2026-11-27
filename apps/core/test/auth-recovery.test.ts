@@ -1,13 +1,25 @@
-import type { InviteInfo } from "@meetsanctum/auth-protocol";
-import { describe, expect, it } from "vitest";
+import { inviteMs, type InviteInfo } from "@meetsanctum/auth-protocol";
+import { eq } from "drizzle-orm";
+import { assert, describe, expect, it } from "vitest";
 
-import { addPerson, invite, redeem } from "./invite-support.js";
+import { authInvites } from "../src/auth/schema.js";
+import {
+  addPerson,
+  checkInvite,
+  finishInvite,
+  invite,
+  redeem,
+  registerInvite,
+  startInvite,
+} from "./invite-support.js";
 import {
   changePassword,
   choosePassword,
   claimed,
   get,
   maya,
+  post,
+  registration,
   setLogin,
   sharedClient,
   signIn,
@@ -74,10 +86,29 @@ describe("a recovery code", () => {
     expect(onKitchen.response.statusCode).toBe(403);
   });
 
-  it("chooses a new password, keeps the username, and is spent", async () => {
+  it("refuses registration from a device using the short format", async () => {
+    const core = await testCore();
+    const claim = await claimed(core);
+    const response = await post(
+      core,
+      "/api/auth/invites/start",
+      {
+        personId: claim.person.id,
+        kind: "recovery",
+        registrationRequest: registration("QXM4PD").registrationRequest,
+      },
+      { token: claim.token },
+    );
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: "invalid_request" });
+  });
+
+  it("chooses a new password after the ordinary invite lifetime, then is spent", async () => {
     const core = await testCore();
     const claim = await claimed(core);
     const made = await invite(core, claim.token, claim.person.id, "recovery");
+    core.advance(inviteMs + 1);
 
     const used = await redeem(core, made.code!, {
       username: maya.username,
@@ -121,11 +152,74 @@ describe("a recovery code", () => {
     expect(used.outcome).toBe("joined");
   });
 
+  it("can still finish after a reset is issued, and cancels that reset", async () => {
+    const { core, claim, jonasToken } = await withJonas();
+    const made = await invite(core, claim.token, claim.person.id, "recovery");
+    const recovery = await checkInvite(core, made.code!);
+    assert(recovery.outcome === "checked");
+
+    const reset = await invite(core, jonasToken, claim.person.id, "reset");
+    const resetChecked = await checkInvite(core, reset.code!);
+    assert(resetChecked.outcome === "checked");
+    const resetRegistered = await registerInvite(
+      core,
+      resetChecked,
+      maya.username,
+    );
+    assert(resetRegistered.outcome === "registered");
+
+    const registered = await registerInvite(
+      core,
+      recovery,
+      maya.username,
+      "a recovered password",
+    );
+    assert(registered.outcome === "registered");
+    expect((await finishInvite(core, recovery, registered.input)).outcome).toBe(
+      "joined",
+    );
+
+    const late = await finishInvite(core, resetChecked, resetRegistered.input);
+    assert(late.outcome === "refused");
+    expect(late.response.json()).toEqual({ error: "invite_ended" });
+    expect(await listed(core, claim.token)).toEqual([
+      expect.objectContaining({ id: reset.info!.id, ended: "cancelled" }),
+    ]);
+    expect(
+      (await signIn(core, { password: "a recovered password" })).outcome,
+    ).toBe("signed-in");
+  });
+
   it("ends when you make a new one", async () => {
     const core = await testCore();
     const claim = await claimed(core);
     const first = await invite(core, claim.token, claim.person.id, "recovery");
-    const second = await invite(core, claim.token, claim.person.id, "recovery");
+    const pending = await startInvite(
+      core,
+      claim.token,
+      claim.person.id,
+      "recovery",
+      first.info!.id,
+    );
+    const second = await invite(
+      core,
+      claim.token,
+      claim.person.id,
+      "recovery",
+      first.info!.id,
+    );
+    expect(second.response.statusCode).toBe(200);
+    const stale = await pending.finish!();
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json()).toEqual({ error: "invite_changed" });
+    const unconfirmed = await invite(
+      core,
+      claim.token,
+      claim.person.id,
+      "recovery",
+    );
+    expect(unconfirmed.response.statusCode).toBe(409);
+    expect(unconfirmed.response.json()).toEqual({ error: "invite_changed" });
 
     const old = await redeem(core, first.code!, {
       username: maya.username,
@@ -136,5 +230,26 @@ describe("a recovery code", () => {
     expect(await listed(core, claim.token)).toEqual([
       expect.objectContaining({ id: second.info!.id }),
     ]);
+  });
+
+  it("refuses a lookup taken by another code for the same person", async () => {
+    const { core, claim, jonasToken } = await withJonas();
+    const pending = await startInvite(
+      core,
+      claim.token,
+      claim.person.id,
+      "recovery",
+    );
+    const reset = await invite(core, jonasToken, claim.person.id, "reset");
+    core.db
+      .update(authInvites)
+      .set({ lookup: pending.lookup! })
+      .where(eq(authInvites.id, reset.info!.id))
+      .run();
+
+    const response = await pending.finish!();
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ error: "expired" });
+    expect(await listed(core, claim.token)).toEqual([reset.info]);
   });
 });
