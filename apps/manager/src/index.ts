@@ -41,6 +41,7 @@ import { createPower } from "./host/power.js";
 import { createHostReadings } from "./host/readings.js";
 import { createSpace } from "./host/space.js";
 import { createHostStatus } from "./host/status.js";
+import { createDiskReader } from "./host/writeback-disk.js";
 import { createWriteback, createWritebackHelper } from "./host/writeback.js";
 import { createOperations } from "./operations.js";
 import { createReconciler } from "./reconcile.js";
@@ -104,7 +105,8 @@ if (config.supervise) {
   // on it: only a host's own manager sets them.
   if (!stack) {
     writeback = createWriteback({
-      apply: createWritebackHelper({ docker }),
+      apply: createWritebackHelper({ docker, log }),
+      readDisk: createDiskReader([config.dataDir, config.coreDataDir]),
       log,
     });
   }

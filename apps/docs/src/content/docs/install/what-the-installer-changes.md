@@ -22,7 +22,8 @@ sidebar:
 
 Once it runs, Sanctum also sets how much the system may hold in memory
 before writing it to the disk (`vm.dirty_background_bytes` and
-`vm.dirty_bytes`). It allows about two seconds of the disk's own writing,
-measured as it goes, so saving a large download never holds up the home for
-long on a slow SD card. The system forgets these when it restarts, and
-Sanctum sets them again as it starts.
+`vm.dirty_bytes`). It starts with a 32 MiB limit and targets
+about two seconds of writes when it can measure a single backing disk. The
+32 MiB minimum can represent more time on slow storage, and the limit drops
+lower when there is little memory available for writes. The system forgets
+these settings when it restarts, and Sanctum sets them again as it starts.

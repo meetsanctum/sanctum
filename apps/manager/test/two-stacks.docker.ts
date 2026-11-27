@@ -1,4 +1,4 @@
-import { execFile as execFileCallback } from "node:child_process";
+import { execFile as execFileCallback, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
@@ -173,6 +173,7 @@ async function publish(stack: Stack, registryPort: number, service: string) {
 describe("two stacks on one Docker", () => {
   let one: Stack;
   let other: Stack;
+  let createdDuringStartup: string[];
 
   beforeAll(async () => {
     await run("pnpm", [
@@ -190,10 +191,52 @@ describe("two stacks on one Docker", () => {
     );
     one = stackOf("one", first, true);
     other = stackOf("other", await freePorts(first + 3), false);
-    await one.script("up");
-    await other.script("up");
-    await appsRunning(one);
-    await appsRunning(other);
+    // A helper can be removed as soon as it exits. Watch creation events
+    // through startup so a stopped or removed helper is still counted.
+    const events = spawn(
+      "docker",
+      [
+        "events",
+        "--since",
+        String(Math.floor(Date.now() / 1000)),
+        "--filter",
+        "type=container",
+        "--filter",
+        "event=create",
+        "--filter",
+        "label=sanctum.stack",
+        "--format",
+        "{{.Actor.Attributes.name}}",
+      ],
+      { cwd: root, stdio: ["ignore", "pipe", "inherit"] },
+    );
+    let output = "";
+    let eventError: Error | undefined;
+    events.once("error", (error) => {
+      eventError = error;
+    });
+    events.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+      output += chunk;
+    });
+    try {
+      await one.script("up");
+      await other.script("up");
+      await appsRunning(one);
+      await appsRunning(other);
+      // Both core creation events follow the managers' startup checks.
+      await vi.waitFor(
+        () => {
+          if (eventError) throw eventError;
+          expect(output.trim().split("\n")).toEqual(
+            expect.arrayContaining([one.core, other.core]),
+          );
+        },
+        { timeout: 5_000 },
+      );
+      createdDuringStartup = output.trim().split("\n");
+    } finally {
+      events.kill();
+    }
   }, 600_000);
 
   afterAll(async () => {
@@ -209,6 +252,13 @@ describe("two stacks on one Docker", () => {
     );
     expect(await docker("port", other.core, "4100/tcp")).toContain(
       `127.0.0.1:${other.port}`,
+    );
+  });
+
+  it("starts neither stack's host-wide writeback helper", () => {
+    expect(createdDuringStartup).not.toContain(`sanctum-${one.name}-writeback`);
+    expect(createdDuringStartup).not.toContain(
+      `sanctum-${other.name}-writeback`,
     );
   });
 

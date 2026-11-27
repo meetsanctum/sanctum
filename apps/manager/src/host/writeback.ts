@@ -1,112 +1,137 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { assertManaged, managedLabels } from "../docker-resources.js";
+import { managedLabels } from "../docker-resources.js";
 import {
   errorMessage,
-  inspectContainer,
+  isNotFound,
   type DockerClientLike,
   type WaitableContainerLike,
 } from "../docker.js";
+import { prepareManagerHelper } from "../manager-helper.js";
 import { stacked } from "../stack.js";
-import { managerContainerName } from "../update/manager-update.js";
+import { memoryField } from "./readings.js";
+import type { DiskWrites } from "./writeback-disk.js";
 
-// How much the host's kernel may hold back from its disks. A save waits for
-// everything written before it, so what's held back is how long a save can
-// wait: unpacking a large image left about 800 MB on a Pi whose SD card writes
-// 7 MB/s, and the core's and the apps' saves waited up to two minutes. The
-// kernel's own limits are a share of memory, which knows nothing of the disk,
-// so they hold a few seconds' writing on a fast disk and minutes on a slow one.
-//
-// Here they're time instead: writing out starts with half a second's worth
-// held back, and whoever writes waits once there are two seconds' worth, at
-// the speed the disks were seen writing out. Until they have been, it's the
-// floor, which suits the slowest disk, and never more than the kernel's own
-// share of memory. The kernel forgets them when it restarts, and the manager
-// sets them again when it starts.
-
+// Linux's default ratios are based on memory. Limit the write backlog by
+// time on a measured disk, with a small startup limit and a ceiling based
+// on how much memory the kernel can use for dirty pages.
 const mebibyte = 1024 * 1024;
 const floor = { background: 8 * mebibyte, limit: 32 * mebibyte };
 const seconds = { background: 0.5, limit: 2 };
-// The kernel's own shares, of the memory that can hold unwritten data; here
-// of all of it, which moves less.
 const kernelShare = { background: 0.1, limit: 0.2 };
-// How much a new estimate moves the one kept, so one odd sample does little.
 const weight = 0.3;
-// A change smaller than this isn't worth starting a helper for.
 const worthChanging = 0.25;
-const defaultSampleMs = 5_000;
-const defaultMinApplyMs = 60_000;
+const sampleMs = 5_000;
+const minApplyMs = 60_000;
+const startupMs = 10_000;
 
 export type WritebackLimits = { backgroundBytes: number; bytes: number };
 
-/** The limits for a disk that writes out `rate` bytes a second (null: not seen yet). */
 export function limitsFor(
   rate: number | null,
   memoryBytes: number,
+  pageSize = 4096,
 ): WritebackLimits {
-  const pick = (part: "background" | "limit") => {
-    const wanted =
-      rate === null ? floor[part] : Math.max(floor[part], rate * seconds[part]);
-    // A machine with little memory keeps the kernel's own, which is smaller.
-    const ceiling = Math.floor(memoryBytes * kernelShare[part]);
-    return Math.round(Math.min(wanted, ceiling));
+  const pick = (part: "background" | "limit", minimumPages: number) => {
+    const wanted = Math.max(floor[part], (rate ?? 0) * seconds[part]);
+    const ceilingPages = Math.floor(
+      (memoryBytes * kernelShare[part]) / pageSize,
+    );
+    // The kernel rejects a dirty limit below two pages.
+    if (ceilingPages < minimumPages) return minimumPages * pageSize;
+    return Math.min(Math.round(wanted), ceilingPages * pageSize);
   };
-  return { backgroundBytes: pick("background"), bytes: pick("limit") };
+  return { backgroundBytes: pick("background", 1), bytes: pick("limit", 2) };
 }
 
-// Dirty and Writeback from /proc/meminfo: what's waiting to be written, or
-// being written.
 export function backlogOf(meminfo: string) {
-  let total = 0;
-  for (const name of ["Dirty", "Writeback"]) {
-    const match = new RegExp(`^${name}:\\s+(\\d+) kB$`, "m").exec(meminfo);
-    if (!match) return null;
-    total += Number(match[1]) * 1024;
-  }
-  return total;
+  const dirty = memoryField(meminfo, "Dirty");
+  const writeback = memoryField(meminfo, "Writeback");
+  return dirty === null || writeback === null ? null : dirty + writeback;
 }
 
-export function memoryOf(meminfo: string) {
-  const match = /^MemTotal:\s+(\d+) kB$/m.exec(meminfo);
-  return match ? Number(match[1]) * 1024 : null;
-}
-
-// Pages written out since the host started, from /proc/vmstat.
-export function pagesWrittenOf(vmstat: string) {
-  const match = /^nr_written (\d+)$/m.exec(vmstat);
+function vmPages(vmstat: string, name: string) {
+  const match = new RegExp(`^${name} (\\d+)$`, "m").exec(vmstat);
   return match ? Number(match[1]) : null;
 }
 
-// The kernel's page size, which differs between machines (4 KiB, or 16 KiB
-// on a Raspberry Pi 5).
+// On a 64-bit host the ratio applies to free pages after reserves, plus
+// the active and inactive file cache. Each zone reserves its high watermark
+// and protection for allocations that can fall back into that zone.
+export function dirtyableMemory(
+  vmstat: string,
+  zoneinfo: string,
+  pageSize: number,
+) {
+  const free = vmPages(vmstat, "nr_free_pages");
+  const active = vmPages(vmstat, "nr_active_file");
+  const inactive = vmPages(vmstat, "nr_inactive_file");
+  if (free === null || active === null || inactive === null) return null;
+  const zones = zoneinfo.split(/^Node \d+, zone\s+\w+/m).slice(1);
+  if (zones.length === 0) return null;
+  let reserved = 0;
+  for (const zone of zones) {
+    const high = /^\s*high\s+(\d+)$/m.exec(zone);
+    const managed = /^\s*managed\s+(\d+)$/m.exec(zone);
+    const protection = /^\s*protection: \(([\d, ]+)\)$/m.exec(zone);
+    if (!high || !managed || !protection) return null;
+    reserved += Math.min(
+      Number(managed[1]),
+      Number(high[1]) + Math.max(...protection[1]!.split(",").map(Number)),
+    );
+  }
+  return (Math.max(0, free - reserved) + active + inactive) * pageSize;
+}
+
 export function pageSizeOf(smaps: string) {
-  const match = /^KernelPageSize:\s+(\d+) kB$/m.exec(smaps);
+  const match = /^KernelPageSize:[ \t]+(\d+) kB$/m.exec(smaps);
   return match ? Number(match[1]) * 1024 : 4096;
 }
 
-type Sample = { at: number; written: number; backlog: number };
+type Sample = {
+  at: number;
+  written: number;
+  backlog: number;
+  disk: DiskWrites;
+};
 
-/**
- * The speed the disks write out at, from samples a while apart. Only an
- * interval with unwritten data held back from start to end counts: then the
- * kernel was writing out all along, so what it wrote is what the disks can.
- */
-export function createRateEstimate() {
+function createRateEstimate() {
   let last: Sample | null = null;
   let rate: number | null = null;
   return {
     rate: () => rate,
+    reset() {
+      last = null;
+      rate = null;
+    },
     add(sample: Sample, pageSize: number, backgroundBytes: number) {
       const before = last;
       last = sample;
-      if (!before || sample.at <= before.at) return;
-      if (sample.written < before.written) return;
-      if (before.backlog < backgroundBytes || sample.backlog < backgroundBytes)
+      if (!before) return;
+      const elapsed = sample.at - before.at;
+      if (elapsed <= 0 || sample.written < before.written) return;
+      if (
+        Math.min(before.backlog, sample.backlog) <
+        Math.max(pageSize, backgroundBytes)
+      )
         return;
-      const seen =
-        ((sample.written - before.written) * pageSize) /
-        ((sample.at - before.at) / 1000);
+      // A backlog at both ends can be two bursts with an idle gap between.
+      // I/O time counts overlap once, while time writing excludes reads.
+      if (
+        Math.min(
+          sample.disk.busyMs - before.disk.busyMs,
+          sample.disk.writeMs - before.disk.writeMs,
+        ) <
+        0.8 * elapsed
+      )
+        return;
+      const bytes = Math.min(
+        (sample.written - before.written) * pageSize,
+        sample.disk.bytes - before.disk.bytes,
+      );
+      if (bytes <= 0) return;
+      const seen = bytes / (elapsed / 1000);
       rate = rate === null ? seen : rate + weight * (seen - rate);
     },
   };
@@ -114,42 +139,44 @@ export function createRateEstimate() {
 
 export const writebackContainerName = stacked("sanctum-writeback");
 export const writebackRole = "writeback";
+const backgroundPath = "proc/sys/vm/dirty_background_bytes";
+const dirtyPath = "proc/sys/vm/dirty_bytes";
 
-/**
- * Sets the kernel's limits through a short privileged helper from the
- * manager's own image: the manager's container can read them but not change
- * them, and they belong to the whole machine. It has no network and nothing
- * mounted.
- */
 export function createWritebackHelper(options: {
   docker: Pick<DockerClientLike, "createContainer"> & {
     getContainer: (id: string) => WaitableContainerLike;
   };
+  log: (message: string) => void;
 }) {
-  const { docker } = options;
-  return async (limits: WritebackLimits) => {
-    const manager = await inspectContainer(docker, managerContainerName);
-    if (!manager) {
-      throw new Error(`No ${managerContainerName} container to start from`);
-    }
-    const stale = await inspectContainer(docker, writebackContainerName);
-    if (stale) {
-      assertManaged(
-        { labels: stale.Config.Labels, name: stale.Name },
-        writebackRole,
-      );
-      await docker.getContainer(stale.Id).remove({ force: true });
-    }
+  const { docker, log } = options;
+  return async ({ backgroundBytes, bytes }: WritebackLimits) => {
+    const image = await prepareManagerHelper(
+      docker,
+      writebackContainerName,
+      writebackRole,
+    );
     const { id } = await docker.createContainer({
       name: writebackContainerName,
-      Image: manager.Image,
+      Image: image,
       Entrypoint: ["sh", "-c"],
-      // Setting a limit in bytes turns its share of memory off.
       Cmd: [
-        `echo ${limits.backgroundBytes} > /proc/sys/vm/dirty_background_bytes && echo ${limits.bytes} > /proc/sys/vm/dirty_bytes`,
+        'echo "$1" > /dirty-background-bytes && echo "$2" > /dirty-bytes',
+        "writeback",
+        String(backgroundBytes),
+        String(bytes),
       ],
       Labels: managedLabels(writebackRole),
-      HostConfig: { Privileged: true, NetworkMode: "none" },
+      // Bind outside /proc, which Docker mounts read-only. The two files
+      // are writable by root without granting access to other host settings.
+      HostConfig: {
+        NetworkMode: "none",
+        CapDrop: ["ALL"],
+        ReadonlyRootfs: true,
+        Binds: [
+          `/${backgroundPath}:/dirty-background-bytes:rw`,
+          `/${dirtyPath}:/dirty-bytes:rw`,
+        ],
+      },
     });
     const helper = docker.getContainer(id);
     try {
@@ -159,7 +186,10 @@ export function createWritebackHelper(options: {
         throw new Error(`its helper ended with ${StatusCode}`);
       }
     } finally {
-      await helper.remove({ force: true }).catch(() => undefined);
+      await helper.remove({ force: true }).catch((error: unknown) => {
+        if (!isNotFound(error))
+          log(`Could not remove the writeback helper: ${errorMessage(error)}`);
+      });
     }
   };
 }
@@ -171,121 +201,170 @@ const format = (bytes: number) =>
 
 export function createWriteback(options: {
   apply: (limits: WritebackLimits) => Promise<void>;
+  readDisk: () => Promise<DiskWrites | null>;
   log: (message: string) => void;
-  // Reads a file of the host's /proc, null where it can't; for tests.
   read?: (path: string) => Promise<string | null>;
-  now?: () => number;
-  sampleMs?: number;
-  minApplyMs?: number;
 }) {
-  const { apply, log } = options;
+  const { apply, log, readDisk } = options;
   const read =
     options.read ??
     ((path: string) => readFile(join("/", path), "utf8").catch(() => null));
-  const now = options.now ?? Date.now;
-  const sampleMs = options.sampleMs ?? defaultSampleMs;
-  const minApplyMs = options.minApplyMs ?? defaultMinApplyMs;
   const estimate = createRateEstimate();
   let pageSize = 4096;
+  let backingDisk: string | null = null;
+  let backingChanged = false;
   let applied: WritebackLimits | null = null;
   let appliedAt = -Infinity;
   let applying: Promise<void> | null = null;
   let failing = false;
+  let sampling = false;
+  let stopped = false;
   let timer: NodeJS.Timeout | undefined;
-
-  async function current(): Promise<WritebackLimits | null> {
-    const [background, limit] = await Promise.all([
-      read("proc/sys/vm/dirty_background_bytes"),
-      read("proc/sys/vm/dirty_bytes"),
-    ]);
-    const backgroundBytes = Number.parseInt(background ?? "", 10);
-    const bytes = Number.parseInt(limit ?? "", 10);
-    if (!Number.isFinite(backgroundBytes) || !Number.isFinite(bytes)) {
-      return null;
-    }
-    return { backgroundBytes, bytes };
-  }
 
   const differs = (a: WritebackLimits, b: WritebackLimits) =>
     Math.abs(a.bytes - b.bytes) > worthChanging * b.bytes ||
     Math.abs(a.backgroundBytes - b.backgroundBytes) >
       worthChanging * b.backgroundBytes;
 
-  async function set(wanted: WritebackLimits) {
-    appliedAt = now();
-    try {
-      await apply(wanted);
-      applied = wanted;
-      failing = false;
-      const rate = estimate.rate();
-      log(
-        `Writing out from ${format(wanted.backgroundBytes)} held back, at most ${format(wanted.bytes)}` +
-          (rate === null
-            ? " until the disks have been seen writing"
-            : `, for disks writing ${format(rate)}/s`),
-      );
-    } catch (error) {
-      // It tries again each minute, and says so once.
-      if (!failing) {
-        log(`Could not limit what waits to be written: ${errorMessage(error)}`);
-      }
-      failing = true;
-    }
+  const exceeds = (a: WritebackLimits, b: WritebackLimits) =>
+    a.bytes > b.bytes || a.backgroundBytes > b.backgroundBytes;
+
+  function set(wanted: WritebackLimits) {
+    appliedAt = performance.now();
+    const rate = estimate.rate();
+    const device = backingDisk;
+    applying = Promise.resolve()
+      .then(() => apply(wanted))
+      .then(() => {
+        applied = wanted;
+        if (device === backingDisk) backingChanged = false;
+        failing = false;
+        log(
+          `Writing out from ${format(wanted.backgroundBytes)} held back, at most ${format(wanted.bytes)}` +
+            (rate === null ? "" : `, for a disk writing ${format(rate)}/s`),
+        );
+      })
+      .catch((error: unknown) => {
+        if (!failing) {
+          log(
+            `Could not limit what waits to be written: ${errorMessage(error)}`,
+          );
+        }
+        failing = true;
+      })
+      .finally(() => (applying = null));
+    return applying;
   }
 
   async function sample() {
-    const [meminfo, vmstat] = await Promise.all([
+    const [meminfo, vmstat, zoneinfo, disk] = await Promise.all([
       read("proc/meminfo"),
       read("proc/vmstat"),
+      read("proc/zoneinfo"),
+      readDisk(),
     ]);
+    if (!vmstat || !zoneinfo || stopped) return;
+    const memory = dirtyableMemory(vmstat, zoneinfo, pageSize);
+    if (memory === null) return;
+
     const backlog = meminfo ? backlogOf(meminfo) : null;
-    const memory = meminfo ? memoryOf(meminfo) : null;
-    const written = vmstat ? pagesWrittenOf(vmstat) : null;
-    if (backlog === null || memory === null || written === null) return;
-    // Against the limit in force: until one's applied, the floor's.
+    const written = vmPages(vmstat, "nr_written");
+    const backgroundPages = vmPages(vmstat, "nr_dirty_background_threshold");
     const background =
-      applied?.backgroundBytes ?? limitsFor(null, memory).backgroundBytes;
-    estimate.add({ at: now(), written, backlog }, pageSize, background);
+      applied?.backgroundBytes ||
+      (backgroundPages === null ? null : backgroundPages * pageSize);
+    const device = disk?.disk ?? null;
+    if (device !== backingDisk) {
+      estimate.reset();
+      backingDisk = device;
+      backingChanged = true;
+    }
+    if (disk && backlog !== null && written !== null && background !== null) {
+      estimate.add(
+        { at: performance.now(), written, backlog, disk },
+        pageSize,
+        background,
+      );
+    }
     const rate = estimate.rate();
-    // Nothing seen yet says what the limits in force should change to.
-    if (rate === null && applied) return;
-    const wanted = limitsFor(rate, memory);
-    if (applying || (applied && !differs(wanted, applied))) return;
-    if (now() - appliedAt < minApplyMs) return;
-    applying = set(wanted).finally(() => (applying = null));
-    await applying;
+    const wanted = limitsFor(rate, memory, pageSize);
+    const ceiling =
+      disk && !backingChanged ? limitsFor(Infinity, memory, pageSize) : wanted;
+    const mustLower = applied !== null && exceeds(applied, ceiling);
+    if (applying) return;
+    if (!mustLower && applied && (rate === null || !differs(wanted, applied)))
+      return;
+    if ((!mustLower || failing) && performance.now() - appliedAt < minApplyMs)
+      return;
+    // The timer continues to sample while the helper is running. set() owns
+    // the pending attempt until Docker confirms it has finished.
+    void set(wanted);
   }
 
-  return {
-    /** Sets the limits for disks not seen yet, unless they're set, and starts watching. */
-    async start() {
-      const smaps = await read("proc/self/smaps");
-      if (smaps) pageSize = pageSizeOf(smaps);
-      const meminfo = await read("proc/meminfo");
-      const memory = meminfo ? memoryOf(meminfo) : null;
-      if (memory === null) {
-        log("Not limiting what waits to be written: no /proc/meminfo");
-        return;
-      }
-      const found = await current();
-      // Limits in bytes are a manager's from before it restarted, kept until
-      // the disks are seen writing; the kernel's own are a share of memory
-      // and none in bytes.
-      if (found && found.bytes > 0) {
-        applied = found;
-      } else {
-        await set(limitsFor(null, memory));
-      }
-      timer = setInterval(() => {
-        sample().catch((error: unknown) =>
+  async function initialize() {
+    const [smaps, vmstat, zoneinfo, background, limit, disk] =
+      await Promise.all([
+        read("proc/self/smaps"),
+        read("proc/vmstat"),
+        read("proc/zoneinfo"),
+        read(backgroundPath),
+        read(dirtyPath),
+        readDisk(),
+      ]);
+    if (stopped) return;
+    if (smaps) pageSize = pageSizeOf(smaps);
+    backingDisk = disk?.disk ?? null;
+    const memory =
+      vmstat && zoneinfo ? dirtyableMemory(vmstat, zoneinfo, pageSize) : null;
+    if (memory === null) {
+      log("Not limiting what waits to be written: no dirtyable memory reading");
+      return;
+    }
+    const found = {
+      backgroundBytes: Number.parseInt(background ?? "", 10),
+      bytes: Number.parseInt(limit ?? "", 10),
+    };
+    if (found.bytes > 0 && Number.isFinite(found.backgroundBytes))
+      applied = found;
+    const ceiling = limitsFor(disk ? Infinity : null, memory, pageSize);
+    const initial =
+      !applied || exceeds(applied, ceiling)
+        ? set(limitsFor(null, memory, pageSize))
+        : undefined;
+    timer = setInterval(() => {
+      if (sampling) return;
+      sampling = true;
+      sample()
+        .catch((error: unknown) =>
           log(
             `Could not read what waits to be written: ${errorMessage(error)}`,
           ),
-        );
-      }, sampleMs);
-      timer.unref();
+        )
+        .finally(() => (sampling = false));
+    }, sampleMs);
+    timer.unref();
+    await initial;
+  }
+
+  return {
+    async start() {
+      let deadline: NodeJS.Timeout | undefined;
+      try {
+        await Promise.race([
+          initialize(),
+          new Promise<void>((resolve) => {
+            deadline = setTimeout(() => {
+              log("Timed out waiting for the writeback limits at startup");
+              resolve();
+            }, startupMs);
+          }),
+        ]);
+      } finally {
+        clearTimeout(deadline);
+      }
     },
     stop() {
+      stopped = true;
       clearInterval(timer);
     },
     rate: () => estimate.rate(),
