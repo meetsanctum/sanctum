@@ -244,11 +244,8 @@ it("opens the app after adding it from a hardware offer, as Apps does", async ()
   );
   await act(async () => add!.click());
 
-  const title = () =>
-    (
-      container.querySelector(".top-bar h1") ??
-      container.querySelector("main h1")
-    )?.textContent;
-  expect(title()).toBe("Example");
-  expect(container.textContent).not.toContain("Example Settings");
+  expect(container.querySelector("main h1")?.textContent).toBe("Example");
+  expect(container.querySelector("main")?.textContent).toContain(
+    `Version ${added.version}`,
+  );
 });

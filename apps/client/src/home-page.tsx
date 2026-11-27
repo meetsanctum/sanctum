@@ -213,7 +213,11 @@ function HomePageWithDevices({
             onAppChanged={appChanged}
             onAppAdded={appAdded}
             onOpenApp={(appId) =>
-              setRoutes([{ app: appId, page: mainPage, params: {} }])
+              setRoutes((current) =>
+                current.at(-1) === route
+                  ? [{ app: appId, page: mainPage, params: {} }]
+                  : current,
+              )
             }
             homeBackground={
               dashboardBackground[
