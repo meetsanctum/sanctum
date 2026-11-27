@@ -228,15 +228,30 @@ describe("an app's page in its frame", () => {
     }
   });
 
-  it("shows the app's name, and the loader only after 0.4 s", async () => {
+  it("shows the app's name, and the page's sections only after 0.4 s", async () => {
     await show();
     expect(container.querySelector("h1")?.textContent).toBe("Weather");
     expect(text()).not.toContain("Opening Weather");
+    expect(container.querySelector("[data-slot=skeleton]")).toBeNull();
     expect(frame().className).toContain("opacity-0");
     expect(frame().getAttribute("sandbox")).toBe("allow-scripts");
     expect(frame().getAttribute("allow")).toBe("");
     await after(400);
-    expect(text()).toContain("Opening Weather");
+    expect(text()).toContain("Opening Weather…");
+    expect(container.querySelectorAll("[data-slot=skeleton]")).toHaveLength(4);
+  });
+
+  it("says it's taking longer than usual after 5 s, and goes once it's ready", async () => {
+    await show();
+    await after(4_999);
+    expect(text()).not.toContain("taking longer");
+    await after(1);
+    expect(text()).toContain("Opening Weather is taking longer than usual.");
+    const port = hello();
+    port.postMessage({ type: "ready" });
+    await vi.waitFor(() => expect(text()).not.toContain("taking longer"));
+    expect(container.querySelector("[data-slot=skeleton]")).toBeNull();
+    port.close();
   });
 
   it("says it didn't open when it doesn't answer in 10 s, and tries again", async () => {
@@ -244,9 +259,8 @@ describe("an app's page in its frame", () => {
     await after(9_999);
     expect(text()).not.toContain("didn't open");
     await after(1);
-    expect(text()).toContain("Weather's page didn't open");
-    expect(text()).toContain(
-      "It didn't answer in time. What Weather adds to the home keeps working.",
+    expect(container.querySelector("[role=alert]")?.textContent).toBe(
+      "Weather's page didn't openWhat Weather adds to the home keeps working.Try again",
     );
     expect(address.calls).toBe(1);
     expect(frame().src).toContain("/pages/page_ticket1/");
@@ -269,7 +283,7 @@ describe("an app's page in its frame", () => {
     await after(9_999);
     expect(text()).not.toContain("didn't open");
     await after(1);
-    expect(text()).toContain("It didn't answer in time.");
+    expect(text()).toContain("Weather's page didn't open");
   });
 
   it("shows the page's title, and the app's name again when another page shows", async () => {
@@ -333,7 +347,7 @@ describe("an app's page in its frame", () => {
     });
     await show();
     expect(frame().getAttribute("src")).toBeNull();
-    expect(text()).toContain("Its files didn't load.");
+    expect(text()).toContain("Weather's page didn't open");
   });
 
   it("draws the page's actions in the top bar, and says which was pressed, at which revision", async () => {
@@ -466,11 +480,10 @@ describe("an app's page in its frame", () => {
     expect(frame()).not.toBe(first);
   });
 
-  it("says its files didn't load when the core has none", async () => {
+  it("says it didn't open when the core has no files for it", async () => {
     address.answer = () => Promise.reject(new Error("not_found"));
     await show();
     expect(text()).toContain("Weather's page didn't open");
-    expect(text()).toContain("Its files didn't load.");
   });
 
   it("waits while the home is away", async () => {

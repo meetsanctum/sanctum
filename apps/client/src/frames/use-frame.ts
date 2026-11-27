@@ -21,9 +21,9 @@ import { forgetPageTicket, pageAddress } from "./page-ticket";
 // address and gets its port. The home comes first: while it's away the
 // timer waits, so a home that's updating is never called a page failing.
 // The app comes next: while it isn't running, its own notice is the shell's.
-// Only then the page: one that doesn't answer in 10 s, whose files didn't
-// load, or that stopped working once drawn says so, and Try again loads it
-// afresh. A page that can't work with this client or this home says which
+// Only then the page: one still opening after 5 s says it's taking longer
+// than usual; one that doesn't answer in 10 s, whose files didn't load, or
+// that stopped working once drawn says so, and Try again loads it afresh. A page that can't work with this client or this home says which
 // is too old instead (page-mismatch.tsx).
 
 export type FramePhase =
@@ -35,6 +35,7 @@ export type FrameHousehold = Pick<
 >;
 
 const loaderAfterMs = 400;
+const slowAfterMs = 5_000;
 const answerWithinMs = 10_000;
 
 export function useFrame(options: {
@@ -75,6 +76,7 @@ export function useFrame(options: {
   // jump within the page already there, which keeps the old code.
   const [src, setSrc] = useState<{ url: string; code: string }>();
   const [showsLoader, setShowsLoader] = useState(false);
+  const [isSlow, setIsSlow] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
   // The code of the address whose page has loaded once.
   const loads = useRef<{ code?: string }>({});
@@ -94,6 +96,7 @@ export function useFrame(options: {
     setMismatch(undefined);
     setSrc(undefined);
     setShowsLoader(false);
+    setIsSlow(false);
     const on = (event: FrameEvent) => {
       if (!isCurrent) return;
       if (event.type === "ready") {
@@ -177,12 +180,14 @@ export function useFrame(options: {
   useEffect(() => {
     if (phase !== "opening" || waits) return;
     const loader = setTimeout(() => setShowsLoader(true), loaderAfterMs);
+    const slow = setTimeout(() => setIsSlow(true), slowAfterMs);
     const late = setTimeout(
       () => setPhase((now) => (now === "opening" ? "late" : now)),
       answerWithinMs,
     );
     return () => {
       clearTimeout(loader);
+      clearTimeout(slow);
       clearTimeout(late);
     };
   }, [phase, waits, attempt, id, version, build]);
@@ -195,6 +200,8 @@ export function useFrame(options: {
     mismatch: phase === "mismatch" ? mismatch : undefined,
     failed,
     showsLoader: phase === "opening" && showsLoader && !failed,
+    /** Whether it's still opening after 5 s, which the loader says. */
+    isSlow: phase === "opening" && isSlow && !failed,
     /** Says something to the page, once it has its port. */
     send: (message: ToFrame) => bridge.current?.send(message),
     /** Loads the page afresh, in a new frame with a new code. */
