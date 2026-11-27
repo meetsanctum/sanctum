@@ -96,6 +96,7 @@ function emptyHome(manifest: StaticManifest): PeerCalls {
       throw new ActionError("no_turn");
     },
     replyRequest: notFound,
+    setSpeechLanguage: notFound,
     openListen: notFound,
     sendListen: notFound,
     readListen: notFound,

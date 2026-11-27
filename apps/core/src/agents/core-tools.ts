@@ -44,7 +44,7 @@ import {
   notInstructions,
   toolError,
 } from "./answers.js";
-import type { Speech } from "../speech/speech.js";
+import type { Speech, SpeechLanguage } from "../speech/speech.js";
 import { createAnnounceTool } from "./announce-tool.js";
 import { assistantOf } from "./assistants.js";
 import type { AgentChanges } from "./changes.js";
@@ -83,6 +83,9 @@ type CoreToolsOptions = {
   agentWho: (id: string) => ActivityAuthor;
   // What Sanctum says out loud, for announce; a core without it has none.
   speech?: Pick<Speech, "speak">;
+  // The home's language for speech, which announcements are in unless
+  // they say otherwise.
+  language?: () => SpeechLanguage;
   now?: () => Date;
 };
 
@@ -597,6 +600,7 @@ export function createCoreTools(options: CoreToolsOptions) {
       announce: createAnnounceTool({
         devices: options.devices,
         speech: options.speech,
+        language: options.language ?? (() => "en"),
         record: options.record,
         agentWho: options.agentWho,
       }),

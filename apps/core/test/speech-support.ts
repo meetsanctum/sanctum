@@ -52,7 +52,8 @@ export async function fakeSpeechToPhrase(
     token?: string;
     voiceAfter?: number | null;
     endAfter?: number | null;
-    transcript?: string;
+    // The words it hears, or each time what they are now.
+    transcript?: string | (() => string);
     trainError?: () => string | undefined;
     answerAfterStopMs?: number;
   } = {},
@@ -60,6 +61,8 @@ export async function fakeSpeechToPhrase(
   const lessons: Record<string, unknown>[] = [];
   const heard: Heard[] = [];
   let hasLesson = true;
+  // The language of the model it has loaded, once it has been taught.
+  let loaded: string | null = null;
   const server = createServer((socket) => {
     socket.on("error", () => {});
     let buffered = Buffer.alloc(0);
@@ -80,7 +83,11 @@ export async function fakeSpeechToPhrase(
     const answer = () => {
       if (answered) return;
       answered = true;
-      send("transcript", { text: options.transcript ?? "" });
+      const { transcript } = options;
+      send("transcript", {
+        text:
+          typeof transcript === "function" ? transcript() : (transcript ?? ""),
+      });
     };
     socket.on("data", (chunk: Buffer) => {
       buffered = Buffer.concat([buffered, chunk]);
@@ -107,7 +114,13 @@ export async function fakeSpeechToPhrase(
         heard.push({ type: head.type, data, bytes: payload });
         if (head.type === "describe") {
           send("info", {
-            asr: [{ models: hasLesson ? [{ name: "test" }] : [] }],
+            asr: [
+              {
+                models: hasLesson
+                  ? [{ name: "test", languages: loaded ? [loaded] : [] }]
+                  : [],
+              },
+            ],
           });
         }
         if (head.type === "train") {
@@ -120,6 +133,8 @@ export async function fakeSpeechToPhrase(
           } else {
             lessons.push(lesson);
             hasLesson = true;
+            loaded =
+              typeof lesson.language === "string" ? lesson.language : null;
             send("trained", {
               digest: `digest-${lessons.length}`,
               changed: true,

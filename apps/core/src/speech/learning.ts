@@ -3,6 +3,8 @@ import {
   sentenceBlanks,
   sentenceLimits,
   type AssistantSentences,
+  type Hearing,
+  type HearingFailure,
   type RequestLanguage,
   type SentenceBlank,
 } from "@meetsanctum/app-sdk";
@@ -10,6 +12,7 @@ import {
 import { ManagerRefusal } from "../manager.js";
 import type { Transcriber } from "./spoken.js";
 import {
+  describeLanguages,
   MissingSpeechLesson,
   train,
   transcribe,
@@ -20,9 +23,10 @@ import {
 // Assistant has sentences in the home's language and a smart speaker
 // listens, and teaches it those sentences with the home's names filled in.
 // It retrains a minute after the last change to a name, a room or floor, a
-// light, a mood or the language, and until it has the new lesson it hears
-// with the one it had, rather than not at all. A lesson too large to learn
-// on the host isn't sent, and the one before stays.
+// light or a mood, and at once for a new language; until it has the new
+// lesson it hears with the one it had, in its language, rather than not at
+// all. A lesson too large to learn on the host isn't sent, and the one
+// before stays. How it's doing (`hearing()`) is for the Assistant's page.
 
 /** The service the manager runs for it. */
 export const wordsService = "speech-to-phrase";
@@ -62,7 +66,8 @@ function endpointOf(url: string) {
 
 export function createLearning(options: {
   manager: Manager;
-  // The Assistant's sentences while it answers requests, or null.
+  // The Assistant's sentences while it answers requests, none when it
+  // brings none, or null while it doesn't answer.
   sentences: () => AssistantSentences | null;
   // The home's names for each blank.
   names: () => Record<SentenceBlank, string[]>;
@@ -73,6 +78,8 @@ export function createLearning(options: {
   retrainAfterMs?: number;
   // The core started or stopped wanting the service.
   onWanted?: () => void;
+  // How it's doing changed.
+  onHearing?: (hearing: Hearing) => void;
   log: (message: string) => void;
 }) {
   const retrainMs = options.retrainAfterMs ?? retrainAfterMs;
@@ -82,6 +89,11 @@ export function createLearning(options: {
   // Keep the last lesson the service acknowledged in case it loses its grammar.
   let learned: HomeLesson | null = null;
   let recovering = false;
+  // What keeps it from hearing in the home's language, while something does.
+  let problem: HearingFailure | null = null;
+  // What a lesson under way does: fetch the language's model, or only learn.
+  let phase: "downloading" | "learning" | null = null;
+  let shown: string | null = null;
   let changing: AbortController | null = null;
   let teaching: AbortController | null = null;
   let retrain: NodeJS.Timeout | undefined;
@@ -90,6 +102,34 @@ export function createLearning(options: {
 
   function templates() {
     return options.sentences()?.[options.language()] ?? null;
+  }
+
+  function hearing(): Hearing {
+    const language = options.language();
+    const failed = (failure: HearingFailure): Hearing => ({
+      state: "failed",
+      language,
+      failure,
+    });
+    const sentences = options.sentences();
+    if (sentences === null) return failed("assistant_off");
+    if (!sentences[language]) return failed("no_sentences");
+    if (!options.speakersListen()) return { state: "no_speaker", language };
+    if (learned?.language === language && !recovering) {
+      return { state: "ready", language };
+    }
+    if (problem) return failed(problem);
+    return { state: phase ?? "downloading", language };
+  }
+
+  // Tells of how it's doing, once for each change.
+  function notify() {
+    if (!running || !options.onHearing) return;
+    const now = hearing();
+    const key = JSON.stringify(now);
+    if (key === shown) return;
+    shown = key;
+    options.onHearing(now);
   }
 
   function lesson(): HomeLesson | null {
@@ -110,6 +150,7 @@ export function createLearning(options: {
       options.log(
         `speech: the home has no usable ${language} sentences; keeping what it learned`,
       );
+      problem = "no_names";
       return null;
     }
     const lists = Object.fromEntries(
@@ -122,6 +163,7 @@ export function createLearning(options: {
       options.log(
         `speech: the home's ${language} sentences take about ${steps} steps to learn, over ${sentenceLimits.grammarSteps}; keeping what it learned`,
       );
+      problem = "too_many_names";
       return null;
     }
     return { language, templates: usable, lists };
@@ -146,10 +188,13 @@ export function createLearning(options: {
     looking = undefined;
     teaching?.abort();
     teaching = null;
+    phase = null;
+    problem = null;
     const now = lesson() ?? (recovering ? learned : null);
-    if (!now) return;
+    if (!now) return notify();
     const controller = new AbortController();
     teaching = controller;
+    notify();
     try {
       const at = await connection(controller.signal);
       if (controller.signal.aborted) return;
@@ -157,6 +202,14 @@ export function createLearning(options: {
         looking = setTimeout(() => void teach(), lookEveryMs).unref();
         return;
       }
+      // A model it has loaded needs no download.
+      const loaded = await describeLanguages({
+        ...at,
+        signal: controller.signal,
+      }).catch((): string[] => []);
+      if (controller.signal.aborted) return;
+      phase = loaded.includes(now.language) ? "learning" : "downloading";
+      notify();
       await train({
         ...at,
         lesson: now,
@@ -170,15 +223,21 @@ export function createLearning(options: {
       options.log(
         `speech: speech recognition didn't learn the home's sentences (${error instanceof Error ? error.message : String(error)}); trying again`,
       );
+      problem = "unavailable";
       looking = setTimeout(() => void teach(), lookEveryMs).unref();
     } finally {
-      if (teaching === controller) teaching = null;
+      if (teaching === controller) {
+        teaching = null;
+        phase = null;
+      }
+      notify();
     }
   }
 
   function recover() {
     if (!running || !admitted || !learned || recovering) return;
     recovering = true;
+    notify();
     if (!teaching && !looking) void teach();
   }
 
@@ -196,6 +255,7 @@ export function createLearning(options: {
           });
           if (!controller.signal.aborted) {
             admitted = true;
+            problem = null;
             void teach();
           }
         } else {
@@ -208,8 +268,12 @@ export function createLearning(options: {
           options.log(
             `speech: speech recognition couldn't ${want ? "start" : "stop"} (${error instanceof Error ? error.message : String(error)})`,
           );
+          const noRoom =
+            error instanceof ManagerRefusal && error.status === 409;
+          if (want) problem = noRoom ? "memory" : "unavailable";
+          notify();
           // Memory may become available when another service or app stops.
-          if (want && error instanceof ManagerRefusal && error.status === 409) {
+          if (want && noRoom) {
             retryAdmission = setTimeout(
               () => void apply(Math.min(delay * 2, maxAdmissionRetryMs)),
               delay,
@@ -227,7 +291,7 @@ export function createLearning(options: {
   function reconcile() {
     if (!running) return;
     const want = templates() !== null && options.speakersListen();
-    if (want === wanted) return;
+    if (want === wanted) return notify();
     wanted = want;
     admitted = false;
     teaching?.abort();
@@ -237,6 +301,9 @@ export function createLearning(options: {
     clearTimeout(retryAdmission);
     learned = null;
     recovering = false;
+    problem = null;
+    phase = null;
+    notify();
     options.onWanted?.();
     if (changing) changing.abort();
     else void apply();
@@ -250,8 +317,8 @@ export function createLearning(options: {
 
     /**
      * Something the lesson or the want depends on changed: the Assistant,
-     * a speaker, a name, a room, a floor, a light, a mood or the language.
-     * It retrains a minute after the last one.
+     * a speaker, a name, a room, a floor, a light or a mood. It retrains a
+     * minute after the last one.
      */
     changed() {
       if (!running) return;
@@ -264,6 +331,26 @@ export function createLearning(options: {
       retrain = setTimeout(() => void teach(), retrainMs);
       retrain.unref();
     },
+
+    /**
+     * The home's language changed: it learns the new one at once, and hears
+     * in the old one until then.
+     */
+    languageChanged() {
+      if (!running) return;
+      const before = wanted;
+      reconcile();
+      if (wanted !== before || !wanted) return;
+      clearTimeout(retrain);
+      void teach();
+    },
+
+    /** How speech recognition is doing, in the home's language. */
+    hearing,
+
+    /** The language it hears in now, or null while it hears in none. */
+    hearsIn: (): RequestLanguage | null =>
+      learned && !recovering ? learned.language : null,
 
     /** Whether the core wants the service now, and Piper for its replies. */
     wanted: () => wanted === true,
@@ -299,6 +386,9 @@ export function createLearning(options: {
 
     stop() {
       running = false;
+      shown = null;
+      problem = null;
+      phase = null;
       wanted = null;
       admitted = false;
       learned = null;

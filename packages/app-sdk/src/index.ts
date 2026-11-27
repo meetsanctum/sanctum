@@ -40,7 +40,7 @@ import {
 import { turnOnType } from "./lights.js";
 import { protocolVersion } from "./protocol-version.js";
 import { assistantAppId } from "./requests.js";
-import { sentenceIssues } from "./sentences.js";
+import { notUnderstoodIssues, sentenceIssues } from "./sentences.js";
 import { settingsSchemaOf, type SettingsSchema } from "./settings.js";
 import { forecastType, sunType } from "./weather.js";
 import {
@@ -83,6 +83,7 @@ export * from "./media.js";
 export * from "./models.js";
 export * from "./requests.js";
 export * from "./sentences.js";
+export * from "./hearing.js";
 export * from "./action-errors.js";
 export * from "./host.js";
 export * from "./net.js";
@@ -434,6 +435,15 @@ export function defineApp(app: AppDefinition): AppDefinition {
     const issues = sentenceIssues(app.sentences);
     if (issues.length > 0) throw new Error(issues.join("; "));
   }
+  if (app.notUnderstood !== undefined) {
+    if (app.id !== assistantAppId || app.sentences === undefined) {
+      throw new Error(
+        "Only Sanctum's Assistant, with its sentences, says what it didn't understand",
+      );
+    }
+    const issues = notUnderstoodIssues(app.notUnderstood, app.sentences);
+    if (issues.length > 0) throw new Error(issues.join("; "));
+  }
   for (const hook of [
     "start",
     "resume",
@@ -503,6 +513,7 @@ export function toStaticManifest(app: AppDefinition) {
     migrations: app.migrations ?? null,
     ...(app.requests ? { requests: true as const } : {}),
     ...(app.sentences ? { sentences: app.sentences } : {}),
+    ...(app.notUnderstood ? { notUnderstood: app.notUnderstood } : {}),
     driver: app.driver
       ? {
           hooks: driverHooks.filter((hook) => app.driver?.[hook]),

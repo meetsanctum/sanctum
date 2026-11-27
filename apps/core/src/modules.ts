@@ -5,6 +5,7 @@ import {
   shownQuestions,
   sunTimesSchema,
   sunType,
+  type Hearing,
 } from "@meetsanctum/app-sdk";
 
 import { createActivity } from "./activity/activity.js";
@@ -247,6 +248,8 @@ export async function createModules(
       eventBus.publish({ name: "location.changed", ...change }),
     onTimeZoneChange: (at, previousZone) =>
       workflows.followTimeZone(at, previousZone),
+    // Speech recognition learns the new language.
+    onLanguageChange: () => learning?.languageChanged(),
     // A room's devices move to No room as it goes, which Devices tells once
     // the removal has committed.
     onRoomRemoving: (roomId) => devices.prepareRoomRemoval(roomId),
@@ -480,6 +483,7 @@ export async function createModules(
     places,
     apps: () => apps,
     record: activity.for("devices"),
+    onHearing: live.hearing,
   });
   // The home's AI models, which the household adds in Settings, and the
   // turns in which apps ask the one in use.
@@ -691,6 +695,14 @@ export async function createModules(
       );
     }
   });
+  // How speech recognition is doing: unavailable where the manager runs no
+  // speech recognition for the core.
+  const hearing = (): Hearing =>
+    learning?.hearing() ?? {
+      state: "failed",
+      language: places.language(),
+      failure: "unavailable",
+    };
   // Register the followers once every module they call has been built.
   setCoreFollowers(eventBus, {
     apps,
@@ -738,6 +750,7 @@ export async function createModules(
   });
 
   return {
+    hearing,
     activity,
     blobs,
     activityViews,

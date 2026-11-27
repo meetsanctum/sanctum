@@ -1,6 +1,7 @@
 import {
   announcePermission,
   assistantAppId,
+  type Hearing,
   type RequestLanguage,
 } from "@meetsanctum/app-sdk";
 
@@ -26,17 +27,21 @@ export function assembleSpeakerAudio(
   > &
     Pick<HearingOptions, "transcriber"> & {
       manager: Partial<Pick<ManagerClient, "serviceConnection">>;
-      // Speaker requests use English.
-      language?: () => RequestLanguage;
       speechRetrainAfterMs?: number;
     },
-  options: Pick<HearingOptions, "devices" | "places" | "apps" | "record"> & {
+  options: Pick<HearingOptions, "devices" | "apps" | "record"> & {
+    places: HearingOptions["places"] & { language(): RequestLanguage };
     canUse: Pick<AgentsCanUse, "areaOn">;
+    // How speech recognition is doing changed.
+    onHearing?: (hearing: Hearing) => void;
   },
 ) {
   const { manager } = config;
-  const language = config.language ?? (() => "en" as const);
   const { devices, places, apps } = options;
+  const language = () => places.language();
+  // The Assistant's, while it answers requests.
+  const assistant = () =>
+    apps().answersRequests() ? apps().manifest(assistantAppId) : undefined;
   const learning =
     manager.serviceConnection &&
     manager.wantServiceForCore &&
@@ -47,10 +52,10 @@ export function assembleSpeakerAudio(
             wantServiceForCore: manager.wantServiceForCore,
             releaseServiceForCore: manager.releaseServiceForCore,
           },
-          sentences: () =>
-            apps().answersRequests()
-              ? (apps().manifest(assistantAppId)?.sentences ?? null)
-              : null,
+          sentences: () => {
+            const manifest = assistant();
+            return manifest ? (manifest.sentences ?? {}) : null;
+          },
           names: () => {
             const { rooms, floors } = places.list();
             return {
@@ -68,6 +73,7 @@ export function assembleSpeakerAudio(
           },
           language,
           onWanted: () => speech.speech?.hearingChanged(),
+          onHearing: options.onHearing,
           speakersListen: () => devices.list().some(hasListeningPart),
           retrainAfterMs: config.speechRetrainAfterMs,
           log: config.log,
@@ -83,12 +89,21 @@ export function assembleSpeakerAudio(
       config.transcriber
         ? Boolean(config.transcriber())
         : (learning?.wanted() ?? false),
+    // What the Assistant says for speech it didn't understand, kept ready
+    // like "One moment".
+    keptPhrases: () =>
+      Object.entries(assistant()?.notUnderstood ?? {}).map(
+        ([language, text]) => ({ language: language as RequestLanguage, text }),
+      ),
   });
   const hearing = assembleHearing({
     ...options,
     transcriber: config.transcriber ?? (() => learning?.transcriber() ?? null),
     notHearing: () => learning?.notHearing() ?? "no_speech_to_text",
-    language,
+    // The language speech recognition hears in: the home's, or until it
+    // has learned that, the one before.
+    language: () => learning?.hearsIn() ?? language(),
+    notUnderstood: (language) => assistant()?.notUnderstood?.[language] ?? null,
     log: config.log,
     speech: () => speech.speech,
   });
@@ -116,6 +131,8 @@ export function assembleSpeech(options: {
   devices: Parameters<typeof createSpeech>[0]["devices"];
   areaOn: () => boolean;
   hears?: () => boolean;
+  // Phrases kept ready besides the core's own.
+  keptPhrases?: () => readonly { language: RequestLanguage; text: string }[];
   log: (message: string) => void;
 }) {
   const { speaker, manager, devices, areaOn, log } = options;
@@ -141,12 +158,15 @@ export function assembleSpeech(options: {
           hears: options.hears,
           chime: [successChime()],
           publishedPort: speaker.publishedPort,
-          keptPhrases: Object.values(spokenPhrases).flatMap((phrase) =>
-            speechLanguages.map((language) => ({
-              language,
-              text: phrase[language],
-            })),
-          ),
+          keptPhrases: () => [
+            ...Object.values(spokenPhrases).flatMap((phrase) =>
+              speechLanguages.map((language) => ({
+                language,
+                text: phrase[language],
+              })),
+            ),
+            ...(options.keptPhrases?.() ?? []),
+          ],
           log,
         })
       : undefined;

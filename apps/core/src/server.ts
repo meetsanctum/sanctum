@@ -16,6 +16,7 @@ import { ActionCallError } from "./app-host/errors.js";
 import { registerPageRequests } from "./app-host/page-requests.js";
 import { registerAppRoutes } from "./app-host/routes.js";
 import { registerBlobRoutes } from "./blobs/routes.js";
+import { registerSpeechRoutes } from "./speech/routes.js";
 import { AuthError } from "./auth/errors.js";
 import { registerAuth } from "./auth/routes.js";
 import type { CoreConfig } from "./config.js";
@@ -75,6 +76,7 @@ export function createServer(
     | "pages"
     | "workflows"
     | "blobs"
+    | "hearing"
   > & {
     // The core's phase and readiness (lifecycle.ts): only the health check
     // answers while an update is on trial, until the manager commits it.
@@ -228,9 +230,11 @@ export function createServer(
         offers: options.hardwareOffers,
         gate,
         authenticate: auth.authenticate,
+        language: () => places.language(),
       });
       registerWorkflowRoutes(core, { workflows: options.workflows, gate });
       registerBlobRoutes(core, { blobs: options.blobs, gate });
+      registerSpeechRoutes(core, { hearing: options.hearing, gate });
       // Only the desktop app's shell, and those a development stack allows,
       // may show an app's page in a frame.
       registerPageRoutes(core, {

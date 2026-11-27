@@ -43,7 +43,7 @@ export const spokenPhrases = {
 } as const satisfies Record<string, Record<RequestLanguage, string>>;
 
 /**
- * Hears a run's words from its sound, in the home's language, and stops
+ * Hears a run's words from its sound, in the language it was taught, and stops
  * listening once speech ends: null when nothing was said, "" for speech it
  * doesn't know.
  */
@@ -101,8 +101,11 @@ export function createSpokenRequests(options: {
   // Why nothing hears words now: the Assistant has no sentences in the
   // home's language, or speech recognition isn't ready.
   notHearing?: () => "no_sentences" | "no_speech_to_text";
-  // The home's one language for speech.
+  // The language speech recognition hears in: the home's one language.
   language: () => RequestLanguage;
+  // What the speaker says for speech outside the Assistant's sentences, or
+  // null for nothing.
+  notUnderstood?: (language: RequestLanguage) => string | null;
   speaker: (device: string) => Speaker | null;
   // Whether `driver` still drives the device and runs.
   drives: (driver: string, device: string) => boolean;
@@ -336,6 +339,23 @@ export function createSpokenRequests(options: {
       const { text } = heard;
       const words = text?.trim().slice(0, requestTextMaxLength).trim();
       if (!words) {
+        // Speech it doesn't know gets the Assistant's words; silence, none.
+        const sorry =
+          text === null ? null : (options.notUnderstood?.(language) ?? null);
+        const url =
+          sorry &&
+          (await prepareReply(
+            run,
+            { text: sorry },
+            language,
+            AbortSignal.any([run.signal, signal]),
+          ));
+        if (sorry && url && !signal.aborted) {
+          run.reply(url, sorry);
+          await runEnded;
+          return;
+        }
+        if (signal.aborted) return;
         run.fail(text === null ? "nothing-heard" : "not-understood");
         return;
       }

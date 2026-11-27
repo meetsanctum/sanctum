@@ -221,6 +221,21 @@ describe("who answers requests", () => {
         },
       }),
     ).toThrow("steps to learn in a large home");
+    // What speech it doesn't know gets, in its sentences' languages only.
+    const notUnderstood = { en: "I can only help with lights and moods" };
+    expect(() => contractOf({ ...manifest, notUnderstood })).not.toThrow();
+    expect(() =>
+      contractOf({ ...manifest, notUnderstood: { de: "Nur Licht" } }),
+    ).toThrow("has no de sentences");
+    expect(() =>
+      contractOf({
+        ...manifest,
+        id: "sanctum.example",
+        requests: undefined,
+        sentences: undefined,
+        notUnderstood,
+      }),
+    ).toThrow("Only Sanctum's Assistant says what it didn't understand");
   });
 
   it("requires the Assistant to declare the grant for answering requests", () => {

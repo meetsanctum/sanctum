@@ -31,6 +31,7 @@ function setup(
     prepare?: (text: string, signal?: AbortSignal) => Promise<void>;
     beforeDispatch?: () => Promise<void>;
     speakers?: Record<string, Speaker>;
+    notUnderstood?: string;
   } = {},
 ) {
   const recorded: NewActivityEntry[] = [];
@@ -69,6 +70,7 @@ function setup(
         : options.heard;
     },
     language: () => "en",
+    notUnderstood: () => options.notUnderstood ?? null,
     speaker: (device) => speakers[device] ?? null,
     drives: (by, device) => drives && by === driver && device in speakers,
     requests: {
@@ -288,6 +290,30 @@ describe("a smart speaker's request", () => {
       });
       expect(asked).toEqual([]);
     }
+  });
+
+  it("says the Assistant's words for speech it doesn't know, never for silence", async () => {
+    const notUnderstood = "I can only help with lights and moods";
+    const unknown = setup({ heard: "", notUnderstood });
+    const opened = await unknown.wake();
+    if (!opened.accepted) throw new Error(opened.refusal);
+    await unknown.until(() =>
+      unknown.steps(opened.run).some((step) => step.step === "reply"),
+    );
+    expect(unknown.replied).toEqual([{ text: notUnderstood }]);
+    expect(unknown.asked).toEqual([]);
+
+    const silent = setup({ heard: null, notUnderstood });
+    const quiet = await silent.wake();
+    if (!quiet.accepted) throw new Error(quiet.refusal);
+    await silent.until(() =>
+      silent.steps(quiet.run).some((step) => step.step === "done"),
+    );
+    expect(silent.steps(quiet.run)).toContainEqual({
+      step: "error",
+      error: "nothing-heard",
+    });
+    expect(silent.replied).toEqual([]);
   });
 
   it("ends in an error the speaker shows when the Assistant can't answer", async () => {

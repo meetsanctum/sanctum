@@ -230,6 +230,41 @@ export async function transcribe(options: {
 }
 
 /**
+ * The languages of the models the service has loaded: those it has
+ * downloaded and been taught in, since it last started.
+ */
+export async function describeLanguages(options: {
+  host: string;
+  port: number;
+  signal?: AbortSignal;
+}): Promise<string[]> {
+  const connection = open(options, options.signal);
+  try {
+    await connection.connected;
+    connection.send("describe");
+    const info = await connection.next(connectMs);
+    const asr: unknown = info?.data.asr;
+    if (info?.type !== "info" || !Array.isArray(asr)) {
+      throw new SpeechError("Speech recognition didn't describe its models");
+    }
+    return asr.flatMap((program: { models?: unknown }) =>
+      Array.isArray(program?.models)
+        ? program.models.flatMap((model: { languages?: unknown }) =>
+            Array.isArray(model?.languages)
+              ? model.languages.filter(
+                  (language): language is string =>
+                    typeof language === "string",
+                )
+              : [],
+          )
+        : [],
+    );
+  } finally {
+    connection.close();
+  }
+}
+
+/**
  * Teaches the service a lesson with its token, and answers once it has it:
  * whether anything changed, and the lesson's digest.
  */

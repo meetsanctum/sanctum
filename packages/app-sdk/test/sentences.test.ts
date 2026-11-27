@@ -129,4 +129,25 @@ describe("the Assistant's sentences", () => {
       sentenceLimits.grammarSteps,
     );
   });
+
+  it("say what speech they don't know gets, in their languages", () => {
+    const sentences = { en: ["turn on the lights"] };
+    const notUnderstood = { en: "I can only help with lights and moods" };
+    expect(
+      toStaticManifest(defineApp({ ...assistant(sentences), notUnderstood }))
+        .notUnderstood,
+    ).toEqual(notUnderstood);
+    expect(() =>
+      defineApp({
+        ...assistant(sentences),
+        notUnderstood: { de: "Ich helfe nur mit Licht und Stimmungen" },
+      }),
+    ).toThrow("has no de sentences");
+    expect(() =>
+      defineApp({ ...assistant(sentences), notUnderstood: { en: " " } }),
+    ).toThrow("not-understood replies don't fit");
+    expect(() => defineApp({ ...assistant(undefined), notUnderstood })).toThrow(
+      "with its sentences",
+    );
+  });
 });

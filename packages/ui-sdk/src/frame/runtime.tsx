@@ -133,6 +133,7 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
       command: (command) => request({ op: "command", command }),
       entities: () => request({ op: "entities" }),
       settings: () => request({ op: "settings" }),
+      hearing: () => request({ op: "hearing" }),
       async ask(requested) {
         const ids =
           typeof requested === "string" ? [requested] : [...requested];

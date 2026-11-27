@@ -84,7 +84,7 @@ export function createAppHost(options: {
     AppContainerManager &
     Pick<ManagerClient, "hostResources">;
   people: Pick<People, "list">;
-  places: Pick<PlacesModule, "list" | "location" | "clock">;
+  places: Pick<PlacesModule, "list" | "location" | "clock" | "setLanguage">;
   devices: Devices;
   // Where drivers' presses go, and apps' pages' captures of them.
   presses: () => Pick<Presses, "press" | "released" | "endCaptures">;

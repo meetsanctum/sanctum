@@ -37,6 +37,8 @@ export function assembleHearing(options: {
   // Why nothing hears runs, when nothing does.
   notHearing?: () => NotHearing;
   language?: () => RequestLanguage;
+  // What a speaker says for speech outside the Assistant's sentences.
+  notUnderstood?: (language: RequestLanguage) => string | null;
   record: (entry: NewActivityEntry) => void;
   now?: () => number;
   log: (message: string) => void;
@@ -46,6 +48,7 @@ export function assembleHearing(options: {
     transcriber: options.transcriber ?? (() => null),
     notHearing: options.notHearing ?? (() => "no_speech_to_text"),
     language: options.language ?? (() => "en"),
+    notUnderstood: options.notUnderstood ?? (() => null),
     speaker(id) {
       const device = devices.get(id);
       const capability = listens(device);

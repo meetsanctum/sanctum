@@ -706,6 +706,7 @@ const noCore: CoreCalls = {
   aiTools: unused,
   callAiTool: unused,
   replyRequest: unused,
+  setSpeechLanguage: unused,
   openListen: unused,
   sendListen: unused,
   readListen: unused,

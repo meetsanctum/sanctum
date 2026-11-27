@@ -74,7 +74,7 @@ function message(error: unknown) {
 
 export function createAppContexts(options: {
   people: Pick<People, "list">;
-  places: Pick<PlacesModule, "list" | "location" | "clock">;
+  places: Pick<PlacesModule, "list" | "location" | "clock" | "setLanguage">;
   devices: Devices;
   entities: Entities;
   presses: () => Pick<Presses, "press" | "released">;
@@ -213,7 +213,11 @@ export function createAppContexts(options: {
       services: entry.services,
       claims: () => entry.updating?.claims,
       people: snapshot?.people ?? options.people,
-      places: snapshot?.places ?? options.places,
+      // Reads come from a snapshot meanwhile; the language is set at once.
+      places: {
+        ...(snapshot?.places ?? options.places),
+        setLanguage: (by, language) => options.places.setLanguage(by, language),
+      },
       devices: snapshot?.devices ?? options.devices,
       presses: {
         press: (driver, press) => options.presses().press(driver, press),

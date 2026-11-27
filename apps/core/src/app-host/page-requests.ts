@@ -1,4 +1,5 @@
 import {
+  assistantAppId,
   placesReadPermission,
   type DeviceInfo,
   type EntityInfo,
@@ -14,7 +15,7 @@ import type { AppHost } from "./host.js";
 // app's id in a header, and the core answers with what both the client and
 // the app may see, so a page can't see more than its app even by mistake. A
 // page reaches only the routes an app's client uses, and its own app's
-// actions and settings; the routes it reads, places, devices and entities,
+// actions and settings, and the Assistant's how speech recognition is doing; the routes it reads, places, devices and entities,
 // and the commands it sends, keep to the app's grants as they are now. A
 // request without the header is the shell's own.
 
@@ -39,11 +40,14 @@ const ownRoutes = new Set([
   "POST /api/apps/:appId/actions/:actionId",
   "GET /api/apps/:appId/settings",
 ]);
+// How speech recognition is doing, which only the Assistant's page shows.
+const assistantRoutes = new Set(["GET /api/speech/hearing"]);
 
 // Whether an app's page may reach a route at all.
 function pageMayReach(request: FastifyRequest, app: string) {
   const route = `${request.method} ${request.routeOptions.url ?? ""}`;
   if (pageRoutes.has(route)) return true;
+  if (assistantRoutes.has(route)) return app === assistantAppId;
   const { appId } = (request.params ?? {}) as { appId?: unknown };
   return ownRoutes.has(route) && appId === app;
 }

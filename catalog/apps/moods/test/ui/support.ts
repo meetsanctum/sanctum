@@ -31,6 +31,7 @@ export function fakeClient() {
     command: vi.fn(),
     entities: vi.fn(async () => []),
     settings: vi.fn(async () => ({})),
+    hearing: vi.fn(),
     capturePresses: vi.fn(),
     ask: vi.fn(async () => true),
     subscribe: vi.fn((_listener: LiveListener) => () => {}),

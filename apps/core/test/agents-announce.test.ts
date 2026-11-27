@@ -71,6 +71,7 @@ function setup(
   const recorded: NewActivityEntry[] = [];
   const deliveries: ((fetched: boolean) => void)[] = [];
   let clock = 0;
+  let language: "en" | "de" = "en";
   const tool = createAnnounceTool({
     devices: {
       list: () => devices,
@@ -91,10 +92,14 @@ function setup(
       return "entry";
     },
     agentWho: () => ({ actor: "assistant-run:agent-1" }),
+    language: () => language,
     now: () => clock,
   });
   return {
     tool,
+    speakIn: (home: "en" | "de") => {
+      language = home;
+    },
     said,
     recorded,
     deliveries,
@@ -122,7 +127,7 @@ describe("the announce tool", () => {
     ).toBe(false);
   });
 
-  it("says the text on the speaker in English unless asked, and logs what was said", async () => {
+  it("says the text on the speaker in the home's English unless asked, and logs what was said", async () => {
     const { run, said, recorded, deliveries } = setup();
     const result = await run({
       speaker: "speaker",
@@ -153,6 +158,17 @@ describe("the announce tool", () => {
         detail: { text: "Dinner's ready.", language: "en" },
       },
     ]);
+  });
+
+  it("says it in the home's language unless asked for another", async () => {
+    const { tool, run, said, speakIn } = setup();
+    speakIn("de");
+    expect(tool.tool(canUse(true), { assistant: false }).description).toContain(
+      "the home's, German, unless the person speaks English",
+    );
+    await run({ speaker: "speaker", text: "Essen ist fertig." });
+    await run({ speaker: "speaker", text: "Dinner's ready.", language: "en" });
+    expect(said).toMatchObject([{ language: "de" }, { language: "en" }]);
   });
 
   it("records an expired announcement as failed after replying that it was sent", async () => {

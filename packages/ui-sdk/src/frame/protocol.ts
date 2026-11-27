@@ -43,6 +43,7 @@ export type FrameOperation =
   | { op: "command"; command: unknown }
   | { op: "entities" }
   | { op: "settings" }
+  | { op: "hearing" }
   | { op: "ask"; permissions: string[] }
   // Ends a capture the page began, answered once the core has.
   | { op: "release"; capture: number };

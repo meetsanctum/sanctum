@@ -17,6 +17,8 @@ import type {
   LiveSettings,
   LiveSystem,
   HardwareOffer,
+  Hearing,
+  LiveHearing,
   PairingInfo,
   Places,
 } from "@meetsanctum/app-sdk";
@@ -160,6 +162,13 @@ export function createLiveUpdates(
     offer(offer: HardwareOffer | null) {
       connections.publish((principal): LiveOffer | undefined =>
         reads(principal) ? { type: "offer", offer } : undefined,
+      );
+    },
+
+    // How speech recognition is doing, for the Assistant's page.
+    hearing(hearing: Hearing) {
+      connections.publish((principal): LiveHearing | undefined =>
+        reads(principal) ? { type: "hearing", hearing } : undefined,
       );
     },
 

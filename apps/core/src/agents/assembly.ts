@@ -204,6 +204,7 @@ export function assembleAgentTools(
       record: activity.for("agents"),
       agentWho: activity.agentWho,
       speech: options.speech,
+      language: () => places.language(),
     }),
     readableDeviceKinds,
     places: () => places.list(),

@@ -1,4 +1,5 @@
 import {
+  assistantAppId,
   entityReadPermission,
   knownParts,
   registerPermission,
@@ -16,6 +17,7 @@ import type {
   CommandOf,
   DeviceInfo,
   EntityInfo,
+  Hearing,
   LiveMessage,
   Places,
 } from "@meetsanctum/app-sdk";
@@ -106,6 +108,12 @@ export interface AppClient {
     device: string,
     listener: PressCaptureListener,
   ): { stop(): Promise<void> };
+  /**
+   * Sanctum's Assistant's pages only: how speech recognition is doing for
+   * smart speakers, in the home's language, which `subscribe` then follows
+   * as `hearing` messages.
+   */
+  hearing(): Promise<Hearing>;
   subscribe(listener: LiveListener): () => void;
 }
 
@@ -236,6 +244,11 @@ export function createAppClient(
       return granted;
     },
 
+    async hearing() {
+      need(app.id === assistantAppId, "to be Sanctum's Assistant");
+      return bridge.json<Hearing>("/api/speech/hearing");
+    },
+
     capturePresses(device, listener) {
       need(access.kinds.reads.has("button"), "devices.read:button");
       return capturePresses(bridge, device, listener, app.id);
@@ -251,6 +264,10 @@ export function createAppClient(
           }
           if (message.type === "settings") {
             if (message.app === app.id) listener.message?.(message);
+            return;
+          }
+          if (message.type === "hearing") {
+            if (app.id === assistantAppId) listener.message?.(message);
             return;
           }
           if (message.type === "entity") {
