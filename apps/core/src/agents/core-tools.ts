@@ -11,6 +11,7 @@ import {
   type AiCanUse,
   type AiOfferInfo,
   type CapabilityKind,
+  type SpeechLanguage,
 } from "@meetsanctum/app-sdk";
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import { z } from "zod";
@@ -45,7 +46,7 @@ import {
   notInstructions,
   toolError,
 } from "./answers.js";
-import type { Speech, SpeechLanguage } from "../speech/speech.js";
+import type { Speech } from "../speech/speech.js";
 import { createAnnounceTool } from "./announce-tool.js";
 import { assistantOf } from "./assistants.js";
 import type { AgentChanges } from "./changes.js";

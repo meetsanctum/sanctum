@@ -2,7 +2,7 @@ import {
   aiAssistantPermission,
   aiToolCallSchema,
   assistantAppId,
-  requestLanguages,
+  speechLanguages,
   requestReplySchema,
   blobOf,
   ActionError,
@@ -59,7 +59,7 @@ import { secretName, secretValue, type AppSecrets } from "./secrets.js";
 const confirmationFrom = 26;
 
 const speechLanguageSchema = z.strictObject({
-  language: z.enum(requestLanguages),
+  language: z.enum(speechLanguages),
 });
 
 const isTurnOpener = (
@@ -719,7 +719,7 @@ export function createCoreCalls(options: {
       const parsed = speechLanguageSchema.safeParse(set);
       if (!parsed.success) {
         throw new Error(
-          `A language for speech is one of ${requestLanguages.join(", ")}`,
+          `A language for speech is one of ${speechLanguages.join(", ")}`,
         );
       }
       if (!options.assistant.canActFor(actor)) {

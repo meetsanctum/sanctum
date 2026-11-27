@@ -51,7 +51,7 @@ export function SidebarPins(props: {
       {apps.map((app) => (
         <li key={app.id} className="min-w-0">
           <PinTile name={app.name} current={app.current} onOpen={app.onOpen}>
-            <AppIcon icon={app.icon} className="size-9" />
+            <AppIcon appId={app.id} icon={app.icon} className="size-9" />
           </PinTile>
         </li>
       ))}

@@ -69,6 +69,7 @@ export function PieceIcon(props: {
   if (app?.icon) {
     return (
       <AppIcon
+        appId={app.id}
         icon={app.icon}
         className={cn(
           "shrink-0 rounded-[22.5%]",

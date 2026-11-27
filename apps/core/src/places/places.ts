@@ -4,7 +4,7 @@ import {
   type Floor,
   type HomeLocation,
   type Places,
-  type RequestLanguage,
+  type Language,
   type Room,
   type Zone,
 } from "@meetsanctum/app-sdk";
@@ -216,7 +216,7 @@ export function createPlaces(
     // Move dependent timers in the same transaction as the zone change.
     onTimeZoneChange?: (at: Date, previousZone: string) => void;
     // The home's language for speech changed, once it has committed.
-    onLanguageChange?: (language: RequestLanguage) => void;
+    onLanguageChange?: (language: Language) => void;
     // Capture dependent state before the foreign-key cascade; the returned
     // notification runs only once the removal has committed, before
     // onChange, so what follows the devices hears them move first.
@@ -398,13 +398,13 @@ export function createPlaces(
     clock: () => clockOf(read.home.get()),
 
     /** The home's one language for speech, English until it's set. */
-    language: (): RequestLanguage => read.home.get()?.language ?? "en",
+    language: (): Language => read.home.get()?.language ?? "en",
 
     /**
      * Sets the home's language for speech, which only Sanctum's Assistant
      * does, for someone in the home.
      */
-    setLanguage(by: ActivityAuthor, language: RequestLanguage) {
+    setLanguage(by: ActivityAuthor, language: Language) {
       if ((read.home.get()?.language ?? "en") === language) return;
       db.transaction(() => {
         const set = { language, updatedAt: now() };

@@ -1,26 +1,32 @@
 # App icons
 
-The approved 2026-11-03 icon family: mostly opaque foreground symbols,
+The app icon family uses mostly opaque foreground symbols,
 fine edge highlights, gentle gradients and shallow depth. The PNG masters
-are exports of the approved concept artwork, with the presentation labels
-and background removed. They have transparent corners and a 256 × 256 px
-canvas, enough for the 72 px app overview at 3× density.
+have transparent corners and a 256 × 256 px canvas, enough for the 72 px
+app overview at 3× density.
 
 Lossless WebP exports sit beside them. The shell's `AppIcon`
 (`apps/client/src/app-icon.tsx`) selects artwork by the manifest's glyph and
-colour; other pairs keep the standard line icon.
+colour. The artwork for Apple Home Devices, ESPHome and Ollama also requires
+a matching app ID. When no artwork matches, the shell uses the standard line
+icon.
 
-| App           | Glyph                 | Colour   | Master                                                      |
-| ------------- | --------------------- | -------- | ----------------------------------------------------------- |
-| Settings      | `settings`            | Graphite | <img src="settings.png" width="64" height="64" alt="">      |
-| Moods         | `swatch-book`         | Ember    | <img src="moods.png" width="64" height="64" alt="">         |
-| Automations   | `sparkles`            | Blossom  | <img src="automations.png" width="64" height="64" alt="">   |
-| Weather       | `cloud-sun`           | Sky      | <img src="weather.png" width="64" height="64" alt="">       |
-| Natural Light | `sun`                 | Sun      | <img src="natural-light.png" width="64" height="64" alt=""> |
-| Zigbee        | `radio-tower`         | Graphite | <img src="zigbee.png" width="64" height="64" alt="">        |
-| Assistant     | `message-circle-more` | Iris     | <img src="assistant.png" width="64" height="64" alt="">     |
+| App                | Glyph                 | Colour   | Master                                                           |
+| ------------------ | --------------------- | -------- | ---------------------------------------------------------------- |
+| Settings           | `settings`            | Graphite | <img src="settings.png" width="64" height="64" alt="">           |
+| Moods              | `swatch-book`         | Ember    | <img src="moods.png" width="64" height="64" alt="">              |
+| Automations        | `sparkles`            | Blossom  | <img src="automations.png" width="64" height="64" alt="">        |
+| Weather            | `cloud-sun`           | Sky      | <img src="weather.png" width="64" height="64" alt="">            |
+| Natural Light      | `sun`                 | Sun      | <img src="natural-light.png" width="64" height="64" alt="">      |
+| Zigbee             | `radio-tower`         | Graphite | <img src="zigbee.png" width="64" height="64" alt="">             |
+| Assistant          | `message-circle-more` | Iris     | <img src="assistant.png" width="64" height="64" alt="">          |
+| Apple Home Devices | `tv`                  | Graphite | <img src="apple-home-devices.png" width="64" height="64" alt=""> |
+| ESPHome            | `cpu`                 | Graphite | <img src="esphome.png" width="64" height="64" alt="">            |
+| Ollama             | `cpu`                 | Iris     | <img src="ollama.png" width="64" height="64" alt="">             |
 
 Moods owns the colour swatches, Automations the two sparkles.
+Apple Home Devices uses a pineapple with a play symbol, ESPHome a chip,
+and Ollama an original llama mascot for its local AI models.
 Zigbee keeps the radio symbol rather than the Zigbee logo, which needs the
 Connectivity Standards Alliance's permission.
 

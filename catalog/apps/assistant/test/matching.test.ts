@@ -2,13 +2,13 @@ import {
   grammarSteps,
   sentenceIssues,
   sentenceLimits,
-  type RequestLanguage,
+  type SpeechLanguage,
 } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
 import { app } from "../src/index.js";
 import { match, type HomeNames } from "../src/matching.js";
-import { languages, spokenTemplate } from "../src/sentences.js";
+import { languageSentences, spokenTemplate } from "../src/sentences.js";
 
 // What the Assistant makes of words: speech recognition's, which are one of
 // its templates with the home's names in, and typed ones.
@@ -27,8 +27,8 @@ const german: HomeNames = {
   mood: ["Abend"],
 };
 
-const en = (text: string) => match(text, languages.en, names);
-const de = (text: string) => match(text, languages.de, german);
+const en = (text: string) => match(text, languageSentences.en, names);
+const de = (text: string) => match(text, languageSentences.de, german);
 
 // One way to say a template: the first of each choice, nothing optional,
 // and the first name for each blank.
@@ -67,8 +67,8 @@ describe("the Assistant's sentences", () => {
 
   it.each(["en", "de"] as const)(
     "in %s each mean what they say, said the plainest way",
-    (language: RequestLanguage) => {
-      const words = languages[language];
+    (language: SpeechLanguage) => {
+      const words = languageSentences[language];
       // Names that don't run into each other, as Office and Office Light do.
       const home =
         language === "en" ? { ...names, light: ["Desk Lamp"] } : german;
@@ -155,11 +155,13 @@ describe("matching English", () => {
       ...names,
       light: ["Lamp 50%", "Lamp fifty percent", "Lamp 40 Percent"],
     };
-    expect(match("Turn on Lamp 50%", languages.en, home)).toMatchObject({
-      names: { light: "Lamp 50%" },
-    });
+    expect(match("Turn on Lamp 50%", languageSentences.en, home)).toMatchObject(
+      {
+        names: { light: "Lamp 50%" },
+      },
+    );
     expect(
-      match("Set Lamp 40 Percent to 75%", languages.en, home),
+      match("Set Lamp 40 Percent to 75%", languageSentences.en, home),
     ).toMatchObject({
       names: { light: "Lamp 40 Percent" },
       choices: { percent: 75 },
@@ -210,7 +212,9 @@ describe("matching moods", () => {
 
   it("takes a light's name over a mood's", () => {
     const both = { ...names, light: ["Evening"] };
-    expect(match("turn on evening", languages.en, both)?.intent).toEqual({
+    expect(
+      match("turn on evening", languageSentences.en, both)?.intent,
+    ).toEqual({
       do: "switch",
       where: "light",
     });
