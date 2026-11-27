@@ -530,6 +530,29 @@ describe("an app's page in its frame", () => {
     expect(text()).toContain("Example's page didn't open");
   });
 
+  it("waits another 5 s before showing the slow message when the home returns", async () => {
+    await show();
+    await after(5_000);
+    expect(container.querySelector("[role=status]")?.textContent).toBe(
+      "Opening Example is taking longer than usual.",
+    );
+
+    await show({ isAway: true });
+    await after(10_000);
+    await show();
+    expect(container.querySelector("[role=status]")?.textContent).toBe(
+      "Opening Example…",
+    );
+    await after(4_999);
+    expect(container.querySelector("[role=status]")?.textContent).toBe(
+      "Opening Example…",
+    );
+    await after(1);
+    expect(container.querySelector("[role=status]")?.textContent).toBe(
+      "Opening Example is taking longer than usual.",
+    );
+  });
+
   it("leaves a paused app's notice to the shell", async () => {
     await show({ app: info({ state: "paused" }) });
     await after(60_000);

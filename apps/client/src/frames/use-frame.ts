@@ -23,8 +23,9 @@ import { forgetPageTicket, pageAddress } from "./page-ticket";
 // The app comes next: while it isn't running, its own notice is the shell's.
 // Only then the page: one still opening after 5 s says it's taking longer
 // than usual; one that doesn't answer in 10 s, whose files didn't load, or
-// that stopped working once drawn says so, and Try again loads it afresh. A page that can't work with this client or this home says which
-// is too old instead (page-mismatch.tsx).
+// that stopped working once drawn says so, and Try again loads it afresh.
+// A page that can't work with this client or this home says which is too
+// old instead (page-mismatch.tsx).
 
 export type FramePhase =
   "opening" | "ready" | "late" | "files" | "stopped" | "mismatch";
@@ -96,7 +97,6 @@ export function useFrame(options: {
     setMismatch(undefined);
     setSrc(undefined);
     setShowsLoader(false);
-    setIsSlow(false);
     const on = (event: FrameEvent) => {
       if (!isCurrent) return;
       if (event.type === "ready") {
@@ -178,6 +178,7 @@ export function useFrame(options: {
 
   const waits = options.isAway || !looksRunning(app.info);
   useEffect(() => {
+    setIsSlow(false);
     if (phase !== "opening" || waits) return;
     const loader = setTimeout(() => setShowsLoader(true), loaderAfterMs);
     const slow = setTimeout(() => setIsSlow(true), slowAfterMs);
