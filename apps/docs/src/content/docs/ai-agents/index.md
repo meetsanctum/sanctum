@@ -139,9 +139,11 @@ an agent can:
 - **See your home:** its floors, rooms, zones and the devices it may see,
   with what they're doing now.
 - **Change your lights:** turn them on or off, make them brighter or dimmer,
-  or set their brightness, colour temperature or both. It can do this for
-  a room, a floor, a zone, the whole home or chosen lights. Turning lights
-  on goes by the room's own rule, as its Lights tile does.
+  or set their brightness, a white or a colour. It can do this for a room,
+  a floor, a zone, the whole home or chosen lights, as the room's Lights
+  tile does. Turning lights on goes by the room's own rule. A brightness
+  changes only the lights that are on. A white or a colour brings every
+  light to it, including those that are off.
 - **Use your apps:** run a mood, or have lights follow natural light, for
   example.
 - **Put its own change back:** a light it changed goes back to how it was,

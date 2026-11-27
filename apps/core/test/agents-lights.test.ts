@@ -19,7 +19,7 @@ import type { AppPackage } from "./runner-apps.js";
 import { post } from "./support.js";
 
 // What AI agents do with lights: on, off, brighter, dimmer and a set
-// brightness and colour temperature, each light answered for, and putting
+// brightness, white or colour, each light answered for, and putting
 // an agent's own change back where nobody changed it since.
 
 // Turns one light on, as an app's action that commands devices does.
@@ -193,7 +193,7 @@ describe("AI agents' lights", () => {
     expect(answer.content.change).toEqual(expect.any(String));
   });
 
-  it("sets a lit light's brightness alone, and brings an off one on with it", async () => {
+  it("sets a lit light's brightness alone, and leaves an off one off while one is on", async () => {
     const { core, token, client, room, lamp, reading } = await household();
     await command(core, token, lamp, "light", {
       on: true,
@@ -215,9 +215,73 @@ describe("AI agents' lights", () => {
       state: { on: true, brightness: 100, colorMode: "color", hue: 20 },
     });
     expect(results(answer)[reading]).toMatchObject({
-      result: done,
-      state: { on: true, brightness: 100 },
+      result: "skipped",
+      why: "off",
+      state: { on: false },
     });
+  });
+
+  it("brings the room up at a brightness while none of its lights is on", async () => {
+    const { client, room, lamp, reading } = await household();
+
+    const answer = await call(client, "lights", {
+      place: room,
+      set: { brightness: 30 },
+    });
+    await settled();
+
+    for (const light of [lamp, reading]) {
+      expect(results(answer)[light]).toMatchObject({
+        result: done,
+        state: { on: true, brightness: 30 },
+      });
+    }
+  });
+
+  it("brings every light to a white, at the level of those that are on", async () => {
+    const { core, token, client, room, lamp, reading } = await household();
+    await command(core, token, lamp, "light", { on: true, brightness: 60 });
+    await settled();
+
+    const answer = await call(client, "lights", {
+      place: room,
+      set: { colorTemperature: 250 },
+    });
+    await settled();
+
+    expect(results(answer)[lamp]).toMatchObject({
+      result: done,
+      state: { on: true, brightness: 60, colorTemperature: 250 },
+    });
+    expect(results(answer)[reading]).toMatchObject({
+      result: done,
+      state: { on: true, brightness: 60, colorTemperature: 250 },
+    });
+  });
+
+  it("brings every light to a colour at the brightness asked", async () => {
+    const { core, token, client, room, lamp, reading } = await household();
+    await command(core, token, lamp, "light", { on: true, brightness: 60 });
+    await settled();
+
+    const answer = await call(client, "lights", {
+      place: room,
+      set: { brightness: 100, hue: 220, saturation: 80 },
+    });
+    await settled();
+
+    for (const light of [lamp, reading]) {
+      expect(results(answer)[light]).toMatchObject({
+        result: done,
+        state: {
+          on: true,
+          brightness: 100,
+          colorMode: "color",
+          hue: 220,
+          saturation: 80,
+        },
+      });
+    }
   });
 
   it("keeps a colour temperature within each light's range", async () => {
@@ -407,7 +471,7 @@ describe("putting an AI agent's change back", () => {
 
     const changed = await call(client, "lights", {
       place: room,
-      set: { brightness: 100 },
+      set: { brightness: 100, colorTemperature: 250 },
     });
     await settled();
     const restored = await call(client, "restore", {
