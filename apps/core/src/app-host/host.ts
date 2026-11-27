@@ -231,6 +231,7 @@ export function createAppHost(options: {
     off: options.off,
     appServices,
     supervisor: () => supervisor,
+    isWritingOut: () => manager.writingOut?.() === true,
     contexts,
     appSockets: options.appSockets,
     timeoutMs,

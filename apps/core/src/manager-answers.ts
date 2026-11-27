@@ -279,6 +279,15 @@ export const startedBody = z.object({
   lan: lanVersion.optional(),
 });
 
+// Whether the host is writing out a backlog of the page cache to its disks:
+// what waits to be written, and where the kernel starts writing it out.
+export const hostWriteout = z.object({
+  pendingBytes: z.number().nonnegative(),
+  thresholdBytes: z.number().nonnegative(),
+  writingOut: z.boolean(),
+});
+export type HostWriteout = z.infer<typeof hostWriteout>;
+
 // What the manager can do. An update replaces the core before the manager, so a
 // new core can find itself under an old manager, which knows no such question.
 export const capabilities = z

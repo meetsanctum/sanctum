@@ -71,6 +71,64 @@ export function memoryOf(meminfo: string): MemoryReading | null {
   };
 }
 
+// What the page cache holds for the disks and how far it is from the point
+// where the kernel writes it out in the background. Above that point the
+// disks are draining a backlog, and every fsync on them waits its turn
+// behind it: on an SD card, a large pull's backlog keeps an fsync waiting
+// for minutes.
+export type WriteoutReading = {
+  // Dirty pages and pages under writeback, in bytes.
+  pendingBytes: number;
+  // Where background writeback starts, in bytes.
+  thresholdBytes: number;
+  writingOut: boolean;
+};
+
+/**
+ * The host's writeout, from /proc/meminfo and vm.dirty_background_bytes, or
+ * when that is 0, vm.dirty_background_ratio of the memory the kernel lets
+ * hold dirty pages: what is free and what holds files' pages.
+ */
+export function writeoutOf(
+  meminfo: string,
+  backgroundBytes: number | null,
+  backgroundRatio: number | null,
+): WriteoutReading | null {
+  const field = (name: string) => {
+    const escaped = name.replace(/[()]/g, "\\$&");
+    const match = new RegExp(`^${escaped}:\\s+(\\d+) kB$`, "m").exec(meminfo);
+    return match ? Number(match[1]) * kib : null;
+  };
+  const dirty = field("Dirty");
+  const writeback = field("Writeback");
+  if (dirty === null || writeback === null) return null;
+  let thresholdBytes: number;
+  if (backgroundBytes !== null && backgroundBytes > 0) {
+    thresholdBytes = backgroundBytes;
+  } else {
+    const free = field("MemFree");
+    const activeFile = field("Active(file)");
+    const inactiveFile = field("Inactive(file)");
+    if (
+      backgroundRatio === null ||
+      free === null ||
+      activeFile === null ||
+      inactiveFile === null
+    ) {
+      return null;
+    }
+    thresholdBytes = Math.round(
+      ((free + activeFile + inactiveFile) * backgroundRatio) / 100,
+    );
+  }
+  const pendingBytes = dirty + writeback;
+  return {
+    pendingBytes,
+    thresholdBytes,
+    writingOut: pendingBytes > thresholdBytes,
+  };
+}
+
 export function cpuTimesOf(stat: string): CpuTimes | null {
   const line = /^cpu\s+(.+)$/m.exec(stat);
   if (!line) return null;
@@ -169,6 +227,17 @@ export function createHostReadings(
     async memory() {
       const meminfo = await text("proc/meminfo");
       return meminfo ? memoryOf(meminfo) : null;
+    },
+
+    // Read afresh each time, since the threshold can change while the
+    // manager runs.
+    async writeout() {
+      const [meminfo, bytes, ratio] = await Promise.all([
+        text("proc/meminfo"),
+        number("proc/sys/vm/dirty_background_bytes"),
+        number("proc/sys/vm/dirty_background_ratio"),
+      ]);
+      return meminfo ? writeoutOf(meminfo, bytes, ratio) : null;
     },
 
     async cpuTimes() {

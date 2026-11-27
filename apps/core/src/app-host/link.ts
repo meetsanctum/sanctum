@@ -45,6 +45,13 @@ const defaultHeartbeatMs = 5_000;
 const maxMissedBeats = 3;
 /** How long past its deadline a call may stay busy before the app counts as hung. */
 const defaultGraceMs = 30_000;
+/**
+ * How much longer each of those may take while the host writes out a backlog
+ * to its disks. Every fsync waits behind it, and an app's database writes
+ * block its runner, so it can't answer meanwhile: an SD card can take minutes
+ * to write out a large pull.
+ */
+export const defaultWriteoutGraceMs = 3 * 60_000;
 /** What may wait for an app that isn't reading. */
 const defaultMaxUnreadBytes = 8 * 1024 * 1024;
 /** Connections that haven't said who they are. */
@@ -87,6 +94,10 @@ type Connection = {
   awaited: number;
   requests: number;
   missedBeats: number;
+  // Beats it missed while the host wrote out, which don't count, and whether
+  // that was logged.
+  sparedBeats: number;
+  isSpared: boolean;
   lastBeat: number;
   timer?: NodeJS.Timeout;
   beats?: NodeJS.Timeout;
@@ -125,14 +136,22 @@ export function createAppLink(options: {
    * `hung` says the app stopped answering, so its process may still be there.
    */
   onGone: (reason: string, hung: boolean) => void;
+  /** Whether the host is writing out a backlog to its disks now. */
+  isWritingOut?: () => boolean;
   helloWithinMs?: number;
   readyWithinMs?: number;
   heartbeatMs?: number;
   graceMs?: number;
+  writeoutGraceMs?: number;
   maxUnreadBytes?: number;
 }) {
   const { appId, log } = options;
   const graceMs = options.graceMs ?? defaultGraceMs;
+  const heartbeatMs = options.heartbeatMs ?? defaultHeartbeatMs;
+  const isWritingOut = options.isWritingOut ?? (() => false);
+  const writeoutGraceMs = options.writeoutGraceMs ?? defaultWriteoutGraceMs;
+  const maxSparedBeats = Math.ceil(writeoutGraceMs / heartbeatMs);
+  const sparedFor = `${Math.round(writeoutGraceMs / 1000)} s`;
   const maxUnreadBytes = options.maxUnreadBytes ?? defaultMaxUnreadBytes;
   const connections = new Set<Connection>();
   let current: Connection | undefined;
@@ -162,6 +181,36 @@ export function createAppLink(options: {
         options.onGone(reason, hung);
       }
     }
+  }
+
+  // A deadline that waits on while the host writes out, for up to
+  // writeoutGraceMs, looking again each heartbeat, and one more after the
+  // writeout is over, since what waited behind it ends a moment later.
+  // `spared` hears the first look that waits.
+  function deadline(
+    ms: number,
+    expired: () => void,
+    set: (timer: NodeJS.Timeout) => void,
+    spared: () => void,
+  ) {
+    const latest = performance.now() + ms + writeoutGraceMs;
+    let wasWriting = false;
+    let isTold = false;
+    const look = () => {
+      const left = latest - performance.now();
+      const writing = isWritingOut();
+      if (left > 0 && (writing || wasWriting)) {
+        if (!isTold) {
+          isTold = true;
+          spared();
+        }
+        wasWriting = writing;
+        set(setTimeout(look, Math.min(heartbeatMs, left)));
+        return;
+      }
+      expired();
+    };
+    set(setTimeout(look, ms));
   }
 
   function send(connection: Connection, message: CoreMessage) {
@@ -209,9 +258,14 @@ export function createAppLink(options: {
     connection.protocol = said.protocol;
     connection.phase = "preparing";
     clearTimeout(connection.timer);
-    connection.timer = setTimeout(
-      () => drop(connection, "it didn't get ready in time"),
+    deadline(
       options.readyWithinMs ?? defaultReadyWithinMs,
+      () => drop(connection, "it didn't get ready in time"),
+      (timer) => (connection.timer = timer),
+      () =>
+        log(
+          `apps: ${appId} isn't ready yet while the host writes out to its disks; it gets up to ${sparedFor} more`,
+        ),
     );
     send(connection, { type: "welcome", generation: lastGeneration });
   }
@@ -219,16 +273,41 @@ export function createAppLink(options: {
   function ready(connection: Connection) {
     clearTimeout(connection.timer);
     connection.phase = "ready";
-    // Only from here: migrating blocks the runner, which can't answer meanwhile.
+    // Only from here: migrating blocks the runner, which can't answer
+    // meanwhile. Once it has missed one, those it misses while the host
+    // writes out don't count, up to writeoutGraceMs; it is logged once it
+    // would have counted as hung.
     connection.beats = setInterval(() => {
-      if (connection.missedBeats >= maxMissedBeats) {
-        drop(connection, `it missed ${maxMissedBeats} heartbeats`, true);
+      if (
+        connection.missedBeats > 0 &&
+        connection.sparedBeats < maxSparedBeats &&
+        isWritingOut()
+      ) {
+        connection.sparedBeats += 1;
+        if (
+          !connection.isSpared &&
+          connection.missedBeats + connection.sparedBeats > maxMissedBeats
+        ) {
+          connection.isSpared = true;
+          log(
+            `apps: ${appId} hasn't answered its heartbeat while the host writes out to its disks; it gets up to ${sparedFor} more`,
+          );
+        }
+      } else if (connection.missedBeats >= maxMissedBeats) {
+        drop(
+          connection,
+          connection.sparedBeats > 0
+            ? `it missed ${maxMissedBeats} heartbeats, and ${connection.sparedBeats} more while the host wrote out to its disks`
+            : `it missed ${maxMissedBeats} heartbeats`,
+          true,
+        );
         return;
+      } else {
+        connection.missedBeats += 1;
       }
-      connection.missedBeats += 1;
       connection.lastBeat += 1;
       send(connection, { type: "ping", beat: connection.lastBeat });
-    }, options.heartbeatMs ?? defaultHeartbeatMs);
+    }, heartbeatMs);
     connection.beats.unref();
     options.onReady();
   }
@@ -335,7 +414,10 @@ export function createAppLink(options: {
         log(`${appId}: ${message.message}`);
         return;
       case "pong":
+        if (connection.isSpared) log(`apps: ${appId} answers again`);
         connection.missedBeats = 0;
+        connection.sparedBeats = 0;
+        connection.isSpared = false;
         return;
     }
     if (connection.phase === "preparing") {
@@ -368,6 +450,8 @@ export function createAppLink(options: {
       awaited: 0,
       requests: 0,
       missedBeats: 0,
+      sparedBeats: 0,
+      isSpared: false,
       lastBeat: 0,
     };
     connections.add(connection);
@@ -482,14 +566,23 @@ export function createAppLink(options: {
         open.timer = setTimeout(() => {
           // A start's context outlives its time: what it set going goes on.
           open.ended = id !== connection.lifetime;
-          open.timer = setTimeout(() => {
-            drop(
-              connection,
-              `it was still busy with a call ${graceMs} ms past its deadline`,
-              true,
-            );
-          }, graceMs);
-          open.timer.unref();
+          deadline(
+            graceMs,
+            () =>
+              drop(
+                connection,
+                `it was still busy with a call ${graceMs} ms past its deadline`,
+                true,
+              ),
+            (timer) => {
+              timer.unref();
+              open.timer = timer;
+            },
+            () =>
+              log(
+                `apps: ${appId} is still busy with a call past its deadline while the host writes out to its disks; it gets up to ${sparedFor} more`,
+              ),
+          );
         }, deadlineMs);
         open.timer.unref();
         // A runner before `end` lets the call run out its time.

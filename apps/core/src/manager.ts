@@ -2,6 +2,10 @@ import { request } from "node:http";
 import { z } from "zod";
 
 import { createManagerServices } from "./manager-services.js";
+import {
+  createWriteoutFollower,
+  type WriteoutFollower,
+} from "./manager-writeout.js";
 
 import {
   appCapacities,
@@ -15,6 +19,7 @@ import {
   hostHistory,
   hostResources,
   hostStatus,
+  hostWriteout,
   keptCopy,
   lanVersion,
   managerAudit,
@@ -150,6 +155,9 @@ const appContainerPath = (app: string) =>
 const appReservationPath = (app: string) =>
   `/api/apps/${encodeURIComponent(app)}/reservations`;
 const askForCapabilitiesEveryMs = 30_000;
+// Often enough to know before an app that waits behind the host's writeout
+// misses its three heartbeats (app-host/link.ts).
+const askForWriteoutEveryMs = 5_000;
 const appUpdatePath = (app: string) =>
   `/api/apps/${encodeURIComponent(app)}/update`;
 
@@ -175,6 +183,7 @@ export function createManagerClient(options: {
   let hostId: string | undefined;
   let learning = false;
   let known = noCapabilities;
+  let writeout: WriteoutFollower | undefined;
 
   function pause(ms: number, signal?: AbortSignal) {
     return new Promise<void>((resolve) => {
@@ -320,6 +329,39 @@ export function createManagerClient(options: {
         }
       })().catch((error: unknown) => {
         log(`manager: stopped asking what it can do (${String(error)})`);
+      });
+    },
+
+    // Whether the host is writing out a backlog to its disks, as the
+    // manager last said (manager-writeout.ts).
+    writingOut: () => writeout?.writingOut() ?? false,
+
+    // Keeps asking whether it is, each answer its own question. A manager
+    // too old to know it never says so.
+    followWriteout(everyMs = askForWriteoutEveryMs, holdMs?: number) {
+      if (writeout) return;
+      const follower = createWriteoutFollower({ log, holdMs });
+      writeout = follower;
+      void (async () => {
+        while (!closed) {
+          try {
+            follower.heard(
+              parseBody(
+                hostWriteout,
+                await once("GET", "/api/host/writeout", undefined, everyMs),
+              ),
+            );
+          } catch (error) {
+            if (error instanceof ManagerRefusal) follower.heard(null);
+            else if (error instanceof ManagerUnavailable) follower.missed();
+            else throw error;
+          }
+          if (!closed) await pause(everyMs);
+        }
+      })().catch((error: unknown) => {
+        log(
+          `manager: stopped asking about the host's writeout (${String(error)})`,
+        );
       });
     },
 
