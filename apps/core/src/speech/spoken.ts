@@ -195,7 +195,9 @@ export function createSpokenRequests(options: {
   function recorded(
     request: Asking,
     speaker: Speaker,
-    outcome: { ok: true; late?: number } | { ok: false; reason: string },
+    outcome:
+      | { ok: true; late?: number; reason?: "not_understood" }
+      | { ok: false; reason: string },
     handedOff = false,
   ) {
     const { run } = request;
@@ -203,7 +205,7 @@ export function createSpokenRequests(options: {
     options.record({
       action: "device.request",
       outcome: outcome.ok ? "ok" : "failed",
-      ...(outcome.ok ? {} : { reason: outcome.reason }),
+      ...(outcome.reason ? { reason: outcome.reason } : {}),
       subjectId: run.device,
       actor: `speaker:${run.device}`,
       clientName: speaker.name,
@@ -359,13 +361,20 @@ export function createSpokenRequests(options: {
             language,
             AbortSignal.any([run.signal, signal]),
           ));
+        // Speech it doesn't know leaves one plain line with its moments,
+        // never its words; silence and a newer wake leave none.
+        const notUnderstood = () =>
+          recorded(request, speaker, { ok: true, reason: "not_understood" });
         if (sorry && url && !signal.aborted) {
+          // Its reply is an answer: the run ending doesn't cancel it.
+          asked = true;
           run.reply(url, sorry);
           await runEnded;
-          return;
+          if (!signal.aborted) notUnderstood();
+        } else if (!signal.aborted) {
+          if (text !== null) notUnderstood();
+          run.fail(text === null ? "nothing-heard" : "not-understood");
         }
-        if (signal.aborted) return;
-        run.fail(text === null ? "nothing-heard" : "not-understood");
         return;
       }
       run.heard(words);

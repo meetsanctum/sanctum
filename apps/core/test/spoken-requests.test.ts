@@ -334,6 +334,30 @@ describe("a smart speaker's request", () => {
     );
     expect(unknown.replied).toEqual([{ text: notUnderstood }]);
     expect(unknown.asked).toEqual([]);
+    unknown.listening.close(driver, { run: opened.run, end: "played" });
+    await unknown.until(() => requestLines(unknown.recorded).length === 1);
+    const [line] = requestLines(unknown.recorded);
+    expect(line).toMatchObject({
+      outcome: "ok",
+      reason: "not_understood",
+      detail: {
+        stoppedListeningMs: expect.any(Number),
+        heardWordsMs: expect.any(Number),
+        finishedPlayingMs: expect.any(Number),
+      },
+    });
+    // The moments only, never what was heard or said.
+    expect(Object.keys(line!.detail!).sort()).toEqual(
+      [
+        "capability",
+        "capabilityKind",
+        "finishedPlayingMs",
+        "firstSoundMs",
+        "heardWordsMs",
+        "replyReadyMs",
+        "stoppedListeningMs",
+      ].sort(),
+    );
 
     const silent = setup({ heard: null, notUnderstood });
     const quiet = await silent.wake();
@@ -439,8 +463,18 @@ describe("a smart speaker's request", () => {
       expect(asked).toEqual([]);
       expect(replied).toEqual([]);
       expect(moments.heardWords).toBe(moments.heard + oneMomentAfterMs + 1);
-      // Speech it can't use leaves no line, as before: a run refused does.
-      expect(requestLines(recorded)).toEqual([]);
+      // Speech it doesn't know leaves one plain line; silence, none.
+      expect(requestLines(recorded)).toMatchObject(
+        heard === null
+          ? []
+          : [
+              {
+                outcome: "ok",
+                reason: "not_understood",
+                detail: { heardWordsMs: oneMomentAfterMs + 1 },
+              },
+            ],
+      );
     },
   );
 
