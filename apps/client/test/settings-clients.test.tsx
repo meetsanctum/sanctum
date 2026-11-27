@@ -12,8 +12,7 @@ import {
   seenText,
 } from "../src/settings-clients";
 
-// The device's own zone, which the expectations here are worked out in.
-const clock = homeClock();
+const clock = homeClock({ timeZone: "UTC" });
 
 vi.mock("../src/core-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/core-fetch")>()),
@@ -23,7 +22,7 @@ vi.mock("../src/core-fetch", async (importOriginal) => ({
 const now = new Date("2026-10-28T12:00:00Z");
 const maya = {
   id: "maya",
-  name: "Maya",
+  name: "Maya Chen",
   avatar: null,
   colour: "#c5cdac",
 } as const;
@@ -39,6 +38,13 @@ const macbook: ClientInfo = {
   current: true,
   reduceEffects: false,
   reduceMotion: false,
+};
+const phone: ClientInfo = {
+  ...macbook,
+  id: "phone",
+  name: "Maya's iPhone",
+  platform: "ios",
+  current: false,
 };
 const tablet: ClientInfo = {
   id: "tablet",
@@ -95,9 +101,9 @@ describe("a client's detail", () => {
         undefined,
         now,
       ),
-    ).toBe("Shared · Web browser · In use now");
+    ).toBe("Shared · Web browser · Connected now");
     expect(clientDetail(clock, macbook, maya, now)).toBe(
-      "Maya · macOS · This device",
+      "Maya Chen · macOS · This device",
     );
   });
 
@@ -133,7 +139,7 @@ describe("Settings → Linked Devices", () => {
     vi.mocked(coreJson).mockImplementation(async (path, init = {}) => {
       switch (path) {
         case "/api/auth/clients":
-          return [shownMacbook, shownTablet];
+          return [shownMacbook, phone, shownTablet];
         case "/api/people":
           return [maya];
         case "/api/auth/clients/revoke":
@@ -221,13 +227,29 @@ describe("Settings → Linked Devices", () => {
       `Sign out ${tablet.name}?`,
     );
     expect(dialog.textContent).toContain(
-      "To use it again, choose your home on it, then Everyone at home, and approve its new code.",
+      "Any AI agents added from this device lose access and must be set up again.",
     );
+    expect(dialog.textContent).toContain(
+      "To use the device again, choose your home on it, then Everyone at home, and approve its new code.",
+    );
+    const revokeCalls = () =>
+      vi
+        .mocked(coreJson)
+        .mock.calls.filter(([path]) => path === "/api/auth/clients/revoke");
+    expect(revokeCalls()).toHaveLength(0);
     await act(async () => button("Sign out").click());
-    expect(coreJson).toHaveBeenCalledWith(
-      "/api/auth/clients/revoke",
-      expect.objectContaining({ json: { id: tablet.id } }),
-    );
+    expect(revokeCalls()).toEqual([
+      [
+        "/api/auth/clients/revoke",
+        expect.objectContaining({ json: { id: tablet.id } }),
+      ],
+    ]);
+  });
+
+  it("tells the person who needs to sign in again on a personal device", async () => {
+    await editClient(phone.name, "Sign out");
+    const dialog = document.querySelector("[role=dialog]")!;
+    expect(dialog.textContent).toContain("Maya signs in again to use it.");
   });
 
   // A setting's switch, by its label.

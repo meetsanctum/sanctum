@@ -106,7 +106,7 @@ export type ClientInfo = {
   connectedSince: string | null;
   /** The client the request came from. */
   current: boolean;
-  /** Whether it draws with Reduce effects: set on any client (Settings → Clients). */
+  /** Whether it draws with Reduce effects: set on any client (Settings → Linked Devices). */
   reduceEffects: boolean;
   /** Whether it draws with Reduce motion, set on its own as Reduce effects is. */
   reduceMotion: boolean;

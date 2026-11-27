@@ -663,13 +663,13 @@ describe("connected now", () => {
     ]);
   });
 
-  it("says In use now in Settings → Linked Devices", () => {
+  it("says Connected now in Settings → Linked Devices", () => {
     expect(
       clientDetail(
         clock,
         client({ connectedSince: today("07:12"), lastSeenAt: today("07:12") }),
         undefined,
       ),
-    ).toBe("Personal · macOS · In use now");
+    ).toBe("Personal · macOS · Connected now");
   });
 });

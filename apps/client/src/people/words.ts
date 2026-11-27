@@ -65,7 +65,7 @@ export function usedText(
   now = new Date(),
 ) {
   if (client.current) return "This device";
-  if (client.connectedSince) return "In use now";
+  if (client.connectedSince) return "Connected now";
   if (!client.lastSeenAt) return "Not used yet";
   const seen = new Date(client.lastSeenAt);
   const days = calendarDaysBetween(

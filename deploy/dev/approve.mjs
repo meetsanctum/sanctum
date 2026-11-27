@@ -1,7 +1,7 @@
 // `pnpm dev:approve <code>` (deploy/dev/stack.sh): approves a shared
-// device's pairing code, as someone would from Settings → Clients. It signs
-// in with the seed's login (deploy/dev/seed.mjs), types the code, waits while
-// the core checks the device through their exchange, approves it and signs
+// device's pairing code, as someone would from Settings → Linked Devices.
+// It signs in with the seed's login (deploy/dev/seed.mjs), types the code, waits
+// while the core checks the device through their exchange, approves it and signs
 // its own client out again. It runs in the core's container, where its
 // dependencies are, as the seed does.
 import {

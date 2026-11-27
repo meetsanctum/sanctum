@@ -328,7 +328,7 @@ function EditClient(props: {
               {editing?.action === "rename"
                 ? "The name shows here and in the activity log."
                 : shared
-                  ? "To use it again, choose your home on it, then Everyone at home, and approve its new code."
+                  ? "Any AI agents added from this device lose access and must be set up again. To use the device again, choose your home on it, then Everyone at home, and approve its new code."
                   : `${person ? firstName(person.name) : "Its person"} signs in again to use it.`}
             </DialogDescription>
           </DialogHeader>
