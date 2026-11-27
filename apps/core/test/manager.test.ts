@@ -618,11 +618,16 @@ describe("the manager client", () => {
     open.push({ server });
 
     await expect(client.serviceConnection(service.name)).resolves.toEqual({
+      state: "running",
       url: service.url,
       token: service.token,
     });
-    service = { name: service.name, state: "starting" };
-    await expect(client.serviceConnection(service.name)).resolves.toBeNull();
+    service = { name: service.name, state: "failed" };
+    await expect(client.serviceConnection(service.name)).resolves.toEqual({
+      state: "failed",
+      url: null,
+      token: null,
+    });
     expect(paths).toEqual([
       "/api/services/speech-to-phrase",
       "/api/services/speech-to-phrase",

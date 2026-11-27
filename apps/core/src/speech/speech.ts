@@ -366,11 +366,7 @@ export function createSpeech(options: {
         signal,
       });
     const key = keyOf(language, text);
-    if (!isKept(key)) {
-      // One an app no longer brings goes.
-      keptSpeech.delete(key);
-      return spoken();
-    }
+    if (!isKept(key)) return spoken();
     return (async function* () {
       const ready = keptSpeech.get(key);
       if (ready) {
@@ -382,7 +378,9 @@ export function createSpeech(options: {
         chunks.push(audio);
         yield audio;
       }
-      if (!signal.aborted && chunks.length > 0) keptSpeech.set(key, chunks);
+      if (!signal.aborted && chunks.length > 0 && isKept(key)) {
+        keptSpeech.set(key, chunks);
+      }
     })();
   }
 
@@ -402,6 +400,15 @@ export function createSpeech(options: {
   }
 
   return {
+    pruneKeptPhrases() {
+      const keys = new Set(
+        keptPhrases().map(({ language, text }) => keyOf(language, text)),
+      );
+      for (const key of keptSpeech.keys()) {
+        if (!keys.has(key)) keptSpeech.delete(key);
+      }
+    },
+
     start() {
       if (running) return;
       running = true;

@@ -146,6 +146,12 @@ describe("the Assistant's sentences", () => {
     expect(() =>
       defineApp({ ...assistant(sentences), notUnderstood: { en: " " } }),
     ).toThrow("not-understood replies don't fit");
+    expect(() =>
+      defineApp({
+        ...assistant(sentences),
+        notUnderstood: { en: `${" ".repeat(200)}Try again` },
+      }),
+    ).toThrow();
     expect(() => defineApp({ ...assistant(undefined), notUnderstood })).toThrow(
       "with its sentences",
     );

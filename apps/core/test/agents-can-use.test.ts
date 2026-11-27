@@ -621,6 +621,7 @@ describe("an app's calls on an AI agent's behalf", () => {
       },
       models: { source: () => null },
       assistant: {
+        canActFor: () => true,
         list: () => [],
         call: async () => ({ text: "", isError: true }),
       },

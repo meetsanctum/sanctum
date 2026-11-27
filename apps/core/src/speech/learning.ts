@@ -9,7 +9,7 @@ import {
   type SentenceBlank,
 } from "@meetsanctum/app-sdk";
 
-import { ManagerRefusal } from "../manager.js";
+import { ManagerRefusal, type ManagerClient } from "../manager.js";
 import type { Transcriber } from "./spoken.js";
 import {
   describeLanguages,
@@ -26,7 +26,7 @@ import {
 // light or a mood, and at once for a new language; until it has the new
 // lesson it hears with the one it had, in its language, rather than not at
 // all. A lesson too large to learn on the host isn't sent, and the one
-// before stays. How it's doing (`hearing()`) is for the Assistant's page.
+// before stays. The Assistant's app client can read how it's doing.
 
 /** The service the manager runs for it. */
 export const wordsService = "speech-to-phrase";
@@ -40,22 +40,17 @@ const maxAdmissionRetryMs = 60_000;
 /** Why nothing hears a speaker's run now. */
 export type NotHearing = "no_sentences" | "no_speech_to_text";
 
-type Manager = {
-  serviceConnection(
-    service: string,
-    signal?: AbortSignal,
-  ): Promise<{ url: string; token: string | null } | null>;
-  wantServiceForCore(
-    service: string,
-    options: { signal: AbortSignal },
-  ): Promise<void>;
-  releaseServiceForCore(
-    service: string,
-    options: { signal: AbortSignal },
-  ): Promise<void>;
-};
+type Manager = Pick<
+  ManagerClient,
+  "serviceConnection" | "wantServiceForCore" | "releaseServiceForCore"
+>;
 
 type HomeLesson = Lesson & { language: RequestLanguage };
+type LessonProgress = {
+  language: RequestLanguage;
+  problem?: HearingFailure;
+  phase?: "downloading" | "learning";
+};
 
 function endpointOf(url: string) {
   const parsed = URL.parse(url);
@@ -89,13 +84,15 @@ export function createLearning(options: {
   // Keep the last lesson the service acknowledged in case it loses its grammar.
   let learned: HomeLesson | null = null;
   let recovering = false;
-  // What keeps it from hearing in the home's language, while something does.
-  let problem: HearingFailure | null = null;
-  // What a lesson under way does: fetch the language's model, or only learn.
-  let phase: "downloading" | "learning" | null = null;
+  let admissionProblem: HearingFailure | null = null;
+  let managerFailed = false;
+  let progress: LessonProgress | null = null;
+  let cachedLanguages = new Set<RequestLanguage>();
   let shown: string | null = null;
   let changing: AbortController | null = null;
   let teaching: AbortController | null = null;
+  let submitted: RequestLanguage | null = null;
+  let teachAgain = false;
   let retrain: NodeJS.Timeout | undefined;
   let looking: NodeJS.Timeout | undefined;
   let retryAdmission: NodeJS.Timeout | undefined;
@@ -115,11 +112,23 @@ export function createLearning(options: {
     if (sentences === null) return failed("assistant_off");
     if (!sentences[language]) return failed("no_sentences");
     if (!options.speakersListen()) return { state: "no_speaker", language };
-    if (learned?.language === language && !recovering) {
+    if (admissionProblem) return failed(admissionProblem);
+    if (managerFailed) return failed("unavailable");
+    if (
+      learned?.language === language &&
+      !recovering &&
+      (submitted === null || submitted === language)
+    ) {
       return { state: "ready", language };
     }
-    if (problem) return failed(problem);
-    return { state: phase ?? "downloading", language };
+    const current = progress?.language === language ? progress : null;
+    if (current?.problem) return failed(current.problem);
+    return {
+      state:
+        current?.phase ??
+        (cachedLanguages.has(language) ? "learning" : "downloading"),
+      language,
+    };
   }
 
   // Tells of how it's doing, once for each change.
@@ -132,8 +141,8 @@ export function createLearning(options: {
     options.onHearing(now);
   }
 
-  function lesson(): HomeLesson | null {
-    const language = options.language();
+  function lesson(status: LessonProgress): HomeLesson | null {
+    const { language } = status;
     const list = options.sentences()?.[language];
     if (!list) return null;
     const names = options.names();
@@ -150,7 +159,7 @@ export function createLearning(options: {
       options.log(
         `speech: the home has no usable ${language} sentences; keeping what it learned`,
       );
-      problem = "no_names";
+      status.problem = "no_names";
       return null;
     }
     const lists = Object.fromEntries(
@@ -163,7 +172,7 @@ export function createLearning(options: {
       options.log(
         `speech: the home's ${language} sentences take about ${steps} steps to learn, over ${sentenceLimits.grammarSteps}; keeping what it learned`,
       );
-      problem = "too_many_names";
+      status.problem = "too_many_names";
       return null;
     }
     return { language, templates: usable, lists };
@@ -174,10 +183,11 @@ export function createLearning(options: {
     const found = await options.manager
       .serviceConnection(wordsService, signal)
       .catch(() => null);
-    const endpoint = found ? endpointOf(found.url) : null;
-    return endpoint && found?.token
-      ? { ...endpoint, token: found.token }
-      : null;
+    const endpoint = found?.url ? endpointOf(found.url) : null;
+    return {
+      at: endpoint && found?.token ? { ...endpoint, token: found.token } : null,
+      state: found?.state,
+    };
   }
 
   // Teaches the current lesson once the service runs, looking again while
@@ -186,29 +196,46 @@ export function createLearning(options: {
     if (!running || !admitted) return;
     clearTimeout(looking);
     looking = undefined;
-    teaching?.abort();
-    teaching = null;
-    phase = null;
-    problem = null;
-    const now = lesson() ?? (recovering ? learned : null);
+    if (teaching) {
+      // Closing the socket doesn't stop training on the service. Let it
+      // finish before submitting the newest lesson.
+      teachAgain = true;
+      return;
+    }
+    const status: LessonProgress = { language: options.language() };
+    progress = status;
+    const now = lesson(status) ?? (recovering ? learned : null);
     if (!now) return notify();
     const controller = new AbortController();
     teaching = controller;
     notify();
     try {
-      const at = await connection(controller.signal);
-      if (controller.signal.aborted) return;
-      if (!at) {
+      const { at, state } = await connection(controller.signal);
+      if (controller.signal.aborted || teachAgain) return;
+      if (state != null) managerFailed = state === "failed";
+      if (managerFailed || !at) {
         looking = setTimeout(() => void teach(), lookEveryMs).unref();
         return;
       }
-      // A model it has loaded needs no download.
-      const loaded = await describeLanguages({
+      const models = await describeLanguages({
         ...at,
         signal: controller.signal,
-      }).catch((): string[] => []);
-      if (controller.signal.aborted) return;
-      phase = loaded.includes(now.language) ? "learning" : "downloading";
+      }).catch(() => null);
+      if (controller.signal.aborted || teachAgain) return;
+      if (models?.cached) {
+        cachedLanguages = new Set(models.cached);
+      } else {
+        // Older services only report the active model. Remember models
+        // observed in this process for switches back to a taught language.
+        for (const language of models?.active ?? [])
+          cachedLanguages.add(language);
+      }
+      if (now.language === status.language) {
+        status.phase = cachedLanguages.has(now.language)
+          ? "learning"
+          : "downloading";
+      }
+      submitted = now.language;
       notify();
       await train({
         ...at,
@@ -216,6 +243,7 @@ export function createLearning(options: {
         signal: controller.signal,
       });
       if (controller.signal.aborted) return;
+      cachedLanguages.add(now.language);
       learned = now;
       recovering = false;
     } catch (error) {
@@ -223,14 +251,20 @@ export function createLearning(options: {
       options.log(
         `speech: speech recognition didn't learn the home's sentences (${error instanceof Error ? error.message : String(error)}); trying again`,
       );
-      problem = "unavailable";
+      status.problem ??= "unavailable";
       looking = setTimeout(() => void teach(), lookEveryMs).unref();
     } finally {
       if (teaching === controller) {
         teaching = null;
-        phase = null;
+        submitted = null;
+        delete status.phase;
+        if (teachAgain) {
+          teachAgain = false;
+          void teach();
+        } else {
+          notify();
+        }
       }
-      notify();
     }
   }
 
@@ -255,7 +289,7 @@ export function createLearning(options: {
           });
           if (!controller.signal.aborted) {
             admitted = true;
-            problem = null;
+            admissionProblem = null;
             void teach();
           }
         } else {
@@ -270,7 +304,7 @@ export function createLearning(options: {
           );
           const noRoom =
             error instanceof ManagerRefusal && error.status === 409;
-          if (want) problem = noRoom ? "memory" : "unavailable";
+          if (want) admissionProblem = noRoom ? "memory" : "unavailable";
           notify();
           // Memory may become available when another service or app stops.
           if (want && noRoom) {
@@ -290,19 +324,27 @@ export function createLearning(options: {
 
   function reconcile() {
     if (!running) return;
-    const want = templates() !== null && options.speakersListen();
+    const sentences = options.sentences();
+    const want =
+      options.speakersListen() &&
+      sentences !== null &&
+      (sentences[options.language()] !== undefined || learned !== null);
     if (want === wanted) return notify();
     wanted = want;
     admitted = false;
     teaching?.abort();
+    teaching = null;
+    submitted = null;
+    teachAgain = false;
     clearTimeout(retrain);
     clearTimeout(looking);
     looking = undefined;
     clearTimeout(retryAdmission);
     learned = null;
     recovering = false;
-    problem = null;
-    phase = null;
+    admissionProblem = null;
+    managerFailed = false;
+    progress = null;
     notify();
     options.onWanted?.();
     if (changing) changing.abort();
@@ -350,7 +392,7 @@ export function createLearning(options: {
 
     /** The language it hears in now, or null while it hears in none. */
     hearsIn: (): RequestLanguage | null =>
-      learned && !recovering ? learned.language : null,
+      learned && !recovering && !managerFailed ? learned.language : null,
 
     /** Whether the core wants the service now, and Piper for its replies. */
     wanted: () => wanted === true,
@@ -359,16 +401,16 @@ export function createLearning(options: {
 
     /** Why nothing hears a run, or null while something does. */
     notHearing(): NotHearing | null {
-      if (templates() === null) return "no_sentences";
-      return learned && !recovering ? null : "no_speech_to_text";
+      if (learned && !recovering && !managerFailed) return null;
+      return templates() === null ? "no_sentences" : "no_speech_to_text";
     },
 
     /** What hears a run's words, once speech recognition has a lesson. */
     transcriber(): Transcriber | null {
-      if (!learned || recovering) return null;
+      if (!learned || recovering || managerFailed) return null;
       const { language } = learned;
       return async (run) => {
-        const at = await connection(run.signal);
+        const { at } = await connection(run.signal);
         run.signal.throwIfAborted();
         if (!at) {
           recover();
@@ -387,8 +429,10 @@ export function createLearning(options: {
     stop() {
       running = false;
       shown = null;
-      problem = null;
-      phase = null;
+      admissionProblem = null;
+      managerFailed = false;
+      progress = null;
+      cachedLanguages.clear();
       wanted = null;
       admitted = false;
       learned = null;
@@ -399,6 +443,9 @@ export function createLearning(options: {
       clearTimeout(retryAdmission);
       changing?.abort();
       teaching?.abort();
+      teaching = null;
+      submitted = null;
+      teachAgain = false;
     },
   };
 }

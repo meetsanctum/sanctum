@@ -165,7 +165,7 @@ export function createLiveUpdates(
       );
     },
 
-    // How speech recognition is doing, for the Assistant's page.
+    // How speech recognition is doing, for the Assistant's app client.
     hearing(hearing: Hearing) {
       connections.publish((principal): LiveHearing | undefined =>
         reads(principal) ? { type: "hearing", hearing } : undefined,

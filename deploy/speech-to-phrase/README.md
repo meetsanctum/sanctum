@@ -24,6 +24,9 @@ Home Assistant's add-on. That runs upstream's Wyoming server only, on port
   speech. Its detector ends the utterance after 0.7 s of silence and sends
   the transcript.
 
+The `info` response to `describe` includes `cached_languages` for models
+already on disk. Its standard `asr` field describes the active grammar.
+
 The server limits lessons by input size and by the expansion work the
 grammar compiler performs. Each Wyoming event can carry a JSON body of up
 to 4 MiB and a binary payload of up to 1 MiB.

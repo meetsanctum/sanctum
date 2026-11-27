@@ -40,7 +40,7 @@ const ownRoutes = new Set([
   "POST /api/apps/:appId/actions/:actionId",
   "GET /api/apps/:appId/settings",
 ]);
-// How speech recognition is doing, which only the Assistant's page shows.
+// Among apps, only the Assistant can read speech recognition status.
 const assistantRoutes = new Set(["GET /api/speech/hearing"]);
 
 // Whether an app's page may reach a route at all.

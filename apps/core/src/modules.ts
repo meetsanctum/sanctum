@@ -5,7 +5,6 @@ import {
   shownQuestions,
   sunTimesSchema,
   sunType,
-  type Hearing,
 } from "@meetsanctum/app-sdk";
 
 import { createActivity } from "./activity/activity.js";
@@ -477,6 +476,8 @@ export async function createModules(
     spoken,
     isSpeaker,
     learning,
+    hearing,
+    assistantChanged,
   } = assembleSpeakerAudio(options, {
     canUse: agentsCanUse,
     devices,
@@ -552,11 +553,7 @@ export async function createModules(
       // Its first successful start also restores workflows after a restart
       // interrupted adding it back.
       if (app.state === "running") workflows.forApps.added(app.id);
-      // The Assistant brings what speech recognition learns.
-      if (app.id === assistantAppId) {
-        if (!apps.answersRequests()) listening.cancelRuns();
-        learning?.changed();
-      }
+      if (app.id === assistantAppId) assistantChanged();
       // A driver that starts or stops lets devices join, or lists what it
       // found, or no longer does.
       pairing.refresh();
@@ -695,14 +692,6 @@ export async function createModules(
       );
     }
   });
-  // How speech recognition is doing: unavailable where the manager runs no
-  // speech recognition for the core.
-  const hearing = (): Hearing =>
-    learning?.hearing() ?? {
-      state: "failed",
-      language: places.language(),
-      failure: "unavailable",
-    };
   // Register the followers once every module they call has been built.
   setCoreFollowers(eventBus, {
     apps,

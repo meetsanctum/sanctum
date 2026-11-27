@@ -193,6 +193,7 @@ export const hostResources = hostStatus
 // over HTTP while it runs, as Ollama does.
 export const serviceStatus = z.object({
   service: z.object({
+    state: z.string().optional(),
     url: z.string().optional(),
     // A secret the service takes from the core, as Speech-to-Phrase's for
     // teaching it, given only while it runs.

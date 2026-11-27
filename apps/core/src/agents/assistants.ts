@@ -101,6 +101,8 @@ export function createAssistantCalls(options: {
   }
 
   return {
+    canActFor: options.canActFor,
+
     /** The tools for an assistant app, in the shape accepted by `ctx.models`. */
     list(appId: string, who: TurnOpener): ModelTool[] {
       if (takeRequest(appId, who)) throw new ActionError("limited");

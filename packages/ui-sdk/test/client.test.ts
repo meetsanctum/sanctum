@@ -587,7 +587,7 @@ describe("how speech recognition is doing", () => {
     assistant.live.publish({ type: "hearing", hearing });
     expect(messages).toEqual([{ type: "hearing", hearing }]);
 
-    const other = setup([]);
+    const other = setup([], [], "sanctum.example");
     const theirs: LiveMessage[] = [];
     other.client.subscribe({ message: (message) => theirs.push(message) });
     other.live.publish({ type: "hearing", hearing });
@@ -595,10 +595,7 @@ describe("how speech recognition is doing", () => {
     await expect(other.client.hearing()).rejects.toThrow(
       "to be Sanctum's Assistant",
     );
-    expect(other.json).not.toHaveBeenCalledWith(
-      "/api/speech/hearing",
-      expect.anything(),
-    );
+    expect(other.json).not.toHaveBeenCalled();
   });
 });
 

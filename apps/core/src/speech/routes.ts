@@ -5,7 +5,7 @@ import type { Gate } from "../app-host/gate.js";
 
 // GET /api/speech/hearing: how speech recognition is doing for smart
 // speakers, in the home's language, for any client that may see the home.
-// The Assistant's page reads it, then follows `hearing` on the live socket.
+// The Assistant's app client can read it and follow `hearing` live.
 export function registerSpeechRoutes(
   app: FastifyInstance,
   options: { hearing: () => Hearing; gate: Gate },

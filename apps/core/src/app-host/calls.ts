@@ -709,8 +709,7 @@ export function createCoreCalls(options: {
     },
 
     // The home's language for speech: Sanctum's Assistant sets it for
-    // someone in the home, as its page asks, never on its own or for an AI
-    // agent.
+    // someone in the home, never on its own or for an AI agent.
     async setSpeechLanguage(set) {
       need(aiAssistantPermission);
       notForAgents();
@@ -722,6 +721,9 @@ export function createCoreCalls(options: {
         throw new Error(
           `A language for speech is one of ${requestLanguages.join(", ")}`,
         );
+      }
+      if (!options.assistant.canActFor(actor)) {
+        throw new ActionError("forbidden");
       }
       options.places.setLanguage(
         {

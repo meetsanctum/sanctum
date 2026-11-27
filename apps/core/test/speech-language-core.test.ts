@@ -12,45 +12,56 @@ import {
 import { expect, it, vi } from "vitest";
 import { z } from "zod";
 
+import { voices } from "../src/speech/speech.js";
 import { base, running, useCleanUps } from "./app-apart-support.js";
+import { openLive } from "./devices-support.js";
 import { fakeManager } from "./manager-support.js";
 import { fakePiper, fakeSpeechToPhrase } from "./speech-support.js";
-import { claimed, get, post, testCore } from "./support.js";
+import {
+  claimed,
+  deferredResult,
+  get,
+  post,
+  sharedClient,
+  testCore,
+} from "./support.js";
 
 // The home's one language for speech in a running core: the Assistant sets
 // it for someone in the home, speech recognition learns it at once and
-// hears in the old one until then, and requests and replies follow it. The
-// Assistant's page reads how that's going.
+// hears in the old one until then, and requests and replies follow it. Its
+// app client can read and follow the status.
 
 useCleanUps();
 
-async function setup(transcript: () => string) {
+async function setup(
+  speech: Parameters<typeof fakeSpeechToPhrase>[0],
+  beforeSetLanguage?: () => Promise<void>,
+) {
   const asked: AssistantRequest[] = [];
   let assistantCtx: AppContext | undefined;
+  const permission = {
+    id: aiAssistantPermission,
+    reason: "To do what you ask.",
+    needed: true,
+  };
+  const setLanguage = defineAction({
+    id: "assistant.language",
+    title: "Language",
+    tier: "write",
+    input: z.object({ language: z.enum(["en", "de"]) }),
+    output: z.object({}),
+    run: async (ctx, { language }) => {
+      await beforeSetLanguage?.();
+      await ctx.speech.setLanguage(language);
+      return {};
+    },
+  });
   const assistant = defineApp({
     ...base,
     id: assistantAppId,
     name: "Assistant",
-    permissions: [
-      {
-        id: aiAssistantPermission,
-        reason: "To do what you ask.",
-        needed: true,
-      },
-    ],
-    actions: [
-      defineAction({
-        id: "assistant.language",
-        title: "Language",
-        tier: "write",
-        input: z.object({ language: z.enum(["en", "de"]) }),
-        output: z.object({}),
-        run: async (ctx, { language }) => {
-          await ctx.speech.setLanguage(language);
-          return {};
-        },
-      }),
-    ],
+    permissions: [permission],
+    actions: [setLanguage],
     sentences: {
       en: ["turn (on|off) the {room} lights"],
       de: ["schalte das licht im {room} (ein|aus)"],
@@ -64,7 +75,11 @@ async function setup(transcript: () => string) {
     },
     async requests(_ctx, request) {
       asked.push({ text: request.text, language: request.language } as never);
-      await request.reply({ text: "Done", confirmation: true });
+      await request.reply(
+        request.language === "de"
+          ? { text: "Das Licht ist an." }
+          : { text: "Done", confirmation: true },
+      );
     },
   });
   let driverCtx: AppContext | undefined;
@@ -73,8 +88,9 @@ async function setup(transcript: () => string) {
     id: "sanctum.example",
     permissions: [
       { id: registerPermission, reason: "To register devices.", needed: true },
+      permission,
     ],
-    actions: [],
+    actions: [setLanguage],
     start: async (ctx) => {
       driverCtx = ctx;
       await ctx.devices.register({
@@ -93,7 +109,7 @@ async function setup(transcript: () => string) {
     driver: { command: async () => undefined },
   });
 
-  const stp = await fakeSpeechToPhrase({ transcript });
+  const stp = await fakeSpeechToPhrase(speech);
   const said: unknown[] = [];
   const piper = await fakePiper(said);
   const { manager } = fakeManager();
@@ -103,8 +119,8 @@ async function setup(transcript: () => string) {
     name === "piper" && wanted.has("piper") ? piper.url : null;
   manager.serviceConnection = async (name) =>
     name === "speech-to-phrase" && wanted.has(name)
-      ? { url: stp.url, token: "secret" }
-      : null;
+      ? { state: "running", url: stp.url, token: "secret" }
+      : { state: "starting", url: null, token: null };
   manager.hostStatus = async () => ({
     ...hostStatus,
     network: {
@@ -193,7 +209,18 @@ async function setup(transcript: () => string) {
 
 it("learns the language the Assistant sets at once, and asks and replies in it", async () => {
   let words = "turn on the office lights";
-  const home = await setup(() => words);
+  const training = deferredResult<void>();
+  const started = deferredResult<void>();
+  const home = await setup({
+    transcript: () => words,
+    beforeTrain(lesson) {
+      if (lesson.language === "de") {
+        started.resolve();
+        return training.promise;
+      }
+    },
+  });
+  const { socket, messages } = await openLive(home.core, home.home.token);
   try {
     await vi.waitFor(
       async () =>
@@ -214,6 +241,15 @@ it("learns the language the Assistant sets at once, and asks and replies in it",
       home.home,
     );
     expect(set.statusCode).toBe(200);
+    await started.promise;
+    expect(await home.hearing()).toEqual({
+      state: "downloading",
+      language: "de",
+    });
+    expect(await home.ask()).toContainEqual({ step: "heard", text: words });
+    expect(home.asked.at(-1)).toEqual({ text: words, language: "en" });
+
+    training.resolve();
     await vi.waitFor(() =>
       expect(home.stp.lessons.at(-1)).toMatchObject({
         language: "de",
@@ -224,10 +260,25 @@ it("learns the language the Assistant sets at once, and asks and replies in it",
     await vi.waitFor(async () =>
       expect(await home.hearing()).toEqual({ state: "ready", language: "de" }),
     );
+    await vi.waitFor(() =>
+      expect(messages).toContainEqual({
+        type: "hearing",
+        hearing: { state: "ready", language: "de" },
+      }),
+    );
 
     words = "schalte das licht im office ein";
     const steps = await home.ask();
     expect(steps).toContainEqual({ step: "heard", text: words });
+    expect(steps).toContainEqual({
+      step: "reply",
+      url: expect.any(String),
+      text: "Das Licht ist an.",
+    });
+    expect(home.said).toContainEqual({
+      type: "synthesize",
+      data: { text: "Das Licht ist an.", voice: { name: voices.de } },
+    });
     expect(home.asked.at(-1)).toEqual({ text: words, language: "de" });
     expect(
       home.stp.heard.filter((event) => event.type === "transcribe").at(-1)
@@ -247,12 +298,26 @@ it("learns the language the Assistant sets at once, and asks and replies in it",
       language: "de",
     });
   } finally {
+    training.resolve();
+    socket.close();
     home.close();
   }
 });
 
+it("keeps the saved speech language when the core restarts", async () => {
+  const core = await testCore();
+  const home = await claimed(core);
+  core.places.setLanguage({ actor: "sanctum" }, "de");
+  await core.stop();
+
+  const restarted = await testCore({ dataDir: core.dataDir });
+  const response = await get(restarted, "/api/speech/hearing", home);
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ language: "de" });
+});
+
 it("says the Assistant's words for speech it doesn't know", async () => {
-  const home = await setup(() => "");
+  const home = await setup({ transcript: "" });
   try {
     await vi.waitFor(
       async () => expect((await home.hearing()).state).toBe("ready"),
@@ -274,7 +339,7 @@ it("says the Assistant's words for speech it doesn't know", async () => {
 });
 
 it("lets only the Assistant set the language, for someone in the home", async () => {
-  const home = await setup(() => "");
+  const home = await setup({ transcript: "" });
   try {
     // Not on its own.
     await expect(
@@ -288,6 +353,16 @@ it("lets only the Assistant set the language, for someone in the home", async ()
       home.home,
     );
     expect(odd.statusCode).toBe(400);
+    expect(home.core.apps.holds("sanctum.example")?.granted).toContain(
+      aiAssistantPermission,
+    );
+    const other = await post(
+      home.core,
+      "/api/apps/sanctum.example/actions/assistant.language",
+      { language: "de" },
+      home.home,
+    );
+    expect(other.statusCode).toBe(403);
     expect((await home.hearing()).language).toBe("en");
 
     // Only the Assistant's page reads how speech is doing.
@@ -302,6 +377,38 @@ it("lets only the Assistant set the language, for someone in the home", async ()
     });
     expect(assistantPage.statusCode).toBe(200);
   } finally {
+    home.close();
+  }
+});
+
+it("refuses a language change after the shared client is revoked", async () => {
+  const started = deferredResult<void>();
+  const finish = deferredResult<void>();
+  const home = await setup({}, () => {
+    started.resolve();
+    return finish.promise;
+  });
+  try {
+    const shared = sharedClient(home.core);
+    const set = post(
+      home.core,
+      `/api/apps/${assistantAppId}/actions/assistant.language`,
+      { language: "de" },
+      shared,
+    );
+    await started.promise;
+    const revoked = await post(
+      home.core,
+      "/api/auth/clients/revoke",
+      { id: shared.id },
+      home.home,
+    );
+    expect(revoked.statusCode).toBe(200);
+    finish.resolve();
+    expect((await set).statusCode).toBe(403);
+    expect((await home.hearing()).language).toBe("en");
+  } finally {
+    finish.resolve();
     home.close();
   }
 });

@@ -39,8 +39,7 @@ import {
 } from "./room-sections.js";
 import { turnOnType } from "./lights.js";
 import { protocolVersion } from "./protocol-version.js";
-import { assistantAppId } from "./requests.js";
-import { notUnderstoodIssues, sentenceIssues } from "./sentences.js";
+import { assertAssistantSpeech } from "./sentences.js";
 import { settingsSchemaOf, type SettingsSchema } from "./settings.js";
 import { forecastType, sunType } from "./weather.js";
 import {
@@ -82,7 +81,20 @@ export * from "./live.js";
 export * from "./media.js";
 export * from "./models.js";
 export * from "./requests.js";
-export * from "./sentences.js";
+export {
+  assistantSentencesSchema,
+  grammarSteps,
+  notUnderstoodIssues,
+  notUnderstoodMaxLength,
+  notUnderstoodSchema,
+  referenceHome,
+  sentenceBlanks,
+  sentenceIssues,
+  sentenceLimits,
+  type AssistantSentences,
+  type NotUnderstood,
+  type SentenceBlank,
+} from "./sentences.js";
 export * from "./hearing.js";
 export * from "./action-errors.js";
 export * from "./host.js";
@@ -425,25 +437,7 @@ export function defineApp(app: AppDefinition): AppDefinition {
   if (pages.length > 0 && !app.icon) {
     throw new Error("An app with pages has an icon");
   }
-  if (app.sentences !== undefined) {
-    if (app.id !== assistantAppId) {
-      throw new Error("Only Sanctum's Assistant brings sentences");
-    }
-    if (typeof app.requests !== "function") {
-      throw new Error("An Assistant with sentences needs a requests handler");
-    }
-    const issues = sentenceIssues(app.sentences);
-    if (issues.length > 0) throw new Error(issues.join("; "));
-  }
-  if (app.notUnderstood !== undefined) {
-    if (app.id !== assistantAppId || app.sentences === undefined) {
-      throw new Error(
-        "Only Sanctum's Assistant, with its sentences, says what it didn't understand",
-      );
-    }
-    const issues = notUnderstoodIssues(app.notUnderstood, app.sentences);
-    if (issues.length > 0) throw new Error(issues.join("; "));
-  }
+  assertAssistantSpeech(app);
   for (const hook of [
     "start",
     "resume",

@@ -8,6 +8,7 @@ import {
   createSpokenRequests,
   oneMomentAfterMs,
   type Speaker,
+  type Transcriber,
 } from "../src/speech/spoken.js";
 import { deferredResult } from "./support.js";
 
@@ -25,7 +26,7 @@ type Asked = Parameters<
 function setup(
   options: {
     answers?: boolean;
-    heard?: string | null;
+    heard?: Awaited<ReturnType<Transcriber>>;
     transcript?: Promise<string | null>;
     turnFinished?: Promise<void>;
     prepare?: (text: string, signal?: AbortSignal) => Promise<void>;
@@ -161,6 +162,22 @@ afterEach(() => {
 });
 
 describe("a smart speaker's request", () => {
+  it("uses the recognizer's language when it changes before the run's audio starts", async () => {
+    const text = "mach das licht an";
+    const { wake, asked, until, listening } = setup({
+      heard: { text, language: "de" },
+    });
+    const opened = await wake();
+    if (!opened.accepted) throw new Error(opened.refusal);
+    try {
+      await until(() => asked.length === 1);
+      expect(asked[0]?.request.asked).toMatchObject({ text, language: "de" });
+    } finally {
+      asked[0]?.answer.resolve(null);
+      listening.close(driver, { run: opened.run, end: "played" });
+    }
+  });
+
   it("limits microphone runs even when they end before any words are heard", () => {
     const { listening, asked } = setup();
     for (let attempt = 0; attempt < 12; attempt++) {

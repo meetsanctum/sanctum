@@ -136,6 +136,19 @@ class Taught:
         self.language = holder.language
         self.digest = digest
 
+    def describe(self) -> Event:
+        event = self.info.event()
+        cached = []
+        for language in LANGUAGES:
+            name = models.model_name_for(language, BACKEND)
+            if name and (
+                models._present(self.data / "models" / name)
+                or models._present(models.BUNDLED_MODELS_DIR / name)
+            ):
+                cached.append(language)
+        event.data["cached_languages"] = cached
+        return event
+
 
 async def _load_grammar(
     language: str, name: str, model_dir: Path, grammar: Path
@@ -355,7 +368,7 @@ class Listening(wyoming_server.S2PEventHandler):
 
     async def handle_event(self, event: Event) -> bool:
         if Describe.is_type(event.type):
-            await self.write_event(self._taught.info.event())
+            await self.write_event(self._taught.describe())
         elif event.type == "train":
             await self.write_event(await _train(self._taught, event.data))
         elif AudioStart.is_type(event.type):

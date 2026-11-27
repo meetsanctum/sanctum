@@ -111,6 +111,20 @@ export function assembleSpeakerAudio(
     ...speech,
     ...hearing,
     learning,
+    hearing(): Hearing {
+      return (
+        learning?.hearing() ?? {
+          state: "failed",
+          language: language(),
+          failure: "unavailable",
+        }
+      );
+    },
+    assistantChanged() {
+      if (!apps().answersRequests()) hearing.listening.cancelRuns();
+      learning?.changed();
+      speech.speech?.pruneKeptPhrases();
+    },
     async startSpeech() {
       await speech.startSpeech();
       learning?.start();
