@@ -1,5 +1,7 @@
 import {
+  controlPermission,
   isActionError,
+  permissionWords,
   type AssistantRequestCall,
   type RequestContext,
   type RequestReply,
@@ -26,9 +28,13 @@ type Overview = {
   devices: {
     id: string;
     name: string;
+    roomId: string | null;
     capabilities: { id: string; kind: string }[];
   }[];
+  notAllowed: { title: string; where: string }[];
 };
+
+const lightControlTitle = permissionWords(controlPermission("light")).title;
 
 // One light in a command or restore result.
 type LightAnswer = { name: string; result: string; why?: string };
@@ -115,10 +121,15 @@ function targetOf(
     };
   }
   if (where === "light") {
-    const devices = overview.devices.filter(
+    let devices = overview.devices.filter(
       (device) =>
         normalized(device.name) === said && lightsOf(device).length > 0,
     );
+    const room = request.room;
+    if (devices.length > 1 && room) {
+      const nearby = devices.filter((device) => device.roomId === room.id);
+      if (nearby.length === 1) devices = nearby;
+    }
     if (devices.length > 1) return { reply: words.whichNamed(where, name) };
     const [device] = devices;
     if (!device) return null;
@@ -128,7 +139,7 @@ function targetOf(
     }));
     return {
       place: { kind: "lights", lights },
-      subject: { kind: "light", name },
+      subject: { kind: "light", name: device.name },
     };
   }
   return null;
@@ -222,7 +233,7 @@ async function putBack(
   words: Replies,
 ): Promise<RequestReply> {
   const answer = await callTool(ctx, "restore", {});
-  if (!answer.ok) return { text: words.cannotPutBack };
+  if (!answer.ok) return { text: words.failed(answer.words) };
   const { changed } = answer.value as { changed: RestoreAnswer[] };
   if (changed.length === 0) return { text: words.cannotPutBack };
   const missed = changed.filter((light) => !done(light));
@@ -271,7 +282,14 @@ export async function answerRequest(
     if (!read.ok) return { text: words.failed(read.words) };
     const overview = read.value as Overview;
     const matched = match(request.text, language, namesOf(overview));
-    if (!matched) return { text: language.notUnderstood };
+    if (!matched) {
+      const lightsHidden = overview.notAllowed.some(
+        ({ title, where }) =>
+          title === lightControlTitle &&
+          where === "Settings, What AI Agents Can Use",
+      );
+      return { text: lightsHidden ? words.notAllowed : language.notUnderstood };
+    }
     return await changeLights(ctx, matched, overview, request, words);
   } catch (error) {
     if (isActionError(error) && error.code === "forbidden") {

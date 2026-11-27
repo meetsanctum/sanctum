@@ -37,6 +37,7 @@ const overview = {
       capabilities: [{ id: "switch", kind: "switch" }],
     },
   ],
+  notAllowed: [],
 };
 
 const json = (value: unknown): AiToolAnswer => ({
@@ -219,6 +220,7 @@ describe("the Assistant's requests", () => {
     'asks which target for "%s" when two names match',
     async (text, kind, name) => {
       const duplicateNames = {
+        ...overview,
         floors: [
           ...overview.floors,
           { id: "floor-other", name: "Ground Floor" },
@@ -239,6 +241,48 @@ describe("the Assistant's requests", () => {
       });
     },
   );
+
+  it("uses the speaker's room to choose between lights with the same name", async () => {
+    const named = {
+      ...overview,
+      devices: [
+        {
+          ...overview.devices[0],
+          id: "device-other",
+          name: "DESK LAMP",
+          roomId: "room-kitchen",
+        },
+        ...overview.devices,
+      ],
+    };
+    const tools = { home_overview: () => json(named) };
+    const { calls, replies } = await ask("turn off the desk lamp", { tools });
+    expect(calls.at(-1)).toEqual({
+      name: "lights",
+      input: {
+        place: {
+          kind: "lights",
+          lights: [{ device: "device-desk", capability: "light" }],
+        },
+        to: "off",
+      },
+    });
+    expect(replies).toEqual([{ text: "Desk Lamp off.", confirmation: true }]);
+
+    const ambiguous = {
+      calls: [{ name: "home_overview", input: {} }],
+      replies: [{ text: "Which light? More than one is named DESK LAMP." }],
+    };
+    expect(
+      await ask("turn off the desk lamp", { from: "client", tools }),
+    ).toEqual(ambiguous);
+    expect(
+      await ask("turn off the desk lamp", {
+        room: { id: "room-hall", name: "Hall" },
+        tools,
+      }),
+    ).toEqual(ambiguous);
+  });
 
   it("says which lights didn't answer, and when nothing changed", async () => {
     const answering = (lights: object[]) => ({
@@ -328,22 +372,21 @@ describe("the Assistant's requests", () => {
     expect(reply.confirmation).toBeUndefined();
   });
 
-  it("passes on a tool's refusal in English, and says it failed in German", async () => {
-    const refused = {
-      lights: () => ({
-        text: "“Control lights” is switched off for AI agents in Settings, What AI Agents Can Use.",
-        isError: true,
-      }),
-    };
-    expect((await ask("lights off", { tools: refused })).replies).toEqual([
-      {
-        text: "“Control lights” is switched off for AI agents in Settings, What AI Agents Can Use.",
-      },
-    ]);
-    expect(
-      (await ask("Licht aus", { language: "de", tools: refused })).replies,
-    ).toEqual([{ text: "Das hat nicht geklappt." }]);
-  });
+  it.each([
+    ["lights", "lights off", "Licht aus"],
+    ["restore", "undo", "rückgängig"],
+  ])(
+    "passes on a %s refusal in English, and says it failed in German",
+    async (tool, english, german) => {
+      const text =
+        "“Control your lights” is switched off for AI agents in Settings, What AI Agents Can Use.";
+      const tools = { [tool]: () => ({ text, isError: true }) };
+      expect((await ask(english, { tools })).replies).toEqual([{ text }]);
+      expect((await ask(german, { language: "de", tools })).replies).toEqual([
+        { text: "Das hat nicht geklappt." },
+      ]);
+    },
+  );
 
   it.each([
     ["changed", undefined, "A light changed in the meantime."],
@@ -393,6 +436,17 @@ describe("the Assistant's requests", () => {
               isError: true,
             }),
           },
+        })
+      ).replies,
+    ).toEqual([
+      {
+        text: "There's no change of yours to put back: only your last 5 changes are kept, for an hour.",
+      },
+    ]);
+    expect(
+      (
+        await ask("undo", {
+          tools: { restore: () => json({ change: "c1", changed: [] }) },
         })
       ).replies,
     ).toEqual([{ text: "There's nothing I can put back." }]);
@@ -451,6 +505,28 @@ describe("the Assistant's requests", () => {
       },
     });
     expect(replies).toEqual([{ text: "I'm not allowed to do that." }]);
+  });
+
+  it.each([
+    ["Settings, What AI Agents Can Use", "I'm not allowed to do that."],
+    ["Example's settings", "I can only help with lights."],
+  ])("checks for the light permission in %s", async (where, text) => {
+    expect(
+      await ask("turn off the desk lamp", {
+        from: "client",
+        tools: {
+          home_overview: () =>
+            json({
+              ...overview,
+              devices: [overview.devices[1]],
+              notAllowed: [{ title: "Control your lights", where }],
+            }),
+        },
+      }),
+    ).toEqual({
+      calls: [{ name: "home_overview", input: {} }],
+      replies: [{ text }],
+    });
   });
 
   it("doesn't answer a request that has ended", async () => {
