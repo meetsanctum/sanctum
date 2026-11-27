@@ -528,7 +528,7 @@ describe("whether it fits beside the rest", () => {
         "sanctum.example",
         { memoryMb: 512, dataMb: 256, services: [] },
         await apps.held(),
-        { room: () => null, sizeMb: () => 0 },
+        { room: () => null, spare: () => null, sizeMb: () => 0 },
       ),
     );
     finishImage(dataVolume);

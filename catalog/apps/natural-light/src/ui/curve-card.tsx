@@ -1,4 +1,4 @@
-import { useHomeClock } from "@meetsanctum/ui-sdk";
+import { number, useHomeClock } from "@meetsanctum/ui-sdk";
 
 import type { Preview } from "../preview.js";
 import { kelvinLabel, timeOfDay } from "./use-natural-light";
@@ -59,7 +59,7 @@ function Curve(props: { preview: Preview }) {
       <div className="relative h-24 w-full">
         <svg
           role="img"
-          aria-label={`From ${curve.lowKelvin.toLocaleString()} K at ${curve.lowBrightness}% at night to ${curve.highKelvin.toLocaleString()} K at ${curve.highBrightness}% at its peak`}
+          aria-label={`From ${number("en", curve.lowKelvin)} K at ${curve.lowBrightness}% at night to ${number("en", curve.highKelvin)} K at ${curve.highBrightness}% at its peak`}
           viewBox={`0 0 ${width} ${height}`}
           preserveAspectRatio="none"
           className="absolute inset-0 size-full overflow-visible"

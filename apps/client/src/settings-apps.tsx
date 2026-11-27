@@ -112,6 +112,7 @@ export function AddAppsSection(props: {
       <AddAppSheet
         key={shown?.id ?? "none"}
         app={shown}
+        apps={props.apps}
         onAdded={(app) => {
           // A late answer leaves alone a sheet opened since for another app.
           setAdding((current) =>

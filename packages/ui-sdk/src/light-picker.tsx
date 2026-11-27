@@ -23,6 +23,7 @@ import {
   type PointerEvent,
   type ReactNode,
 } from "react";
+import { number } from "@meetsanctum/app-sdk/words";
 
 import { isMotionReduced } from "./reduce-motion";
 import { whiteOf } from "./tiles";
@@ -96,9 +97,7 @@ const clamp = (value: number, min: number, max: number) =>
 const kelvin = (mireds: number) => Math.round(1_000_000 / mireds / 100) * 100;
 // Made once: toLocaleString makes a formatter on each call, and the picker
 // writes a temperature for each of its whites.
-const kelvinNumber = new Intl.NumberFormat();
-const kelvinText = (mireds: number) =>
-  `${kelvinNumber.format(kelvin(mireds))} K`;
+const kelvinText = (mireds: number) => `${number("en", kelvin(mireds))} K`;
 
 // Whites spread evenly across a light's range, coolest first.
 function whitesOf(range: Range) {

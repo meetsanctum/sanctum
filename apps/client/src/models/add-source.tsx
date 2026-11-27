@@ -376,6 +376,7 @@ export function AddSource(props: {
               )
             }
             onAppAdded={(app) => props.onAppAdded?.(app)}
+            onClose={() => setOpen(false)}
             onOpenOllama={
               props.onOpenApp &&
               (() => {

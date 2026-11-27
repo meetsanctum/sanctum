@@ -1,0 +1,92 @@
+name: Connector
+
+# Stages @meetsanctum/mcp, the connector AI agents run, on npm from a tag
+# mcp-vX.Y.Z. A staged version is installable only once a maintainer approves
+# it on npmjs.com with two-factor authentication, so nothing reaches anyone's
+# computer without a person's say.
+#
+# npm trusts the staging job through OIDC and attaches provenance. The
+# connector-release environment holds a stage-only token for the first release.
+on:
+  push:
+    tags: ["mcp-v*.*.*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: connector-${{ github.ref }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - name: Require a protected release tag
+        run: |
+          if [ "$GITHUB_REF_PROTECTED" != true ]; then
+            echo "::error::Protect mcp-v* tags with the connector release ruleset"
+            exit 1
+          fi
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Require the tagged commit to be on main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "::error::$GITHUB_REF_NAME must tag a commit on main"
+            exit 1
+          fi
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      # Settings' prompt pins the connector's version, and the connector's
+      # tests hold that pin to its package.json: the tag must name it too.
+      - name: Check the tag names the package's version
+        run: |
+          version="$(jq -r .version packages/mcp/package.json)"
+          if [ "${GITHUB_REF_NAME#mcp-v}" != "$version" ]; then
+            echo "::error::$GITHUB_REF_NAME doesn't match @meetsanctum/mcp $version"
+            exit 1
+          fi
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @meetsanctum/mcp... build
+      - run: pnpm --filter @meetsanctum/mcp... typecheck
+      - run: pnpm --filter @meetsanctum/mcp... test
+      - name: Check the connector archive
+        working-directory: packages/mcp
+        run: bash tools/check-archive.sh "$RUNNER_TEMP/connector"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: connector
+          path: ${{ runner.temp }}/connector/connector.tgz
+          if-no-files-found: error
+
+  stage:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: connector-release
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      # Staged publishing needs npm 11.15.0 or later.
+      - run: npm install --global --ignore-scripts npm@11.21.3
+      - uses: actions/download-artifact@v8
+        with:
+          name: connector
+          path: ${{ runner.temp }}/connector
+      # npm stages the directory it runs in, so the tarball pnpm packed is
+      # unpacked first.
+      - run: tar -xzf "$RUNNER_TEMP/connector/connector.tgz" -C "$RUNNER_TEMP/connector"
+      - name: Stage it on npm
+        working-directory: ${{ runner.temp }}/connector/package
+        run: npm stage publish --access public --provenance --ignore-scripts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

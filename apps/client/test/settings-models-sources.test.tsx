@@ -378,6 +378,31 @@ describe("AI model source dialogs", () => {
     expect(document.querySelector("[role=dialog]")).toBeNull();
   });
 
+  it("opens Storage instead of adding Ollama when it does not fit", async () => {
+    page.ollamaShortfalls = [
+      { kind: "space", needs: 256_000_000, free: 128_000_000 },
+    ];
+    const openSettings = vi.fn();
+    await show(openSettings);
+    await click(button("Add a source"));
+    await click(button("Continue"));
+
+    const sheet = dialog()!;
+    expect(sheet.querySelector("h2")?.textContent).toBe(
+      "Not enough storage for Ollama",
+    );
+    expect(sheet.textContent).toContain("free up 128 MB");
+    expect(sheet.textContent).not.toContain("then download a model");
+    expect(sheet.textContent).not.toContain("Run AI models at home");
+
+    await click(button("Free up space"));
+    expect(dialog()).toBeNull();
+    expect(openSettings).toHaveBeenCalledWith("system", { card: "storage" });
+    expect(page.requests.some(([, path]) => path === "/api/apps/add")).toBe(
+      false,
+    );
+  });
+
   it("reports an unreachable Ollama without saying it needs a model", async () => {
     page.installed = [ollamaApp];
     page.isOllamaAvailable = false;

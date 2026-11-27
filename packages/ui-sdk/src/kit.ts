@@ -30,6 +30,7 @@ export * from "./units";
 export * from "./use-app-settings";
 export * from "./widget-card";
 export * from "./widget-icons";
+export * from "./words";
 export { Button, buttonVariants } from "./components/ui/button";
 export { Input } from "./components/ui/input";
 export {

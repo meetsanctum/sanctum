@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { productName } from "../src/brand";
 import { CoreError, coreJson } from "../src/core-fetch";
 import { AddAppsSection } from "../src/settings-apps";
+import { SettingsOpenerProvider } from "../src/settings-opener";
 
 // Settings → Apps' Add apps: the apps the home could add, each with Add,
 // and the sheet that says what one needs to work, what it starts with and
@@ -72,10 +73,16 @@ let root: Root;
 let container: HTMLDivElement;
 let available: AvailableApp[];
 let onAdded: ReturnType<typeof vi.fn<(app: AppInfo) => void>>;
+let openSettings:
+  ReturnType<typeof vi.fn<(page: string, params?: object) => void>> | undefined;
 
 const render = (apps: AppInfo[] = [weather]) =>
   act(async () =>
-    root.render(<AddAppsSection apps={apps} onAdded={onAdded} />),
+    root.render(
+      <SettingsOpenerProvider value={openSettings}>
+        <AddAppsSection apps={apps} onAdded={onAdded} />
+      </SettingsOpenerProvider>,
+    ),
   );
 const dialog = () => document.querySelector('[role="dialog"]');
 const buttonIn = (scope: ParentNode, name: string) =>
@@ -93,6 +100,7 @@ beforeEach(() => {
   root = createRoot(container);
   available = [example];
   onAdded = vi.fn();
+  openSettings = vi.fn();
   vi.mocked(coreJson).mockImplementation(async (path) => {
     if (path === "/api/apps/available") return available;
     if (path === "/api/apps/add") return added;
@@ -261,7 +269,109 @@ describe("Add apps", () => {
     expect(dialog()).toBeNull();
   });
 
-  it("says what keeps it from being added, with what would help, and can't add it", async () => {
+  it.each([
+    {
+      shortfall: {
+        kind: "space" as const,
+        needs: 256 * mebibyte,
+        free: 0,
+        toFree: 1.14 * 1024 * mebibyte,
+      },
+      title: "Not enough storage for Example",
+      line: `To add Example, free up 1.23 GB. ${productName} keeps some storage free for updates and for your other apps.`,
+      fix: "Free up space",
+      opens: ["system", { card: "storage" }],
+    },
+    {
+      // An older core says only what's free.
+      shortfall: {
+        kind: "space" as const,
+        needs: 256 * mebibyte,
+        free: 100 * mebibyte,
+      },
+      title: "Not enough storage for Example",
+      line: `To add Example, free up 164 MB. ${productName} keeps some storage free for updates and for your other apps.`,
+      fix: "Free up space",
+      opens: ["system", { card: "storage" }],
+    },
+    {
+      shortfall: {
+        kind: "space" as const,
+        needs: 256 * mebibyte,
+        free: 0,
+      },
+      title: "Not enough storage for Example",
+      line: `To add Example, free up some storage. ${productName} keeps some storage free for updates and for your other apps.`,
+      fix: "Free up space",
+      opens: ["system", { card: "storage" }],
+    },
+    {
+      shortfall: {
+        kind: "memory" as const,
+        needs: 128 * mebibyte,
+        free: 60 * mebibyte,
+      },
+      title: "Not enough memory for Example",
+      line: "To add Example, turn off an app you don't use. Your other apps take the memory Example needs.",
+      fix: "Show apps",
+      opens: ["apps", undefined],
+    },
+    {
+      shortfall: { kind: "sanctum" as const, range: "^2.0.0" },
+      title: `Example needs a newer ${productName}`,
+      line: `Update ${productName}, then add Example.`,
+      fix: `Update ${productName}`,
+      opens: ["system", { card: "updates" }],
+    },
+    {
+      shortfall: { kind: "pages" as const, needs: "pages" as const },
+      title: "Example is out of date",
+      line: `A newer Example comes with an update of ${productName}. Update ${productName}, then add Example.`,
+      fix: `Update ${productName}`,
+      opens: ["system", { card: "updates" }],
+    },
+  ])(
+    "says $title, with what would help, and $fix leads there",
+    async ({ shortfall, title, line, fix, opens }) => {
+      available = [{ ...example, shortfalls: [shortfall] }];
+      await render();
+      await press(container, "Add Example");
+
+      const sheet = dialog()!;
+      expect(sheet.querySelector("h2")!.textContent).toBe(title);
+      expect(sheet.textContent).toContain(line);
+      expect(sheet.textContent).not.toContain("It needs these to work:");
+      expect(buttonIn(sheet, "Add")).toBeUndefined();
+      expect(buttonIn(sheet, "Cancel")).toBeDefined();
+
+      await press(sheet, fix);
+      expect(dialog()).toBeNull();
+      expect(openSettings).toHaveBeenCalledWith(...opens);
+    },
+  );
+
+  it("shows the memory shortfall without a repair action when no app can be turned off", async () => {
+    available = [
+      {
+        ...example,
+        shortfalls: [
+          { kind: "memory", needs: 1152 * mebibyte, free: 1024 * mebibyte },
+        ],
+      },
+    ];
+    await render([]);
+    await press(container, "Add Example");
+
+    const sheet = dialog()!;
+    expect(sheet.textContent).toContain(
+      `Example needs more memory than ${productName} can give it.`,
+    );
+    expect(buttonIn(sheet, "Show apps")).toBeUndefined();
+    expect(buttonIn(sheet, "Add")!.disabled).toBe(true);
+  });
+
+  it("can't add one that doesn't fit where Settings can't be opened", async () => {
+    openSettings = undefined;
     available = [
       {
         ...example,
@@ -273,23 +383,8 @@ describe("Add apps", () => {
     await render();
     await press(container, "Add Example");
 
-    const sheet = dialog()!;
-    expect(sheet.textContent).toContain(
-      "There isn't room for it. It needs 128 MB of memory, and 60 MB are left beside your other apps. Turning off an app you don't use makes room.",
-    );
-    expect(sheet.textContent).not.toContain("It needs these to work:");
-    expect(buttonIn(sheet, "Add")!.disabled).toBe(true);
-  });
-
-  it("says a newer Sanctum is needed for one made for it", async () => {
-    available = [
-      { ...example, shortfalls: [{ kind: "sanctum", range: "^2.0.0" }] },
-    ];
-    await render();
-    await press(container, "Add Example");
-    expect(dialog()!.textContent).toContain(
-      `It needs a newer ${productName}. Update ${productName} in Settings, then add it.`,
-    );
+    expect(buttonIn(dialog()!, "Show apps")).toBeUndefined();
+    expect(buttonIn(dialog()!, "Add")!.disabled).toBe(true);
   });
 
   it("says when it changed meanwhile, and stays open", async () => {
@@ -317,6 +412,7 @@ describe("Add apps", () => {
   });
 
   it("checks what is short again when the sheet is closed", async () => {
+    openSettings = undefined;
     available = [
       {
         ...example,

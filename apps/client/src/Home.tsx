@@ -45,6 +45,7 @@ import { HomeSidebar } from "./home-sidebar";
 import { useWidgetCards } from "./home-widgets";
 import { OpenDeviceDetail, useOpenDevice } from "./open-device";
 import { OverlayHostProvider } from "./overlay-host";
+import { SettingsOpenerProvider } from "./settings-opener";
 import { placePages } from "./place-pages";
 import { usePins } from "./pins";
 import { useSectionEntities } from "./room-sections";
@@ -384,6 +385,20 @@ function HomeScreen(
     (app: string) =>
     (page: string, params: PageParams = {}) =>
       setRoutes((current) => [...current, { app, page, params }]);
+  // One of Settings' pages for a sheet's fix, over the page that opened it,
+  // or in its place where that's the page already, as Settings → Apps under
+  // its Add sheet, so Back leads where it did.
+  const openSettingsPage = useCallback(
+    (page: string, params: PageParams = {}) =>
+      setRoutes((current) => {
+        const top = current.at(-1);
+        const next = { app: settingsApp.id, page, params: { ...params } };
+        return top?.app === settingsApp.id && top.page === page
+          ? [...current.slice(0, -1), next]
+          : [...current, next];
+      }),
+    [],
+  );
   // An app's preferences, over the page that opened them.
   const settingsOf = (app: string) => () =>
     opener(settingsApp.id)(appSettingsPage, { id: app });
@@ -481,178 +496,181 @@ function HomeScreen(
       hourCycle={devicesSummary.hourCycle}
     >
       <OverlayHostProvider value={overlayHost}>
-        <ShellFrame
-          screenRef={setScreen}
-          layout={sidebar}
-          isPlace={!appPage}
-          place={dashboard && dashboardFrame[dashboard.background]}
-          deviceMode={deviceMode}
-          panelBackground={
-            isDefaultPage && routeApp
-              ? appBackdrop(routeApp.info)
-              : appPage
-                ? "var(--background)"
-                : dashboard && dashboardBackground[dashboard.background]
-          }
-          isVeiled={isVeiled}
-          triggerRef={sidebarTrigger}
-          sidebar={(isFloating) => (
-            <HomeSidebar
-              isFloating={isFloating}
-              isVeiled={isVeiled}
-              layout={sidebar}
-              routes={routes}
-              listed={listed}
-              pins={pins}
-              dashboards={dashboards}
-              shown={dashboard}
-              showDashboard={showDashboard}
-              go={go}
-              account={
-                signedIn
-                  ? {
-                      person: signedIn,
-                      onProfile: () => settings.openPerson(signedIn.id),
-                      onSettings: settings.openSettings,
-                      onSignOut: signOut,
+        <SettingsOpenerProvider value={openSettingsPage}>
+          <ShellFrame
+            screenRef={setScreen}
+            layout={sidebar}
+            isPlace={!appPage}
+            place={dashboard && dashboardFrame[dashboard.background]}
+            deviceMode={deviceMode}
+            panelBackground={
+              isDefaultPage && routeApp
+                ? appBackdrop(routeApp.info)
+                : appPage
+                  ? "var(--background)"
+                  : dashboard && dashboardBackground[dashboard.background]
+            }
+            isVeiled={isVeiled}
+            triggerRef={sidebarTrigger}
+            sidebar={(isFloating) => (
+              <HomeSidebar
+                isFloating={isFloating}
+                isVeiled={isVeiled}
+                layout={sidebar}
+                routes={routes}
+                listed={listed}
+                pins={pins}
+                dashboards={dashboards}
+                shown={dashboard}
+                showDashboard={showDashboard}
+                go={go}
+                account={
+                  signedIn
+                    ? {
+                        person: signedIn,
+                        onProfile: () => settings.openPerson(signedIn.id),
+                        onSettings: settings.openSettings,
+                        onSignOut: signOut,
+                      }
+                    : undefined
+                }
+              />
+            )}
+            panel={
+              <>
+                {/* Nothing on the page can be used under the veil. */}
+                <div className="contents" inert={isVeiled}>
+                  <TopBar
+                    sidebarTrigger={sidebarTrigger}
+                    sidebarShown={sidebar.docked || sidebar.floating !== null}
+                    sidebarDocked={sidebar.docked}
+                    onSidebar={sidebar.toggle}
+                    dashboard={onDashboard ? dashboard : undefined}
+                    isVeiled={isVeiled}
+                    onRename={rename}
+                    onEditHome={{
+                      disabled: !devicesSummary.loaded || devicesSummary.none,
+                      open: () => setEditingHome(true),
+                    }}
+                    editingHome={
+                      isEditingHome
+                        ? { onDone: () => setEditingHome(false) }
+                        : undefined
                     }
-                  : undefined
-              }
-            />
-          )}
-          panel={
-            <>
-              {/* Nothing on the page can be used under the veil. */}
-              <div className="contents" inert={isVeiled}>
-                <TopBar
-                  sidebarTrigger={sidebarTrigger}
-                  sidebarShown={sidebar.docked || sidebar.floating !== null}
-                  sidebarDocked={sidebar.docked}
-                  onSidebar={sidebar.toggle}
-                  dashboard={onDashboard ? dashboard : undefined}
-                  isVeiled={isVeiled}
-                  onRename={rename}
-                  onEditHome={{
-                    disabled: !devicesSummary.loaded || devicesSummary.none,
-                    open: () => setEditingHome(true),
-                  }}
-                  editingHome={
-                    isEditingHome
-                      ? { onDone: () => setEditingHome(false) }
-                      : undefined
-                  }
-                  pageSlot={setPageSlot}
-                  appSettings={
-                    route && routeApp && isAppPage && !openedByItsApp
-                      ? {
-                          name: routeApp.info.name,
-                          open: settingsOf(route.app),
-                        }
-                      : undefined
-                  }
-                />
-                <PageBarSlot.Provider value={pageSlot}>
-                  <main
-                    ref={scrollArea}
-                    className={`page${appPage ? " app-page" : ""}`}
-                  >
-                    <HomePage
-                      route={route}
-                      routeDepth={routes.length}
-                      routeApp={routeApp}
-                      isAppPage={isAppPage}
-                      isDefaultPage={isDefaultPage}
-                      openedByItsApp={openedByItsApp}
-                      back={back}
-                      opener={opener}
-                      setRoutes={setRoutes}
-                      settingsOf={settingsOf}
-                      settings={settings}
-                      listed={listed}
-                      appsWaiting={appsWaiting}
-                      installed={installed}
-                      pins={pins}
-                      changePins={changePins}
-                      appChanged={appChanged}
-                      appAdded={appAdded}
-                      live={live}
-                      ask={ask}
-                      core={core}
-                      shownStatus={shownStatus}
-                      statusFailed={statusFailed}
-                      setUpdateRunning={setUpdateRunning}
-                      me={me}
-                      dashboard={dashboard}
-                      dashboards={dashboards}
-                      home={home}
-                      isEditingHome={isEditingHome}
-                      showDashboard={showDashboard}
-                      setEditingHome={setEditingHome}
-                      openDevice={openDevice}
-                      openRoomDevice={openRoomDevice}
-                      openAppDevice={openedDevice.openFromApp}
-                      sectionEntities={sectionEntities}
-                      widgetCards={widgetCards}
-                      hostUrl={host.url}
-                      deviceMode={deviceMode}
-                      isVeiled={isVeiled}
-                    />
-                  </main>
-                </PageBarSlot.Provider>
-              </div>
-              {/* Over the page, under the top bar; it takes the page's
+                    pageSlot={setPageSlot}
+                    appSettings={
+                      route && routeApp && isAppPage && !openedByItsApp
+                        ? {
+                            name: routeApp.info.name,
+                            open: settingsOf(route.app),
+                          }
+                        : undefined
+                    }
+                  />
+                  <PageBarSlot.Provider value={pageSlot}>
+                    <main
+                      ref={scrollArea}
+                      className={`page${appPage ? " app-page" : ""}`}
+                    >
+                      <HomePage
+                        route={route}
+                        routeDepth={routes.length}
+                        routeApp={routeApp}
+                        isAppPage={isAppPage}
+                        isDefaultPage={isDefaultPage}
+                        openedByItsApp={openedByItsApp}
+                        back={back}
+                        opener={opener}
+                        setRoutes={setRoutes}
+                        settingsOf={settingsOf}
+                        settings={settings}
+                        listed={listed}
+                        appsWaiting={appsWaiting}
+                        installed={installed}
+                        pins={pins}
+                        changePins={changePins}
+                        appChanged={appChanged}
+                        appAdded={appAdded}
+                        live={live}
+                        ask={ask}
+                        core={core}
+                        shownStatus={shownStatus}
+                        statusFailed={statusFailed}
+                        setUpdateRunning={setUpdateRunning}
+                        me={me}
+                        dashboard={dashboard}
+                        dashboards={dashboards}
+                        home={home}
+                        isEditingHome={isEditingHome}
+                        showDashboard={showDashboard}
+                        setEditingHome={setEditingHome}
+                        openDevice={openDevice}
+                        openRoomDevice={openRoomDevice}
+                        openAppDevice={openedDevice.openFromApp}
+                        sectionEntities={sectionEntities}
+                        widgetCards={widgetCards}
+                        hostUrl={host.url}
+                        deviceMode={deviceMode}
+                        isVeiled={isVeiled}
+                      />
+                    </main>
+                  </PageBarSlot.Provider>
+                </div>
+                {/* Over the page, under the top bar; it takes the page's
                   background, so it sits beside the page, not in it. */}
-              {!isDefaultPage && (
-                <div aria-hidden="true" className="top-fade" />
-              )}
-            </>
-          }
-        >
-          {veil && (
-            <ConnectionVeil
-              state={veil}
-              host={host}
-              certificateNotValid={certificateNotValid}
-              onForgotten={props.onSignedOut}
+                {!isDefaultPage && (
+                  <div aria-hidden="true" className="top-fade" />
+                )}
+              </>
+            }
+          >
+            {veil && (
+              <ConnectionVeil
+                state={veil}
+                host={host}
+                certificateNotValid={certificateNotValid}
+                onForgotten={props.onSignedOut}
+              />
+            )}
+            <OpenDeviceDetail
+              opened={openedDevice}
+              container={screen}
+              apps={apps}
+              live={live}
+              home={home}
+              isAway={veil !== undefined}
+              onCovering={sidebar.setCovered}
+              onShowActivity={(device) => {
+                closeDevice();
+                opener(settingsApp.id)(activitySettingsPage, { device });
+              }}
+              onOpenAppSettings={(app) => {
+                closeDevice();
+                settingsOf(app)();
+              }}
+              onOpenStatus={() => {
+                closeDevice();
+                opener(settingsApp.id)(systemSettingsPage);
+              }}
             />
-          )}
-          <OpenDeviceDetail
-            opened={openedDevice}
-            container={screen}
-            apps={apps}
-            live={live}
-            home={home}
-            isAway={veil !== undefined}
-            onCovering={sidebar.setCovered}
-            onShowActivity={(device) => {
-              closeDevice();
-              opener(settingsApp.id)(activitySettingsPage, { device });
-            }}
-            onOpenAppSettings={(app) => {
-              closeDevice();
-              settingsOf(app)();
-            }}
-            onOpenStatus={() => {
-              closeDevice();
-              opener(settingsApp.id)(systemSettingsPage);
-            }}
-          />
-          {permissionSheet.sheet}
-          <StickOffer
-            live={live}
-            isOnline={!isVeiled && core.state === "online"}
-            onAdded={(app) => {
-              appAdded(app);
-              // It opens as from Apps, where it gets going, unless someone
-              // opened something else while it was being added.
-              setRoutes((current) =>
-                current.at(-1) === route
-                  ? [{ app: app.id, page: mainPage, params: {} }]
-                  : current,
-              );
-            }}
-          />
-        </ShellFrame>
+            {permissionSheet.sheet}
+            <StickOffer
+              live={live}
+              isOnline={!isVeiled && core.state === "online"}
+              apps={installed}
+              onAdded={(app) => {
+                appAdded(app);
+                // It opens as from Apps, where it gets going, unless someone
+                // opened something else while it was being added.
+                setRoutes((current) =>
+                  current.at(-1) === route
+                    ? [{ app: app.id, page: mainPage, params: {} }]
+                    : current,
+                );
+              }}
+            />
+          </ShellFrame>
+        </SettingsOpenerProvider>
       </OverlayHostProvider>
     </Household>
   );
