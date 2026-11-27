@@ -59,21 +59,27 @@ export function firstTry(language: RequestLanguage, room: string) {
 export const assignSpeakerRoom =
   "Assign a room to a smart speaker to try a command.";
 
+/** What the first card says when every online smart speaker is muted. */
+export const mutedWords = {
+  title: "Microphones off",
+  help: "All online smart speakers are muted. Turn their microphones on from a speaker's page.",
+};
+
 export type HearingWords = {
   title: string;
   help: string;
   /** The step it's on, with a bar that moves, while it gets ready. */
   step?: string;
   /** Where the household can put it right. */
-  action?: "settings" | "addDevices";
+  action?: "addDevices";
 };
 
-const failures: Record<HearingFailure, Omit<HearingWords, "step">> = {
-  assistant_off: {
-    title: "The Assistant is off",
-    help: "It's paused, or not allowed to act as your AI assistant. Its settings turn it back on.",
-    action: "settings",
-  },
+// The shell says when the Assistant is off or paused, and opens its
+// settings, so the page adds nothing for that.
+const failures: Record<
+  Exclude<HearingFailure, "assistant_off">,
+  Omit<HearingWords, "step">
+> = {
   no_sentences: {
     title: "It doesn't speak this language",
     help: "Choose another language below.",
@@ -96,11 +102,15 @@ const failures: Record<HearingFailure, Omit<HearingWords, "step">> = {
   },
 };
 
-/** What the first card says about hearing. */
-export function hearingWords(hearing: Hearing): HearingWords {
+/** What the first card says about hearing, or null for the shell to say. */
+export function hearingWords(hearing: Hearing): HearingWords | null {
   const { activeLanguage } = hearing;
   const name = languageNames[hearing.language];
-  if (hearing.state === "failed") return failures[hearing.failure];
+  if (hearing.state === "failed") {
+    return hearing.failure === "assistant_off"
+      ? null
+      : failures[hearing.failure];
+  }
   if (hearing.state === "no_speaker") {
     return {
       title: "No smart speaker yet",

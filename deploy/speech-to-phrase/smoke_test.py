@@ -49,7 +49,7 @@ def wait_for_server():
     raise RuntimeError("The server did not answer describe")
 
 
-def main(audio_path):
+def main(lights_audio_path, undo_audio_path):
     wait_for_server()
     with socket.create_connection(("127.0.0.1", 10300), timeout=300) as conn:
         with conn.makefile("rb") as response:
@@ -59,7 +59,7 @@ def main(audio_path):
                 {
                     "token": os.environ["SANCTUM_TRAIN_TOKEN"],
                     "language": "en",
-                    "templates": ["turn on the {room} lights"],
+                    "templates": ["turn on the {room} lights", "undo [(that|it)]"],
                     "lists": {"room": ["kitchen"]},
                 },
             )
@@ -67,6 +67,11 @@ def main(audio_path):
             if not trained["changed"] or not trained["digest"]:
                 raise RuntimeError(f"Expected the first lesson to load, got {trained}")
 
+    expect_transcript(lights_audio_path, "turn on the kitchen lights")
+    expect_transcript(undo_audio_path, "undo it")
+
+
+def expect_transcript(audio_path, expected):
     with socket.create_connection(("127.0.0.1", 10300), timeout=60) as conn:
         with conn.makefile("rb") as response, wave.open(audio_path, "rb") as audio:
             audio_format = {
@@ -79,9 +84,9 @@ def main(audio_path):
             send(conn, "audio-stop")
 
             transcript = receive(response, "transcript", allow_onset=True)
-            if transcript["text"] != "turn on the kitchen lights":
-                raise RuntimeError(f"Wrong transcript: {transcript}")
+            if transcript["text"] != expected:
+                raise RuntimeError(f"Expected transcript {expected!r}, got {transcript}")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main(sys.argv[1], sys.argv[2])

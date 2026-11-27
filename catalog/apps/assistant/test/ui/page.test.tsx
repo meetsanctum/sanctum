@@ -236,7 +236,8 @@ describe("the Assistant's page", () => {
       finishDevices([office, speaker("removed", "Removed Speaker", null)]),
     );
 
-    expect(text()).toContain("Ready in English");
+    // Its one speaker is muted now, which the card says over ready.
+    expect(text()).toContain("Microphones off");
     expect(text()).toContain("Office SpeakerStudy · Microphones off");
     expect(text()).not.toContain("Removed Speaker");
   });
@@ -249,10 +250,45 @@ describe("the Assistant's page", () => {
     const props = await show(client);
 
     expect(text()).toContain("No smart speaker yet");
-    expect(text()).not.toContain("Smart speakers");
+    // One thing to do: nothing else until a speaker listens.
+    for (const section of [
+      "Smart speakers",
+      "Setup",
+      "Language",
+      "What you can say",
+    ]) {
+      expect(text()).not.toContain(section);
+    }
     expect(button("Add a smart speaker").dataset.variant).toBe("default");
     await press("Add a smart speaker");
     expect(props.addDevices).toHaveBeenCalledOnce();
+  });
+
+  it("says the microphones are off when every online speaker is muted", async () => {
+    const { client, push } = fakeClient({
+      hearing: { state: "ready", language: "en", activeLanguage: "en" },
+      devices: [
+        speaker(office.id, office.name, office.roomId, { muted: true }),
+        speaker("kitchen-speaker", "Kitchen Speaker", "kitchen", {
+          offline: true,
+        }),
+      ],
+    });
+    await show(client);
+
+    expect(container.querySelector("h2")?.textContent).toBe("Microphones off");
+    expect(text()).not.toContain("Ready in English");
+
+    push({ type: "device", id: office.id, device: office });
+    expect(text()).toContain("Ready in English");
+    expect(text()).not.toContain("Microphones off");
+
+    push({
+      type: "device",
+      id: office.id,
+      device: { ...office, availability: "offline" },
+    });
+    expect(text()).not.toContain("Microphones off");
   });
 
   it("names each step while it gets ready, and follows it live", async () => {
@@ -287,7 +323,51 @@ describe("the Assistant's page", () => {
     expect(container.querySelector('[role="progressbar"]')).toBeNull();
   });
 
-  it("says why it can't listen, with settings when it's off", async () => {
+  it("stops and centres the progress segment when Reduce motion is turned on", async ({
+    onTestFinished,
+  }) => {
+    const { client } = fakeClient({
+      hearing: { state: "downloading", language: "en", activeLanguage: null },
+      devices: [office],
+    });
+    const original = Object.getOwnPropertyDescriptor(
+      Element.prototype,
+      "animate",
+    );
+    const cancel = vi.fn();
+    const animate = vi.fn(() => ({ cancel }));
+    Object.defineProperty(Element.prototype, "animate", {
+      configurable: true,
+      value: animate,
+    });
+    onTestFinished(() => {
+      delete document.documentElement.dataset.motion;
+      if (original)
+        Object.defineProperty(Element.prototype, "animate", original);
+      else Reflect.deleteProperty(Element.prototype, "animate");
+    });
+
+    await show(client);
+
+    const segment = container.querySelector('[role="progressbar"] > span');
+    expect(animate).toHaveBeenCalledExactlyOnceWith(
+      [{ transform: "translateX(-100%)" }, { transform: "translateX(334%)" }],
+      expect.objectContaining({ iterations: Infinity }),
+    );
+    expect(animate.mock.contexts[0]).toBe(segment);
+    expect(segment?.classList.contains("ml-[35%]")).toBe(false);
+    expect(cancel).not.toHaveBeenCalled();
+
+    await act(async () => {
+      document.documentElement.dataset.motion = "reduced";
+    });
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(animate).toHaveBeenCalledOnce();
+    expect(segment?.classList.contains("ml-[35%]")).toBe(true);
+  });
+
+  it("says why it can't listen, and leaves its being off to the shell", async () => {
     const { client } = fakeClient({
       hearing: {
         state: "failed",
@@ -297,11 +377,12 @@ describe("the Assistant's page", () => {
       },
       devices: [office],
     });
-    const props = await show(client);
+    await show(client);
 
-    expect(text()).toContain("The Assistant is off");
-    await press("Open settings");
-    expect(props.openSettings).toHaveBeenCalledOnce();
+    // The shell's notice says it's paused and opens its settings.
+    expect(text()).not.toContain("The Assistant is off");
+    expect(button("Open settings")).toBeUndefined();
+    expect(text()).toContain("Language");
 
     const memory = fakeClient({
       hearing: {
@@ -337,8 +418,9 @@ describe("the Assistant's page", () => {
     });
     expect(text()).toContain("Switching to Deutsch");
     expect(text()).toContain("English keeps working until then.");
-    expect(select.closest("section")?.textContent).toContain(
-      "English keeps working until then.",
+    // Said once, on the card.
+    expect(select.closest("section")?.textContent).not.toContain(
+      "keeps working",
     );
     expect(text()).toContain("“Turn off the lights”");
     expect(text()).not.toContain("Deutsch keeps working");

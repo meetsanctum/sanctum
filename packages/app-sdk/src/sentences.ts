@@ -142,7 +142,10 @@ const referenceNames = Object.fromEntries(
 ) as Record<SentenceBlank, string[]>;
 
 // Brackets that open and close in order, and blanks with none inside.
-function bracketsIssue(template: string) {
+function bracketsIssue(
+  template: string,
+  requireGroupedOptionalChoices: boolean,
+) {
   const open: string[] = [];
   const pairs: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
   for (const character of template) {
@@ -151,13 +154,22 @@ function bracketsIssue(template: string) {
       open.push(character);
     } else if (character in pairs) {
       if (open.pop() !== pairs[character]) return "its brackets don't match";
+    } else if (
+      requireGroupedOptionalChoices &&
+      character === "|" &&
+      open.at(-1) === "["
+    ) {
+      return "an optional part's choices need round brackets: [(a|b)]";
     }
   }
   return open.length > 0 ? "its brackets don't match" : null;
 }
 
 /** What's wrong with a list of sentences, or nothing. */
-export function sentenceIssues(sentences: unknown): string[] {
+export function sentenceIssues(
+  sentences: unknown,
+  { requireGroupedOptionalChoices = false } = {},
+): string[] {
   const parsed = assistantSentencesSchema.safeParse(sentences);
   if (!parsed.success) {
     return [`Its sentences don't fit: ${z.prettifyError(parsed.error)}`];
@@ -165,7 +177,7 @@ export function sentenceIssues(sentences: unknown): string[] {
   const issues: string[] = [];
   for (const [language, templates] of Object.entries(parsed.data)) {
     for (const template of templates ?? []) {
-      const brackets = bracketsIssue(template);
+      const brackets = bracketsIssue(template, requireGroupedOptionalChoices);
       if (brackets) issues.push(`"${template}" (${language}): ${brackets}`);
       for (const [, blank] of template.matchAll(blankPattern)) {
         if (!(sentenceBlanks as readonly string[]).includes(blank!)) {

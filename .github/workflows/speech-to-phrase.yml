@@ -65,8 +65,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends espeak-ng
-          audio="$RUNNER_TEMP/command.wav"
-          espeak-ng -v en-us -s 145 -w "$audio" 'turn on the kitchen lights'
+          lights_audio="$RUNNER_TEMP/lights.wav"
+          undo_audio="$RUNNER_TEMP/undo.wav"
+          espeak-ng -v en-us -s 145 -w "$lights_audio" 'turn on the kitchen lights'
+          espeak-ng -v en-us -s 145 -w "$undo_audio" 'undo it'
           export SANCTUM_TRAIN_TOKEN="$(openssl rand -hex 32)"
           data="$RUNNER_TEMP/speech-to-phrase-data"
           mkdir -p "$data"
@@ -74,7 +76,7 @@ jobs:
             -v "$data:/data" \
             -p 127.0.0.1:10300:10300 sanctum-speech-to-phrase:check
           trap 'status=$?; if [ "$status" -ne 0 ]; then docker logs stp; fi; docker rm -fv stp >/dev/null' EXIT
-          python3 deploy/speech-to-phrase/smoke_test.py "$audio"
+          python3 deploy/speech-to-phrase/smoke_test.py "$lights_audio" "$undo_audio"
 
   release-build:
     if: github.event_name == 'push' && github.ref_type == 'tag'

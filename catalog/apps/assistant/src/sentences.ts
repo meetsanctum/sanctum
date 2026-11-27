@@ -202,7 +202,7 @@ const en: Language = {
     // Putting back what it did.
     { template: "(put|change|set) it back", intent: { do: "restore" } },
     { template: "(put|turn) [the] lights back", intent: { do: "restore" } },
-    { template: "undo [that|it]", intent: { do: "restore" } },
+    { template: "undo [(that|it)]", intent: { do: "restore" } },
     // Timers, which it can't set.
     {
       template:
@@ -243,17 +243,17 @@ const de: Language = {
   sentences: [
     // An und aus.
     {
-      template: "(schalte|schalt|mach|mache) [das|die|den] {light} <switch>",
+      template: "(schalte|schalt|mach|mache) [(das|die|den)] {light} <switch>",
       intent: switchOf("light"),
     },
     {
       template:
-        "(schalte|schalt|mach|mache) [das|die] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {room} <switch>",
+        "(schalte|schalt|mach|mache) [(das|die)] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {room} <switch>",
       intent: switchOf("room"),
     },
     {
       template:
-        "(schalte|schalt|mach|mache) (im|in der|in den|in|auf dem|auf der) {room} [das|die] (Licht|Lichter|Lampen) <switch>",
+        "(schalte|schalt|mach|mache) (im|in der|in den|in|auf dem|auf der) {room} [(das|die)] (Licht|Lichter|Lampen) <switch>",
       intent: switchOf("room"),
     },
     {
@@ -263,7 +263,7 @@ const de: Language = {
     },
     {
       template:
-        "(schalte|schalt|mach|mache) [das|die] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {floor} <switch>",
+        "(schalte|schalt|mach|mache) [(das|die)] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {floor} <switch>",
       intent: switchOf("floor"),
     },
     {
@@ -272,38 +272,38 @@ const de: Language = {
     },
     {
       template:
-        "(schalte|schalt|mach|mache) [das|die] (Licht|Lichter|Lampen) (überall|im ganzen Haus) <switch>",
+        "(schalte|schalt|mach|mache) [(das|die)] (Licht|Lichter|Lampen) (überall|im ganzen Haus) <switch>",
       intent: switchOf("home"),
     },
     {
       template:
-        "(schalte|schalt|mach|mache) überall [das|die] (Licht|Lichter|Lampen) <switch>",
+        "(schalte|schalt|mach|mache) überall [(das|die)] (Licht|Lichter|Lampen) <switch>",
       intent: switchOf("home"),
     },
     {
       template:
-        "(schalte|schalt|mach|mache) [das|die] (Licht|Lichter|Lampen) <switch>",
+        "(schalte|schalt|mach|mache) [(das|die)] (Licht|Lichter|Lampen) <switch>",
       intent: switchOf("here"),
     },
     { template: "[das] (Licht|Lichter) <switch>", intent: switchOf("here") },
     // Heller und dunkler.
     {
-      template: "(mach|mache) [das|die|den] {light} <step>",
+      template: "(mach|mache) [(das|die|den)] {light} <step>",
       intent: stepOf("light"),
     },
     {
       template:
-        "(mach|mache) [das|die] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {room} <step>",
+        "(mach|mache) [(das|die)] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {room} <step>",
       intent: stepOf("room"),
     },
     {
       template:
-        "(dimm|dimme) [das|die] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {room}",
+        "(dimm|dimme) [(das|die)] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {room}",
       intent: stepOf("room", "dimmer"),
     },
     {
       template:
-        "(mach|mache) [das|die] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {floor} <step>",
+        "(mach|mache) [(das|die)] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {floor} <step>",
       intent: stepOf("floor"),
     },
     {
@@ -311,27 +311,27 @@ const de: Language = {
       intent: stepOf("home"),
     },
     {
-      template: "(mach|mache) [das|die] (Licht|Lichter|Lampen) <step>",
+      template: "(mach|mache) [(das|die)] (Licht|Lichter|Lampen) <step>",
       intent: stepOf("here"),
     },
     {
-      template: "(dimm|dimme) [das|die] (Licht|Lichter|Lampen)",
+      template: "(dimm|dimme) [(das|die)] (Licht|Lichter|Lampen)",
       intent: stepOf("here", "dimmer"),
     },
     // Auf eine Helligkeit.
     {
       template:
-        "(stell|stelle|dimm|dimme|mach|mache) [das|die|den] {light} auf <percent> Prozent",
+        "(stell|stelle|dimm|dimme|mach|mache) [(das|die|den)] {light} auf <percent> Prozent",
       intent: setOf("light"),
     },
     {
       template:
-        "(stell|stelle|dimm|dimme|mach|mache) [das|die] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {room} auf <percent> Prozent",
+        "(stell|stelle|dimm|dimme|mach|mache) [(das|die)] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {room} auf <percent> Prozent",
       intent: setOf("room"),
     },
     {
       template:
-        "(stell|stelle|dimm|dimme|mach|mache) [das|die] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {floor} auf <percent> Prozent",
+        "(stell|stelle|dimm|dimme|mach|mache) [(das|die)] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {floor} auf <percent> Prozent",
       intent: setOf("floor"),
     },
     {
@@ -341,13 +341,13 @@ const de: Language = {
     },
     {
       template:
-        "(stell|stelle|dimm|dimme|mach|mache) [das|die] (Licht|Lichter|Lampen) auf <percent> Prozent",
+        "(stell|stelle|dimm|dimme|mach|mache) [(das|die)] (Licht|Lichter|Lampen) auf <percent> Prozent",
       intent: setOf("here"),
     },
     // Zurück.
     { template: "(mach|mache) das rückgängig", intent: { do: "restore" } },
     {
-      template: "(stell|stelle) [es|das] [wieder] zurück",
+      template: "(stell|stelle) [(es|das)] [wieder] zurück",
       intent: { do: "restore" },
     },
     { template: "rückgängig", intent: { do: "restore" } },

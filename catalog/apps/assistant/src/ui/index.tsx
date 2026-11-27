@@ -11,9 +11,10 @@ import {
   PageSection,
   defineAppUi,
   icons,
+  useReducedMotion,
   type PageProps,
 } from "@meetsanctum/ui-sdk";
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { notUnderstood, version } from "../../sanctum-app.json";
 import { useAssistant } from "./use-assistant";
@@ -24,6 +25,7 @@ import {
   hearingWords,
   languageNames,
   listeningAudio,
+  mutedWords,
   speakerLine,
 } from "./words";
 
@@ -38,18 +40,33 @@ const help = "m-0 text-[13px] leading-[18px] text-muted-foreground";
 const card = "flex flex-col gap-3 rounded-xl bg-foreground/5 p-4";
 const languages = Object.keys(languageNames) as RequestLanguage[];
 
-// A bar for a step whose length nobody knows: a segment that breathes, and
-// holds still under Reduce motion.
+// A bar for a step whose length nobody knows: a segment that slides across
+// and starts again, moved by its transform alone, and held still in the
+// middle under Reduce motion.
 function StepBar(props: { label: string }) {
+  const segment = useRef<HTMLSpanElement>(null);
+  const isStill = useReducedMotion();
+  useEffect(() => {
+    if (isStill || !segment.current?.animate) return;
+    // The segment is 30% of the track: from wholly before it to wholly past.
+    const sliding = segment.current.animate(
+      [{ transform: "translateX(-100%)" }, { transform: "translateX(334%)" }],
+      { duration: 1600, easing: "ease-in-out", iterations: Infinity },
+    );
+    return () => sliding.cancel();
+  }, [isStill]);
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-sm font-medium">{props.label}</span>
       <div
-        className="h-1.5 overflow-hidden bg-foreground/10"
+        className="h-1.5 overflow-hidden rounded-full bg-foreground/10"
         role="progressbar"
         aria-label={props.label}
       >
-        <span className="ml-[35%] block h-full w-[30%] bg-foreground motion-safe:animate-pulse" />
+        <span
+          ref={segment}
+          className={`block h-full w-[30%] rounded-full bg-foreground ${isStill ? "ml-[35%]" : ""}`}
+        />
       </div>
     </div>
   );
@@ -72,17 +89,24 @@ function HearingLine(props: { hearing: Hearing }) {
   if (props.hearing.state === "ready") {
     return <Ready language={props.hearing.language} />;
   }
-  return words.step ? <StepBar label={words.step} /> : null;
+  return words?.step ? <StepBar label={words.step} /> : null;
 }
 
 function HearingCard(props: {
   hearing: Hearing;
   room: string | null;
+  /** Whether at least one speaker is online and every online speaker is muted. */
+  allMuted: boolean;
   page: PageProps;
 }) {
   const { hearing, page, room } = props;
-  const words = hearingWords(hearing);
   const id = useId();
+  if (props.allMuted && hearing.state === "ready") {
+    return <MutedCard />;
+  }
+  const words = hearingWords(hearing);
+  // The shell's own notice says it's off and opens its settings.
+  if (!words) return null;
   return (
     <section
       aria-labelledby={id}
@@ -114,13 +138,24 @@ function HearingCard(props: {
           <Button onClick={() => page.addDevices()}>Add a smart speaker</Button>
         </div>
       )}
-      {words.action === "settings" && (
-        <div className="flex">
-          <Button variant="outline" onClick={page.openSettings}>
-            Open settings
-          </Button>
-        </div>
-      )}
+    </section>
+  );
+}
+
+function MutedCard() {
+  const id = useId();
+  return (
+    <section
+      aria-labelledby={id}
+      aria-live="polite"
+      className={`${card} gap-2.5 p-5`}
+    >
+      <h2 id={id} className="m-0 text-xl leading-7 font-semibold">
+        {mutedWords.title}
+      </h2>
+      <p className="m-0 text-sm leading-5 text-muted-foreground">
+        {mutedWords.help}
+      </p>
     </section>
   );
 }
@@ -299,10 +334,33 @@ function MainPage(page: PageProps) {
   const choose = async (language: RequestLanguage) =>
     setChoiceFailed(!(await assistant.choose(language)));
   const { language, activeLanguage } = hearing;
+  const onlineSpeakers = speakers.filter(
+    (speaker) => speaker.availability === "online",
+  );
+  const allMuted =
+    onlineSpeakers.length > 0 &&
+    onlineSpeakers.every((speaker) => listeningAudio(speaker)?.state?.muted);
+  const hearingCard = (
+    <HearingCard
+      hearing={hearing}
+      room={room}
+      allMuted={allMuted}
+      page={page}
+    />
+  );
+  // Without a smart speaker there is one thing to do: add one.
+  if (hearing.state === "no_speaker") {
+    return (
+      <>
+        <PageBar title="Assistant" />
+        {hearingCard}
+      </>
+    );
+  }
   return (
     <>
       <PageBar title="Assistant" />
-      <HearingCard hearing={hearing} room={room} page={page} />
+      {hearingCard}
       <PageSection id="assistant-setup" title="Setup">
         <Row
           icon={<icons.ListChecks aria-hidden="true" className="size-4" />}
@@ -331,9 +389,6 @@ function MainPage(page: PageProps) {
           <p className={help}>
             It listens and replies in one language. Switching takes a few
             minutes.
-            {activeLanguage &&
-              activeLanguage !== language &&
-              ` ${languageNames[activeLanguage]} keeps working until then.`}
           </p>
           {choiceFailed && <LanguageChangeError />}
         </div>

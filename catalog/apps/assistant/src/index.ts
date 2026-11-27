@@ -37,7 +37,8 @@ export const app = defineApp({
   id: assistantAppId,
   name: "Assistant",
   // 0.2.0: its page, which lists the smart speakers by room.
-  version: "0.2.0",
+  // 0.2.1: optional choices in sentences as speech recognition reads them.
+  version: "0.2.1",
   core: "^2.0.0",
   summary: "Controls lights by voice or typed request.",
   icon: { glyph: "message-circle-more", color: "iris" },
@@ -45,7 +46,7 @@ export const app = defineApp({
   permissions: [
     {
       id: aiAssistantPermission,
-      reason: "To do what you ask, with what AI agents may use.",
+      reason: "To do what you ask by voice or in writing.",
       needed: true,
     },
     {

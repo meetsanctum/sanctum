@@ -15,7 +15,11 @@ export function assertAssistantSpeech(
     if (typeof app.requests !== "function") {
       throw new Error("An Assistant with sentences needs a requests handler");
     }
-    const issues = sentenceIssues(app.sentences);
+    // Speech recognition takes choices in round brackets. Check this when an
+    // app is defined so the core can still load packages with the older syntax.
+    const issues = sentenceIssues(app.sentences, {
+      requireGroupedOptionalChoices: true,
+    });
     if (issues.length > 0) throw new Error(issues.join("; "));
   }
   if (app.notUnderstood !== undefined) {
