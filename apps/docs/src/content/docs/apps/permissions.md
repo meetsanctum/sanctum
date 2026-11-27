@@ -59,7 +59,7 @@ These are the permissions the apps in Sanctum ask for:
 | Keep its own workflows          | Make workflows of its own, as Moods does for your remotes      |
 | Reach api.open-meteo.com        | Reach Open-Meteo for the forecast, as Weather does             |
 
-Each website has its own permission. Weather sends your home's position
+Each website has its own permission. Weather sends your home's location
 and time zone to Open-Meteo to fetch the forecast.
 
 ## What needs no permission
