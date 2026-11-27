@@ -1,11 +1,14 @@
 import { liveInvalidTokenCode } from "@meetsanctum/auth-protocol";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
+import { activity } from "../src/activity/schema.js";
 import { authLogins } from "../src/auth/schema.js";
 import { openLive } from "./devices-support.js";
 import {
   hostId,
   changePassword,
+  choosePassword,
   claimed,
   get,
   maya,
@@ -296,5 +299,63 @@ describe("changing your own password", () => {
 
     expect(changed).toMatchObject({ statusCode: 403 });
     expect((await signIn(core)).outcome).toBe("signed-in");
+  });
+});
+
+describe("choosing a new password without the current one", () => {
+  it("works on a device signed in as you, which stays signed in", async () => {
+    const core = await testCore();
+    const { token, person, client } = await claimed(core);
+
+    const chosen = await choosePassword(core, token, "a new password");
+
+    expect(chosen).toMatchObject({ statusCode: 204 });
+    expect((await signIn(core)).outcome).toBe("failed-on-device");
+    expect((await signIn(core, { password: "a new password" })).outcome).toBe(
+      "signed-in",
+    );
+    expect((await get(core, "/api/auth/me", { token })).statusCode).toBe(200);
+    expect(
+      core.db
+        .select()
+        .from(activity)
+        .where(eq(activity.action, "password.choose"))
+        .all(),
+    ).toEqual([
+      expect.objectContaining({
+        outcome: "ok",
+        personId: person.id,
+        clientId: client.id,
+      }),
+    ]);
+  });
+
+  it("is refused on a shared device, which has no one to sign in as", async () => {
+    const core = await testCore();
+    await claimed(core);
+    const kitchen = sharedClient(core);
+
+    const chosen = await choosePassword(core, kitchen.token, "a new password");
+
+    expect(chosen).toMatchObject({ statusCode: 403 });
+    expect((await signIn(core)).outcome).toBe("signed-in");
+  });
+
+  it("ends when the sign-in changed in between, and keeps that change", async () => {
+    const core = await testCore();
+    const { token, person } = await claimed(core);
+
+    const chosen = await choosePassword(core, token, "a new password", () =>
+      setLogin(core, token, {
+        personId: person.id,
+        username: "maya",
+        password: "set in between",
+      }),
+    );
+
+    expect(chosen).toMatchObject({ statusCode: 409 });
+    expect((await signIn(core, { password: "set in between" })).outcome).toBe(
+      "signed-in",
+    );
   });
 });

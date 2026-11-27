@@ -53,6 +53,11 @@ Your current password is checked on your Mac before anything changes, and
 neither password leaves it. Your other devices stay signed in. To sign one
 out, choose **Sign out** beside it under **Linked Devices**.
 
+Forgot it? In the same dialog, choose **Forgot your password?** under
+**Current password**, then enter a new password twice. Your Mac is signed in
+as you, so the old one isn't needed. See
+[If you forget your password](/people/forgotten-password/).
+
 Change password shows only on your own page, on your own device. On someone
 else's page, and on a shared device, it is **Reset password**.
 

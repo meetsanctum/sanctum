@@ -280,6 +280,17 @@ export type PasswordFinish = {
   keyStretching: number;
 };
 
+// Choosing a new password on a device signed in as you, when you've
+// forgotten the current one: the device registers the new one, and the
+// sign-in it holds is the proof. The answer to the start is a
+// RegistrationStarted.
+export type PasswordChooseStart = { registrationRequest: string };
+export type PasswordChooseFinish = {
+  registrationId: string;
+  registrationRecord: string;
+  keyStretching: number;
+};
+
 // Inviting a person to sign in (invites.ts). Any client makes, lists and
 // cancels invites; redeeming one needs no token, as signing in doesn't.
 

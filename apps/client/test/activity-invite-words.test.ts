@@ -21,6 +21,13 @@ describe("Activity for invites", () => {
     ["invite.redeem", "ok", null, "Joined with an invite code", false],
     ["invite.redeem", "ok", "reset", "Chose a new password with a code", false],
     [
+      "password.choose",
+      "ok",
+      null,
+      "Chose a new password without the old one",
+      false,
+    ],
+    [
       "invite.redeem",
       "refused",
       "too_many_attempts",

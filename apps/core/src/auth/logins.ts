@@ -9,6 +9,8 @@ import {
   type HostStatus,
   type HostView,
   type LoginInfo,
+  type PasswordChooseFinish,
+  type PasswordChooseStart,
   type PasswordFinish,
   type PasswordStart,
   type PasswordStarted,
@@ -64,6 +66,14 @@ type Pending =
       username: string;
       record: string;
       serverLoginState: string;
+    }
+  | {
+      kind: "choose";
+      address: string;
+      clientId: string;
+      personId: string;
+      username: string;
+      record: string;
     };
 
 export function personInfo(person: Person): PersonInfo {
@@ -564,6 +574,76 @@ export function createLogins(
           .run();
         record({
           action: "password.change",
+          outcome: "ok",
+          personId,
+          clientId: principal.client.id,
+        });
+      });
+      limiter.succeeded(address);
+    },
+
+    // Choosing a new password without the current one, on a device signed
+    // in as you: its sign-in is the proof, as any device at home could
+    // already make you a code for a new password. Only for your own
+    // sign-in, from a personal device; the username stays.
+    passwordChooseStart(
+      principal: Principal,
+      address: string,
+      input: PasswordChooseStart,
+    ): RegistrationStarted {
+      const personId = personal(principal);
+      host();
+      const login = loginOf(personId);
+      if (!login) {
+        throw new AuthError("not_found");
+      }
+      limiter.attempt(address);
+      const response = registrationResponse(
+        login.username,
+        input.registrationRequest,
+      );
+      const registrationId = pending.add({
+        kind: "choose",
+        address,
+        clientId: principal.client.id,
+        personId,
+        username: login.username,
+        record: login.registrationRecord,
+      });
+      return { registrationId, registrationResponse: response };
+    },
+
+    passwordChooseFinish(
+      principal: Principal,
+      address: string,
+      input: PasswordChooseFinish,
+    ) {
+      const personId = personal(principal);
+      const entry = take("choose", input.registrationId, address);
+      if (!entry || entry.clientId !== principal.client.id) {
+        throw new AuthError("expired");
+      }
+      db.transaction(() => {
+        // The sign-in must be the one this started from: same username,
+        // and no other change since.
+        const login = loginOf(personId);
+        if (
+          !login ||
+          login.username !== entry.username ||
+          login.registrationRecord !== entry.record
+        ) {
+          throw new AuthError("expired");
+        }
+        db.update(authLogins)
+          .set({
+            registrationRecord: input.registrationRecord,
+            keyStretching: input.keyStretching,
+            updatedAt: now(),
+          })
+          .where(eq(authLogins.personId, personId))
+          .run();
+        record({
+          action: "password.choose",
           outcome: "ok",
           personId,
           clientId: principal.client.id,

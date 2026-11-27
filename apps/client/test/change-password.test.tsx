@@ -11,7 +11,11 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { changePassword, PasswordChangeError } from "../src/auth/password";
+import {
+  changePassword,
+  choosePassword,
+  PasswordChangeError,
+} from "../src/auth/password";
 import { CoreError, coreJson } from "../src/core-fetch";
 import { PersonPage } from "../src/people/person-page";
 import { deferred } from "./deferred";
@@ -19,11 +23,13 @@ import { deferred } from "./deferred";
 // Changing your own password from your own page: Change password takes
 // Reset password's place there, the dialog checks the new password before
 // anything is sent, says what went wrong beside its cause, can't be closed
-// while it saves, and the page says the password changed.
+// while it saves, and the page says the password changed. Forgot your
+// password? chooses a new one without the current one.
 
 vi.mock("../src/auth/password", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/auth/password")>()),
   changePassword: vi.fn(),
+  choosePassword: vi.fn(),
 }));
 vi.mock("../src/core-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/core-fetch")>()),
@@ -364,5 +370,53 @@ describe("Change password", () => {
     // The dialog hands focus back once it has gone.
     await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(document.activeElement).toBe(button("Change password"));
+  });
+});
+
+describe("Forgot your password?", () => {
+  it("chooses a new password without the current one", async () => {
+    vi.mocked(choosePassword).mockResolvedValue();
+    await show();
+    await click("Change password");
+    await click("Forgot your password?");
+    await act(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+
+    expect(dialog()?.querySelector("h2")?.textContent).toBe(
+      "Choose a new password",
+    );
+    expect(dialog()?.textContent).toContain(
+      "This device is signed in as you, so you don’t need your old password.",
+    );
+    expect(
+      [...document.querySelectorAll("label")].map((each) => each.textContent),
+    ).not.toContain("Current password");
+    expect(document.activeElement).toBe(field("New password"));
+
+    await fill("New password", "staple battery horse");
+    await fill("Repeat new password", "staple battery horse");
+    await submit();
+
+    expect(choosePassword).toHaveBeenCalledWith(
+      expect.objectContaining({ next: "staple battery horse" }),
+    );
+    expect(changePassword).not.toHaveBeenCalled();
+    expect(dialog()).toBeNull();
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(
+      "Changed just now",
+    );
+  });
+
+  it("asks for the current password again next time", async () => {
+    await show();
+    await click("Change password");
+    await click("Forgot your password?");
+    await click("Cancel");
+    await click("Change password");
+
+    expect(dialog()?.querySelector("h2")?.textContent).toBe(
+      "Change your password",
+    );
+    expect(field("Current password").value).toBe("");
+    expect(button("Forgot your password?")).toBeDefined();
   });
 });

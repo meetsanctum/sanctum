@@ -22,6 +22,8 @@ import {
   type PairLookup,
   type PairPoll,
   type PairRequest,
+  type PasswordChooseFinish,
+  type PasswordChooseStart,
   type PasswordFinish,
   type PasswordStart,
   type RedeemCheck,
@@ -216,6 +218,14 @@ const schemas = {
     registrationRecord: message,
     keyStretching: stretching,
   }) satisfies z.ZodType<PasswordFinish>,
+  passwordChooseStart: z.object({
+    registrationRequest: message,
+  }) satisfies z.ZodType<PasswordChooseStart>,
+  passwordChooseFinish: z.object({
+    registrationId: id,
+    registrationRecord: message,
+    keyStretching: stretching,
+  }) satisfies z.ZodType<PasswordChooseFinish>,
 };
 
 const parse = parseRequest;
@@ -489,6 +499,21 @@ export async function registerAuth(
       personal(request),
       address(request),
       parse(schemas.passwordFinish, request.body),
+    );
+    return reply.code(204).send();
+  });
+  app.post("/api/auth/password/choose/start", async (request) =>
+    logins.passwordChooseStart(
+      personal(request),
+      address(request),
+      parse(schemas.passwordChooseStart, request.body),
+    ),
+  );
+  app.post("/api/auth/password/choose/finish", async (request, reply) => {
+    logins.passwordChooseFinish(
+      personal(request),
+      address(request),
+      parse(schemas.passwordChooseFinish, request.body),
     );
     return reply.code(204).send();
   });
