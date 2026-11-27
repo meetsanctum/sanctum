@@ -8,6 +8,7 @@ import {
   type ClaimStart,
   type HostStatus,
   type HostView,
+  type LoginInfo,
   type PasswordFinish,
   type PasswordStart,
   type PasswordStarted,
@@ -22,7 +23,7 @@ import {
   type SignInStarted,
 } from "@meetsanctum/auth-protocol";
 import * as opaque from "@serenity-kit/opaque";
-import { and, count, eq, gt, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, count, eq, gt, isNotNull, isNull } from "drizzle-orm";
 
 import type { RecordActivity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
@@ -428,10 +429,23 @@ export function createLogins(
       limiter.succeeded(address);
     },
 
+    // Who signs in, by username, for Settings → People.
+    list(): LoginInfo[] {
+      return db
+        .select({
+          personId: authLogins.personId,
+          username: authLogins.username,
+        })
+        .from(authLogins)
+        .orderBy(asc(authLogins.username))
+        .all();
+    },
+
     // Refused if it would leave the claimed host without anyone who can
-    // sign in.
+    // sign in. Their personal devices sign out with it: without a sign-in,
+    // nothing is left that they sign in again with.
     removeLogin(principal: Principal, input: RemoveLogin) {
-      db.transaction(() => {
+      const signedOut = db.transaction(() => {
         const removed = db
           .delete(authLogins)
           .where(eq(authLogins.personId, input.personId))
@@ -453,10 +467,12 @@ export function createLogins(
           clientId: principal.client.id,
           subjectId: input.personId,
         });
+        return clients.revokePersonal(input.personId, now());
       });
       pending.drop(
         (entry) => "personId" in entry && entry.personId === input.personId,
       );
+      clients.close(signedOut);
     },
 
     // Changing your own password proves the current one on the host, bound

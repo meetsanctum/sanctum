@@ -1,10 +1,13 @@
+import { liveInvalidTokenCode } from "@meetsanctum/auth-protocol";
 import { describe, expect, it } from "vitest";
 
 import { authLogins } from "../src/auth/schema.js";
+import { openLive } from "./devices-support.js";
 import {
   hostId,
   changePassword,
   claimed,
+  get,
   maya,
   post,
   setLogin,
@@ -155,6 +158,62 @@ describe("logins", () => {
     expect(core.db.select().from(authLogins).all()).toMatchObject([
       { username: "jonas" },
     ]);
+  });
+
+  it("are listed for every client, shared ones too, by username", async () => {
+    const core = await testCore();
+    const { claim, person } = await withJonas(core);
+    const kitchen = sharedClient(core);
+    await setLogin(core, claim.token, {
+      personId: person.id,
+      username: "jonas",
+      password: "jonas's password",
+    });
+
+    const listed = await get(core, "/api/auth/logins", {
+      token: kitchen.token,
+    });
+
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json()).toEqual([
+      { personId: person.id, username: "jonas" },
+      { personId: claim.person.id, username: "maya" },
+    ]);
+    expect((await get(core, "/api/auth/logins")).statusCode).toBe(401);
+  });
+
+  it("take their person's devices with them when removed", async () => {
+    const core = await testCore();
+    const { claim, person } = await withJonas(core);
+    await setLogin(core, claim.token, {
+      personId: person.id,
+      username: "jonas",
+      password: "jonas's password",
+    });
+    const phone = await tokenFor(core, "jonas", "jonas's password");
+    const kitchen = sharedClient(core);
+    const connected = await openLive(core, phone);
+
+    const removed = await post(
+      core,
+      "/api/auth/logins/remove",
+      { personId: person.id },
+      { token: kitchen.token },
+    );
+
+    expect(removed.statusCode).toBe(204);
+    expect((await connected.closed).code).toBe(liveInvalidTokenCode);
+    expect((await get(core, "/api/auth/me", { token: phone })).statusCode).toBe(
+      401,
+    );
+    // Everyone else stays signed in, and the person stays in People.
+    expect(
+      (await get(core, "/api/auth/me", { token: claim.token })).statusCode,
+    ).toBe(200);
+    expect(
+      (await get(core, "/api/auth/me", { token: kitchen.token })).statusCode,
+    ).toBe(200);
+    expect(core.people.list().map(({ name }) => name)).toContain("Jonas");
   });
 });
 

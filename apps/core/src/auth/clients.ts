@@ -15,6 +15,7 @@ import {
   ne,
   or,
   sql,
+  type SQL,
 } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
@@ -83,6 +84,14 @@ export type Connections = {
   tell(clientId: string, message: object): void;
 };
 
+function activePersonalClients(personId: string) {
+  return and(
+    eq(authClients.personId, personId),
+    eq(authClients.kind, "personal"),
+    isNull(authClients.revokedAt),
+  )!;
+}
+
 export function createClients(
   db: CoreDatabase,
   options: {
@@ -92,6 +101,31 @@ export function createClients(
   },
 ) {
   const { record, connections, now } = options;
+
+  function revokeMatchingClients(affected: SQL, at: Date) {
+    db.update(authTokens)
+      .set({ revokedAt: at })
+      .where(
+        and(
+          inArray(
+            authTokens.clientId,
+            db.select({ id: authClients.id }).from(authClients).where(affected),
+          ),
+          isNull(authTokens.revokedAt),
+        ),
+      )
+      .run();
+    return db
+      .update(authClients)
+      .set({ revokedAt: at })
+      .where(affected)
+      .returning({
+        id: authClients.id,
+        name: authClients.name,
+        kind: authClients.kind,
+      })
+      .all();
+  }
 
   // What every request and every entry a shared client leaves in the
   // activity log reads, each compiled once: the client a token stands for,
@@ -481,6 +515,18 @@ export function createClients(
       return clients.filter(({ kind }) => kind !== "agent").length;
     },
 
+    // Sign out a person's own devices in the caller's transaction. The
+    // caller closes their live connections once it commits.
+    revokePersonal(personId: string, at: Date): string[] {
+      return revokeMatchingClients(activePersonalClients(personId), at).map(
+        ({ id }) => id,
+      );
+    },
+
+    close(ids: readonly string[]) {
+      for (const id of ids) connections.closeClient(id);
+    },
+
     // Refused from its next request on; its live connections close now. The
     // agents it added go with it.
     revoke(principal: Principal, input: { id: string }) {
@@ -493,32 +539,8 @@ export function createClients(
             eq(authClients.id, input.id),
             eq(authClients.addedByClientId, input.id),
           ),
-        );
-        db.update(authTokens)
-          .set({ revokedAt: at })
-          .where(
-            and(
-              inArray(
-                authTokens.clientId,
-                db
-                  .select({ id: authClients.id })
-                  .from(authClients)
-                  .where(affected),
-              ),
-              isNull(authTokens.revokedAt),
-            ),
-          )
-          .run();
-        const revoked = db
-          .update(authClients)
-          .set({ revokedAt: at })
-          .where(affected)
-          .returning({
-            id: authClients.id,
-            name: authClients.name,
-            kind: authClients.kind,
-          })
-          .all();
+        )!;
+        const revoked = revokeMatchingClients(affected, at);
         // One entry for the client, and one for each agent it took along.
         for (const { id, kind, name } of revoked) {
           record({

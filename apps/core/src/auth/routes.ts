@@ -13,6 +13,7 @@ import {
   type InviteFinish,
   type InviteInfo,
   type InviteStart,
+  type LoginInfo,
   type Me,
   type PairAnswer,
   type PairApprove,
@@ -391,6 +392,10 @@ export async function registerAuth(
     return reply.code(204).send();
   });
 
+  app.get("/api/auth/logins", async (request): Promise<LoginInfo[]> => {
+    principal(request);
+    return logins.list();
+  });
   app.post("/api/auth/logins/set/start", async (request) =>
     logins.setLoginStart(
       principal(request),

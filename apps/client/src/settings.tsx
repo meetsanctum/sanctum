@@ -16,6 +16,8 @@ import { ClientsSection } from "./settings-clients";
 import { DevicesSection } from "./settings-devices";
 import { NeedsAttentionSection } from "./settings-attention";
 import { HouseholdSection } from "./settings-household";
+import { PeoplePage } from "./people/people-page";
+import { PersonPage } from "./people/person-page";
 import { MaintenancePage } from "./settings-maintenance";
 import { SettingsOverview } from "./settings-overview";
 import { RoomsSection } from "./settings-rooms";
@@ -35,6 +37,8 @@ import {
   householdSettingsPage,
   maintenanceSettingsPage,
   modelsSettingsPage,
+  peopleSettingsPage,
+  personSettingsPage,
   roomsSettingsPage,
   roomsTitle,
   systemSettingsPage,
@@ -43,7 +47,8 @@ import {
 // Settings: a system app, the core's own UI, which the shell brings rather
 // than a package. Its first page shows what needs attention, while anything
 // does, Sanctum itself included, then a row for each area, which opens the
-// area's page: the household with where the home is, the rooms and floors,
+// area's page: the household with where the home is, its people, each with
+// a page of their own, the rooms and floors,
 // the devices, Maintenance, what's due for the devices, which the
 // dashboard's Batteries tile opens too, the activity log, which a device's
 // detail opens too, the apps the home has installed, each with a page of its
@@ -162,6 +167,25 @@ export function SettingsPage(props: {
     }
     case householdSettingsPage:
       return <HouseholdSection page={back} />;
+    case peopleSettingsPage:
+      return (
+        <PeoplePage
+          page={back}
+          live={props.live}
+          me={props.me}
+          onOpen={(id) => props.open(personSettingsPage, { id })}
+        />
+      );
+    case personSettingsPage:
+      return props.params.id ? (
+        <PersonPage
+          key={props.params.id}
+          live={props.live}
+          personId={props.params.id}
+          back={props.back}
+          backTo={backTo}
+        />
+      ) : null;
     case roomsSettingsPage:
       return (
         <>

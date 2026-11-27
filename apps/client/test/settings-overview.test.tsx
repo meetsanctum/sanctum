@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { AppInfo, DeviceInfo, Places } from "@meetsanctum/app-sdk";
-import type { ClientInfo, Me } from "@meetsanctum/auth-protocol";
+import type { ClientInfo, Me, PersonInfo } from "@meetsanctum/auth-protocol";
 import { createLiveFeed, type PageParams } from "@meetsanctum/ui-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -70,6 +70,7 @@ const weather: AppInfo = {
 let container: HTMLDivElement;
 let root: Root;
 let clients: ClientInfo[];
+let people: { name: string }[];
 let agents: unknown[];
 let models: unknown[];
 let opened: [string, PageParams | undefined][];
@@ -80,6 +81,12 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   clients = [maya.client, tablet, { ...tablet, id: "phone", name: "Phone" }];
   agents = [{ id: "codex" }, { id: "claude" }];
+  people = [
+    { name: "Maya" },
+    { name: "Jonas" },
+    { name: "Ida" },
+    { name: "Sam" },
+  ];
   models = [
     {
       id: "mac",
@@ -95,6 +102,7 @@ beforeEach(() => {
   wentBack = 0;
   vi.mocked(coreJson).mockImplementation(async (path: string) => {
     if (path === "/api/auth/clients") return clients as never;
+    if (path === "/api/people") return people as never;
     if (path === "/api/auth/agents") return agents as never;
     if (path === "/api/models") return { sources: models } as never;
     throw new Error(`unexpected ${path}`);
@@ -112,6 +120,7 @@ afterEach(async () => {
 async function show(
   props: {
     page?: string;
+    params?: PageParams;
     backTo?: string;
     apps?: AppInfo[];
     devices?: DeviceInfo[];
@@ -122,7 +131,7 @@ async function show(
     root.render(
       <SettingsPage
         page={props.page ?? "main"}
-        params={{}}
+        params={props.params ?? {}}
         open={(page, params) => opened.push([page, params])}
         back={() => wentBack++}
         backTo={props.backTo}
@@ -153,6 +162,68 @@ const row = (area: string) =>
     ),
   ].find((button) => button.textContent?.startsWith(area))!;
 
+it("adds a person and opens their Settings page using the returned ID", async () => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+    },
+  );
+  const added: PersonInfo = {
+    id: "new-person",
+    name: "Ida West",
+    avatar: null,
+    colour: "#fcd2b3",
+  };
+  const household = [maya.person!];
+  vi.mocked(coreJson).mockImplementation(async (path, init) => {
+    if (path === "/api/people") return household as never;
+    if (
+      path === "/api/auth/logins" ||
+      path === "/api/auth/invites" ||
+      path === "/api/auth/clients" ||
+      path === "/api/auth/agents"
+    )
+      return [] as never;
+    if (path === "/api/people/add" && init?.method === "POST") {
+      household.push(added);
+      return added as never;
+    }
+    throw new Error(`unexpected ${path}`);
+  });
+  await show({ page: "people" });
+  const addPerson = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Add a person",
+  )!;
+  await act(async () => addPerson.click());
+  const dialog = document.querySelector('[role="dialog"]')!;
+  const name = dialog.querySelector<HTMLInputElement>("input[maxlength]")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )!.set!.call(name, "  Ida West  ");
+    name.dispatchEvent(new Event("input", { bubbles: true }));
+    dialog
+      .querySelector<HTMLButtonElement>('[role="radio"][aria-label="Peach"]')!
+      .click();
+  });
+  await act(async () =>
+    dialog.querySelector<HTMLButtonElement>('button[type="submit"]')!.click(),
+  );
+
+  expect(coreJson).toHaveBeenCalledWith("/api/people/add", {
+    method: "POST",
+    json: { name: "Ida West", colour: "#fcd2b3" },
+  });
+  expect(opened).toEqual([["person", { id: added.id }]]);
+
+  const [page, params] = opened[0]!;
+  await show({ page, params });
+  expect(container.textContent).toContain("Ida West");
+});
+
 describe("Settings' first page", () => {
   it("has a row for each area, saying how it stands", async () => {
     await show({
@@ -166,6 +237,7 @@ describe("Settings' first page", () => {
 
     expect(rows()).toEqual([
       "HouseholdOffice · Zurich · Celsius",
+      "PeopleMaya and 3 more",
       "Rooms and Floors2 rooms on 1 floor",
       "Devices2 devices",
       "Maintenance1 battery",
@@ -183,6 +255,7 @@ describe("Settings' first page", () => {
 
   it("says what a new home doesn't have yet", async () => {
     clients = [maya.client];
+    people = [{ name: "Maya" }];
     agents = [];
     models = [];
     await show({
@@ -192,6 +265,7 @@ describe("Settings' first page", () => {
 
     expect(rows()).toEqual([
       "HouseholdOffice · Zurich · Celsius",
+      "PeopleMaya",
       "Rooms and FloorsNo rooms yet",
       "DevicesNone yet",
       "MaintenanceNothing to do",
@@ -231,6 +305,7 @@ describe("Settings' first page", () => {
 
     for (const area of [
       "Household",
+      "People",
       "Rooms and Floors",
       "Devices",
       "Maintenance",
@@ -244,6 +319,7 @@ describe("Settings' first page", () => {
 
     expect(opened.map(([page]) => page)).toEqual([
       "household",
+      "people",
       "rooms",
       "devices",
       "maintenance",

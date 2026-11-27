@@ -6,6 +6,7 @@ import {
 import { Button } from "@meetsanctum/ui-sdk";
 import { useId, useState, type FormEvent } from "react";
 
+import { ColourPicker, identityColours } from "../colour-picker";
 import { Avatar } from "../components";
 import { getShell, type FoundHost, type StoredHost } from "../shell";
 import { checkHost, claimHost } from "./device";
@@ -14,14 +15,6 @@ import { rememberSignIn } from "./session";
 import { Busy, Sheet, SheetActions, SheetField, SheetProblem } from "./sheet";
 import { StorageNotice, useSecureStorage } from "./SignIn";
 import { useAuthAttempt } from "./use-auth-attempt";
-
-// Identity colours from the avatar set.
-const colours = [
-  { name: "Sage", value: "#c5cdac" },
-  { name: "Blue", value: "#b9defc" },
-  { name: "Peach", value: "#fcd2b3" },
-  { name: "Lavender", value: "#dbcaf5" },
-];
 
 // What a problem is about: one of the fields, which then names it, or the
 // set-up as a whole.
@@ -38,7 +31,7 @@ export function ClaimHost(props: {
   onClaimed: (host: StoredHost) => void;
 }) {
   const [name, setName] = useState("");
-  const [colour, setColour] = useState(colours[0]!.value);
+  const [colour, setColour] = useState<string>(identityColours[0].value);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [repeated, setRepeated] = useState("");
@@ -132,34 +125,13 @@ export function ClaimHost(props: {
             />
           </div>
         </div>
-        <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-          <legend className="mb-2 p-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
-            Your colour
-          </legend>
-          <div className="flex gap-3">
-            {colours.map((option) => (
-              <label
-                key={option.value}
-                className="relative flex size-11 cursor-pointer items-center justify-center"
-              >
-                <input
-                  type="radio"
-                  name="colour"
-                  value={option.value}
-                  checked={colour === option.value}
-                  onChange={() => setColour(option.value)}
-                  aria-label={option.name}
-                  className="peer absolute inset-0 m-0 cursor-pointer opacity-0"
-                />
-                <span
-                  aria-hidden="true"
-                  className="size-8 rounded-full peer-checked:ring-2 peer-checked:ring-(--action) peer-checked:ring-offset-2 peer-checked:ring-offset-(--carbon) peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-(--action)"
-                  style={{ background: option.value }}
-                />
-              </label>
-            ))}
-          </div>
-        </fieldset>
+        <ColourPicker
+          legend="Your colour"
+          name="colour"
+          value={colour}
+          onChange={setColour}
+          surface="var(--carbon)"
+        />
         <SheetField
           label="Username"
           value={username}

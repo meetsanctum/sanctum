@@ -1,5 +1,5 @@
 import type { AppInfo, DeviceInfo, Places } from "@meetsanctum/app-sdk";
-import type { ClientInfo, Me } from "@meetsanctum/auth-protocol";
+import type { ClientInfo, Me, PersonInfo } from "@meetsanctum/auth-protocol";
 import { Button, useTemperatureUnit, type LiveFeed } from "@meetsanctum/ui-sdk";
 import {
   Bot,
@@ -12,6 +12,7 @@ import {
   Lightbulb,
   List,
   MonitorSmartphone,
+  Users,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
@@ -24,6 +25,7 @@ import { useModels } from "./models/data";
 import { modelsTitle, sourceName } from "./models/words";
 import { coreJson } from "./core-fetch";
 import { maintenanceHint } from "./maintenance";
+import { peopleSummary } from "./people/words";
 import { SummaryLine, summarySpoken } from "./settings-status";
 import type { SystemStatus } from "./system-status";
 import { useMinuteClock } from "./device-firmware";
@@ -39,6 +41,7 @@ import { roomsTitle } from "./system-apps";
 /** One of Settings' areas, by the page it opens. */
 type SettingsArea =
   | "household"
+  | "people"
   | "rooms"
   | "devices"
   | "maintenance"
@@ -86,6 +89,7 @@ export function SettingsOverview(props: {
   const now = useMinuteClock();
   const unit = useTemperatureUnit() ?? "celsius";
   const others = useOtherClients(props.live);
+  const names = usePeopleNames(props.live);
   const { agents } = useAgents(props.live);
   const agentCount = (agents?.length ?? 0) + assistantAppsOf(props.apps).length;
   const models = useModels(props.live).info?.sources;
@@ -121,6 +125,7 @@ export function SettingsOverview(props: {
               ].join(" · ")
             : "",
         )}
+        {row("people", Users, "People", peopleSummary(names ?? []))}
         {row("rooms", Layers, roomsTitle, describeRoomsAndFloors(places))}
         {row(
           "devices",
@@ -201,6 +206,30 @@ export function SettingsOverview(props: {
       </AreaGroup>
     </nav>
   );
+}
+
+// The household's names, once the core has said, read again with the shell.
+function usePeopleNames(live: LiveFeed) {
+  const [names, setNames] = useState<string[]>();
+  useEffect(() => {
+    let request = 0;
+    const refresh = async () => {
+      const current = ++request;
+      try {
+        const people = await coreJson<PersonInfo[]>("/api/people");
+        if (current === request) setNames(people.map(({ name }) => name));
+      } catch {
+        // The next shell refresh can ask again.
+      }
+    };
+    void refresh();
+    const stop = live.subscribe({ refresh: () => void refresh() });
+    return () => {
+      request++;
+      stop();
+    };
+  }, [live]);
+  return names;
 }
 
 // How many clients there are besides this one, once the core has said.
