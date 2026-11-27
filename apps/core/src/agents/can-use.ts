@@ -4,6 +4,7 @@ import {
   aiAreasOnAtFirst,
   capabilityKinds,
   controlPermission,
+  moodType,
   readPermission,
   type AiCanUse,
   type AiOfferInfo,
@@ -154,11 +155,18 @@ export function createAgentsCanUse(
           const row = rows.get(itemId);
           const tier = offer.tier;
           if (!row) {
+            // Moods publishes the same moods under the standard type.
+            const previous =
+              app.app === "sanctum.moods" && itemId === `entity:${moodType.id}`
+                ? rows.get("entity:moods.mood")
+                : undefined;
             db.insert(agentItems)
               .values({
                 appId: app.app,
                 itemId,
-                on: !asUpdate && offer.starts === "on",
+                on: previous
+                  ? previous.on && tierRank[tier] <= tierRank[previous.tier]
+                  : !asUpdate && offer.starts === "on",
                 tier,
                 updatedAt,
               })

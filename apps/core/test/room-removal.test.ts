@@ -23,12 +23,12 @@ import {
 // An app that keeps scenes in rooms and publishes them as entities in their
 // room, by placeId as a room section's tiles are.
 const sceneType = defineEntityType({
-  id: "moods.scene",
+  id: "example.scene",
   title: "Scene",
   state: z.object({ placeId: z.string().nullable(), name: z.string() }),
 });
 const publish = defineAction({
-  id: "moods.publish",
+  id: "example.publish",
   title: "Publish",
   tier: "write",
   input: z.object({ key: z.string(), state: sceneType.state }),
@@ -43,9 +43,9 @@ const publish = defineAction({
     return {};
   },
 });
-const moodsApp = defineApp({
-  id: "test.moods",
-  name: "Moods",
+const example = defineApp({
+  id: "sanctum.example",
+  name: "Example",
   version: "0.1.0",
   core: "^2.0.0",
   permissions: [],
@@ -56,7 +56,7 @@ const moodsApp = defineApp({
 
 async function home() {
   const context = await lampsCore({
-    apps: [samplePackage, { app: moodsApp, origin: "official" }],
+    apps: [samplePackage, { app: example, origin: "official" }],
   });
   const { core, maya } = context;
   const room = async (name: string) =>
@@ -86,7 +86,7 @@ describe("removing a room", () => {
     ]) {
       const published = await post(
         core,
-        "/api/apps/test.moods/actions/moods.publish",
+        "/api/apps/sanctum.example/actions/example.publish",
         { key, state: { placeId, name: key } },
         maya,
       );
@@ -116,7 +116,12 @@ describe("removing a room", () => {
     expect(answer.json()).toEqual({
       devices: [{ id: lamp, name: expect.any(String) }],
       entities: [
-        { app: "test.moods", type: "moods.scene", title: "Scene", count: 2 },
+        {
+          app: "sanctum.example",
+          type: "example.scene",
+          title: "Scene",
+          count: 2,
+        },
       ],
       workflows: [{ id: kitchenOff.id, name: "Kitchen lights off" }],
     });

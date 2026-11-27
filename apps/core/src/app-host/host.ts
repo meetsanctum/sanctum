@@ -666,6 +666,20 @@ export function createAppHost(options: {
       return [...actions].find((action) => action.runs === typeId);
     },
 
+    /** Records an agent's refused run when its entity cannot be read. */
+    recordAgentRefusal(agentId: string, appId: string, actionId: string) {
+      const action = installed.get(appId)?.contract.actions.get(actionId);
+      if (action) {
+        recordRefusal(
+          appId,
+          action,
+          activity.agentWho(agentId),
+          "forbidden",
+          undefined,
+        );
+      }
+    },
+
     /** What each installed app offers AI agents. */
     offers(): AppOffers[] {
       return [...installed.values()].map((entry) => ({

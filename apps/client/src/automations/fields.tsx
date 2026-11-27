@@ -643,7 +643,11 @@ export function FieldControl(props: {
         <OptionList
           label={label}
           options={home.entities
-            .filter((entity) => entity.type === kind.type)
+            .filter(
+              (entity) =>
+                entity.type === kind.type &&
+                (kind.app === undefined || entity.app === kind.app),
+            )
             .map((entity) => ({ value: entity.key, label: entity.name }))
             .sort((a, b) => a.label.localeCompare(b.label))}
           selected={props.value as string | undefined}

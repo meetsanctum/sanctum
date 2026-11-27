@@ -214,6 +214,7 @@ export function assembleAgentTools(
       name: appName,
       action: apps.action,
       runner: apps.runner,
+      recordRefusal: apps.recordAgentRefusal,
       call: apps.call,
     },
   });

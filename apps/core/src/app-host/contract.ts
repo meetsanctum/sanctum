@@ -501,13 +501,36 @@ export function contractOf(manifest: StaticManifest): AppContract {
     return [id, { ...action, words, needs }];
   };
   const entityTypes = new Map<string, DeclaredEntityType>();
+  const runners = new Map(
+    [...actions.values()].flatMap((action) =>
+      action.runs ? [[action.runs, action.input] as const] : [],
+    ),
+  );
   for (const type of manifest.provides.entities) {
     // The core's own definition for a standard type, whatever copy of the
     // SDK the app brought.
     const standard = standardEntityTypes.find((each) => each.id === type.id);
+    const state = standard ? zodCheck(standard.state) : schemaCheck(type.state);
+    const runnerInput = runners.get(type.id);
     entityTypes.set(type.id, {
       id: type.id,
-      state: standard ? zodCheck(standard.state) : schemaCheck(type.state),
+      state: runnerInput
+        ? (value) => {
+            const checked = state(value);
+            if (!checked.success) return checked;
+            const input = runnerInput(
+              (checked.data as { input: unknown }).input,
+            );
+            if (input.success) return checked;
+            return {
+              ...input,
+              issues: input.issues.map((issue) => ({
+                ...issue,
+                path: ["input", ...issue.path],
+              })),
+            };
+          }
+        : state,
     });
   }
   for (const widget of manifest.provides.widgets) {

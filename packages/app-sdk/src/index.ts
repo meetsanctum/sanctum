@@ -634,6 +634,11 @@ function assertProvides(app: AppDefinition) {
           : `"${id}" is not one of the core's standard entity types`,
       );
     }
+    if (!standard && type.run !== undefined) {
+      throw new Error(
+        `Only standard entity types can run, but "${id}" is custom`,
+      );
+    }
     if (!standard && !memberId.test(id)) {
       throw new Error(
         `Entity type "${id}" must be namespaced, such as naturalLight.target`,

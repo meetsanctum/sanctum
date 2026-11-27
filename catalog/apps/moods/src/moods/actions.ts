@@ -246,9 +246,9 @@ export const runMood = defineAction({
   title: "Run a mood",
   tier: "write",
   // A mood by its entity's key, which is its id, so Automations picks one
-  // from the moods the home has. Its entities' input is this, so whoever
+  // from the moods this app keeps. Its entities' input is this, so whoever
   // reads moods by type runs one through it.
-  input: z.object({ id: entityOf(moodType.id) }),
+  input: z.object({ id: entityOf(moodType.id, "sanctum.moods") }),
   output: ran,
   runs: moodType.id,
   words: { sentence: "Run {id}", preview: { id: "Aurora" } },

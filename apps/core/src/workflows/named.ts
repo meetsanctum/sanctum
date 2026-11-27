@@ -16,7 +16,7 @@ import { schemaAt, schemaCheck } from "../app-host/contract.js";
 export type Named =
   | { kind: NamedKind; id: string; field: string }
   // An entity of a type, by its key.
-  | { kind: "entity"; type: string; id: string; field: string };
+  | { kind: "entity"; type: string; app?: string; id: string; field: string };
 
 type Def = { type: string } & Record<string, unknown>;
 
@@ -37,8 +37,7 @@ function parse(schema: z.ZodType, value: unknown) {
 // Whether this field names something, which goes no deeper, noting what its value
 // names if it holds one.
 function noteNamed(
-  names: unknown,
-  entityOf: unknown,
+  { names, entityOf, entityApp }: Record<string, unknown>,
   value: unknown,
   found: Named[],
   path: readonly string[],
@@ -51,7 +50,13 @@ function noteNamed(
   }
   if (typeof entityOf === "string") {
     if (id !== undefined) {
-      found.push({ kind: "entity", type: entityOf, id, field });
+      found.push({
+        kind: "entity",
+        type: entityOf,
+        ...(typeof entityApp === "string" ? { app: entityApp } : {}),
+        id,
+        field,
+      });
     }
     return true;
   }
@@ -65,9 +70,7 @@ function walk(
   path: readonly string[],
   isOutput = false,
 ) {
-  const meta = schema.meta?.() as
-    { names?: unknown; entityOf?: unknown } | undefined;
-  if (noteNamed(meta?.names, meta?.entityOf, value, found, path)) return;
+  if (noteNamed(schema.meta?.() ?? {}, value, found, path)) return;
   const def = schema._zod.def as Def;
   const inner = (key: string) => def[key] as z.ZodType;
   const visit = (child: z.ZodType, each: unknown, at: PropertyKey[] = []) =>
@@ -167,7 +170,7 @@ function walkJson(
   references: ReadonlySet<string> = new Set(),
 ) {
   if (value === undefined) value = schema.default;
-  if (noteNamed(schema.names, schema.entityOf, value, found, path)) return;
+  if (noteNamed(schema, value, found, path)) return;
   const visit = (
     child: unknown,
     atSchema: string[],

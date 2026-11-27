@@ -55,7 +55,7 @@ export type Names = {
   floor(id: string): string | undefined;
   zone(id: string): string | undefined;
   device(id: string): { name: string; kinds: string[] } | undefined;
-  entity(type: string, key: string): string | undefined;
+  entity(type: string, key: string, app?: string): string | undefined;
   app(id: string): string | undefined;
   /** A schedule's time of day as the home writes it: 07:30, or 7:30 AM. */
   time(wall: string): string;
@@ -68,7 +68,7 @@ export type Part = string | Token;
 export type FieldKind =
   | { kind: "names"; names: "room" | "floor" | "zone" | "device" }
   | { kind: "partOf"; of: string }
-  | { kind: "entityOf"; type: string }
+  | { kind: "entityOf"; type: string; app?: string }
   | { kind: "place" }
   | { kind: "timeOfDay" }
   | { kind: "days" }
@@ -126,7 +126,11 @@ export function fieldKind(field: FieldSchema): FieldKind {
   if (typeof field.partOf === "string")
     return { kind: "partOf", of: field.partOf };
   if (typeof field.entityOf === "string") {
-    return { kind: "entityOf", type: field.entityOf };
+    return {
+      kind: "entityOf",
+      type: field.entityOf,
+      app: typeof field.entityApp === "string" ? field.entityApp : undefined,
+    };
   }
   if (field.place === true) return { kind: "place" };
   if (field.timeOfDay === true) return { kind: "timeOfDay" };
@@ -321,7 +325,7 @@ export function formatValue(
     }
     case "entityOf":
       return typeof value === "string"
-        ? names.entity(kind.type, value)
+        ? names.entity(kind.type, value, kind.app)
         : undefined;
     case "timeOfDay":
       return typeof value === "string" ? names.time(value) : undefined;

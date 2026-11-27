@@ -5,6 +5,7 @@ import type { DeviceChange } from "../devices/devices.js";
 import { placeKey, type MotionChange } from "../devices/motion.js";
 import type { Press } from "../devices/presses.js";
 import type { EntityChange } from "../entities/entities.js";
+import { matchesEntityType } from "./entity-selectors.js";
 import type { Engine, WorkflowRow } from "./engine.js";
 import { changeFires, sameValue, statePasses } from "./graph.js";
 import { comparedState } from "./media.js";
@@ -373,7 +374,7 @@ export function createFiring(options: {
         const config = parsed<EntityTriggerConfig>(node);
         return (
           config !== undefined &&
-          (!config.type || config.type === type) &&
+          matchesEntityType(config.type, after) &&
           (!config.app || config.app === app) &&
           (!config.key || config.key === key) &&
           changeFires(config, before, after.state)

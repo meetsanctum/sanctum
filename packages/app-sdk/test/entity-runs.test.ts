@@ -7,9 +7,11 @@ import {
   defineEntityType,
   moodRunSchema,
   moodType,
+  sameSchema,
   toStaticManifest,
   type ActionDefinition,
   type AppDefinition,
+  type EntityTypeDefinition,
 } from "../src/index.js";
 
 // An action that runs a standard type's entities, such as moods: it runs a
@@ -38,7 +40,7 @@ const note = defineEntityType({
 
 function app(
   actions: ActionDefinition[] = [run()],
-  entities = [moodType],
+  entities: EntityTypeDefinition[] = [moodType],
 ): AppDefinition {
   return {
     id: "sanctum.example",
@@ -106,6 +108,24 @@ describe("an action that runs entities", () => {
     );
   });
 
+  it("accepts the standard output with its fields in a different order", () => {
+    const { switched, failed } = moodRunSchema.shape;
+    const output = z.object({ failed, switched });
+
+    expect(() => defineApp(app([run({ output })]))).not.toThrow();
+    expect(sameSchema(moodRunSchema, z.toJSONSchema(output))).toBe(true);
+  });
+
+  it("preserves array order in a literal object inside a schema", () => {
+    const first = { required: ["placeholder", "other"] };
+    const reversed = { required: ["other", "placeholder"] };
+    const constant = z.looseObject({}).meta({ const: first });
+
+    expect(
+      sameSchema(constant, { ...z.toJSONSchema(constant), const: reversed }),
+    ).toBe(false);
+  });
+
   it("needs the type's switch when it's offered to AI agents", () => {
     const offered = (needs: string[]) =>
       run({ assistant: { starts: "on", description: "Run a mood.", needs } });
@@ -120,8 +140,9 @@ describe("an action that runs entities", () => {
 describe("a standard type that runs", () => {
   it("holds the input its app's action takes", () => {
     const definition = {
-      id: "example.scene",
-      title: "Scene",
+      id: moodType.id,
+      title: moodType.title,
+      standard: true,
       state: z.object({ name: z.string() }),
       run: { output: moodRunSchema, description: "Runs a scene." },
     };
@@ -135,5 +156,16 @@ describe("a standard type that runs", () => {
         state: z.object({ input: z.record(z.string(), z.unknown()) }),
       }),
     ).not.toThrow();
+  });
+
+  it("rejects run metadata on a custom type", () => {
+    const custom = { ...note, run: moodType.run };
+
+    expect(() => defineEntityType(custom)).toThrow(
+      /Only standard entity types can run/,
+    );
+    expect(() => defineApp(app([], [custom]))).toThrow(
+      /Only standard entity types can run/,
+    );
   });
 });

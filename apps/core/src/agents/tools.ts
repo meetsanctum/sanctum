@@ -60,6 +60,7 @@ type AgentToolsOptions = {
     action: (appId: string, actionId: string) => DeclaredAction | undefined;
     /** The app's action that runs its entities of a type. */
     runner: (appId: string, typeId: string) => DeclaredAction | undefined;
+    recordRefusal: (agentId: string, appId: string, actionId: string) => void;
     call: (request: {
       caller: Caller;
       appId: string;
@@ -354,7 +355,9 @@ export function createAgentTools(options: AgentToolsOptions) {
     const ofApp = runners.filter((offer) => offer.app === app);
     if (ofApp.length === 0) return notRunnable();
     if (!ofApp.some(isUsable)) {
-      return notAllowed(canUse, ofApp[0]!, apps.name(app) ?? app);
+      const offer = ofApp[0]!;
+      apps.recordRefusal(agent.id, app, offer.id);
+      return notAllowed(canUse, offer, apps.name(app) ?? app);
     }
     const entity = options.entities.get(app, key);
     const type = standardEntityTypes.find(

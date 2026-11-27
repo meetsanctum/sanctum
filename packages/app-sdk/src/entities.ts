@@ -41,6 +41,11 @@ export interface EntityTypeDefinition<State extends z.ZodType = z.ZodType> {
 export function defineEntityType<State extends z.ZodType>(
   type: EntityTypeDefinition<State>,
 ): EntityTypeDefinition<State> {
+  if (type.run && !type.standard) {
+    throw new Error(
+      `Only standard entity types can run, but "${type.id}" is custom`,
+    );
+  }
   // An entity that runs carries what its app's action takes.
   if (
     type.run &&

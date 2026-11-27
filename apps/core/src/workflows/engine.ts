@@ -28,6 +28,7 @@ import {
   type LightsStepConfig,
   type TimeConditionConfig,
 } from "./core-pieces.js";
+import { entitiesOfType, matchesEntityType } from "./entity-selectors.js";
 import { executionPlan, statePasses } from "./graph.js";
 import { comparedState, nothingToDo } from "./media.js";
 import { problemsReason, type Pieces } from "./pieces.js";
@@ -388,11 +389,11 @@ export function createEngine(options: {
         const candidates: (EntityInfo | null)[] =
           app !== undefined && key !== undefined
             ? [entities.get(app, key)]
-            : entities.list({ type });
+            : entitiesOfType(entities, type);
         return candidates.some(
           (entity) =>
             entity !== null &&
-            (type === undefined || entity.type === type) &&
+            matchesEntityType(type, entity) &&
             statePasses(predicate, entity.state),
         );
       }

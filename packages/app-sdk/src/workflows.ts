@@ -95,9 +95,16 @@ export function partOf(field: string) {
   return z.string().min(1).max(64).meta({ partOf: field });
 }
 
-/** A config field that names one entity of a type by its key. */
-export function entityOf(type: string) {
-  return z.string().min(1).max(128).meta({ entityOf: type });
+/** A config field that names one entity by its key, from a given app when specified. */
+export function entityOf(type: string, app?: string) {
+  return z
+    .string()
+    .min(1)
+    .max(128)
+    .meta({
+      entityOf: type,
+      ...(app === undefined ? {} : { entityApp: app }),
+    });
 }
 
 /** When a job runs. */

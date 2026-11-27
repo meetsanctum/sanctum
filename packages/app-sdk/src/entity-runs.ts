@@ -55,6 +55,65 @@ export function assertEntityRuns(
   }
 }
 
+// The order of required names does not matter in a schema. Follow schema
+// keywords so a field called "required" in a literal value keeps its order.
+const schemaMaps = new Set([
+  "$defs",
+  "definitions",
+  "properties",
+  "patternProperties",
+  "dependentSchemas",
+]);
+const schemaLists = new Set(["allOf", "anyOf", "oneOf", "prefixItems"]);
+const singleSchemas = new Set([
+  "additionalItems",
+  "additionalProperties",
+  "contains",
+  "if",
+  "then",
+  "else",
+  "items",
+  "not",
+  "propertyNames",
+  "unevaluatedItems",
+  "unevaluatedProperties",
+]);
+
+function orderedJson(
+  value: unknown,
+  kind?: "schema" | "schemaMap" | "schemaList",
+): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) =>
+      orderedJson(item, kind === "schemaList" ? "schema" : undefined),
+    );
+  }
+  if (typeof value !== "object" || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([a], [b]) => (a < b ? -1 : a === b ? 0 : 1))
+      .map(([key, child]) => {
+        if (kind === "schemaMap") return [key, orderedJson(child, "schema")];
+        if (kind === "schema") {
+          if (
+            key === "required" &&
+            Array.isArray(child) &&
+            child.every((item) => typeof item === "string")
+          ) {
+            return [key, [...child].sort()];
+          }
+          if (schemaMaps.has(key))
+            return [key, orderedJson(child, "schemaMap")];
+          if (schemaLists.has(key))
+            return [key, orderedJson(child, "schemaList")];
+          if (singleSchemas.has(key))
+            return [key, orderedJson(child, "schema")];
+        }
+        return [key, orderedJson(child)];
+      }),
+  );
+}
+
 // The same schema, as JSON says it: a zod schema, from whichever copy of zod
 // made it, or the JSON Schema a manifest holds.
 export function sameSchema(schema: z.ZodType, other: z.ZodType | object) {
@@ -62,7 +121,7 @@ export function sameSchema(schema: z.ZodType, other: z.ZodType | object) {
     const { $schema: _, ...rest } = (
       "_zod" in each ? z.toJSONSchema(each as z.ZodType) : each
     ) as Record<string, unknown>;
-    return JSON.stringify(rest);
+    return JSON.stringify(orderedJson(rest, "schema"));
   };
   return json(schema) === json(other);
 }

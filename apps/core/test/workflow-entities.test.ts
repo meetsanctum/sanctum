@@ -3,15 +3,18 @@ import {
   defineApp,
   defineEntityType,
   entityOf,
+  moodType,
   type WorkflowGraph,
   type WorkflowProblem,
 } from "@meetsanctum/app-sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
+import { workflows } from "../src/workflows/schema.js";
 import { claimed, get, post, testCore, type TestCore } from "./support.js";
 import {
   addWorkflow,
+  lightsOff,
   sample,
   samplePackage,
   noteStep,
@@ -115,6 +118,66 @@ async function forgotten(core: TestCore, token: string, key: string) {
 }
 
 const garden = { app: "test.sky", key: "garden" };
+
+it("keeps a saved Moods trigger and condition following its moods after the type changes", async () => {
+  const core = await testCore();
+  const { token } = await claimed(core);
+  const id = "saved-mood-workflow";
+  const owner = "sanctum.moods";
+  const mood = {
+    key: "focus",
+    type: moodType.id,
+    name: "Focus",
+    state: { active: true },
+  };
+  const active = { type: "moods.mood", field: "active", operator: "is_on" };
+  core.db
+    .insert(workflows)
+    .values({
+      id,
+      name: "Focus is active",
+      enabled: true,
+      runMode: "single",
+      version: 1,
+      createdAt: core.now(),
+      updatedAt: core.now(),
+      graph: {
+        version: 1,
+        nodes: [
+          trigger("active", "entity", active),
+          {
+            id: "condition",
+            kind: "condition",
+            piece: "entity",
+            config: { ...active, app: owner, key: mood.key },
+          },
+          lightsOff("off", { kind: "home" }),
+        ],
+        edges: [
+          { from: "active", to: "condition" },
+          { from: "condition", to: "off" },
+        ],
+      },
+    })
+    .run();
+
+  core.entities.publish("sanctum.example", mood);
+  await core.workflows.settled();
+  expect(await runsOf(core, token, id)).toEqual([]);
+
+  core.entities.publish(owner, mood);
+  await core.workflows.settled();
+  expect(await runsOf(core, token, id)).toEqual([
+    expect.objectContaining({
+      status: "succeeded",
+      trigger: expect.objectContaining({ nodes: ["active"] }),
+      steps: [
+        expect.objectContaining({ node: "condition", output: true }),
+        expect.objectContaining({ node: "off", status: "succeeded" }),
+      ],
+    }),
+  ]);
+});
 
 describe("entity triggers", () => {
   it("fire when the field changes to a value that passes", async () => {
