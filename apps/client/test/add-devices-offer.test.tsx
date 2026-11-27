@@ -35,13 +35,7 @@ const example: AvailableApp = {
   requests: [],
   memory: 128,
   data: 256,
-  adds: {
-    devices: true,
-    widgets: 0,
-    roomSections: 0,
-    devicePages: 0,
-    pieces: 0,
-  },
+  adds: { devices: true },
   shortfalls: [],
 };
 const added = { ...zigbee, id: "sanctum.example", name: "Example" };

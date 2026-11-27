@@ -3,7 +3,7 @@ import { Button } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AppIcon, plainIcon } from "./app-icon";
-import { problemOf } from "./app-permissions";
+import { permissionDetail, problemOf } from "./app-permissions";
 import {
   Dialog,
   DialogContent,
@@ -128,7 +128,10 @@ function PermissionSheet(props: {
   useEffect(() => {
     if (allOn) onDone(true);
   }, [allOn, onDone]);
-  const words = off.map((id) => ({ id, ...permissionWords(id) }));
+  const words = off.map((id) => {
+    const permission = permissionWords(id);
+    return { id, ...permission, detail: permissionDetail(permission) };
+  });
   const reasonOf = (id: string) =>
     app?.requests.find((request) => request.id === id)?.reason ?? "";
   return (

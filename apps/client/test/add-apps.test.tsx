@@ -57,13 +57,7 @@ const example: AvailableApp = {
   ],
   memory: 128,
   data: 256,
-  adds: {
-    devices: true,
-    widgets: 0,
-    roomSections: 0,
-    devicePages: 1,
-    pieces: 2,
-  },
+  adds: { devices: true },
   shortfalls: [],
 };
 
@@ -180,9 +174,10 @@ describe("Add apps", () => {
     expect(sheet.textContent).not.toContain("It adds");
   });
 
-  it("shows permissions that read the same as one row", async () => {
+  it("groups matching permissions and keeps different reasons visible", async () => {
     const reason =
       "To pair with your TVs, control them and see what they play.";
+    const otherReason = "To check whether your TVs are on.";
     available = [
       {
         ...example,
@@ -201,6 +196,13 @@ describe("Add apps", () => {
             asked: null,
             startsOn: false,
           })),
+          {
+            id: "lan:tcp:7001",
+            reason: otherReason,
+            needed: true,
+            asked: null,
+            startsOn: false,
+          },
         ],
       },
     ];
@@ -212,31 +214,39 @@ describe("Add apps", () => {
     ).toEqual([
       "Find devices on your networkTo find your TVs.",
       `Talk to devices on your networkOnly the devices it found. ${reason}`,
+      `Talk to devices on your networkOnly the devices it found. ${otherReason}`,
     ]);
   });
 
-  it("counts the memory and storage of the service it starts", async () => {
-    available = [
-      {
-        ...example,
-        requests: [
-          {
-            id: "services:ollama",
-            reason: "To answer what's asked without it leaving your home.",
-            needed: true,
-            asked: null,
-            startsOn: false,
-          },
-        ],
-        servicesMemory: 3968,
-      },
-    ];
-    await render();
-    await press(container, "Add Example");
+  it.each([
+    ["ollama", 4096, "Estimated 4.1 GB", "A few GB per model"],
+    ["ollama", null, "Total unavailable", "A few GB per model"],
+    ["zigbee2mqtt", 288, "Estimated 416 MB", "Up to 256 MB"],
+  ] as const)(
+    "shows the resource totals with %s and a service allowance of %s",
+    async (service, servicesMemory, memory, storage) => {
+      available = [
+        {
+          ...example,
+          requests: [
+            {
+              id: `services:${service}`,
+              reason: "To run the service.",
+              needed: true,
+              asked: null,
+              startsOn: false,
+            },
+          ],
+          servicesMemory,
+        },
+      ];
+      await render();
+      await press(container, "Add Example");
 
-    expect(dialog()!.textContent).toContain("MemoryUp to 4 GB");
-    expect(dialog()!.textContent).toContain("StorageA few GB per model");
-  });
+      expect(dialog()!.textContent).toContain(`Memory${memory}`);
+      expect(dialog()!.textContent).toContain(`Storage${storage}`);
+    },
+  );
 
   it("adds it at the version the sheet showed, and opens onto it", async () => {
     await render();

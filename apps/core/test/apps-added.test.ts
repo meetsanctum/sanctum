@@ -358,8 +358,9 @@ describe("the apps a home could add", () => {
             dataFreeBytes: 0,
           },
           [zigbee]: {
-            memoryNeedsMb: 544,
+            memoryNeedsMb: 256,
             memoryFreeMb: 512,
+            servicesMemoryMb: 288,
             dataNeedsMb: 512,
             dataFreeBytes: null,
           },
@@ -372,11 +373,9 @@ describe("the apps a home could add", () => {
       { id: weather, shortfalls: [] },
       {
         id: zigbee,
-        // What its service takes besides its own memory, for its sheet.
+        // Already counted for admission, still shown on the sheet.
         servicesMemory: 288,
-        shortfalls: [
-          { kind: "memory", needs: 544 * mebibyte, free: 512 * mebibyte },
-        ],
+        shortfalls: [],
       },
     ]);
     expect(list[0]).not.toHaveProperty("servicesMemory");
@@ -414,13 +413,7 @@ describe("the apps a home could add", () => {
         requests: [],
         memory: 128,
         data: 256,
-        adds: {
-          devices: false,
-          widgets: 0,
-          roomSections: 0,
-          devicePages: 0,
-          pieces: 0,
-        },
+        adds: { devices: false },
         shortfalls: [],
       },
       {
@@ -440,13 +433,8 @@ describe("the apps a home could add", () => {
         ],
         memory: 256,
         data: 512,
-        adds: {
-          devices: false,
-          widgets: 0,
-          roomSections: 0,
-          devicePages: 0,
-          pieces: 0,
-        },
+        servicesMemory: null,
+        adds: { devices: false },
         shortfalls: [{ kind: "pages", needs: "pages" }],
       },
     ]);

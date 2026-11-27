@@ -31,13 +31,7 @@ const example: AvailableApp = {
   requests: [],
   memory: 128,
   data: 256,
-  adds: {
-    devices: true,
-    widgets: 0,
-    roomSections: 0,
-    devicePages: 0,
-    pieces: 0,
-  },
+  adds: { devices: true },
   shortfalls: [],
   removed: {
     at: "2026-11-17T12:00:00.000Z",

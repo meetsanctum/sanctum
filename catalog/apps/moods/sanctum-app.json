@@ -21,7 +21,7 @@
     },
     {
       "id": "devices.control:light",
-      "reason": "To set your lights when you choose a mood.",
+      "reason": "To set your lights when a mood runs.",
       "needed": true,
       "asked": null,
       "startsOn": false

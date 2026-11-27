@@ -21,7 +21,7 @@
     },
     {
       "id": "net:api.open-meteo.com",
-      "reason": "Only your home's location is sent, to get the forecast.",
+      "reason": "To send your home's position and time zone for the forecast.",
       "needed": true,
       "asked": null,
       "startsOn": false

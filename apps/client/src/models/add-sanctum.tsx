@@ -8,7 +8,7 @@ import { Button } from "@meetsanctum/ui-sdk";
 import { Check } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import { addProblemOf, Asks, shortfallWords } from "../add-app-sheet";
+import { addProblemOf, AppSize, Asks, shortfallWords } from "../add-app-sheet";
 import { AppIcon } from "../app-icon";
 import { productName } from "../brand";
 import {
@@ -195,7 +195,10 @@ export function AddSanctum(props: {
                 )}
               </span>
             </div>
-            <Asks requests={app.requests.filter((request) => request.needed)} />
+            <Asks
+              requests={app.requests.filter((request) => request.needed)}
+              compact
+            />
             {blocked && (
               <p role="alert" className="m-0 text-sm">
                 <span className="font-medium">{blocked.title}</span>{" "}
@@ -209,6 +212,11 @@ export function AddSanctum(props: {
           </p>
         )}
         {problemLine}
+        {app && (
+          <div className="grid grid-cols-2 gap-2">
+            <AppSize app={app} />
+          </div>
+        )}
         <DialogFooter>
           {back}
           <Button

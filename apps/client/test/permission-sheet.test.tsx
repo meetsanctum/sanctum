@@ -102,6 +102,35 @@ afterEach(async () => {
 });
 
 describe("the sheet that asks for a permission", () => {
+  it.each([
+    ["lan:tcp:7000", "on port 7000", []],
+    [
+      "lan:tcp:49152-65535",
+      "on any port from 49152 to 65535",
+      ["devices.read:motion"],
+    ],
+  ] as const)(
+    "shows the scope of %s before Allow",
+    async (id, scope, other) => {
+      app = {
+        ...app,
+        requests: [
+          ...app.requests,
+          request(id, "To talk to devices it found."),
+        ],
+      };
+      await render();
+      await act(async () => {
+        void ask(app.id, [id, ...other]);
+      });
+
+      expect(dialog()?.textContent).toContain(
+        `Only the devices it found, ${scope}. To talk to devices it found.`,
+      );
+      expect(granted()).toEqual([]);
+    },
+  );
+
   it("asks for one in Sanctum's words, with the app's reason, and Allow turns it on", async () => {
     let answer: boolean | undefined;
     await act(async () => {

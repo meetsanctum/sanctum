@@ -44,7 +44,7 @@ export function createWeatherApp(options: WeatherOptions = {}) {
       },
       {
         id: netPermission(openMeteoHost),
-        reason: "Only your home's location is sent, to get the forecast.",
+        reason: "To send your home's position and time zone for the forecast.",
         needed: true,
       },
     ],

@@ -96,7 +96,7 @@ const controls: Record<CapabilityKind, [string, PermissionIcon, string?]> = {
 // and the rest by the names their makers give them.
 const services: Record<string, [string, PermissionIcon]> = {
   zigbee2mqtt: ["Use your Zigbee stick", "radio-tower"],
-  ollama: ["Run AI models on Sanctum", "sparkles"],
+  ollama: ["Run AI models locally", "sparkles"],
 };
 const serviceNames: Record<string, string> = { mosquitto: "Mosquitto" };
 

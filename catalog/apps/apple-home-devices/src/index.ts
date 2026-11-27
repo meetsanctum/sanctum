@@ -54,7 +54,7 @@ export function createAppleHomeDevicesApp(options: DriverOptions = {}) {
     permissions: [
       {
         id: "devices.register",
-        reason: "To add your Apple TVs and HomePods and show what they play.",
+        reason: "To add your Apple TVs and show what they play.",
         needed: true,
       },
       {

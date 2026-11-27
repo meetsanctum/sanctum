@@ -318,6 +318,8 @@ export const noCapabilities: ManagerCapabilities = {
 const appCapacity = z.object({
   memoryNeedsMb: z.number().nonnegative(),
   memoryFreeMb: z.number().nonnegative(),
+  // The full service allowance, including services already counted.
+  servicesMemoryMb: z.number().nonnegative().optional(),
   dataNeedsMb: z.number().nonnegative(),
   dataFreeBytes: z.number().nonnegative().nullable(),
 });

@@ -31,7 +31,7 @@ import { permissionIconOf } from "./permission-icons";
 // straight to What AI agents can use, which limits what it can do.
 
 /** A permission's detail with which one it is, as a port: "…, on port 7000". */
-function detailOf(words: PermissionWords) {
+export function permissionDetail(words: PermissionWords) {
   return [words.detail, words.specifics].filter(Boolean).join(", ") || null;
 }
 
@@ -92,7 +92,7 @@ export function PermissionsSection(props: {
       <ul className="m-0 flex list-none flex-col gap-3 p-0">
         {app.requests.map((request) => {
           const words = permissionWords(request.id);
-          const detail = detailOf(words);
+          const detail = permissionDetail(words);
           const Icon = permissionIconOf[words.icon];
           const granted =
             pending?.id === request.id
@@ -166,8 +166,8 @@ export function PermissionsSection(props: {
                 Turn off “{permissionWords(asking.id).title}” for {app.name}?
               </DialogTitle>
               <DialogDescription>
-                {detailOf(permissionWords(asking.id)) &&
-                  `${detailOf(permissionWords(asking.id))}. `}
+                {permissionDetail(permissionWords(asking.id)) &&
+                  `${permissionDetail(permissionWords(asking.id))}. `}
                 {app.name} needs it to work. It pauses until you turn this back
                 on.
               </DialogDescription>

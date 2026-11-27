@@ -5,13 +5,13 @@ import {
   type AppShortfall,
   type AvailableApp,
   type PermissionInfo,
-  type PermissionWords,
 } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
 import { HardDrive, MemoryStick, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 
 import { AppIcon, plainIcon } from "./app-icon";
+import { permissionDetail } from "./app-permissions";
 import { productName } from "./brand";
 import {
   Dialog,
@@ -47,8 +47,12 @@ export function sizeWords(bytes: number) {
 
 /** The memory it may use, with the services it starts, in words. */
 export function memoryWords(app: AvailableApp) {
-  const megabytes = app.memory + (app.servicesMemory ?? 0);
-  return `Up to ${sizeWords(megabytes * mebibyte)}`;
+  const { servicesMemory } = app;
+  if (servicesMemory === null) return "Total unavailable";
+  if (servicesMemory === undefined) {
+    return `Up to ${sizeWords(app.memory * mebibyte)}`;
+  }
+  return `Estimated ${sizeWords((app.memory + servicesMemory) * mebibyte)}`;
 }
 
 /** What it keeps on Sanctum, its services' where they keep more. */
@@ -158,24 +162,27 @@ export function addProblemOf(error: unknown, app: AvailableApp) {
 
 /**
  * What an app asks for, each with Sanctum's words for it and its reason.
- * Those that read the same, as two of a network's ports do, are one row.
+ * Install sheets can group permissions that share a summary and reason.
  */
-export function Asks(props: { requests: readonly PermissionInfo[] }) {
-  const rows = new Map<
-    string,
-    { id: string; words: PermissionWords; reason: string }
-  >();
-  for (const request of props.requests) {
-    const words = permissionWords(request.id);
-    const key = JSON.stringify([words.title, words.detail, request.reason]);
-    if (!rows.has(key)) {
-      rows.set(key, { id: request.id, words, reason: request.reason });
-    }
-  }
+export function Asks(props: {
+  requests: readonly PermissionInfo[];
+  compact?: boolean;
+}) {
+  const seen = new Set<string>();
+  const rows = props.requests
+    .map(({ id, reason }) => ({ id, reason, words: permissionWords(id) }))
+    .filter(({ words, reason }) => {
+      if (!props.compact) return true;
+      const key = JSON.stringify([words.title, words.detail, reason]);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   return (
     <ul className="m-0 flex list-none flex-col gap-3 p-0">
-      {[...rows.values()].map(({ id, words, reason }) => {
+      {rows.map(({ id, words, reason }) => {
         const Icon = permissionIconOf[words.icon];
+        const detail = props.compact ? words.detail : permissionDetail(words);
         return (
           <li key={id} className="flex items-start gap-3">
             <span
@@ -189,7 +196,7 @@ export function Asks(props: { requests: readonly PermissionInfo[] }) {
                 {words.title}
               </span>
               <span className="text-[13px] leading-[18px] font-medium">
-                {words.detail && `${words.detail}. `}
+                {detail && `${detail}. `}
                 {reason}
               </span>
             </span>
@@ -289,7 +296,7 @@ export function AddAppSheet(props: {
                   {needed.length > 0 && (
                     <>
                       <p className="m-0">It needs these to work:</p>
-                      <Asks requests={needed} />
+                      <Asks requests={needed} compact />
                     </>
                   )}
                   {startsOn.length > 0 && (
@@ -299,7 +306,7 @@ export function AddAppSheet(props: {
                         {startsOn.length === 1 ? "this" : "these"} too, which
                         you can switch off in its settings:
                       </p>
-                      <Asks requests={startsOn} />
+                      <Asks requests={startsOn} compact />
                     </>
                   )}
                 </div>
