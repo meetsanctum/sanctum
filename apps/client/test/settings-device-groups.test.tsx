@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { coreJson } from "../src/core-fetch";
 import { SettingsPage } from "../src/settings";
+import { deferred } from "./deferred";
 import { unknownHome } from "./home-fixtures";
 import {
   light,
@@ -53,7 +54,7 @@ describe("Settings → Devices' categories", () => {
         case "/api/places":
           return places;
         case "/api/history/devices":
-          return [];
+          return devices.map(({ id }) => ({ device: id, kept: true }));
         case "/api/devices/pairing":
           return { until: null, joined: [], drivers: [], finders: [] };
         default:
@@ -72,20 +73,20 @@ describe("Settings → Devices' categories", () => {
     vi.unstubAllGlobals();
   });
 
-  // The list, with the devices the shell already has.
-  async function show(known: DeviceInfo[] = []) {
+  // The category list or page, with the devices and rooms the shell has.
+  async function show(known: DeviceInfo[] = [], group?: string) {
     await act(async () =>
       root.render(
         <SettingsPage
-          page="devices"
-          params={{}}
+          page={group ? "device-group" : "devices"}
+          params={group ? { id: group } : {}}
           open={(page, params) => opened.push({ page, params })}
           back={() => undefined}
           apps={[zigbee]}
           me={admin}
           core={{ state: "online", version: "1.2.3" } as never}
           live={live}
-          devices={{ devices: known, places: undefined }}
+          devices={{ devices: known, places }}
           home={unknownHome}
           onUpdating={() => undefined}
         />,
@@ -131,6 +132,31 @@ describe("Settings → Devices' categories", () => {
     expect(container.textContent).toContain("Add devices");
   });
 
+  it("counts a failed and an available update separately", async () => {
+    const firmware = {
+      version: "1.0",
+      updatable: true,
+      sleeps: false,
+      progress: null,
+      remainingSeconds: null,
+      problem: null,
+      checkedAt: null,
+      startedAt: null,
+      endedAt: null,
+    };
+    devices = [
+      light("desk", "Light", { firmware: { ...firmware, state: "failed" } }),
+      light("lamp", "Lamp", { firmware: { ...firmware, state: "available" } }),
+    ];
+    await show();
+    expect(rows()[0]?.textContent).toBe(
+      "Lights1 needs attention · 1 update · 2 devices",
+    );
+    expect(rows()[0]?.getAttribute("aria-label")).toBe(
+      "Lights: 1 needs attention, 1 update, 2 devices",
+    );
+  });
+
   it("draws from the devices the shell has, before its own read answers", async () => {
     let answer!: (devices: DeviceInfo[]) => void;
     devicesReply = new Promise((resolve) => (answer = resolve));
@@ -138,11 +164,45 @@ describe("Settings → Devices' categories", () => {
     expect(rows().map((row) => row.getAttribute("aria-label"))).toEqual([
       "Lights: 1 device",
     ]);
+    expect(
+      vi
+        .mocked(coreJson)
+        .mock.calls.filter(([path]) => path === "/api/history/devices"),
+    ).toHaveLength(1);
 
     await act(async () => answer([light("desk", "Light"), remote]));
     expect(rows().map((row) => row.getAttribute("aria-label"))).toEqual([
       "Lights: 1 device",
       "Buttons: 1 device",
     ]);
+  });
+
+  it("shows cached rooms on a category page while the device read is pending", async () => {
+    const { promise, resolve } = deferred<DeviceInfo[]>();
+    devicesReply = promise;
+    const lamp = light("desk", "Light", { roomId: "office" });
+    await show([lamp], "lights");
+    expect(container.textContent).toContain("Office · Hue Essential");
+    const trigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Light: more"]',
+    )!;
+    await act(async () =>
+      trigger.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+    );
+    const room = [...document.querySelectorAll('[role="menuitem"]')].find(
+      (item) => item.textContent === "Room",
+    )!;
+    await act(async () =>
+      room.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+      ),
+    );
+    expect(
+      document.querySelector('[role="menuitemradio"][aria-checked="true"]')
+        ?.textContent,
+    ).toBe("Office");
+    await act(async () => resolve([lamp]));
   });
 });

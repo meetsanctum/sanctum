@@ -213,3 +213,22 @@ export async function openFromOverview(name: string) {
   });
   return apps.map((button) => button.textContent);
 }
+
+// One of Settings' areas, from its row on Settings' first page.
+export async function openArea(name: string) {
+  await act(async () => {
+    [
+      ...container.querySelectorAll<HTMLButtonElement>(
+        'main nav[aria-label="Settings"] button',
+      ),
+    ]
+      .find((button) => button.textContent?.startsWith(name))!
+      .click();
+  });
+}
+
+// The way back before a page's title, by the page it returns to.
+export const backTo = (name: string) =>
+  container.querySelector<HTMLButtonElement>(
+    `.top-bar button[aria-label="Back to ${name}"]`,
+  );

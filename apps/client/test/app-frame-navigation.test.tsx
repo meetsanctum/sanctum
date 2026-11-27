@@ -164,6 +164,21 @@ it("opens Add devices and restores Setup's Try it parameters on return", async (
       .find((button) => button.textContent === "Done")!
       .click();
   });
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>(
+        'button[aria-label="Media: 2 devices"]',
+      )!
+      .click(),
+  );
+  expect(pageTitle()).toBe("Media");
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>('button[aria-label="Back to Devices"]')!
+      .click(),
+  );
+  expect(pageTitle()).toBe("Devices");
+  expect(dialog()).toBeNull();
   await act(async () => {
     container
       .querySelector<HTMLButtonElement>('button[aria-label="Back to Setup"]')!

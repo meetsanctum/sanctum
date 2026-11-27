@@ -43,7 +43,13 @@ export function useSettingsNavigation(
   // page over it, which reopen where they were with Back to Settings. A
   // removed app's settings can no longer be reopened, nor a page over them.
   useEffect(() => {
-    if (isInSettings) remembered.current = routes.slice(1);
+    if (isInSettings) {
+      remembered.current = routes.slice(1).map((each) => {
+        if (each.page !== personSettingsPage || !each.params.added) return each;
+        const { added: _, ...params } = each.params;
+        return { ...each, params };
+      });
+    }
     const gone = remembered.current.findIndex(
       (each) => !isSettingsRouteAvailable(each, apps),
     );

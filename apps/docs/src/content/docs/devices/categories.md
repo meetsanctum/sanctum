@@ -48,8 +48,8 @@ opens a page with only its devices, where you rename them, move them to
 another room, update and remove them. **Add devices** is on both pages.
 
 There a device is in one category, the one for its
-[type](/devices/types/), as its main tile on a room's page is: a motion
-sensor that measures the light level is under Presence.
+[type](/devices/types/). A motion sensor that measures the light level
+is under Presence.
 
 ## A room's page groups tiles by device
 

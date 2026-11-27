@@ -128,6 +128,11 @@ export function HomePage(props: HomePageProps) {
   );
 }
 
+function afterAddDevices(route: Route): Route {
+  const { add: _, ...params } = route.params;
+  return { ...route, params };
+}
+
 function HomePageWithDevices({
   route,
   routeDepth,
@@ -166,7 +171,17 @@ function HomePageWithDevices({
 }: HomePageProps) {
   const devices = useHomeDevices();
   const onDashboard = routeDepth === 0;
-  const routeKey = `${routeDepth}:${JSON.stringify(route)}`;
+  const addDevicesRequest =
+    route?.app === settingsApp.id &&
+    route.page === devicesSettingsPage &&
+    route.params.add === "true"
+      ? route
+      : undefined;
+  // Consuming the request keeps the Devices page and its dialog mounted.
+  const shownRoute = addDevicesRequest
+    ? afterAddDevices(addDevicesRequest)
+    : route;
+  const routeKey = `${routeDepth}:${JSON.stringify(shownRoute)}`;
   return (
     <>
       {route?.app === automationsApp.id ? (
@@ -217,6 +232,18 @@ function HomePageWithDevices({
             statusFailed={statusFailed}
             start={settings.start}
             onStarted={settings.onStarted}
+            onAddDevicesStarted={
+              addDevicesRequest &&
+              (() =>
+                setRoutes((current) =>
+                  current.at(-1) === addDevicesRequest
+                    ? [
+                        ...current.slice(0, -1),
+                        afterAddDevices(addDevicesRequest),
+                      ]
+                    : current,
+                ))
+            }
           />
         </SystemPageBoundary>
       ) : route?.app === placePages ? (

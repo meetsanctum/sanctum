@@ -33,12 +33,18 @@ describe("Settings → Devices' groups", () => {
       device("x", "unknown"),
       device("remote", "button"),
       device("desk", "light"),
+      device("plug", "plug"),
+      device("motion", "motion"),
       device("door", "contact"),
+      device("temperature", "sensor"),
       device("lamp", "light"),
     ]);
     expect(groups.map((group) => group.title)).toEqual([
       "Lights",
+      "Environment",
       "Security",
+      "Presence",
+      "Switches",
       "Buttons",
       "Unknown Devices",
     ]);

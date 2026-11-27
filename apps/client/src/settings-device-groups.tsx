@@ -1,11 +1,11 @@
 import type { DeviceInfo } from "@meetsanctum/app-sdk";
 import { useHomeClock } from "@meetsanctum/ui-sdk";
 import { CircleAlert, Radio } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 import { categoryLooks } from "./category-looks";
 import { AreaGroup, AreaRow } from "./components";
-import { firmwareStatus, useMinuteClock } from "./device-firmware";
+import { firmwareStatus } from "./device-firmware";
 import { deviceGroups, groupCounts, unknownGroup } from "./device-groups";
 import { deviceStatus } from "./device-line";
 
@@ -25,26 +25,33 @@ export function returnToGroup(id: string) {
 
 export function DeviceGroupList(props: {
   devices: readonly DeviceInfo[];
+  now: number;
   onOpen: (group: string) => void;
+  focusFallback: RefObject<HTMLButtonElement | null>;
 }) {
   const clock = useHomeClock();
-  const now = useMinuteClock();
+  const { now, focusFallback } = props;
   const rows = useRef(new Map<string, HTMLButtonElement>());
   const groups = deviceGroups(props.devices);
 
   useEffect(() => {
     const id = returningFrom;
     returningFrom = undefined;
-    if (id) rows.current.get(id)?.focus();
-  }, []);
+    if (id) (rows.current.get(id) ?? focusFallback.current)?.focus();
+  }, [focusFallback]);
 
+  // Update blocking only changes the wording, which the counts don't show.
   const needsAttention = (device: DeviceInfo) =>
-    deviceStatus(
-      clock,
-      device,
-      firmwareStatus(device, props.devices, undefined, now),
-      now,
-    )?.tone === "problem";
+    deviceStatus(clock, device, firmwareStatus(device, [], undefined, now), now)
+      ?.tone === "problem";
+
+  if (groups.length === 0) {
+    return (
+      <p className="m-0 text-[13px] font-medium text-muted-foreground">
+        No devices yet.
+      </p>
+    );
+  }
 
   return (
     <AreaGroup>

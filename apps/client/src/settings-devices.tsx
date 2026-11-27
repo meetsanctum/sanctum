@@ -94,14 +94,19 @@ export function DevicesSection(props: {
   // The devices the shell already has, which the page shows until its own
   // read answers, so it never opens blank.
   known?: readonly DeviceInfo[];
+  knownRooms?: Places["rooms"];
 }) {
   const clock = useHomeClock();
   const [devices, setDevices] = useState<DeviceInfo[] | undefined>(() =>
     props.known?.length ? [...props.known].sort(byName) : undefined,
   );
-  const [rooms, setRooms] = useState<Places["rooms"]>([]);
+  const [rooms, setRooms] = useState<Places["rooms"]>(
+    () => props.knownRooms ?? [],
+  );
   // Whether each device with a history keeps it.
   const [kept, setKept] = useState<Record<string, boolean>>({});
+  const [initialReadDone, setInitialReadDone] = useState(false);
+  const addButton = useRef<HTMLButtonElement>(null);
   const [editing, setEditing] = useState<Editing>();
   // What drivers found and could add, which the heading says.
   const addable = useAdding(props.live);
@@ -151,12 +156,17 @@ export function DevicesSection(props: {
   const refresh = useCallback(async () => {
     const request: Pending = { updates: [], kept: {} };
     pending.current = request;
+    const devicesRead = coreDevices();
+    const placesRead = coreJson<Places>("/api/places");
+    // Without them, the menus leave the choice out.
+    const historiesRead = coreJson<HistoryKept[]>("/api/history/devices").catch(
+      () => [],
+    );
     try {
       const [nextDevices, places, histories] = await Promise.all([
-        coreDevices(),
-        coreJson<Places>("/api/places"),
-        // Without them, the menus leave the choice out.
-        coreJson<HistoryKept[]>("/api/history/devices").catch(() => []),
+        devicesRead,
+        placesRead,
+        historiesRead,
       ]);
       if (pending.current !== request) return;
       setKept({
@@ -173,7 +183,12 @@ export function DevicesSection(props: {
       );
       setRooms(request.rooms ?? places.rooms);
     } finally {
-      if (pending.current === request) pending.current = undefined;
+      // If another read failed first, let this one finish before retrying it.
+      await historiesRead;
+      if (pending.current === request) {
+        pending.current = undefined;
+        setInitialReadDone(true);
+      }
     }
   }, []);
 
@@ -181,6 +196,7 @@ export function DevicesSection(props: {
   // its recording choice before offering it in the menu.
   useEffect(() => {
     if (
+      !initialReadDone ||
       !devices?.some(
         (device) =>
           kept[device.id] === undefined &&
@@ -212,7 +228,7 @@ export function DevicesSection(props: {
     return () => {
       current = false;
     };
-  }, [devices, kept]);
+  }, [devices, kept, initialReadDone]);
 
   const changed = useCallback(
     (device: DeviceInfo) =>
@@ -491,21 +507,23 @@ export function DevicesSection(props: {
           .join(" · ") ||
           undefined)
       }
-      action={<Button onClick={() => setAdding(true)}>Add devices</Button>}
+      action={
+        <Button ref={addButton} onClick={() => setAdding(true)}>
+          Add devices
+        </Button>
+      }
       page={props.page ?? null}
       hideBody={!listed}
       bare={isList && !!devices?.length}
     >
       {devices &&
         listed &&
-        (isList && devices.length === 0 ? (
-          <p className="m-0 text-[13px] font-medium text-muted-foreground">
-            No devices yet.
-          </p>
-        ) : isList ? (
+        (isList ? (
           <DeviceGroupList
             devices={devices}
+            now={now}
             onOpen={(group) => props.onOpenGroup?.(group)}
+            focusFallback={addButton}
           />
         ) : listed.length === 0 ? (
           // Its last device went while its page was open: the page stays

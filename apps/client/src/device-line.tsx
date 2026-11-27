@@ -99,7 +99,7 @@ export function DeviceLine(props: {
             aria-hidden="true"
             className={cn(
               "size-3.5 shrink-0",
-              status?.tone === "busy" && "animate-spin",
+              status?.tone === "busy" && "motion-safe:animate-spin",
               status?.tone === "problem" && "text-destructive",
             )}
           />

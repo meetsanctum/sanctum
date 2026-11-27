@@ -5,6 +5,8 @@ import {
   type DeviceInfo,
 } from "@meetsanctum/app-sdk";
 
+import { categoryOrder } from "./category-looks";
+
 // Settings → Devices lists the home's devices by category, each in the one
 // category of its type, so a motion sensor that measures is under Presence
 // alone, and a device no category holds under Unknown Devices, last. Each
@@ -62,10 +64,7 @@ export function deviceGroups(devices: readonly DeviceInfo[]) {
     if (listed) listed.push(device);
     else byGroup.set(group, [device]);
   }
-  const order: DeviceGroup[] = [
-    ...deviceCategories.map((category) => category.id),
-    unknownGroup,
-  ];
+  const order = [...categoryOrder, unknownGroup] as const;
   return order.flatMap((id) => {
     const listed = byGroup.get(id);
     return listed

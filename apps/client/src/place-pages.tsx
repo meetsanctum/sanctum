@@ -19,7 +19,7 @@ import {
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 
 import { appsNotRunning, attentionTile, needingAttention } from "./attention";
-import { categoryLooks } from "./category-looks";
+import { categoryLooks, categoryOrder } from "./category-looks";
 import {
   contactsOf,
   contactsStatus,
@@ -217,21 +217,6 @@ function Sections(props: {
     />
   );
 }
-
-// The sidebar and Home's status row share this category order. Lights leads
-// the categories, the one with something to press, followed by Environment,
-// Security and Presence, as in a room's line of readings. Media comes before
-// Buttons. On Home, the Attention tile comes before the categories while
-// there's a problem.
-const categoryOrder = [
-  "lights",
-  "environment",
-  "security",
-  "presence",
-  "switches",
-  "media",
-  "buttons",
-] as const satisfies DeviceCategory[];
 
 const sidebarCategories = categoryOrder.map((id) =>
   deviceCategories.find((each) => each.id === id)!,

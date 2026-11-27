@@ -106,11 +106,13 @@ export function SettingsPage(props: {
   // has started.
   start?: SetupTarget;
   onStarted?: () => void;
+  onAddDevicesStarted?: () => void;
 }) {
-  const { start, onStarted, backTo } = props;
+  const { start, onStarted, onAddDevicesStarted, backTo } = props;
   useEffect(() => {
     if (start) onStarted?.();
-  }, [start, onStarted]);
+    onAddDevicesStarted?.();
+  }, [start, onStarted, onAddDevicesStarted]);
   const rooms = props.devices.places?.rooms ?? [];
   const back = backTo ? <BackButton to={backTo} onBack={props.back} /> : null;
   const openStatus = () => props.open(systemSettingsPage);
@@ -215,6 +217,7 @@ export function SettingsPage(props: {
           notSetUp={props.status?.notSetUp}
           page={back}
           known={props.devices.devices}
+          knownRooms={props.devices.places?.rooms}
           onOpenGroup={(id) => props.open(deviceGroupSettingsPage, { id })}
         />
       );
@@ -229,6 +232,7 @@ export function SettingsPage(props: {
           notSetUp={props.status?.notSetUp}
           group={group}
           known={props.devices.devices}
+          knownRooms={props.devices.places?.rooms}
           // Back puts focus on the category's row it came from.
           page={
             backTo ? (
