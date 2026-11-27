@@ -194,6 +194,33 @@ describe("the run tool", () => {
     );
   });
 
+  // The Assistant's German reply goes by this place in the words, to say
+  // where running a mood is switched on.
+  it("names Settings' page for AI agents when a core area it needs is off", async () => {
+    const { client, core, token } = await household();
+    const [relax] = await moodsSeen(client);
+    const off = await post(
+      core,
+      "/api/agents/can-use/area",
+      { id: "devices.control:light", on: false },
+      { token },
+    );
+    expect(off.statusCode).toBe(200);
+
+    const refused = await call(client, "run", {
+      app: relax!.app,
+      key: relax!.key,
+    });
+    expect(refused).toEqual({
+      isError: true,
+      content: {
+        error: "not_allowed",
+        message:
+          "“Run a mood” needs “Control your lights”, which is switched off for AI agents in Settings, What AI Agents Can Use.",
+      },
+    });
+  });
+
   it("is refused while moods are off for AI agents, as Run a mood is", async () => {
     const { client, offer } = await household();
     const [relax] = await moodsSeen(client);
