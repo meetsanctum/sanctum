@@ -264,20 +264,30 @@ describe("the Assistant's page", () => {
     expect(props.addDevices).toHaveBeenCalledOnce();
   });
 
-  it("says the microphones are off when every speaker is muted, over ready", async () => {
+  it("says the microphones are off when every online speaker is muted", async () => {
     const { client, push } = fakeClient({
       hearing: { state: "ready", language: "en", activeLanguage: "en" },
       devices: [
-        speaker("office-speaker", "Office Speaker", "office", { muted: true }),
+        speaker(office.id, office.name, office.roomId, { muted: true }),
+        speaker("kitchen-speaker", "Kitchen Speaker", "kitchen", {
+          offline: true,
+        }),
       ],
     });
     await show(client);
 
-    expect(text()).toContain("Microphones off");
+    expect(container.querySelector("h2")?.textContent).toBe("Microphones off");
     expect(text()).not.toContain("Ready in English");
 
-    push({ type: "device", id: "office-speaker", device: office });
+    push({ type: "device", id: office.id, device: office });
     expect(text()).toContain("Ready in English");
+    expect(text()).not.toContain("Microphones off");
+
+    push({
+      type: "device",
+      id: office.id,
+      device: { ...office, availability: "offline" },
+    });
     expect(text()).not.toContain("Microphones off");
   });
 

@@ -59,10 +59,10 @@ export function firstTry(language: RequestLanguage, room: string) {
 export const assignSpeakerRoom =
   "Assign a room to a smart speaker to try a command.";
 
-/** What the first card says when every smart speaker's microphones are off. */
+/** What the first card says when every online smart speaker is muted. */
 export const mutedWords = {
   title: "Microphones off",
-  help: "Every smart speaker's microphones are off. Turn them on from a speaker's page.",
+  help: "All online smart speakers are muted. Turn their microphones on from a speaker's page.",
 };
 
 export type HearingWords = {

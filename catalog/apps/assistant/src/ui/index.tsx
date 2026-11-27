@@ -95,18 +95,16 @@ function HearingLine(props: { hearing: Hearing }) {
 function HearingCard(props: {
   hearing: Hearing;
   room: string | null;
-  /** Whether every smart speaker's microphones are off. */
+  /** Whether at least one speaker is online and every online speaker is muted. */
   allMuted: boolean;
   page: PageProps;
 }) {
-  const { page, room } = props;
-  // Ready to hear, but nothing listens: the microphones say so first.
-  if (props.allMuted && props.hearing.state === "ready") {
+  const { hearing, page, room } = props;
+  const id = useId();
+  if (props.allMuted && hearing.state === "ready") {
     return <MutedCard />;
   }
-  const { hearing } = props;
   const words = hearingWords(hearing);
-  const id = useId();
   return (
     <section
       aria-labelledby={id}
@@ -341,9 +339,12 @@ function MainPage(page: PageProps) {
   const choose = async (language: RequestLanguage) =>
     setChoiceFailed(!(await assistant.choose(language)));
   const { language, activeLanguage } = hearing;
+  const onlineSpeakers = speakers.filter(
+    (speaker) => speaker.availability === "online",
+  );
   const allMuted =
-    speakers.length > 0 &&
-    speakers.every((speaker) => listeningAudio(speaker)?.state?.muted);
+    onlineSpeakers.length > 0 &&
+    onlineSpeakers.every((speaker) => listeningAudio(speaker)?.state?.muted);
   const hearingCard = (
     <HearingCard
       hearing={hearing}
