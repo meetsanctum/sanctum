@@ -45,14 +45,17 @@ export function sizeWords(bytes: number) {
   return `${Math.max(0, Math.floor(megabytes))} MB`;
 }
 
-/** The memory it may use, with the services it starts, in words. */
+/**
+ * The memory it may use, in words: its own container's cap, or about what
+ * it takes with the services it starts, whose allowances aren't all caps.
+ */
 export function memoryWords(app: AvailableApp) {
   const { servicesMemory } = app;
-  if (servicesMemory === null) return "Total unavailable";
+  if (servicesMemory === null) return "Not known now";
   if (servicesMemory === undefined) {
     return `Up to ${sizeWords(app.memory * mebibyte)}`;
   }
-  return `Estimated ${sizeWords((app.memory + servicesMemory) * mebibyte)}`;
+  return `About ${sizeWords((app.memory + servicesMemory) * mebibyte)}`;
 }
 
 /** What it keeps on Sanctum, its services' where they keep more. */

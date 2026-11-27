@@ -30,7 +30,7 @@ describe("a permission's words", () => {
       icon: "radio-tower",
     });
     expect(permissionWords("services:ollama").title).toBe(
-      "Run AI models locally",
+      "Run AI models at home",
     );
     expect(permissionWords("services:mosquitto").title).toBe("Use Mosquitto");
     expect(permissionWords("services:redis").title).toBe("Use redis");

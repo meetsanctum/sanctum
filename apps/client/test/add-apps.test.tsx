@@ -219,9 +219,9 @@ describe("Add apps", () => {
   });
 
   it.each([
-    ["ollama", 4096, "Estimated 4.1 GB", "A few GB per model"],
-    ["ollama", null, "Total unavailable", "A few GB per model"],
-    ["zigbee2mqtt", 288, "Estimated 416 MB", "Up to 256 MB"],
+    ["ollama", 4096, "About 4.1 GB", "A few GB per model"],
+    ["ollama", null, "Not known now", "A few GB per model"],
+    ["zigbee2mqtt", 288, "About 416 MB", "Up to 256 MB"],
   ] as const)(
     "shows the resource totals with %s and a service allowance of %s",
     async (service, servicesMemory, memory, storage) => {
