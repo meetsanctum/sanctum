@@ -177,6 +177,7 @@ export function ClientsSection(props: {
                 />
                 <ClientMenu
                   client={client}
+                  person={person?.name}
                   onEdit={(action) => setEditing({ action, client })}
                 />
               </li>
@@ -209,8 +210,11 @@ export function ClientsSection(props: {
   );
 }
 
+// Named by the device and whose it is: two people's devices can share a
+// name, such as two Macs called MacBook Air.
 function ClientMenu(props: {
   client: ClientInfo;
+  person?: string;
   onEdit: (action: Editing["action"]) => void;
 }) {
   return (
@@ -219,7 +223,11 @@ function ClientMenu(props: {
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label={`${props.client.name}: more`}
+          aria-label={
+            props.person
+              ? `${props.client.name}, ${props.person}: more`
+              : `${props.client.name}: more`
+          }
           className="ms-auto"
         >
           <EllipsisVertical />

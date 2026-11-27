@@ -14,14 +14,16 @@ import {
 
 export type Account = {
   person: PersonInfo;
+  /** Opens the person's own page in Settings → People. */
+  onProfile: () => void;
   onSettings: () => void;
   onSignOut: () => void;
 };
 
 // The signed-in person at the foot of the sidebar: their avatar alone, in
 // the bottom left corner, named for screen readers and in its tooltip; the
-// device needs no saying. Its menu opens upwards. Profile has no screen, so
-// it is dimmed.
+// device needs no saying. Its menu opens upwards. Profile is the person's
+// own page in Settings → People.
 export function UserMenu(
   props: Account & {
     isInert?: boolean;
@@ -62,7 +64,7 @@ export function UserMenu(
         className="w-56"
       >
         <DropdownMenuGroup>
-          <DropdownMenuItem disabled>
+          <DropdownMenuItem onSelect={props.onProfile}>
             <UserRound />
             Profile
           </DropdownMenuItem>

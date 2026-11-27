@@ -6,6 +6,8 @@ import type { SetupTarget } from "./setup-guide";
 import {
   appSettingsPage,
   devicesSettingsPage,
+  peopleSettingsPage,
+  personSettingsPage,
   settingsApp,
   settingsPageTitle,
   setupPage,
@@ -64,6 +66,16 @@ export function useSettingsNavigation(
     show([overview, area]);
   }
 
+  // A person's page, under People, as if opened from there.
+  function openPerson(id: string) {
+    setSetupStep(undefined);
+    show([
+      overview,
+      { app: settingsApp.id, page: peopleSettingsPage, params: {} },
+      { app: settingsApp.id, page: personSettingsPage, params: { id } },
+    ]);
+  }
+
   function openSetup(step: SetupTarget) {
     setSetupStep(step);
     show([
@@ -83,6 +95,7 @@ export function useSettingsNavigation(
   return {
     openSettings,
     openOverview,
+    openPerson,
     openSetup,
     backTo,
     start:

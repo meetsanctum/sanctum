@@ -92,6 +92,10 @@ export function HomeSidebar(props: {
       account={
         props.account && {
           ...props.account,
+          onProfile: () => {
+            props.account?.onProfile();
+            layout.close();
+          },
           onSettings: () => {
             props.account?.onSettings();
             layout.close();

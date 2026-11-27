@@ -200,11 +200,25 @@ describe("Settings → Linked Devices", () => {
     await act(async () => item.click());
   }
 
+  it("names each device's menu with whose it is, as two people's devices can share a name", () => {
+    expect(
+      [
+        ...document.querySelectorAll<HTMLButtonElement>(
+          "li button[aria-label$=': more']",
+        ),
+      ].map((each) => each.getAttribute("aria-label")),
+    ).toEqual([
+      `Maya's MacBook, ${maya.name}: more`,
+      `Maya's iPhone, ${maya.name}: more`,
+      "Kitchen tablet: more",
+    ]);
+  });
+
   it("signs a device out from its menu, saying what that means, but never this one", async () => {
     await act(async () =>
       document
         .querySelector<HTMLButtonElement>(
-          `button[aria-label="${macbook.name}: more"]`,
+          `button[aria-label="${macbook.name}, ${maya.name}: more"]`,
         )!
         .dispatchEvent(
           new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
@@ -247,7 +261,7 @@ describe("Settings → Linked Devices", () => {
   });
 
   it("tells the person who needs to sign in again on a personal device", async () => {
-    await editClient(phone.name, "Sign out");
+    await editClient(`${phone.name}, ${maya.name}`, "Sign out");
     const dialog = document.querySelector("[role=dialog]")!;
     expect(dialog.textContent).toContain("Maya signs in again to use it.");
   });
@@ -452,7 +466,7 @@ describe("Settings → Linked Devices", () => {
     await type(document.querySelector("[role=dialog] input")!, "Hall tablet");
     await act(async () => button("Save").click());
     await act(async () => button("Cancel").click());
-    await editClient("Maya's MacBook", "Rename");
+    await editClient(`Maya's MacBook, ${maya.name}`, "Rename");
     await act(async () => finishRename(undefined));
 
     const input = document.querySelector<HTMLInputElement>(

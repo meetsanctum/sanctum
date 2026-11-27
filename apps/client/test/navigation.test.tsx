@@ -357,11 +357,39 @@ describe("the dashboard's menu", () => {
 });
 
 describe("the sidebar", () => {
+  it("opens the signed-in person's own page from Profile in their menu", async () => {
+    const onProfile = vi.fn();
+    await render(
+      <Navigation
+        account={{
+          person: { id: "maya", name: "Maya", colour: "#ff9500", avatar: null },
+          onProfile,
+          onSettings() {},
+          onSignOut() {},
+        }}
+      />,
+    );
+    await act(async () =>
+      button("Maya's menu").dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+    );
+    const profile = [
+      ...document.querySelectorAll<HTMLElement>("[role=menuitem]"),
+    ].find((item) => item.textContent === "Profile")!;
+    expect(profile.hasAttribute("data-disabled")).toBe(false);
+    await act(async () => profile.click());
+
+    expect(onProfile).toHaveBeenCalledOnce();
+    expect(document.querySelector("[role=menu]")).toBeNull();
+  });
+
   it.each(["connection veil", "collapsed sidebar"])(
     "closes the docked account menu under a %s",
     async (state) => {
       const account: Account = {
         person: { id: "maya", name: "Maya", colour: "#ff9500", avatar: null },
+        onProfile() {},
         onSettings() {},
         onSignOut() {},
       };

@@ -404,6 +404,7 @@ function HomeScreen(
     if (!onDashboard || dashboard?.kind !== "home") setEditingHome(false);
   }, [onDashboard, dashboard?.kind]);
   const settings = useSettingsNavigation(routes, setRoutes, installed);
+  const signedIn = me?.person;
   const shownDashboardId = onDashboard ? dashboard?.id : undefined;
   // Reset before drawing a different page or dashboard, including when
   // entering or leaving Edit Home.
@@ -508,9 +509,10 @@ function HomeScreen(
               showDashboard={showDashboard}
               go={go}
               account={
-                me?.person
+                signedIn
                   ? {
-                      person: me.person,
+                      person: signedIn,
+                      onProfile: () => settings.openPerson(signedIn.id),
                       onSettings: settings.openSettings,
                       onSignOut: signOut,
                     }

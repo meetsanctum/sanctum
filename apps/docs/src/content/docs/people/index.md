@@ -44,8 +44,9 @@ next try is right. Then it works again.
 
 ## Change your password
 
-On a Mac signed in as you, open your own page in **Settings → People** and
-choose **Change password** under **Sign-In**. Enter your current password,
+On a Mac signed in as you, open your own page: choose **Profile** in the
+menu under your picture at the bottom of the sidebar, or your name in
+**Settings → People**. Then choose **Change password** under **Sign-In**. Enter your current password,
 then your new one twice, and choose **Change password**.
 
 Your current password is checked on your Mac before anything changes, and
