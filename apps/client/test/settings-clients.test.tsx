@@ -59,7 +59,7 @@ const tablet: ClientInfo = {
   reduceEffects: false,
   reduceMotion: false,
 };
-const tabletMenu = "Shared device, Kitchen tablet";
+const tabletMenu = "Kitchen tablet, shared";
 
 describe("a client's detail", () => {
   it.each([
@@ -225,9 +225,9 @@ describe("Settings → Linked Devices", () => {
         ),
       ].map((each) => each.getAttribute("aria-label")),
     ).toEqual([
-      "Personal device, MacBook Air, Maya Chen: more",
-      "Personal device, MacBook Air, Sam: more",
-      "Shared device, MacBook Air, Maya Chen: more",
+      "MacBook Air, Maya Chen: more",
+      "MacBook Air, Sam: more",
+      "MacBook Air, Maya Chen, shared: more",
     ]);
   });
 
@@ -235,7 +235,7 @@ describe("Settings → Linked Devices", () => {
     await act(async () =>
       document
         .querySelector<HTMLButtonElement>(
-          `button[aria-label="Personal device, ${macbook.name}, ${maya.name}: more"]`,
+          `button[aria-label="${macbook.name}, ${maya.name}: more"]`,
         )!
         .dispatchEvent(
           new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
@@ -278,10 +278,7 @@ describe("Settings → Linked Devices", () => {
   });
 
   it("tells the person who needs to sign in again on a personal device", async () => {
-    await editClient(
-      `Personal device, ${phone.name}, ${maya.name}`,
-      "Sign out",
-    );
+    await editClient(`${phone.name}, ${maya.name}`, "Sign out");
     const dialog = document.querySelector("[role=dialog]")!;
     expect(dialog.textContent).toContain("Maya signs in again to use it.");
   });
@@ -486,10 +483,7 @@ describe("Settings → Linked Devices", () => {
     await type(document.querySelector("[role=dialog] input")!, "Hall tablet");
     await act(async () => button("Save").click());
     await act(async () => button("Cancel").click());
-    await editClient(
-      `Personal device, ${macbook.name}, ${maya.name}`,
-      "Rename",
-    );
+    await editClient(`${macbook.name}, ${maya.name}`, "Rename");
     await act(async () => finishRename(undefined));
 
     const input = document.querySelector<HTMLInputElement>(

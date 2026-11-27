@@ -217,16 +217,20 @@ function ClientMenu(props: {
   person?: string;
   onEdit: (action: Editing["action"]) => void;
 }) {
-  const kind =
-    props.client.kind === "shared" ? "Shared device" : "Personal device";
-  const owner = props.person ? `, ${props.person}` : "";
+  // Whose it is, as its detail line starts: a person, or shared.
+  const whose =
+    props.client.kind === "shared" ? "shared" : (props.person ?? "");
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label={`${kind}, ${props.client.name}${owner}: more`}
+          aria-label={
+            whose
+              ? `${props.client.name}, ${whose}: more`
+              : `${props.client.name}: more`
+          }
           className="ms-auto"
         >
           <EllipsisVertical />
