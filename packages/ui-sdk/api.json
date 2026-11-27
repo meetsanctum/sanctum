@@ -2725,7 +2725,7 @@
       "import type { AppInfo, DeviceInfo, LiveMessage, LivePress, TemperatureUnit } from \"@meetsanctum/app-sdk\";",
       "import type { HourCycle } from \"@meetsanctum/app-sdk/clock\";",
       "import type { PageParams } from \"../app-ui\";",
-      "export declare const frameBridge = 5;",
+      "export declare const frameBridge = 4;",
       "export type FrameHello = {",
       "    sanctum: \"hello\";",
       "    code: string;",
