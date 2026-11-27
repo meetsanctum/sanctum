@@ -2,6 +2,7 @@ import type { AppInfo, DashboardInfo } from "@meetsanctum/app-sdk";
 import type { Me } from "@meetsanctum/auth-protocol";
 import {
   Button,
+  mainPage,
   type createLiveFeed,
   type PageParams,
   type Tile,
@@ -211,11 +212,13 @@ function HomePageWithDevices({
             apps={installed}
             onAppChanged={appChanged}
             onAppAdded={appAdded}
-            onOpenApp={(appId) => {
-              const page = installed.find((each) => each.id === appId)
-                ?.pages[0];
-              if (page) setRoutes([{ app: appId, page, params: {} }]);
-            }}
+            onOpenApp={(appId) =>
+              setRoutes((current) =>
+                current.at(-1) === route
+                  ? [{ app: appId, page: mainPage, params: {} }]
+                  : current,
+              )
+            }
             homeBackground={
               dashboardBackground[
                 dashboards?.find((each) => each.kind === "home")?.background ??

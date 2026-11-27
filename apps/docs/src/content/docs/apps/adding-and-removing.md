@@ -12,8 +12,10 @@ sidebar:
 2. The sheet shows what the app adds to your home, how much memory it can
    use and the permissions it needs or asks to start with, together with
    the reason for each.
-3. Choose **Add** followed by the app's name, such as **Add Weather**. Its
-   settings open so you can see whether it's running.
+3. Choose **Add** followed by the app's name, such as **Add Weather**. The
+   app opens, as it does from **Apps**: its own page, where it gets going,
+   or for an app without one, such as a driver, a page that says what it
+   does. Its settings stay in **Settings → Apps**.
 
 **Add Apps** doesn't show when your home already has every app.
 
