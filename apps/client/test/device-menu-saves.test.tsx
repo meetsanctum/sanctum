@@ -5,6 +5,11 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  contrast,
+  themeRgb,
+  themeTokens,
+} from "../../../packages/ui-sdk/test/theme-colours";
 import { coreJson } from "../src/core-fetch";
 import type { OnHome } from "../src/dashboards";
 import { DevicesSection } from "../src/settings-devices";
@@ -145,6 +150,47 @@ describe("what a device's menu saves", () => {
   const line = () => container.querySelector("li")!.textContent;
   const announced = () => container.querySelector("[role=status]")?.textContent;
   const office = places.rooms[0]!;
+
+  it("keeps the focused Remove item at 4.5:1 contrast in both modes", async () => {
+    await show();
+    await openMenu();
+    const remove = items("menuitem").find(
+      (item) => item.textContent === "Remove",
+    )!;
+    await act(async () => remove.focus());
+    expect(document.activeElement).toBe(remove);
+    expect(remove.dataset.variant).toBe("destructive");
+    expect(
+      remove.closest('[role="menu"]')?.classList.contains("bg-popover"),
+    ).toBe(true);
+    expect(
+      [...remove.classList].filter((name) => name.includes("focus:bg-")),
+    ).toEqual(["focus:bg-accent", "dark:focus:bg-foreground/6"]);
+    expect(
+      remove.classList.contains(
+        "data-[variant=destructive]:focus:text-destructive",
+      ),
+    ).toBe(true);
+
+    for (const mode of ["day", "evening"]) {
+      const tokens = themeTokens(mode);
+      const accent = tokens.get("--color-accent")!;
+      const dayOpacity =
+        /^color-mix\(in srgb, var\(--ink\) (\d+)%, transparent\)$/.exec(
+          accent,
+        )?.[1];
+      const opacity = mode === "day" ? Number(dayOpacity) / 100 : 0.06;
+      const ink = themeRgb(tokens, "--ink");
+      const popover = themeRgb(tokens, "--color-popover");
+      const highlight = popover.map(
+        (channel, index) => channel * (1 - opacity) + ink[index]! * opacity,
+      );
+      expect(
+        contrast(themeRgb(tokens, "--color-destructive"), highlight),
+        mode,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
 
   it("says so on the device's line when its room could not be saved, until the next try", async () => {
     await show();
