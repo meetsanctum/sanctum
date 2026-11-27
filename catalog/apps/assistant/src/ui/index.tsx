@@ -58,13 +58,13 @@ function StepBar(props: { label: string }) {
     <div className="flex flex-col gap-1.5">
       <span className="text-sm font-medium">{props.label}</span>
       <div
-        className="h-1.5 overflow-hidden rounded-full bg-foreground/10"
+        className="h-1.5 overflow-hidden bg-foreground/10"
         role="progressbar"
         aria-label={props.label}
       >
         <span
           ref={segment}
-          className={`block h-full w-[30%] rounded-full bg-foreground ${isStill ? "ml-[35%]" : ""}`}
+          className={`block h-full w-[30%] bg-foreground ${isStill ? "ml-[35%]" : ""}`}
         />
       </div>
     </div>

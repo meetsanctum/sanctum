@@ -287,6 +287,50 @@ describe("the Assistant's page", () => {
     expect(container.querySelector('[role="progressbar"]')).toBeNull();
   });
 
+  it("stops and centres the progress segment when Reduce motion is turned on", async ({
+    onTestFinished,
+  }) => {
+    const { client } = fakeClient({
+      hearing: { state: "downloading", language: "en", activeLanguage: null },
+      devices: [office],
+    });
+    const original = Object.getOwnPropertyDescriptor(
+      Element.prototype,
+      "animate",
+    );
+    const cancel = vi.fn();
+    const animate = vi.fn(() => ({ cancel }));
+    Object.defineProperty(Element.prototype, "animate", {
+      configurable: true,
+      value: animate,
+    });
+    onTestFinished(() => {
+      delete document.documentElement.dataset.motion;
+      if (original)
+        Object.defineProperty(Element.prototype, "animate", original);
+      else Reflect.deleteProperty(Element.prototype, "animate");
+    });
+
+    await show(client);
+
+    const segment = container.querySelector('[role="progressbar"] > span');
+    expect(animate).toHaveBeenCalledExactlyOnceWith(
+      [{ transform: "translateX(-100%)" }, { transform: "translateX(334%)" }],
+      expect.objectContaining({ iterations: Infinity }),
+    );
+    expect(animate.mock.contexts[0]).toBe(segment);
+    expect(segment?.classList.contains("ml-[35%]")).toBe(false);
+    expect(cancel).not.toHaveBeenCalled();
+
+    await act(async () => {
+      document.documentElement.dataset.motion = "reduced";
+    });
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(animate).toHaveBeenCalledOnce();
+    expect(segment?.classList.contains("ml-[35%]")).toBe(true);
+  });
+
   it("says why it can't listen, with settings when it's off", async () => {
     const { client } = fakeClient({
       hearing: {

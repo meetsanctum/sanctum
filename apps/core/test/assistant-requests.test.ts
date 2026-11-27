@@ -245,6 +245,14 @@ describe("who answers requests", () => {
     );
   });
 
+  it("accepts a kept Assistant package with bare optional choices", () => {
+    const manifest = {
+      ...toStaticManifest(assistant(echo)),
+      sentences: { en: ["undo [that|it]"] },
+    };
+    expect(() => contractOf(manifest)).not.toThrow();
+  });
+
   it("is reached over the socket when the Assistant runs in its own container", async () => {
     const { core } = await apart(assistant(echo));
     const maya = await claimed(core);

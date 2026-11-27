@@ -82,13 +82,13 @@ describe("the Assistant's sentences", () => {
     ).toEqual([]);
   });
 
-  it("give an optional part's choices round brackets of their own", () => {
-    expect(sentenceIssues({ de: ["mach [das|die] Licht aus"] })).toEqual([
-      expect.stringContaining(
-        "an optional part's choices need round brackets: [(a|b)]",
-      ),
-    ]);
-    expect(sentenceIssues({ de: ["mach [(das|die)] Licht aus"] })).toEqual([]);
+  it("requires round brackets for optional choices when defining the Assistant", () => {
+    expect(() => assistant({ de: ["mach [das|die] Licht aus"] })).toThrow(
+      "an optional part's choices need round brackets: [(a|b)]",
+    );
+    expect(() =>
+      assistant({ de: ["mach [(das|die)] Licht aus"] }),
+    ).not.toThrow();
   });
 
   it("keep to their limits per language", () => {
