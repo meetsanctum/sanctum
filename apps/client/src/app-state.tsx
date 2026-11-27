@@ -325,27 +325,28 @@ function noticeOf(
     }
     case "restarting":
     case "starting":
-      // A first start shows on its pages, which open as it's added; its
-      // settings say it beside their head.
-      if (isAdding(app)) {
-        return permissionsAre === "below"
-          ? null
-          : {
-              Icon: RotateCw,
-              title: `Adding ${name}`,
-              line: "It opens here once it's running.",
-              isUnderWay: true,
-            };
-      }
-      return app.run?.isFirstStart === true && permissionsAre === "below"
-        ? null
-        : {
+      // A first start someone added shows on its pages, which open onto it,
+      // and one that failed says why there; its settings say it beside their
+      // head. A first start as the core starts goes on as it was.
+      if (app.run?.isFirstStart === true) {
+        if (permissionsAre === "below") return null;
+        if (isAdding(app)) {
+          return {
             Icon: RotateCw,
-            title: `${name} is ${app.state === "restarting" || app.run?.lastFailure ? "restarting" : "starting"}`,
-            line: app.run?.lastFailure
-              ? `${whyItStopped(app)}, and it starts again by itself.`
-              : "It starts again by itself.",
+            title: `Adding ${name}`,
+            line: "It opens here once it's running.",
+            isUnderWay: true,
           };
+        }
+        if (app.state === "starting" && !app.run.lastFailure) return null;
+      }
+      return {
+        Icon: RotateCw,
+        title: `${name} is ${app.state === "restarting" || app.run?.lastFailure ? "restarting" : "starting"}`,
+        line: app.run?.lastFailure
+          ? `${whyItStopped(app)}, and it starts again by itself.`
+          : "It starts again by itself.",
+      };
     default:
       return null;
   }
@@ -419,12 +420,16 @@ function isFirstStarting(app: AppInfo) {
 }
 
 /**
- * Whether it's on its way up for the first time and nothing has gone wrong
- * yet: its pages say it's being added until it runs.
+ * Whether someone added it and its first start hasn't returned, with nothing
+ * gone wrong yet: its pages say it's being added until it runs. A first
+ * start as the core starts isn't one, though it's first for the supervisor.
  */
 function isAdding(app: AppInfo) {
   return (
-    isFirstStarting(app) && app.state === "starting" && !app.run?.lastFailure
+    isFirstStarting(app) &&
+    app.state === "starting" &&
+    app.run?.isAdding === true &&
+    !app.run.lastFailure
   );
 }
 

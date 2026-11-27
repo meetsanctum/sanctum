@@ -247,7 +247,9 @@ describe("its notice", () => {
   });
 
   it("says on its pages that it's being added, with a bar and nothing to press", async () => {
-    await notice(app("starting", { since, isFirstStart: true }));
+    await notice(
+      app("starting", { since, isFirstStart: true, isAdding: true }),
+    );
 
     expect(status()?.textContent).toContain("Adding Weather");
     expect(status()?.textContent).toContain("It opens here once it's running.");
@@ -278,8 +280,16 @@ describe("its notice", () => {
     }
   });
 
-  it("goes once it runs, leaving nothing in its place", async () => {
+  it("says nothing of a first start as the core starts, which adds nothing", async () => {
     await notice(app("starting", { since, isFirstStart: true }));
+
+    expect(status()).toBeNull();
+  });
+
+  it("goes once it runs, leaving nothing in its place", async () => {
+    await notice(
+      app("starting", { since, isFirstStart: true, isAdding: true }),
+    );
     expect(status()).not.toBeNull();
 
     await notice(app("running"));
