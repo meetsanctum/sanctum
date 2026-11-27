@@ -259,6 +259,34 @@ describe("createAnnouncements", () => {
     expect(await made.encoded).toBe(true);
   });
 
+  it("starts on whatever sound there is once it's due, short of the lead", async () => {
+    const served = await started();
+    const rate = 22_050;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const made = served.create(
+      "speaker",
+      network,
+      4180,
+      speech([rate / 2, rate * 3], gate),
+      undefined,
+      undefined,
+      { finishing: true, readyWithinMs: 30 },
+    );
+    try {
+      const first = await Promise.race([
+        made.ready,
+        new Promise<"waiting">((resolve) =>
+          setTimeout(() => resolve("waiting"), 500),
+        ),
+      ]);
+      expect(first).toBe(true);
+    } finally {
+      release();
+    }
+    expect(await made.encoded).toBe(true);
+  });
+
   it("has the rest wait their turn on a speaker, in order, until what's before them has played", async () => {
     const served = await started();
     // A tenth of a second of sound.

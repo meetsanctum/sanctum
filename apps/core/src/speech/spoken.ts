@@ -33,6 +33,8 @@ import type { SpeechTranscript } from "./words.js";
 
 /** How long after listening stops a reply may take before "One moment". */
 export const oneMomentAfterMs = 5_000;
+/** How long before "One moment" a reply starts on whatever sound it has. */
+const startsByMs = 250;
 
 /** What a speaker says on its own, in each language: kept ready once said. */
 export const spokenPhrases = {
@@ -259,6 +261,7 @@ export function createSpokenRequests(options: {
     language: SpeechLanguage,
     signal: AbortSignal,
     placeholder = false,
+    startsBy?: number,
   ) {
     const speech = options.speech();
     if (!speech) return null;
@@ -268,6 +271,9 @@ export function createSpokenRequests(options: {
         text: reply.text,
         language,
         ...(reply.confirmation ? { confirmation: true } : {}),
+        ...(startsBy === undefined
+          ? {}
+          : { readyWithinMs: Math.max(0, startsBy - now()) }),
         signal,
         onPlayback(finished) {
           // Successful playback falls back to this after allowing time for
@@ -400,6 +406,8 @@ export function createSpokenRequests(options: {
           result.reply,
           language,
           AbortSignal.any([run.signal, preparing.signal]),
+          false,
+          stopped + oneMomentAfterMs - startsByMs,
         );
         return { ...result, url };
       });

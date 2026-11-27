@@ -289,7 +289,14 @@ export function createAnnouncements(options: {
       {
         finishing = false,
         playbackGraceMs = 1_000,
-      }: { finishing?: boolean; playbackGraceMs?: number } = {},
+        readyWithinMs,
+      }: {
+        finishing?: boolean;
+        playbackGraceMs?: number;
+        // From then on, any playable sound is ready, short of the lead: a
+        // reply that has to start before "One moment" is said.
+        readyWithinMs?: number;
+      } = {},
     ) {
       const queue = byDevice.get(device) ?? [];
       if (queue.length >= maxPerSpeaker) throw new AnnouncementRefused("busy");
@@ -344,8 +351,18 @@ export function createAnnouncements(options: {
         announcement.chunks.push(bytes);
         for (const listener of [...announcement.listeners]) listener();
       };
+      let encoder: ReturnType<typeof createFlacEncoder> | null = null;
+      let isDue = false;
+      const due =
+        readyWithinMs === undefined
+          ? undefined
+          : setTimeout(() => {
+              isDue = true;
+              if (encoder && encoder.encodedSamples() > 0) sounded(true);
+            }, readyWithinMs);
+      due?.unref();
+      void ready.then(() => clearTimeout(due));
       const encoded = (async () => {
-        let encoder: ReturnType<typeof createFlacEncoder> | null = null;
         try {
           for await (const audio of speech(announcement.stop.signal)) {
             if (announcement.stop.signal.aborted) return false;
@@ -356,7 +373,8 @@ export function createAnnouncements(options: {
             announcement.samples += audio.samples.length;
             append(encoder.push(audio.samples));
             const lead = (announcement.rate * readyLeadMs) / 1000;
-            if (encoder.encodedSamples() >= lead) sounded(true);
+            const made = encoder.encodedSamples();
+            if (made >= lead || (isDue && made > 0)) sounded(true);
           }
           if (announcement.stop.signal.aborted) return false;
           if (!encoder || announcement.samples === 0) {
