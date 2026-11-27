@@ -1,5 +1,6 @@
 import {
   ActionError,
+  requestReplySchema,
   type AiToolAnswer,
   type AssistantRequestCall,
   type RequestContext,
@@ -109,9 +110,10 @@ async function ask(
 }
 
 describe("the Assistant's requests", () => {
-  it("changes the speaker's room's lights without reading the home", async () => {
+  it("changes the speaker's room's lights when no named light matches", async () => {
     const { calls, replies } = await ask("turn off the lights");
     expect(calls).toEqual([
+      { name: "home_overview", input: {} },
       {
         name: "lights",
         input: { place: { kind: "room", id: "room-office" }, to: "off" },
@@ -122,13 +124,41 @@ describe("the Assistant's requests", () => {
     ]);
   });
 
+  it.each(["speaker", "client"] as const)(
+    "chooses a named light over the room lights for a %s request",
+    async (from) => {
+      const named = {
+        ...overview,
+        devices: [
+          ...overview.devices,
+          { ...overview.devices[0], id: "device-lights", name: "Lights" },
+        ],
+      };
+      const { calls, replies } = await ask("turn off the lights", {
+        from,
+        tools: { home_overview: () => json(named) },
+      });
+      expect(calls.at(-1)).toEqual({
+        name: "lights",
+        input: {
+          place: {
+            kind: "lights",
+            lights: [{ device: "device-lights", capability: "light" }],
+          },
+          to: "off",
+        },
+      });
+      expect(replies).toEqual([{ text: "Lights off.", confirmation: true }]);
+    },
+  );
+
   it("asks which room when typed, and says when the speaker has none", async () => {
     expect(await ask("lights on", { from: "client" })).toEqual({
-      calls: [],
+      calls: [{ name: "home_overview", input: {} }],
       replies: [{ text: "Which room's lights? Say the room too." }],
     });
     expect(await ask("lights on", { room: null })).toEqual({
-      calls: [],
+      calls: [{ name: "home_overview", input: {} }],
       replies: [
         {
           text: "I'm not in a room yet. Choose my room in Settings, Devices.",
@@ -170,6 +200,46 @@ describe("the Assistant's requests", () => {
     ]);
   });
 
+  it.each([
+    ["dim the lights", "room-office", "dimmer"],
+    ["brighten the lights in the Kitchen", "room-kitchen", "brighter"],
+  ])('sends the direction in "%s"', async (text, id, to) => {
+    const { calls } = await ask(text);
+    expect(calls.at(-1)).toEqual({
+      name: "lights",
+      input: { place: { kind: "room", id }, to },
+    });
+  });
+
+  it.each([
+    ["turn off the lights in Office", "room", "Office"],
+    ["turn off the lights on Ground Floor", "floor", "Ground Floor"],
+    ["turn off Desk Lamp", "light", "Desk Lamp"],
+  ])(
+    'asks which target for "%s" when two names match',
+    async (text, kind, name) => {
+      const duplicateNames = {
+        floors: [
+          ...overview.floors,
+          { id: "floor-other", name: "Ground Floor" },
+        ],
+        rooms: [...overview.rooms, { id: "room-other", name: "OFFICE" }],
+        devices: [
+          ...overview.devices,
+          { ...overview.devices[0], id: "device-other", name: "Desk Lamp" },
+        ],
+      };
+      expect(
+        await ask(text, {
+          tools: { home_overview: () => json(duplicateNames) },
+        }),
+      ).toEqual({
+        calls: [{ name: "home_overview", input: {} }],
+        replies: [{ text: `Which ${kind}? More than one is named ${name}.` }],
+      });
+    },
+  );
+
   it("says which lights didn't answer, and when nothing changed", async () => {
     const answering = (lights: object[]) => ({
       lights: () => json({ change: null, lights }),
@@ -180,7 +250,7 @@ describe("the Assistant's requests", () => {
           tools: answering([lit("Desk Lamp"), lit("Shelf", "offline")]),
         })
       ).replies,
-    ).toEqual([{ text: "Office lights on. Shelf didn't answer." }]);
+    ).toEqual([{ text: "Some lights changed. Shelf didn't answer." }]);
     expect(
       (
         await ask("lights on", {
@@ -190,11 +260,31 @@ describe("the Assistant's requests", () => {
     ).toEqual([{ text: "Office lights already on." }]);
     expect(
       (
+        await ask("lights on", {
+          tools: answering([
+            lit("Desk Lamp", "skipped", "already"),
+            lit("Shelf", "offline"),
+          ]),
+        })
+      ).replies,
+    ).toEqual([{ text: "Nothing changed. Shelf didn't answer." }]);
+    expect(
+      (
         await ask("lights down", {
           tools: answering([lit("Desk Lamp", "skipped", "off")]),
         })
       ).replies,
     ).toEqual([{ text: "Office lights are off." }]);
+    expect(
+      (
+        await ask("lights down", {
+          tools: answering([
+            lit("Desk Lamp", "skipped", "off"),
+            lit("Shelf", "skipped", "already"),
+          ]),
+        })
+      ).replies,
+    ).toEqual([{ text: "Nothing changed." }]);
     expect(
       (
         await ask("lights on", {
@@ -205,6 +295,37 @@ describe("the Assistant's requests", () => {
     expect((await ask("lights on", { tools: answering([]) })).replies).toEqual([
       { text: "No lights in Office." },
     ]);
+  });
+
+  it("says which lights couldn't take a brightness change", async () => {
+    const { replies } = await ask("set all lights to 40%", {
+      tools: {
+        lights: () =>
+          json({
+            change: "c1",
+            lights: [lit("Desk Lamp"), lit("Shelf", "skipped", "unsupported")],
+          }),
+      },
+    });
+    expect(replies).toEqual([
+      { text: "Some lights changed. Shelf couldn't be changed." },
+    ]);
+  });
+
+  it("counts the remaining lights when their names can't all fit in a reply", async () => {
+    const offline = Array.from({ length: 34 }, (_, index) =>
+      lit(`Light ${index + 1}`.padEnd(120, "*"), "offline"),
+    );
+    const { replies } = await ask("turn on all lights", {
+      tools: {
+        lights: () =>
+          json({ change: "c1", lights: [lit("Desk Lamp"), ...offline] }),
+      },
+    });
+    const reply = requestReplySchema.parse(replies[0]);
+    expect(reply.text).toContain(offline[0]!.name);
+    expect(reply.text).toMatch(/\band 2 more didn't answer\.$/);
+    expect(reply.confirmation).toBeUndefined();
   });
 
   it("passes on a tool's refusal in English, and says it failed in German", async () => {
@@ -223,6 +344,41 @@ describe("the Assistant's requests", () => {
       (await ask("Licht aus", { language: "de", tools: refused })).replies,
     ).toEqual([{ text: "Das hat nicht geklappt." }]);
   });
+
+  it.each([
+    ["changed", undefined, "A light changed in the meantime."],
+    ["failed", "limited", "The device command limit blocked a restore."],
+  ])(
+    "reports a partial restore when an outcome is %s",
+    async (result, why, reason) => {
+      const response = json({
+        change: "c1",
+        changed: [lit("Desk Lamp"), lit("Shelf", result, why)],
+      });
+      const { replies } = await ask("undo", {
+        tools: { restore: () => ({ ...response, isError: why === "limited" }) },
+      });
+      expect(replies).toEqual([
+        { text: `Some lights were put back. ${reason}` },
+      ]);
+    },
+  );
+
+  it.each([
+    ["offline", "A light is offline."],
+    ["uncertain", "A light still has a command pending."],
+  ])(
+    "explains a failed restore when the light is %s",
+    async (result, reason) => {
+      const { replies } = await ask("undo", {
+        tools: {
+          restore: () =>
+            json({ change: "c1", changed: [lit("Desk Lamp", result)] }),
+        },
+      });
+      expect(replies).toEqual([{ text: `Nothing was put back. ${reason}` }]);
+    },
+  );
 
   it("puts back its last change", async () => {
     const { calls, replies } = await ask("put it back");
@@ -258,7 +414,7 @@ describe("the Assistant's requests", () => {
   it("can't set timers, and says what it does for anything else", async () => {
     expect(await ask("set a timer for five minutes")).toEqual({
       calls: [],
-      replies: [{ text: "I can't set timers yet." }],
+      replies: [{ text: "I can't set timers." }],
     });
     const { calls, replies } = await ask("play some music");
     expect(calls.map(({ name }) => name)).toEqual(["home_overview"]);
@@ -283,7 +439,7 @@ describe("the Assistant's requests", () => {
     ]);
     expect(
       (await ask("stell einen Timer", { language: "de" })).replies,
-    ).toEqual([{ text: "Ich kann noch keine Timer stellen." }]);
+    ).toEqual([{ text: "Ich kann keine Timer stellen." }]);
   });
 
   it("says it isn't allowed when whoever asked has left the home", async () => {

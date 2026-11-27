@@ -35,7 +35,7 @@ export const app = defineApp({
   name: "Assistant",
   version: "0.1.0",
   core: "^2.0.0",
-  summary: "Does what you ask your smart speakers or type to Sanctum.",
+  summary: "Controls lights by voice or typed request.",
   icon: { glyph: "message-circle-more", color: "iris" },
   permissions: [
     {

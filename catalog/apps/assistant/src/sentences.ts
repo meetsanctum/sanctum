@@ -43,8 +43,6 @@ export type Language = {
   sentences: Sentence[];
   /** Said for speech outside the sentences, and written for typed words. */
   notUnderstood: string;
-  /** The word after a percentage, which typed digits are read with. */
-  percentWord: string;
 };
 
 const switchOf = (where: Where): Intent => ({ do: "switch", where });
@@ -148,8 +146,12 @@ const en: Language = {
       intent: stepOf("room"),
     },
     {
-      template: "(dim|brighten) [the] (light|lights) in [the] {room}",
-      intent: stepOf("room"),
+      template: "dim [the] (light|lights) in [the] {room}",
+      intent: stepOf("room", "dimmer"),
+    },
+    {
+      template: "brighten [the] (light|lights) in [the] {room}",
+      intent: stepOf("room", "brighter"),
     },
     {
       template: "(make|turn) [the] (light|lights) on [the] {floor} <step>",
@@ -163,7 +165,11 @@ const en: Language = {
       template: "(make|turn) [the] (light|lights) <step>",
       intent: stepOf("here"),
     },
-    { template: "(dim|brighten) [the] (light|lights)", intent: stepOf("here") },
+    { template: "dim [the] (light|lights)", intent: stepOf("here", "dimmer") },
+    {
+      template: "brighten [the] (light|lights)",
+      intent: stepOf("here", "brighter"),
+    },
     { template: "[the] (light|lights) <step>", intent: stepOf("here") },
     // To a brightness.
     {
@@ -210,7 +216,6 @@ const en: Language = {
     },
   ],
   notUnderstood: "I can only help with lights.",
-  percentWord: "percent",
 };
 
 // German names rooms with an article of their own ("im Büro", "in der
@@ -354,7 +359,6 @@ const de: Language = {
     },
   ],
   notUnderstood: "Ich kann nur mit dem Licht helfen.",
-  percentWord: "Prozent",
 };
 
 export const languages: Record<RequestLanguage, Language> = { en, de };

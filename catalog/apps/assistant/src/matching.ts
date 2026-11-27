@@ -61,7 +61,9 @@ export function compile(
 ): RegExp | null {
   let pattern = "";
   const tokens =
-    template.match(/\{[^{}]*\}|<[^<>]*>|[()[\]|]|\s+|[^\s()[\]{}<>|]+/gu) ?? [];
+    template.match(
+      /<percent>\s+\p{L}+|\{[^{}]*\}|<[^<>]*>|[()[\]|]|\s+|[^\s()[\]{}<>|]+/gu,
+    ) ?? [];
   for (const token of tokens) {
     if (token === "(" || token === "[") pattern += "(?:";
     else if (token === ")") pattern += ")";
@@ -73,6 +75,11 @@ export function compile(
       const alternatives = wordsPattern(names[blank] ?? []);
       if (!alternatives) return null;
       pattern += `${notLetter}(?<${blank}>${alternatives})${notLetterAfter}`;
+    } else if (token.startsWith("<percent>") && token !== "<percent>") {
+      // Digits and the % sign belong to the brightness value, never a name.
+      const unit = escape(normalized(token.slice("<percent>".length)));
+      const spelled = wordsPattern(Object.keys(choices.percent));
+      pattern += `${notLetter}(?:(?<percent>${spelled})\\s+${unit}|(?<digits>[0-9]{1,3})\\s*(?:%|${unit}))${notLetterAfter}`;
     } else if (token.startsWith("<")) {
       const choice = token.slice(1, -1) as ChoiceName;
       pattern += `${notLetter}(?<${choice}>${wordsPattern(Object.keys(choices[choice]))})${notLetterAfter}`;
@@ -81,24 +88,6 @@ export function compile(
     }
   }
   return new RegExp(`^\\s*${pattern}\\s*$`, "u");
-}
-
-// A typed percentage, "40%" or "40 percent", as the template's words for it.
-function withPercentWords(text: string, language: Language) {
-  const word = normalized(language.percentWord);
-  const said = new Map(
-    Object.entries(language.choices.percent).map(([words, value]) => [
-      value,
-      words,
-    ]),
-  );
-  return text.replace(
-    new RegExp(`(?<!\\p{N})(\\d{1,3})\\s*(?:%|${escape(word)})`, "gu"),
-    (whole, digits: string) => {
-      const words = said.get(Number(digits));
-      return words ? `${words} ${word}` : whole;
-    },
-  );
 }
 
 // The name as the home writes it, for the words that matched it.
@@ -112,7 +101,7 @@ export function match(
   language: Language,
   names: HomeNames,
 ): Matched | null {
-  const words = withPercentWords(normalized(text), language);
+  const words = normalized(text);
   for (const { template, intent } of language.sentences) {
     const found = compile(template, language.choices, names)?.exec(words);
     if (!found) continue;
@@ -134,8 +123,17 @@ export function match(
     if (switched !== undefined) matched.choices.switch = switched;
     const step = choice("step");
     if (step !== undefined) matched.choices.step = step;
-    const percent = choice("percent");
-    if (percent !== undefined) matched.choices.percent = percent;
+    const percent =
+      groups.digits === undefined ? choice("percent") : Number(groups.digits);
+    if (percent !== undefined) {
+      if (
+        groups.digits !== undefined &&
+        !Object.values(language.choices.percent).includes(percent)
+      ) {
+        continue;
+      }
+      matched.choices.percent = percent;
+    }
     return matched;
   }
   return null;

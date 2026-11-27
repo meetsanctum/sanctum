@@ -5,7 +5,7 @@ import {
   type RequestReply,
 } from "@meetsanctum/app-sdk";
 
-import { match, type HomeNames, type Matched } from "./matching.js";
+import { match, normalized, type HomeNames, type Matched } from "./matching.js";
 import {
   replies,
   type LightsState,
@@ -30,8 +30,9 @@ type Overview = {
   }[];
 };
 
-// One light in the lights tool's answer.
+// One light in a command or restore result.
 type LightAnswer = { name: string; result: string; why?: string };
+type RestoreAnswer = Omit<LightAnswer, "name">;
 
 type Place =
   | { kind: "room" | "floor"; id: string }
@@ -43,15 +44,16 @@ type ToolResult = { ok: true; value: unknown } | { ok: false; words: string };
 
 async function callTool(
   ctx: RequestContext,
-  name: string,
+  name: "home_overview" | "lights" | "restore",
   input: Record<string, unknown>,
 ): Promise<ToolResult> {
   const answer = await ctx.ai.call(name, input);
   if (answer.isError) {
     try {
-      // A partly limited answer still lists its lights.
-      const value = JSON.parse(answer.text) as unknown;
-      if (value && typeof value === "object" && "lights" in value) {
+      // A batch interrupted by the command limit still has outcomes.
+      const value = JSON.parse(answer.text) as Record<string, unknown> | null;
+      const field = name === "restore" ? "changed" : "lights";
+      if (name !== "home_overview" && Array.isArray(value?.[field])) {
         return { ok: true, value };
       }
     } catch {
@@ -77,15 +79,12 @@ function namesOf(overview: Overview): HomeNames {
   };
 }
 
-const same = (a: string, b: string) =>
-  a.localeCompare(b, undefined, { sensitivity: "accent" }) === 0;
-
 type Target = { place: Place; subject: Subject } | { reply: string };
 
 function targetOf(
   matched: Matched,
   where: Exclude<Matched["intent"], { do: "restore" | "timer" }>["where"],
-  overview: Overview | undefined,
+  overview: Overview,
   request: AssistantRequestCall,
   words: Replies,
 ): Target | null {
@@ -101,11 +100,14 @@ function targetOf(
     };
   }
   const name = matched.names[where];
-  if (name === undefined || !overview) return null;
+  if (name === undefined) return null;
+  const said = normalized(name);
   if (where === "room" || where === "floor") {
-    const found = (where === "room" ? overview.rooms : overview.floors).find(
-      (place) => same(place.name, name),
+    const places = (where === "room" ? overview.rooms : overview.floors).filter(
+      (place) => normalized(place.name) === said,
     );
+    if (places.length > 1) return { reply: words.whichNamed(where, name) };
+    const [found] = places;
     if (!found) return null;
     return {
       place: { kind: where, id: found.id },
@@ -113,15 +115,17 @@ function targetOf(
     };
   }
   if (where === "light") {
-    const lights = overview.devices
-      .filter((device) => same(device.name, name))
-      .flatMap((device) =>
-        lightsOf(device).map((capability) => ({
-          device: device.id,
-          capability: capability.id,
-        })),
-      );
-    if (lights.length === 0) return null;
+    const devices = overview.devices.filter(
+      (device) =>
+        normalized(device.name) === said && lightsOf(device).length > 0,
+    );
+    if (devices.length > 1) return { reply: words.whichNamed(where, name) };
+    const [device] = devices;
+    if (!device) return null;
+    const lights = lightsOf(device).map((capability) => ({
+      device: device.id,
+      capability: capability.id,
+    }));
     return {
       place: { kind: "lights", lights },
       subject: { kind: "light", name },
@@ -130,10 +134,13 @@ function targetOf(
   return null;
 }
 
-const done = (light: LightAnswer) =>
+const done = (light: RestoreAnswer) =>
   light.result === "sent" || light.result === "confirmed";
-const notAnswering = (light: LightAnswer) =>
-  light.result === "offline" || light.result === "failed";
+const already = (light: LightAnswer) =>
+  light.result === "skipped" && light.why === "already";
+const offline = (light: LightAnswer) => light.result === "offline";
+const off = (light: LightAnswer) =>
+  light.result === "skipped" && light.why === "off";
 
 // What the lights tool did, in a reply.
 function lightsReply(
@@ -143,32 +150,36 @@ function lightsReply(
   words: Replies,
 ): RequestReply {
   if (lights.length === 0) return { text: words.noLights(subject) };
-  const missing = lights.filter(notAnswering).map((light) => light.name);
-  if (lights.some(done)) {
-    const changed = words.changed(subject, state);
-    return missing.length > 0
-      ? { text: `${changed} ${words.didNotAnswer(missing)}` }
-      : { text: changed, confirmation: true };
-  }
-  if (missing.length === lights.length) {
+  if (lights.every(offline)) {
     return { text: words.notAnswering(subject) };
   }
-  const skipped = lights.filter((light) => !notAnswering(light));
-  if (skipped.every((light) => light.why === "already")) {
+  if (lights.every(already)) {
     return { text: words.already(subject, state) };
   }
-  if (
-    skipped.every((light) => light.why === "off" || light.why === "already")
-  ) {
+  if (lights.every(off)) {
     return { text: words.allOff(subject) };
   }
-  return { text: words.nothingChanged };
+  const changed = lights.some(done);
+  const missed = lights.filter((light) => !done(light) && !already(light));
+  if (missed.length === 0) {
+    return { text: words.changed(subject, state), confirmation: true };
+  }
+  if (!changed && missed.every(off)) {
+    return { text: words.nothingChanged };
+  }
+  return {
+    text: words.missedLights(
+      changed ? words.someChanged : words.nothingChanged,
+      missed.map((light) => light.name),
+      missed.every(offline),
+    ),
+  };
 }
 
 async function changeLights(
   ctx: RequestContext,
   matched: Matched,
-  overview: Overview | undefined,
+  overview: Overview,
   request: AssistantRequestCall,
   words: Replies,
 ): Promise<RequestReply> {
@@ -212,12 +223,33 @@ async function putBack(
 ): Promise<RequestReply> {
   const answer = await callTool(ctx, "restore", {});
   if (!answer.ok) return { text: words.cannotPutBack };
-  const { changed } = answer.value as { changed: { result: string }[] };
-  return changed.some(
-    ({ result }) => result === "sent" || result === "confirmed",
-  )
-    ? { text: words.putBack, confirmation: true }
-    : { text: words.changedSince };
+  const { changed } = answer.value as { changed: RestoreAnswer[] };
+  if (changed.length === 0) return { text: words.cannotPutBack };
+  const missed = changed.filter((light) => !done(light));
+  if (missed.length === 0) return { text: words.putBack, confirmation: true };
+  const restored = missed.length < changed.length;
+  if (!restored && missed.every(({ result }) => result === "changed")) {
+    return { text: words.changedSince };
+  }
+  const issues = new Set(
+    missed.map(({ result, why }) => {
+      if (why === "limited") return "limited";
+      if (
+        result === "changed" ||
+        result === "offline" ||
+        result === "uncertain"
+      ) {
+        return result;
+      }
+      return "failed";
+    }),
+  );
+  return {
+    text: [
+      restored ? words.somePutBack : words.nothingPutBack,
+      ...Array.from(issues, (issue) => words.restoreIssues[issue]),
+    ].join(" "),
+  };
 }
 
 /** What the Assistant answers a request, in the request's language. */
@@ -228,26 +260,19 @@ export async function answerRequest(
   const language = languages[request.language];
   const words = replies[request.language];
   try {
-    // A sentence without a blank, such as "lights off" or "put it back",
-    // matches without the home's names, which saves asking for them.
+    // Undo and timer requests don't need the home's names. Lighting phrases
+    // can name a device even when they also match a room or whole-home phrase.
     const none: HomeNames = { room: [], floor: [], light: [], mood: [] };
-    let overview: Overview | undefined;
-    let matched = match(request.text, language, none);
-    if (!matched) {
-      const read = await callTool(ctx, "home_overview", {});
-      if (!read.ok) return { text: words.failed(read.words) };
-      overview = read.value as Overview;
-      matched = match(request.text, language, namesOf(overview));
-    }
+    const unnamed = match(request.text, language, none);
+    if (unnamed?.intent.do === "timer") return { text: words.noTimers };
+    if (unnamed?.intent.do === "restore") return await putBack(ctx, words);
+
+    const read = await callTool(ctx, "home_overview", {});
+    if (!read.ok) return { text: words.failed(read.words) };
+    const overview = read.value as Overview;
+    const matched = match(request.text, language, namesOf(overview));
     if (!matched) return { text: language.notUnderstood };
-    switch (matched.intent.do) {
-      case "timer":
-        return { text: words.noTimers };
-      case "restore":
-        return await putBack(ctx, words);
-      default:
-        return await changeLights(ctx, matched, overview, request, words);
-    }
+    return await changeLights(ctx, matched, overview, request, words);
   } catch (error) {
     if (isActionError(error) && error.code === "forbidden") {
       return { text: words.notAllowed };

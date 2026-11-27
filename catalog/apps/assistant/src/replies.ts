@@ -1,4 +1,4 @@
-import type { RequestLanguage } from "@meetsanctum/app-sdk";
+import { replyTextMaxLength, type RequestLanguage } from "@meetsanctum/app-sdk";
 
 // What the Assistant answers, in each language: short, since a smart speaker
 // says it, and naming what changed by the home's own names. The names keep
@@ -15,6 +15,8 @@ export type Subject =
 export type LightsState =
   { is: "on" | "off" | "brighter" | "dimmer" } | { is: "at"; percent: number };
 
+type RestoreIssue = "changed" | "offline" | "uncertain" | "limited" | "failed";
+
 export type Replies = {
   changed(subject: Subject, state: LightsState): string;
   already(subject: Subject, state: LightsState): string;
@@ -22,15 +24,23 @@ export type Replies = {
   allOff(subject: Subject): string;
   noLights(subject: Subject): string;
   notAnswering(subject: Subject): string;
-  /** After what changed: the lights that didn't, by name. */
-  didNotAnswer(names: readonly string[]): string;
+  missedLights(
+    summary: string,
+    names: readonly string[],
+    allOffline: boolean,
+  ): string;
+  someChanged: string;
   nothingChanged: string;
   putBack: string;
+  somePutBack: string;
+  nothingPutBack: string;
+  restoreIssues: Record<RestoreIssue, string>;
   changedSince: string;
   cannotPutBack: string;
   noTimers: string;
   notInARoom: string;
   whichRoom: string;
+  whichNamed(kind: "room" | "floor" | "light", name: string): string;
   notAllowed: string;
   /** A tool's refusal in this language, where its own words are English. */
   failed(toolWords: string): string;
@@ -40,6 +50,30 @@ const list = (names: readonly string[], and: string) =>
   names.length < 2
     ? names.join("")
     : `${names.slice(0, -1).join(", ")} ${and} ${names.at(-1)}`;
+
+function withNames(
+  summary: string,
+  names: readonly string[],
+  and: string,
+  more: (count: number) => string,
+  ending: string,
+) {
+  const limit = replyTextMaxLength - summary.length - 1 - ending.length;
+  const full = list(names, and);
+  if (full.length <= limit) return `${summary} ${full}${ending}`;
+
+  const shown: string[] = [];
+  let length = 0;
+  for (const name of names) {
+    const count = names.length - shown.length - 1;
+    if (length + name.length + and.length + 2 + more(count).length > limit)
+      break;
+    shown.push(name);
+    length += name.length + 2; // Each earlier name also takes a comma and space.
+  }
+  const shortened = list([...shown, more(names.length - shown.length)], and);
+  return `${summary} ${shortened}${ending}`;
+}
 
 const enState = (state: LightsState) =>
   state.is === "at" ? `at ${state.percent}%` : state.is;
@@ -62,14 +96,32 @@ const en: Replies = {
       ? "There are no lights."
       : `No lights in ${subject.name}.`,
   notAnswering: (subject) => `${enSubject(subject)} didn't answer.`,
-  didNotAnswer: (names) => `${list(names, "and")} didn't answer.`,
+  missedLights: (summary, names, allOffline) =>
+    withNames(
+      summary,
+      names,
+      "and",
+      (count) => `${count} more`,
+      allOffline ? " didn't answer." : " couldn't be changed.",
+    ),
+  someChanged: "Some lights changed.",
   nothingChanged: "Nothing changed.",
   putBack: "Put back.",
+  somePutBack: "Some lights were put back.",
+  nothingPutBack: "Nothing was put back.",
+  restoreIssues: {
+    changed: "A light changed in the meantime.",
+    offline: "A light is offline.",
+    uncertain: "A light still has a command pending.",
+    limited: "The device command limit blocked a restore.",
+    failed: "A light couldn't be restored.",
+  },
   changedSince: "Nothing put back: it changed since.",
   cannotPutBack: "There's nothing I can put back.",
-  noTimers: "I can't set timers yet.",
+  noTimers: "I can't set timers.",
   notInARoom: "I'm not in a room yet. Choose my room in Settings, Devices.",
   whichRoom: "Which room's lights? Say the room too.",
+  whichNamed: (kind, name) => `Which ${kind}? More than one is named ${name}.`,
   notAllowed: "I'm not allowed to do that.",
   failed: (toolWords) => toolWords,
 };
@@ -105,16 +157,41 @@ const de: Replies = {
       subject,
       subject.kind === "home" ? "antworten nicht" : "antwortet nicht",
     ),
-  didNotAnswer: (names) =>
-    `${list(names, "und")} ${names.length > 1 ? "antworten" : "antwortet"} nicht.`,
+  missedLights: (summary, names, allOffline) =>
+    withNames(
+      summary,
+      names,
+      "und",
+      (count) => `${count} weitere`,
+      allOffline
+        ? names.length > 1
+          ? " antworten nicht."
+          : " antwortet nicht."
+        : names.length > 1
+          ? " konnten nicht geändert werden."
+          : " konnte nicht geändert werden.",
+    ),
+  someChanged: "Einige Lichter wurden geändert.",
   nothingChanged: "Nichts geändert.",
   putBack: "Zurückgestellt.",
+  somePutBack: "Einige Lichter wurden zurückgestellt.",
+  nothingPutBack: "Nichts wurde zurückgestellt.",
+  restoreIssues: {
+    changed: "Ein Licht wurde inzwischen geändert.",
+    offline: "Ein Licht ist offline.",
+    uncertain: "Bei einem Licht steht noch ein Befehl aus.",
+    limited:
+      "Das Limit für Gerätebefehle hat eine Wiederherstellung verhindert.",
+    failed: "Ein Licht konnte nicht zurückgestellt werden.",
+  },
   changedSince: "Nichts zurückgestellt: es wurde inzwischen geändert.",
   cannotPutBack: "Da kann ich nichts zurückstellen.",
-  noTimers: "Ich kann noch keine Timer stellen.",
+  noTimers: "Ich kann keine Timer stellen.",
   notInARoom:
     "Ich bin noch in keinem Raum. Wähle meinen Raum unter Settings, Devices.",
   whichRoom: "Welcher Raum? Sag den Raum mit dazu.",
+  whichNamed: (kind, name) =>
+    `Mehrere ${{ room: "Räume", floor: "Etagen", light: "Lampen" }[kind]} heißen „${name}“. Welche davon meinst du?`,
   notAllowed: "Das darf ich nicht.",
   failed: () => "Das hat nicht geklappt.",
 };

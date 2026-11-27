@@ -134,6 +134,7 @@ describe("matching English", () => {
     expect(en("dim the lights")?.intent).toEqual({
       do: "step",
       where: "here",
+      to: "dimmer",
     });
     expect(en("set the kitchen lights to forty percent")).toMatchObject({
       intent: { do: "set", where: "room" },
@@ -147,6 +148,22 @@ describe("matching English", () => {
       choices: { percent: 75 },
     });
     expect(en("set the kitchen lights to 45%")).toBeNull();
+  });
+
+  it("keeps numbers and percent signs in light names", () => {
+    const home = {
+      ...names,
+      light: ["Lamp 50%", "Lamp fifty percent", "Lamp 40 Percent"],
+    };
+    expect(match("Turn on Lamp 50%", languages.en, home)).toMatchObject({
+      names: { light: "Lamp 50%" },
+    });
+    expect(
+      match("Set Lamp 40 Percent to 75%", languages.en, home),
+    ).toMatchObject({
+      names: { light: "Lamp 40 Percent" },
+      choices: { percent: 75 },
+    });
   });
 
   it("puts back and knows timers", () => {
