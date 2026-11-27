@@ -59,6 +59,28 @@ function endpointOf(url: string) {
   return { host: parsed.hostname, port };
 }
 
+function lessonWithNames(
+  language: RequestLanguage,
+  templates: readonly string[],
+  names: Record<SentenceBlank, string[]>,
+): HomeLesson {
+  const used = new Set<SentenceBlank>();
+  const usable = templates.filter((template) => {
+    const blanks = [...template.matchAll(/\{(\w+)\}/g)].map(
+      ([, blank]) => blank as SentenceBlank,
+    );
+    if (blanks.some((blank) => !names[blank]?.length)) return false;
+    for (const blank of blanks) used.add(blank);
+    return true;
+  });
+  const lists = Object.fromEntries(
+    sentenceBlanks
+      .filter((blank) => used.has(blank))
+      .map((blank) => [blank, names[blank].slice()]),
+  );
+  return { language, templates: usable, lists };
+}
+
 export function createLearning(options: {
   manager: Manager;
   // The Assistant's sentences while it answers requests, none when it
@@ -83,6 +105,8 @@ export function createLearning(options: {
   let admitted = false;
   // Keep the last lesson the service acknowledged in case it loses its grammar.
   let learned: HomeLesson | null = null;
+  // The blanks a lesson was taught without, to fit what can be learned.
+  const leftOutOf = new WeakMap<HomeLesson, SentenceBlank[]>();
   let recovering = false;
   let admissionProblem: HearingFailure | null = null;
   let managerFailed = false;
@@ -125,7 +149,13 @@ export function createLearning(options: {
       activeLanguage === language &&
       (submitted === null || submitted === language)
     ) {
-      return { state: "ready", language, activeLanguage };
+      const leftOut = learned ? leftOutOf.get(learned) : undefined;
+      return {
+        state: "ready",
+        language,
+        activeLanguage,
+        ...(leftOut ? { leftOut } : {}),
+      };
     }
     const current = progress?.language === language ? progress : null;
     if (current?.problem) return failed(current.problem);
@@ -153,36 +183,38 @@ export function createLearning(options: {
     const list = options.sentences()?.[language];
     if (!list) return null;
     const names = options.names();
-    const used = new Set<SentenceBlank>();
-    const usable = list.filter((template) => {
-      const blanks = [...template.matchAll(/\{(\w+)\}/g)].map(
-        ([, blank]) => blank as SentenceBlank,
-      );
-      if (blanks.some((blank) => !names[blank]?.length)) return false;
-      for (const blank of blanks) used.add(blank);
-      return true;
-    });
-    if (usable.length === 0) {
+    const full = lessonWithNames(language, list, names);
+    if (full.templates.length === 0) {
       options.log(
         `speech: the home has no usable ${language} sentences; keeping what it learned`,
       );
       status.problem = "no_names";
       return null;
     }
-    const lists = Object.fromEntries(
-      sentenceBlanks
-        .filter((blank) => used.has(blank))
-        .map((blank) => [blank, names[blank].slice()]),
-    );
-    const steps = grammarSteps(usable, lists);
-    if (steps > sentenceLimits.grammarSteps) {
-      options.log(
-        `speech: the home's ${language} sentences take about ${steps} steps to learn, over ${sentenceLimits.grammarSteps}; keeping what it learned`,
-      );
-      status.problem = "too_many_names";
-      return null;
+    const steps = grammarSteps(full.templates, full.lists);
+    if (steps <= sentenceLimits.grammarSteps) return full;
+    if (full.lists.mood) {
+      const withoutMoods = lessonWithNames(language, list, {
+        ...names,
+        mood: [],
+      });
+      if (
+        withoutMoods.templates.length > 0 &&
+        grammarSteps(withoutMoods.templates, withoutMoods.lists) <=
+          sentenceLimits.grammarSteps
+      ) {
+        options.log(
+          `speech: the home's ${language} lesson is too large with moods; learning the other sentences`,
+        );
+        leftOutOf.set(withoutMoods, ["mood"]);
+        return withoutMoods;
+      }
     }
-    return { language, templates: usable, lists };
+    options.log(
+      `speech: the home's ${language} sentences take about ${steps} steps to learn, over ${sentenceLimits.grammarSteps}; keeping what it learned`,
+    );
+    status.problem = "too_many_names";
+    return null;
   }
 
   async function connection(signal: AbortSignal) {

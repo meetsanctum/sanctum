@@ -1,8 +1,11 @@
 import { isDeepStrictEqual } from "node:util";
 
+import { moodType } from "@meetsanctum/app-sdk";
+
 import type { AppHost } from "./app-host/host.js";
 import type { Blobs } from "./blobs/blobs.js";
 import type { Dashboards } from "./dashboards/dashboards.js";
+import type { EntityChange } from "./entities/entities.js";
 import type { DeviceChange, Devices } from "./devices/devices.js";
 import type { Holds } from "./devices/holds.js";
 import type { Motion } from "./devices/motion.js";
@@ -77,6 +80,12 @@ export function setCoreFollowers(
           list.map(({ name }) => name).sort(),
         );
       if (!isDeepStrictEqual(names(before), names(after))) learning.changed();
+    },
+    // A mood added, renamed or gone, of the standard type whatever app keeps it.
+    "entity.changed": ({ before, after }) => {
+      const moodName = (entity: EntityChange["before"]) =>
+        entity?.type === moodType.id ? entity.name : undefined;
+      if (moodName(before) !== moodName(after)) learning.changed();
     },
   };
   eventBus.setFollowers([

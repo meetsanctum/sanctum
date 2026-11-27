@@ -1,5 +1,6 @@
 import {
   appManifestSchema,
+  moodType,
   standardEntityTypes,
   type AiCanUse,
   type AiOfferInfo,
@@ -22,6 +23,7 @@ import {
   notInstructions,
   toolError,
 } from "./answers.js";
+import type { AgentChanges } from "./changes.js";
 import { inputSchemaOf } from "./core-tool.js";
 import type { CoreTools } from "./core-tools.js";
 import {
@@ -50,6 +52,7 @@ type AgentToolsOptions = {
   canUse: () => AiCanUse;
   /** The core's own tools (core-tools.ts). */
   core: CoreTools;
+  changes: Pick<AgentChanges, "recordMood">;
   readableDeviceKinds: () => ReadonlySet<CapabilityKind>;
   places: () => Places;
   devices: Pick<Devices, "list">;
@@ -142,25 +145,23 @@ const isUsable = (offer: AiOfferInfo) => offer.on && offer.missing.length === 0;
 // for the core's areas.
 function notAllowed(canUse: AiCanUse, offer: AiOfferInfo, appName: string) {
   const where = settingsOf(appName);
+  const refused = (message: string) => toolError("not_allowed", message);
   if (!offer.on) {
-    return toolError(
-      "not_allowed",
+    return refused(
       `“${offer.title}” is switched off for AI agents in ${where}.`,
     );
   }
   const blocked = blockedNeeds(canUse, offer, where);
   if (blocked.length === 0) {
-    return toolError(
-      "not_allowed",
+    return refused(
       `“${offer.title}” has requirements that aren't available for AI agents in ${where}.`,
     );
   }
   const needs = blocked.map(({ title }) => `“${title}”`).join(" and ");
-  const wheres = new Set(blocked.map((need) => need.where));
+  const wheres = [...new Set(blocked.map((need) => need.where))];
   const are = blocked.length > 1 ? "are" : "is";
-  return toolError(
-    "not_allowed",
-    `“${offer.title}” needs ${needs}, which ${are} switched off for AI agents in ${[...wheres].join(" and ")}.`,
+  return refused(
+    `“${offer.title}” needs ${needs}, which ${are} switched off for AI agents in ${wheres.join(" and ")}.`,
   );
 }
 
@@ -367,6 +368,10 @@ export function createAgentTools(options: AgentToolsOptions) {
     const offer = runner && ofApp.find((each) => each.id === runner.id);
     if (!entity || !type || !offer || !isUsable(offer)) return notRunnable();
     const ran = (entity.state as { input?: unknown }).input;
+    // A mood can change lights before its runner answers or times out.
+    if (type.id === moodType.id && agent.requestClientId !== undefined) {
+      options.changes.recordMood(agent);
+    }
     return callOffer(agent, canUse, offer, ran, (result) => ({
       type: type.id,
       result,

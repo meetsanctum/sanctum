@@ -1,11 +1,13 @@
 import {
   announcePermission,
   assistantAppId,
+  moodType,
   type Hearing,
   type RequestLanguage,
 } from "@meetsanctum/app-sdk";
 
 import type { AgentsCanUse } from "../agents/can-use.js";
+import type { Entities } from "../entities/entities.js";
 import type { ManagerClient } from "../manager.js";
 import { createAnnouncements } from "./announcements.js";
 import { assembleHearing, hasListeningPart } from "./hearing.js";
@@ -32,6 +34,8 @@ export function assembleSpeakerAudio(
   options: Pick<HearingOptions, "devices" | "apps" | "record"> & {
     places: HearingOptions["places"] & { language(): RequestLanguage };
     canUse: Pick<AgentsCanUse, "areaOn">;
+    // The home's moods, by the standard type whatever app keeps them.
+    entities: Pick<Entities, "list">;
     // How speech recognition is doing changed.
     onHearing?: (hearing: Hearing) => void;
   },
@@ -67,8 +71,9 @@ export function assembleSpeakerAudio(
                   device.capabilities.some((part) => part.kind === "light"),
                 )
                 .map((device) => device.name),
-              // A standard mood type will name the home's moods.
-              mood: [],
+              mood: options.entities
+                .list({ type: moodType.id })
+                .map((mood) => mood.name),
             };
           },
           language,

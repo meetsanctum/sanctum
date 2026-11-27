@@ -1,5 +1,7 @@
 import { replyTextMaxLength, type RequestLanguage } from "@meetsanctum/app-sdk";
 
+import { agentsPage } from "./tools.js";
+
 // What the Assistant answers, in each language: short, since a smart speaker
 // says it, and naming what changed by the home's own names. The names keep
 // the household's spelling and take no article, as a room's name may not
@@ -36,13 +38,26 @@ export type Replies = {
   restoreIssues: Record<RestoreIssue, string>;
   changedSince: string;
   cannotPutBack: string;
+  cannotUndoMood: string;
+  /** A mood that ran, by its name and its room's. */
+  moodSet(mood: string, room: string): string;
+  /** No mood of that name where it was asked for. */
+  noSuchMood(mood: string, room: string | null): string;
+  /**
+   * `run` refused: its own words, or where it's switched on: the app's
+   * settings, or Settings' page for AI agents when a core area is off.
+   */
+  cannotRunMood(toolWords: string, appName: string): string;
+  duplicateMood(mood: string, room: string | null): string;
+  /** Several rooms have a mood of that name, and none was said. */
+  whichMoodRoom(mood: string): string;
   noTimers: string;
   notInARoom: string;
   whichRoom: string;
   whichNamed(kind: "room" | "floor" | "light", name: string): string;
   notAllowed: string;
   /** A tool's refusal in this language, where its own words are English. */
-  failed(toolWords: string): string;
+  failed(toolWords: string, error?: string): string;
 };
 
 const list = (names: readonly string[], and: string) =>
@@ -116,6 +131,19 @@ const en: Replies = {
   },
   changedSince: "Nothing put back: it changed since.",
   cannotPutBack: "There's nothing I can put back.",
+  cannotUndoMood: "I can't undo a mood.",
+  moodSet: (mood, room) => `${mood} in ${room}.`,
+  noSuchMood: (mood, room) =>
+    room
+      ? `${room} has no mood called ${mood}.`
+      : `There's no mood called ${mood}.`,
+  cannotRunMood: (toolWords) => toolWords,
+  duplicateMood: (mood, room) =>
+    room
+      ? `More than one mood in ${room} is called ${mood}.`
+      : `More than one mood in the same room is called ${mood}.`,
+  whichMoodRoom: (mood) =>
+    `Which room? Several have a mood called ${mood}. Say the room too.`,
   noTimers: "I can't set timers yet.",
   notInARoom: "I'm not in a room yet. Choose my room in Settings, Devices.",
   whichRoom: "Which room's lights? Say the room too.",
@@ -183,6 +211,25 @@ const de: Replies = {
   },
   changedSince: "Nichts zurückgestellt: es wurde inzwischen geändert.",
   cannotPutBack: "Da kann ich nichts zurückstellen.",
+  cannotUndoMood: "Eine Stimmung kann ich nicht rückgängig machen.",
+  moodSet: (mood, room) => `${room}: ${mood}.`,
+  noSuchMood: (mood, room) =>
+    room
+      ? `${room}: keine Stimmung „${mood}“.`
+      : `Es gibt keine Stimmung „${mood}“.`,
+  // Where it's decided is the app's settings, whose words are English.
+  // The core's words name the place; German names it too, as Settings'
+  // pages are in English.
+  cannotRunMood: (toolWords, appName) =>
+    toolWords.includes(agentsPage)
+      ? `Ich darf diese Stimmung nicht starten. Das lässt sich unter ${agentsPage} einschalten.`
+      : `Ich darf diese Stimmung nicht starten. Das lässt sich in den Einstellungen von ${appName} einschalten.`,
+  duplicateMood: (mood, room) =>
+    room
+      ? `${room}: Mehrere Stimmungen heißen „${mood}“.`
+      : `Mehrere Stimmungen im selben Raum heißen „${mood}“.`,
+  whichMoodRoom: (mood) =>
+    `Welcher Raum? Mehrere haben die Stimmung „${mood}“. Sag den Raum mit dazu.`,
   noTimers: "Ich kann noch keine Timer stellen.",
   notInARoom:
     "Ich bin noch in keinem Raum. Wähle meinen Raum unter Settings, Devices.",
@@ -190,7 +237,14 @@ const de: Replies = {
   whichNamed: (kind, name) =>
     `Mehrere ${{ room: "Räume", floor: "Etagen", light: "Lampen" }[kind]} heißen „${name}“. Welche davon meinst du?`,
   notAllowed: "Das darf ich nicht.",
-  failed: () => "Das hat nicht geklappt.",
+  failed: (_toolWords, error) => {
+    if (error === "limited") {
+      return "Zu viele Anfragen. Versuch es in einer Minute noch einmal.";
+    }
+    if (error === "timeout")
+      return "Die App hat nicht rechtzeitig geantwortet.";
+    return "Das hat nicht geklappt.";
+  },
 };
 
 export const replies: Record<RequestLanguage, Replies> = { en, de };

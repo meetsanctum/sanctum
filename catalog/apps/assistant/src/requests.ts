@@ -14,25 +14,14 @@ import {
   type Replies,
   type Subject,
 } from "./replies.js";
+import { readMoods, runMood } from "./moods.js";
 import { languages } from "./sentences.js";
+import { agentsPage, callTool, type Overview } from "./tools.js";
 
 // Answers a request: matches its words against the sentences with the
 // home's names, then does what it asks through the tools every AI agent
 // gets, so it can do only what the household lets AI agents do. It asks no
 // model: words outside the sentences get the words that say what it can do.
-
-// What home_overview answers that the Assistant reads.
-type Overview = {
-  floors: { id: string; name: string }[];
-  rooms: { id: string; name: string }[];
-  devices: {
-    id: string;
-    name: string;
-    roomId: string | null;
-    capabilities: { id: string; kind: string }[];
-  }[];
-  notAllowed: { title: string; where: string }[];
-};
 
 const lightControlTitle = permissionWords(controlPermission("light")).title;
 
@@ -44,31 +33,6 @@ type Place =
   | { kind: "room" | "floor"; id: string }
   | { kind: "home" }
   | { kind: "lights"; lights: { device: string; capability: string }[] };
-
-// A tool's answer, read: its JSON, or its words when it refused.
-type ToolResult = { ok: true; value: unknown } | { ok: false; words: string };
-
-async function callTool(
-  ctx: RequestContext,
-  name: "home_overview" | "lights" | "restore",
-  input: Record<string, unknown>,
-): Promise<ToolResult> {
-  const answer = await ctx.ai.call(name, input);
-  if (answer.isError) {
-    try {
-      // A batch interrupted by the command limit still has outcomes.
-      const value = JSON.parse(answer.text) as Record<string, unknown> | null;
-      const field = name === "restore" ? "changed" : "lights";
-      if (name !== "home_overview" && Array.isArray(value?.[field])) {
-        return { ok: true, value };
-      }
-    } catch {
-      // A refusal is one sentence, not JSON.
-    }
-    return { ok: false, words: answer.text };
-  }
-  return { ok: true, value: JSON.parse(answer.text) as unknown };
-}
 
 const lightsOf = (device: Overview["devices"][number]) =>
   device.capabilities.filter((capability) => capability.kind === "light");
@@ -89,7 +53,10 @@ type Target = { place: Place; subject: Subject } | { reply: string };
 
 function targetOf(
   matched: Matched,
-  where: Exclude<Matched["intent"], { do: "restore" | "timer" }>["where"],
+  where: Exclude<
+    Matched["intent"],
+    { do: "restore" | "timer" | "mood" }
+  >["where"],
   overview: Overview,
   request: AssistantRequestCall,
   words: Replies,
@@ -195,7 +162,11 @@ async function changeLights(
   words: Replies,
 ): Promise<RequestReply> {
   const { intent } = matched;
-  if (intent.do === "restore" || intent.do === "timer") {
+  if (
+    intent.do === "restore" ||
+    intent.do === "timer" ||
+    intent.do === "mood"
+  ) {
     throw new Error("Not a change of lights");
   }
   const target = targetOf(matched, intent.where, overview, request, words);
@@ -233,7 +204,14 @@ async function putBack(
   words: Replies,
 ): Promise<RequestReply> {
   const answer = await callTool(ctx, "restore", {});
-  if (!answer.ok) return { text: words.failed(answer.words) };
+  if (!answer.ok) {
+    return {
+      text:
+        answer.error === "mood_not_restorable"
+          ? words.cannotUndoMood
+          : words.failed(answer.words),
+    };
+  }
   const { changed } = answer.value as { changed: RestoreAnswer[] };
   if (changed.length === 0) return { text: words.cannotPutBack };
   const missed = changed.filter((light) => !done(light));
@@ -281,16 +259,29 @@ export async function answerRequest(
     const read = await callTool(ctx, "home_overview", {});
     if (!read.ok) return { text: words.failed(read.words) };
     const overview = read.value as Overview;
-    const matched = match(request.text, language, namesOf(overview));
-    if (!matched) {
-      const lightsHidden = overview.notAllowed.some(
-        ({ title, where }) =>
-          title === lightControlTitle &&
-          where === "Settings, What AI Agents Can Use",
-      );
-      return { text: lightsHidden ? words.notAllowed : language.notUnderstood };
+    const names = namesOf(overview);
+    const matched = match(request.text, language, names);
+    if (matched)
+      return await changeLights(ctx, matched, overview, request, words);
+
+    // A mood's name only after nothing else matched: its list is a read of
+    // its own, which lights don't wait for.
+    const lookedUp = await readMoods(ctx);
+    if (!lookedUp.ok) {
+      return { text: words.failed(lookedUp.words, lookedUp.error) };
     }
-    return await changeLights(ctx, matched, overview, request, words);
+    const { moods } = lookedUp;
+    const named = match(request.text, language, {
+      ...names,
+      mood: moods.map((mood) => mood.name),
+    });
+    if (named?.intent.do === "mood") {
+      return await runMood(ctx, named, moods, overview, request, words);
+    }
+    const lightsHidden = overview.notAllowed.some(
+      ({ title, where }) => title === lightControlTitle && where === agentsPage,
+    );
+    return { text: lightsHidden ? words.notAllowed : language.notUnderstood };
   } catch (error) {
     if (isActionError(error) && error.code === "forbidden") {
       return { text: words.notAllowed };

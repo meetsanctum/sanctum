@@ -188,6 +188,7 @@ export function assembleAgentTools(
   } = options;
   const readableDeviceKinds = () => canUse.readableDeviceKinds();
   const appName = (appId: string) => apps.manifest(appId)?.name;
+  const changes = createAgentChanges({ isActiveAgent: isRetained, now });
   return createAgentTools({
     canUse: () => canUse.list(),
     core: createCoreTools({
@@ -195,7 +196,7 @@ export function assembleAgentTools(
       appName,
       devices,
       lights,
-      changes: createAgentChanges({ isActiveAgent: isRetained, now }),
+      changes,
       entities,
       activity,
       activityViews,
@@ -206,6 +207,7 @@ export function assembleAgentTools(
       speech: options.speech,
       language: () => places.language(),
     }),
+    changes,
     readableDeviceKinds,
     places: () => places.list(),
     devices,

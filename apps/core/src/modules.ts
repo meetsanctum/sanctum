@@ -483,6 +483,7 @@ export async function createModules(
     devices,
     places,
     apps: () => apps,
+    entities,
     record: activity.for("devices"),
     onHearing: live.hearing,
   });

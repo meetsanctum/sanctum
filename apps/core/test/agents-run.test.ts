@@ -5,14 +5,16 @@ import {
   moodType,
   toStaticManifest,
 } from "@meetsanctum/app-sdk";
+import assistant from "@meetsanctum/assistant";
 import moods from "@meetsanctum/moods";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
+import { createAgentChanges } from "../src/agents/changes.js";
 import { contractOf } from "../src/app-host/contract.js";
 import { connect, names } from "./agents-support.js";
-import { lampsCore, radio, settled } from "./devices-support.js";
+import { devicesSeenBy, lampsCore, radio, settled } from "./devices-support.js";
 import type { AppPackage } from "./runner-apps.js";
 import { post } from "./support.js";
 
@@ -192,6 +194,33 @@ describe("the run tool", () => {
     );
   });
 
+  // The Assistant's German reply goes by this place in the words, to say
+  // where running a mood is switched on.
+  it("names Settings' page for AI agents when a core area it needs is off", async () => {
+    const { client, core, token } = await household();
+    const [relax] = await moodsSeen(client);
+    const off = await post(
+      core,
+      "/api/agents/can-use/area",
+      { id: "devices.control:light", on: false },
+      { token },
+    );
+    expect(off.statusCode).toBe(200);
+
+    const refused = await call(client, "run", {
+      app: relax!.app,
+      key: relax!.key,
+    });
+    expect(refused).toEqual({
+      isError: true,
+      content: {
+        error: "not_allowed",
+        message:
+          "“Run a mood” needs “Control your lights”, which is switched off for AI agents in Settings, What AI Agents Can Use.",
+      },
+    });
+  });
+
   it("is refused while moods are off for AI agents, as Run a mood is", async () => {
     const { client, offer } = await household();
     const [relax] = await moodsSeen(client);
@@ -265,6 +294,132 @@ describe("the run tool", () => {
     );
     expect(run?.description).toContain("can turn others there off");
   });
+});
+
+it("runs a named mood through the Assistant without leaving the previous light change as its implicit undo", async () => {
+  const { core, token } = await household({
+    app: assistant,
+    origin: "official",
+  });
+  await radio.add("lamp-2", "light", "Reading lamp");
+  const kitchen = await post(
+    core,
+    "/api/places/rooms/add",
+    { name: "Kitchen" },
+    { token },
+  );
+  expect(kitchen.statusCode).toBe(200);
+  const reading = (await devicesSeenBy(core, token)).find(
+    (device: { driverName: string }) => device.driverName === "Reading lamp",
+  );
+  expect(
+    (
+      await post(
+        core,
+        "/api/devices/update",
+        { id: reading.id, roomId: kitchen.json().id },
+        { token },
+      )
+    ).statusCode,
+  ).toBe(200);
+
+  async function ask(text: string) {
+    const response = await post(
+      core,
+      "/api/assistant/ask",
+      { text },
+      { token },
+    );
+    expect(response.statusCode).toBe(200);
+    return response.json().reply;
+  }
+
+  expect(await ask("Turn on the Kitchen lights")).toBe("Kitchen lights on.");
+  expect(radio.gadgets.get("lamp-2")?.state).toMatchObject({ on: true });
+  expect(await ask("Set the Office to Relax")).toBe("Relax in Office.");
+  expect(radio.gadgets.get("lamp-1")?.state).toMatchObject({
+    on: true,
+    brightness: 40,
+  });
+  const sent = radio.received.length;
+  expect(await ask("Undo that")).toBe("I can't undo a mood.");
+  expect(radio.received).toHaveLength(sent);
+  expect(radio.gadgets.get("lamp-2")?.state).toMatchObject({ on: true });
+
+  expect(await ask("Turn off the Kitchen lights")).toBe("Kitchen lights off.");
+  expect(await ask("Put it back")).toBe("Put back.");
+  expect(radio.gadgets.get("lamp-2")?.state).toMatchObject({ on: true });
+});
+
+it("blocks implicit undo only for the device that ran the mood", () => {
+  const changes = createAgentChanges({ isActiveAgent: () => true });
+  const tablet = { id: assistant.id, requestClientId: "tablet" };
+  const phone = { id: assistant.id, requestClientId: "phone" };
+  const light = {
+    device: "lamp",
+    capability: "light",
+    kind: "light" as const,
+    at: new Date(),
+    before: { on: false },
+    asked: { on: true },
+  };
+  const tabletChange = changes.record(tablet, [light]);
+  const phoneChange = changes.record(phone, [light]);
+
+  changes.recordMood(tablet);
+  expect(changes.last(tablet)).toBe("mood");
+  expect(changes.last(phone)).toMatchObject({ id: phoneChange });
+  expect(changes.find(tablet, tabletChange!)).toMatchObject({
+    changed: [light],
+  });
+
+  const next = changes.record(tablet, [light]);
+  expect(changes.last(tablet)).toMatchObject({ id: next });
+});
+
+it("lets a mood stop an implicit undo only for the hour changes are kept", () => {
+  let at = new Date("2026-11-27T12:00:00Z");
+  const changes = createAgentChanges({
+    isActiveAgent: () => true,
+    now: () => at,
+  });
+  const tablet = { id: assistant.id, requestClientId: "tablet" };
+  const light = {
+    device: "lamp",
+    capability: "light",
+    kind: "light" as const,
+    at,
+    before: { on: false },
+    asked: { on: true },
+  };
+  changes.record(tablet, [light]);
+  at = new Date("2026-11-27T12:30:00Z");
+  changes.recordMood(tablet);
+  expect(changes.last(tablet)).toBe("mood");
+
+  // An hour after the mood, nothing of it or before it is kept.
+  at = new Date("2026-11-27T13:31:00Z");
+  expect(changes.last(tablet)).toBeUndefined();
+});
+
+it("leaves an MCP agent's own changes to put back after it runs a mood", async () => {
+  const { client } = await household();
+  const lit = await call(client, "lights", {
+    place: { kind: "home" },
+    set: { brightness: 10 },
+  });
+  expect(lit.isError).toBe(false);
+  const change = lit.content.change as string;
+  expect(change).toEqual(expect.any(String));
+  await settled();
+  const [relax] = await moodsSeen(client);
+  const ran = await call(client, "run", { app: relax!.app, key: relax!.key });
+  expect(ran.isError).toBe(false);
+  await settled();
+
+  const restored = await call(client, "restore", { change });
+  expect(restored.isError).toBe(false);
+  expect(restored.content).toMatchObject({ change });
 });
 
 describe("an app's action that runs moods", () => {

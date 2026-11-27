@@ -17,8 +17,8 @@ import { notUnderstood, sentences } from "./sentences.js";
 // sentences, in English and German, and does what they ask through the
 // tools every AI agent gets: lights on, off, brighter, dimmer or to a
 // brightness, for the speaker's room, a room, a floor, a light or the whole
-// home, and putting back what it changed. It asks no model. Its page is in
-// ./ui.
+// home; a room's mood by its name; and putting back a direct light change
+// when no mood has run since. It asks no model. Its page is in ./ui.
 
 /** Sets the home's one language, which smart speakers hear and speak. */
 const language = defineAction({
@@ -38,7 +38,8 @@ export const app = defineApp({
   name: "Assistant",
   // 0.2.0: its page, which lists the smart speakers by room.
   // 0.2.1: optional choices in sentences as speech recognition reads them.
-  version: "0.2.1",
+  // 0.3.0: a room's mood, by its name.
+  version: "0.3.0",
   core: "^2.0.0",
   summary: "Controls lights by voice or typed request.",
   icon: { glyph: "message-circle-more", color: "iris" },

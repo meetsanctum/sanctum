@@ -177,6 +177,9 @@ importers:
       '@meetsanctum/app-testkit':
         specifier: workspace:*
         version: link:../../packages/app-testkit
+      '@meetsanctum/assistant':
+        specifier: workspace:*
+        version: link:../../catalog/apps/assistant
       '@meetsanctum/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp

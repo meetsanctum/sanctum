@@ -25,6 +25,7 @@ import {
   hearingWords,
   languageNames,
   listeningAudio,
+  moodsLeftOut,
   mutedWords,
   speakerLine,
 } from "./words";
@@ -72,13 +73,18 @@ function StepBar(props: { label: string }) {
   );
 }
 
-function Ready(props: { language: RequestLanguage }) {
+function Ready(props: { language: RequestLanguage; leftOut?: string[] }) {
   return (
-    <div className="flex items-center gap-2">
-      <icons.Check aria-hidden="true" className="size-4 shrink-0" />
-      <span className="text-sm font-medium">
-        Ready in {languageNames[props.language]}
-      </span>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <icons.Check aria-hidden="true" className="size-4 shrink-0" />
+        <span className="text-sm font-medium">
+          Ready in {languageNames[props.language]}
+        </span>
+      </div>
+      {props.leftOut?.includes("mood") && (
+        <p className={help}>{moodsLeftOut}</p>
+      )}
     </div>
   );
 }
@@ -87,7 +93,12 @@ function Ready(props: { language: RequestLanguage }) {
 function HearingLine(props: { hearing: Hearing }) {
   const words = hearingWords(props.hearing);
   if (props.hearing.state === "ready") {
-    return <Ready language={props.hearing.language} />;
+    return (
+      <Ready
+        language={props.hearing.language}
+        leftOut={props.hearing.leftOut}
+      />
+    );
   }
   return words?.step ? <StepBar label={words.step} /> : null;
 }

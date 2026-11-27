@@ -159,7 +159,7 @@ describe("the Assistant's page", () => {
     expect(container.querySelector('[role="progressbar"]')).toBeNull();
     expect(text()).toContain("“Turn on the Office lights”");
     expect(text()).toContain(
-      "For anything else, it says “I can only help with lights.”",
+      "For anything else, it says “I can only help with lights and moods.”",
     );
   });
 
@@ -289,6 +289,22 @@ describe("the Assistant's page", () => {
       device: { ...office, availability: "offline" },
     });
     expect(text()).not.toContain("Microphones off");
+  });
+
+  it("says moods can't be used by voice when they were left out", async () => {
+    const { client } = fakeClient({
+      hearing: {
+        state: "ready",
+        language: "en",
+        activeLanguage: "en",
+        leftOut: ["mood"],
+      },
+      devices: [office],
+    });
+    await show(client);
+
+    expect(text()).toContain("Ready in English");
+    expect(text()).toContain("Moods can't be used by voice: too many names.");
   });
 
   it("names each step while it gets ready, and follows it live", async () => {

@@ -74,12 +74,16 @@ const unknownTool = (name: string) =>
 function answerOf(result: {
   content: readonly { type: string; text?: string }[];
   isError?: boolean;
+  structuredContent?: unknown;
 }): AiToolAnswer {
+  const details = result.structuredContent as { error?: unknown } | null;
+  const error = details?.error;
   return {
     text: result.content
       .flatMap((part) => (part.type === "text" && part.text ? [part.text] : []))
       .join("\n"),
     isError: result.isError === true,
+    ...(result.isError && typeof error === "string" ? { error } : {}),
   };
 }
 

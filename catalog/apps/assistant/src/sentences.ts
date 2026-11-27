@@ -24,6 +24,7 @@ export type Intent =
   | { do: "switch"; where: Where }
   | { do: "step"; where: Where; to?: "brighter" | "dimmer" }
   | { do: "set"; where: Where }
+  | { do: "mood" }
   | { do: "restore" }
   | { do: "timer" };
 
@@ -199,6 +200,27 @@ const en: Language = {
       template: "(set|dim|turn) [the] (light|lights) to <percent> percent",
       intent: setOf("here"),
     },
+    // A room's mood, by its name: after the lights, so a light's name wins.
+    {
+      template: "(set|switch|change) [the] {room} to {mood}",
+      intent: { do: "mood" },
+    },
+    {
+      template: "(set|start|turn on) {mood} in [the] {room}",
+      intent: { do: "mood" },
+    },
+    {
+      template: "{mood} in [the] {room}",
+      intent: { do: "mood" },
+    },
+    {
+      template: "(set|start|turn on) [the] {mood} [mood]",
+      intent: { do: "mood" },
+    },
+    {
+      template: "set the mood to {mood}",
+      intent: { do: "mood" },
+    },
     // Putting back what it did.
     { template: "(put|change|set) it back", intent: { do: "restore" } },
     { template: "(put|turn) [the] lights back", intent: { do: "restore" } },
@@ -215,7 +237,7 @@ const en: Language = {
       intent: { do: "timer" },
     },
   ],
-  notUnderstood: "I can only help with lights.",
+  notUnderstood: "I can only help with lights and moods.",
 };
 
 // German names rooms with an article of their own ("im Büro", "in der
@@ -344,6 +366,28 @@ const de: Language = {
         "(stell|stelle|dimm|dimme|mach|mache) [(das|die)] (Licht|Lichter|Lampen) auf <percent> Prozent",
       intent: setOf("here"),
     },
+    // Die Stimmung eines Raums, nach dem Licht.
+    {
+      template: "(stell|stelle|setz|setze) [(den|das|die)] {room} auf {mood}",
+      intent: { do: "mood" },
+    },
+    {
+      template:
+        "(starte|aktiviere|stell|stelle) {mood} (im|in der|in den|in|auf dem|auf der) {room}",
+      intent: { do: "mood" },
+    },
+    {
+      template: "{mood} (im|in der|in den|in|auf dem|auf der) {room}",
+      intent: { do: "mood" },
+    },
+    {
+      template: "(starte|aktiviere) [die Stimmung] {mood}",
+      intent: { do: "mood" },
+    },
+    {
+      template: "(stell|stelle|setz|setze) die Stimmung auf {mood}",
+      intent: { do: "mood" },
+    },
     // Zurück.
     { template: "(mach|mache) das rückgängig", intent: { do: "restore" } },
     {
@@ -358,7 +402,7 @@ const de: Language = {
       intent: { do: "timer" },
     },
   ],
-  notUnderstood: "Ich kann nur mit dem Licht helfen.",
+  notUnderstood: "Ich kann nur mit Licht und Stimmungen helfen.",
 };
 
 export const languages: Record<RequestLanguage, Language> = { en, de };

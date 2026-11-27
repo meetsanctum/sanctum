@@ -32,7 +32,14 @@ export function examples(language: RequestLanguage, room: string | null) {
           say: "Stell das Licht auf vierzig Prozent",
           what: "Or heller and dunkler",
         },
-        { say: "Mach das rückgängig", what: "Undoes the last change it made" },
+        {
+          say: "Stell das Wohnzimmer auf Abend",
+          what: "A room's mood, by its name",
+        },
+        {
+          say: "Mach das rückgängig",
+          what: "Undoes the last light change if no mood has run since",
+        },
       ]
     : [
         {
@@ -47,7 +54,14 @@ export function examples(language: RequestLanguage, room: string | null) {
           say: "Set the lights to forty percent",
           what: "Or brighter and dimmer",
         },
-        { say: "Put it back", what: "Undoes the last change it made" },
+        {
+          say: `Set the ${place} to Evening`,
+          what: "A room's mood, by its name",
+        },
+        {
+          say: "Put it back",
+          what: "Undoes the last light change if no mood has run since",
+        },
       ];
 }
 
@@ -58,6 +72,9 @@ export function firstTry(language: RequestLanguage, room: string) {
 
 export const assignSpeakerRoom =
   "Assign a room to a smart speaker to try a command.";
+
+/** Beside Ready, when the home's moods didn't fit what speech can learn. */
+export const moodsLeftOut = "Moods can't be used by voice: too many names.";
 
 /** What the first card says when every online smart speaker is muted. */
 export const mutedWords = {
