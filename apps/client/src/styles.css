@@ -106,15 +106,6 @@ body {
   padding: 8px 24px 8px 15px;
 }
 
-@media (width < 40rem) {
-  .top-bar {
-    height: calc(64px + env(safe-area-inset-top));
-    padding: calc(12px + env(safe-area-inset-top))
-      calc(24px + env(safe-area-inset-right)) 8px
-      calc(15px + env(safe-area-inset-left));
-  }
-}
-
 /* On macOS the top bar moves the window, between its buttons, and so do the
    sidebar's top row, the strip above the page and an overlay's header
    (src/overlay.tsx). */
@@ -359,19 +350,22 @@ body {
    desktop app). On the Mac Back starts past them, and the bar moves the
    window between its buttons. */
 .sheet-bar {
+  --sheet-back-inset: 15px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   height: 54px;
-  padding: 0 24px 0 15px;
 }
 
 .sheet-bar > button {
   justify-self: start;
+  margin-inline-start: calc(
+    var(--sheet-back-inset) + env(safe-area-inset-left, 0px)
+  );
 }
 
 [data-platform="macos"] .sheet-bar {
-  padding-inline-start: 88px;
+  --sheet-back-inset: 88px;
   -webkit-app-region: drag;
 }
 
@@ -400,14 +394,16 @@ body {
   mask-image: none;
 }
 
-/* A phone's bar is the top bar's, clear of the status bar and the screen's
-   corners; it keeps its width for the sheet, which has its own padding. */
-@media (max-width: 639px) {
+@media (width < 40rem) {
+  .top-bar,
   .sheet-bar {
     height: calc(64px + env(safe-area-inset-top));
-    padding: calc(12px + env(safe-area-inset-top))
-      calc(24px + env(safe-area-inset-right)) 8px
-      calc(15px + env(safe-area-inset-left));
+    padding-block: calc(12px + env(safe-area-inset-top)) 8px;
+  }
+
+  .top-bar {
+    padding-inline: calc(15px + env(safe-area-inset-left))
+      calc(24px + env(safe-area-inset-right));
   }
 
   .sheet-scroll {

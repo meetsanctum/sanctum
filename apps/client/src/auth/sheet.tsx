@@ -14,6 +14,7 @@ import {
 import { BackButton, Logo } from "../components";
 import { Skeleton } from "../components/ui/skeleton";
 import { KnotLoader } from "../knot-loader";
+import { getShell } from "../shell";
 
 // The screens before the dashboard share one sheet: a single column of
 // frosted Carbon glass over the Graphite backdrop. Above it is the screen's
@@ -44,7 +45,8 @@ export function Sheet(props: {
   const goBack = useEffectEvent(() => back?.onBack());
 
   // Esc, and ⌘[ as on the Mac, do what Back does, where there is a way
-  // back. A dialog or menu that closes on Esc has handled the key first.
+  // back. A dialog or menu can handle Esc first, and an open dialog keeps
+  // the Back shortcut from reaching the sheet behind it.
   useEffect(() => {
     if (!canGoBack) return;
     const onKey = (event: KeyboardEvent) => {
@@ -59,6 +61,12 @@ export function Sheet(props: {
         !event.shiftKey;
       if (!isEscape && !isBackShortcut) return;
       event.preventDefault();
+      if (
+        isBackShortcut &&
+        document.querySelector('[role="dialog"][data-state="open"]')
+      ) {
+        return;
+      }
       goBack();
     };
     window.addEventListener("keydown", onKey);
@@ -75,7 +83,11 @@ export function Sheet(props: {
   }, []);
 
   return (
-    <div data-mode="evening" className="sheet-screen">
+    <div
+      data-mode="evening"
+      data-platform={getShell().platform}
+      className="sheet-screen"
+    >
       <header className="sheet-bar">
         {back && <BackButton {...back} />}
         <Logo className="sheet-logo" />

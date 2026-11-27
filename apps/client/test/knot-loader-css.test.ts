@@ -68,6 +68,33 @@ it("gives the sign-in screen a fixed height on old and new web views", () => {
   expect(heights("@supports(height:100dvh)")).toEqual([["height", "100dvh"]]);
 });
 
+it("lets the sign-in sheet scroll in the space below the bar", () => {
+  expect(declarationsOf(".sheet-screen")).toContainEqual([
+    "grid-template-rows",
+    "auto minmax(0,1fr)",
+  ]);
+  expect(declarationsOf(".sheet-scroll")).toContainEqual([
+    "overflow-y",
+    "auto",
+  ]);
+});
+
+it("gives the sign-in and dashboard bars the same height on narrow screens", () => {
+  for (const bar of [".sheet-bar", ".top-bar"]) {
+    const heights = rules
+      .filter(({ selectors }) => selectors.includes(bar))
+      .flatMap(({ media, declarations }) =>
+        declarations
+          .filter((declaration) => declaration.startsWith("height:"))
+          .map((declaration) => [media, declaration]),
+      );
+    expect(heights.at(-1)).toEqual([
+      "@medianotalland(width>=40rem)",
+      "height:calc(64px + env(safe-area-inset-top))",
+    ]);
+  }
+});
+
 describe("the knot loader's built CSS", () => {
   it.each(["upright", "lying"])(
     "draws and pulls out the %s path every 4.8 s, over and over",
