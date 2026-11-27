@@ -385,8 +385,9 @@ function HomeScreen(
     (app: string) =>
     (page: string, params: PageParams = {}) =>
       setRoutes((current) => [...current, { app, page, params }]);
-  // Return to the top of the current page or open the requested card without
-  // adding the same page to the back stack.
+  // One of Settings' pages for a sheet's fix, over the page that opened it,
+  // or in its place where that's the page already, as Settings → Apps under
+  // its Add sheet, so Back leads where it did.
   const openSettingsPage = useCallback(
     (page: string, params: PageParams = {}) =>
       setRoutes((current) => {

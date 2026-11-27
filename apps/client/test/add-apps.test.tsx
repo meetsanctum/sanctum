@@ -312,7 +312,7 @@ describe("Add apps", () => {
         free: 60 * mebibyte,
       },
       title: "Not enough memory for Example",
-      line: "Example needs 128 MB of memory. 60 MB is available for it. Turning off an app you don't use may free enough memory.",
+      line: "To add Example, turn off an app you don't use. Your other apps take the memory Example needs.",
       fix: "Show apps",
       opens: ["apps", undefined],
     },
@@ -364,7 +364,7 @@ describe("Add apps", () => {
 
     const sheet = dialog()!;
     expect(sheet.textContent).toContain(
-      "Example needs 1.13 GB of memory. 1 GB is available for it.",
+      `Example needs more memory than ${productName} can give it.`,
     );
     expect(buttonIn(sheet, "Show apps")).toBeUndefined();
     expect(buttonIn(sheet, "Add")!.disabled).toBe(true);

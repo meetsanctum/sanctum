@@ -24,7 +24,7 @@ import { CoreError, coreJson } from "./core-fetch";
 import { permissionIconOf } from "./permission-icons";
 import { useSettingsOpener } from "./settings-opener";
 import { appsSettingsPage, systemSettingsPage } from "./system-apps";
-import { formatBytes, formatMemory } from "./system-status";
+import { formatBytes } from "./system-status";
 
 // The sheet that adds an app the home could add, before any of its code
 // runs: what it needs to work, each in Sanctum's words with the app's
@@ -156,19 +156,20 @@ export function shortfallWords(
             fix: updateFix,
           };
     case "memory": {
+      // With no app that could be turned off, there's nothing to show.
       const canTurnOff = apps.some(
         (app) => !app.alwaysOn && app.state !== "off",
       );
-      const amounts = `${name} needs ${formatMemory(shortfall.needs)} of memory. ${formatMemory(shortfall.free)} is available for it.`;
-      return {
-        title: `Not enough memory for ${name}`,
-        line: canTurnOff
-          ? `${amounts} Turning off an app you don't use may free enough memory.`
-          : amounts,
-        fix: canTurnOff
-          ? { label: "Show apps", page: appsSettingsPage }
-          : undefined,
-      };
+      return canTurnOff
+        ? {
+            title: `Not enough memory for ${name}`,
+            line: `To add ${name}, turn off an app you don't use. Your other apps take the memory ${name} needs.`,
+            fix: { label: "Show apps", page: appsSettingsPage },
+          }
+        : {
+            title: `Not enough memory for ${name}`,
+            line: `${name} needs more memory than ${productName} can give it.`,
+          };
     }
     case "space": {
       // What's free may not cover what's kept for updates and the other
