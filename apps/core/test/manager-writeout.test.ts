@@ -14,12 +14,10 @@ const mb = 1024 * 1024;
 const writing = {
   pendingBytes: 800 * mb,
   thresholdBytes: 8 * mb,
-  writingOut: true,
 };
 const idle = {
   pendingBytes: 2 * mb,
   thresholdBytes: 8 * mb,
-  writingOut: false,
 };
 
 describe("following the host's writeout", () => {
@@ -96,9 +94,11 @@ describe("following the host's writeout", () => {
 describe("the manager client's writeout", () => {
   const open: { client: ManagerClient; server: Server }[] = [];
   afterEach(() => {
+    vi.restoreAllMocks();
     for (const { client, server } of open.splice(0)) {
       client.close();
       server.close();
+      server.closeAllConnections();
     }
   });
 
@@ -107,10 +107,20 @@ describe("the manager client's writeout", () => {
       await mkdtemp(join(tmpdir(), "sanctum-")),
       "manager.sock",
     );
-    const state = { status: 200, body: JSON.stringify(idle), asked: 0 };
+    const state = {
+      status: 200,
+      body: JSON.stringify(idle),
+      asked: 0,
+      hanging: false,
+      disconnected: false,
+    };
     const server = createServer((request, response) => {
       request.resume();
       if (request.url === "/api/host/writeout") state.asked += 1;
+      if (state.hanging) {
+        response.on("close", () => (state.disconnected = true));
+        return;
+      }
       response.statusCode = state.status;
       response.end(state.body);
     });
@@ -127,9 +137,11 @@ describe("the manager client's writeout", () => {
   }
 
   it("follows what the manager says, and holds it while it answers with an error", async () => {
-    const { client, state } = await answering();
+    const { client, state, logs } = await answering();
+    let at = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => at);
 
-    client.followWriteout(5, 60_000);
+    client.followWriteout(5, 1_000);
     await vi.waitFor(() => expect(state.asked).toBeGreaterThan(0));
     expect(client.writingOut()).toBe(false);
 
@@ -141,9 +153,32 @@ describe("the manager client's writeout", () => {
     await vi.waitFor(() => expect(state.asked).toBeGreaterThan(asked + 1));
     expect(client.writingOut()).toBe(true);
 
+    at += 1_000;
+    await vi.waitFor(() =>
+      expect(logs).toContain(
+        "host: done writing out to its disks, as far as the core knows: the manager hasn't answered for 1 s",
+      ),
+    );
+    expect(client.writingOut()).toBe(false);
+
     state.status = 200;
-    state.body = JSON.stringify(idle);
+    await vi.waitFor(() => expect(client.writingOut()).toBe(true));
+    // A stale flag from a manager reply cannot override the counters.
+    state.body = JSON.stringify({ ...idle, writingOut: true });
     await vi.waitFor(() => expect(client.writingOut()).toBe(false));
+  });
+
+  it("cancels a request still under way when the link closes", async () => {
+    const { client, state, logs } = await answering();
+    state.hanging = true;
+    client.followWriteout(60_000);
+    await vi.waitFor(() => expect(state.asked).toBe(1));
+
+    client.close();
+
+    await vi.waitFor(() => expect(state.disconnected).toBe(true));
+    expect(client.writingOut()).toBe(false);
+    expect(logs).toEqual([]);
   });
 
   it("takes an old manager's not found as idle, and keeps asking", async () => {

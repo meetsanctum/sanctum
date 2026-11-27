@@ -117,6 +117,7 @@ export function createAppInstaller(options: {
       ),
       log,
       isWritingOut: options.isWritingOut,
+      isOff: () => installed.get(appId)?.off === true,
       onReady() {
         const entry = installed.get(appId);
         if (entry) options.supervisor().ready(entry);

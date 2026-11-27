@@ -146,7 +146,6 @@ export function createSupervisor(options: {
   waitPausesMs?: readonly number[];
   connectWithinMs?: number;
   connectCheckMs?: number;
-  writeoutGraceMs?: number;
   quietMs?: number;
   attentionMs?: number;
 }) {
@@ -157,7 +156,6 @@ export function createSupervisor(options: {
   const waitPauses = options.waitPausesMs ?? defaultWaitPausesMs;
   const connectWithinMs = options.connectWithinMs ?? defaultConnectWithinMs;
   const connectCheckMs = options.connectCheckMs ?? defaultConnectCheckMs;
-  const writeoutGraceMs = options.writeoutGraceMs ?? defaultWriteoutGraceMs;
   const isWritingOut = () => manager.writingOut?.() === true;
   // The apps that reach devices stopped while they wait for a manager that
   // can give them their network.
@@ -416,10 +414,10 @@ export function createSupervisor(options: {
   // still runs. Hello, or anything else that moves it on, clears the timer.
   // While the host writes out a backlog to its disks, which a new process
   // waits behind as it loads, the deadline waits on, for up to
-  // writeoutGraceMs.
+  // defaultWriteoutGraceMs.
   function awaitHello(entry: InstalledApp, generation: number, by: number) {
     const { id } = entry.app;
-    const latest = by + writeoutGraceMs;
+    const latest = by + defaultWriteoutGraceMs;
     let isChecking = false;
     let isSpared = false;
     const isWaiting = () =>
@@ -437,7 +435,7 @@ export function createSupervisor(options: {
       if (isLate && !isSpared) {
         isSpared = true;
         log(
-          `apps: ${id} hasn't said hello while the host writes out to its disks; it gets up to ${Math.round(writeoutGraceMs / 1000)} s more`,
+          `apps: ${id} hasn't said hello while the host writes out to its disks; it gets up to ${Math.round(defaultWriteoutGraceMs / 1000)} s more`,
         );
       }
       // A slow status request must neither move the deadline nor pile up requests.

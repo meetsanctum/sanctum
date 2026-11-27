@@ -27,7 +27,7 @@ import { chmod, mkdir, unlink } from "node:fs/promises";
 import { createServer, type Socket } from "node:net";
 import { dirname } from "node:path";
 
-import { ActionCallError } from "./errors.js";
+import { ActionCallError, withTimeout } from "./errors.js";
 
 // The core's end of the socket to an app that runs apart. Whatever arrives
 // is untrusted: only the SDK's rule keeps an app's own code off the socket,
@@ -138,6 +138,8 @@ export function createAppLink(options: {
   onGone: (reason: string, hung: boolean) => void;
   /** Whether the host is writing out a backlog to its disks now. */
   isWritingOut?: () => boolean;
+  /** Whether someone has turned the app off. */
+  isOff?: () => boolean;
   helloWithinMs?: number;
   readyWithinMs?: number;
   heartbeatMs?: number;
@@ -149,6 +151,7 @@ export function createAppLink(options: {
   const graceMs = options.graceMs ?? defaultGraceMs;
   const heartbeatMs = options.heartbeatMs ?? defaultHeartbeatMs;
   const isWritingOut = options.isWritingOut ?? (() => false);
+  const isOff = options.isOff ?? (() => false);
   const writeoutGraceMs = options.writeoutGraceMs ?? defaultWriteoutGraceMs;
   const maxSparedBeats = Math.ceil(writeoutGraceMs / heartbeatMs);
   const sparedFor = `${Math.round(writeoutGraceMs / 1000)} s`;
@@ -191,7 +194,7 @@ export function createAppLink(options: {
     ms: number,
     expired: () => void,
     set: (timer: NodeJS.Timeout) => void,
-    spared: () => void,
+    spared?: () => void,
   ) {
     const latest = performance.now() + ms + writeoutGraceMs;
     let wasWriting = false;
@@ -199,10 +202,10 @@ export function createAppLink(options: {
     const look = () => {
       const left = latest - performance.now();
       const writing = isWritingOut();
-      if (left > 0 && (writing || wasWriting)) {
+      if (left > 0 && !isOff() && (writing || wasWriting)) {
         if (!isTold) {
           isTold = true;
-          spared();
+          spared?.();
         }
         wasWriting = writing;
         set(setTimeout(look, Math.min(heartbeatMs, left)));
@@ -278,7 +281,9 @@ export function createAppLink(options: {
     // writes out don't count, up to writeoutGraceMs; it is logged once it
     // would have counted as hung.
     connection.beats = setInterval(() => {
+      const off = isOff();
       if (
+        !off &&
         connection.missedBeats > 0 &&
         connection.sparedBeats < maxSparedBeats &&
         isWritingOut()
@@ -293,10 +298,13 @@ export function createAppLink(options: {
             `apps: ${appId} hasn't answered its heartbeat while the host writes out to its disks; it gets up to ${sparedFor} more`,
           );
         }
-      } else if (connection.missedBeats >= maxMissedBeats) {
+      } else if (
+        connection.missedBeats + (off ? connection.sparedBeats : 0) >=
+        maxMissedBeats
+      ) {
         drop(
           connection,
-          connection.sparedBeats > 0
+          !off && connection.sparedBeats > 0
             ? `it missed ${maxMissedBeats} heartbeats, and ${connection.sparedBeats} more while the host wrote out to its disks`
             : `it missed ${maxMissedBeats} heartbeats`,
           true,
@@ -472,6 +480,11 @@ export function createAppLink(options: {
   server.maxConnections = maxConnections;
 
   return {
+    /** The core's watchdog for an app's start or stop hook. */
+    withLifecycleTimeout<T>(work: Promise<T>, ms: number) {
+      return withTimeout(work, ms, deadline);
+    },
+
     /** Listens in the app's folder. The app's mount of it is read-only, so it can't swap the socket. */
     async listen() {
       await mkdir(dirname(options.socket), { recursive: true });
@@ -571,7 +584,7 @@ export function createAppLink(options: {
             () =>
               drop(
                 connection,
-                `it was still busy with a call ${graceMs} ms past its deadline`,
+                "it was still busy with a call after its grace expired",
                 true,
               ),
             (timer) => {

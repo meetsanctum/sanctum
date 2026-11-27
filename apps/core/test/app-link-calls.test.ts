@@ -38,7 +38,7 @@ describe("calls over an app's socket", () => {
       );
       const two = link.call(
         calls({ location: second as never }),
-        { kind: "app", id: "test.link" },
+        { kind: "app", id: "sanctum.example" },
         action,
         5_000,
       );
@@ -395,7 +395,7 @@ describe("calls over an app's socket", () => {
       await expect(call).rejects.toMatchObject({ code: "unavailable" });
 
       expect(gone).toEqual([
-        "it was still busy with a call 20 ms past its deadline",
+        "it was still busy with a call after its grace expired",
       ]);
       await vi.waitFor(() => expect(app.isClosed()).toBe(true));
     });

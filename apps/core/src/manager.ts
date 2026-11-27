@@ -184,6 +184,7 @@ export function createManagerClient(options: {
   let learning = false;
   let known = noCapabilities;
   let writeout: WriteoutFollower | undefined;
+  let writeoutAbort: AbortController | undefined;
 
   function pause(ms: number, signal?: AbortSignal) {
     return new Promise<void>((resolve) => {
@@ -334,24 +335,30 @@ export function createManagerClient(options: {
 
     // Whether the host is writing out a backlog to its disks, as the
     // manager last said (manager-writeout.ts).
-    writingOut: () => writeout?.writingOut() ?? false,
+    writingOut: () => !closed && writeout?.writingOut() === true,
 
     // Keeps asking whether it is, each answer its own question. A manager
     // too old to know it never says so.
     followWriteout(everyMs = askForWriteoutEveryMs, holdMs?: number) {
-      if (writeout) return;
+      if (closed || writeout) return;
       const follower = createWriteoutFollower({ log, holdMs });
       writeout = follower;
+      const abort = new AbortController();
+      writeoutAbort = abort;
       void (async () => {
         while (!closed) {
           try {
-            follower.heard(
-              parseBody(
-                hostWriteout,
-                await once("GET", "/api/host/writeout", undefined, everyMs),
-              ),
+            const body = await once(
+              "GET",
+              "/api/host/writeout",
+              undefined,
+              everyMs,
+              abort.signal,
             );
+            if (closed) return;
+            follower.heard(parseBody(hostWriteout, body));
           } catch (error) {
+            if (closed) return;
             if (error instanceof ManagerRefusal) follower.heard(null);
             else if (error instanceof ManagerUnavailable) follower.missed();
             else throw error;
@@ -359,6 +366,7 @@ export function createManagerClient(options: {
           if (!closed) await pause(everyMs);
         }
       })().catch((error: unknown) => {
+        if (closed) return;
         log(
           `manager: stopped asking about the host's writeout (${String(error)})`,
         );
@@ -715,6 +723,7 @@ export function createManagerClient(options: {
 
     close() {
       closed = true;
+      writeoutAbort?.abort();
       for (const wake of wakes) {
         wake();
       }

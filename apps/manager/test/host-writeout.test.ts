@@ -13,7 +13,14 @@ import { createServer } from "../src/server.js";
 // background.
 
 const mb = 1024 * 1024;
-const kb = 1024;
+const pageSize = 16 * 1024;
+const vmstat = (bytes: number) =>
+  `nr_dirty_background_threshold ${bytes / pageSize}\n`;
+const auxv = Buffer.alloc(48);
+auxv.writeBigUInt64LE(6n, 16);
+auxv.writeBigUInt64LE(BigInt(pageSize), 24);
+// Another auxiliary-vector entry before AT_PAGESZ, followed by AT_NULL.
+auxv.writeBigUInt64LE(3n, 0);
 
 // An 8 GB Pi's meminfo, with `dirty` and `writeback` in kB.
 const meminfo = (dirty: number, writeback = 0) =>
@@ -38,10 +45,10 @@ afterEach(async () => {
 });
 
 // A host's /proc, under a folder of its own.
-async function host(files: Record<string, string>) {
+async function host(files: Record<string, string | Buffer>) {
   const root = await mkdtemp(join(tmpdir(), "sanctum-writeout-"));
   roots.push(root);
-  const set = async (path: string, text: string) => {
+  const set = async (path: string, text: string | Buffer) => {
     await mkdir(dirname(join(root, path)), { recursive: true });
     await writeFile(join(root, path), text);
   };
@@ -59,62 +66,43 @@ async function host(files: Record<string, string>) {
 }
 
 describe("the host's writeout", () => {
-  it("is under way once dirty and writeback pages pass the background bytes", () => {
-    expect(writeoutOf(meminfo(6 * 1024, 1024), 8 * mb, 0)).toEqual({
-      pendingBytes: 7 * mb,
-      thresholdBytes: 8 * mb,
-      writingOut: false,
-    });
-    expect(writeoutOf(meminfo(6 * 1024, 3 * 1024), 8 * mb, 0)).toEqual({
-      pendingBytes: 9 * mb,
-      thresholdBytes: 8 * mb,
-      writingOut: true,
-    });
-  });
-
-  // The kernel's ratio is of what is free and what holds files' pages,
-  // 6 GB here, so 10 % is 600 MB.
-  it("takes the background ratio of the memory that may hold dirty pages when the bytes are 0", () => {
-    const threshold = 600_000 * kb;
-
-    expect(writeoutOf(meminfo(500_000), 0, 10)).toEqual({
-      pendingBytes: 500_000 * kb,
-      thresholdBytes: threshold,
-      writingOut: false,
-    });
-    expect(writeoutOf(meminfo(550_000, 100_000), 0, 10)).toMatchObject({
-      pendingBytes: 650_000 * kb,
-      writingOut: true,
-    });
+  it("adds dirty and writeback bytes and converts the kernel's threshold from pages", () => {
+    expect(
+      writeoutOf(meminfo(6 * 1024, 3 * 1024), vmstat(8 * mb), pageSize),
+    ).toEqual({ pendingBytes: 9 * mb, thresholdBytes: 8 * mb });
   });
 
   it("can't say without the counters or a threshold", () => {
-    expect(writeoutOf("MemTotal: 8007400 kB\n", 8 * mb, 0)).toBeNull();
-    expect(writeoutOf(meminfo(10), null, null)).toBeNull();
+    expect(
+      writeoutOf("MemTotal: 8007400 kB\n", vmstat(8 * mb), pageSize),
+    ).toBeNull();
+    expect(
+      writeoutOf(meminfo(10), "nr_dirty_threshold 123\n", pageSize),
+    ).toBeNull();
   });
 
   it("is served from what the kernel says, read again with each question", async () => {
     const { set, server } = await host({
-      "proc/meminfo": meminfo(800_000, 20_000),
-      "proc/sys/vm/dirty_background_bytes": "0\n",
-      "proc/sys/vm/dirty_background_ratio": "10\n",
+      "proc/meminfo": meminfo(90 * 1024, 10 * 1024),
+      "proc/self/auxv": auxv,
+      "proc/vmstat": vmstat(64 * mb),
+      "proc/sys/vm/dirty_background_bytes": `${256 * mb}\n`,
     });
 
     const during = await server.inject("/api/host/writeout");
 
     expect(during.statusCode).toBe(200);
     expect(during.json()).toEqual({
-      pendingBytes: 820_000 * kb,
-      thresholdBytes: 600_000 * kb,
-      writingOut: true,
+      pendingBytes: 100 * mb,
+      thresholdBytes: 64 * mb,
     });
 
     // The threshold changes as the host runs, as the backlog does.
-    await set("proc/sys/vm/dirty_background_bytes", `${1024 * mb}\n`);
-    await set("proc/sys/vm/dirty_background_ratio", "0\n");
-    expect((await server.inject("/api/host/writeout")).json()).toMatchObject({
+    await set("proc/vmstat", vmstat(1024 * mb));
+    await set("proc/meminfo", meminfo(50 * 1024));
+    expect((await server.inject("/api/host/writeout")).json()).toEqual({
+      pendingBytes: 50 * mb,
       thresholdBytes: 1024 * mb,
-      writingOut: false,
     });
   });
 

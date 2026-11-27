@@ -1,4 +1,8 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { defineApp, toStaticManifest } from "@meetsanctum/app-sdk";
+import { manifestDigest, manifestFileName } from "@meetsanctum/app-sdk/package";
+import { coreSocketName, protocolVersion } from "@meetsanctum/app-sdk/protocol";
+import { once } from "node:events";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +13,8 @@ import { openCoreDatabase } from "../src/database.js";
 import { devices } from "../src/devices/schema.js";
 import { createEntities } from "../src/entities/entities.js";
 import { updatePendingFile } from "../src/update-pending.js";
+import { base } from "./app-apart-support.js";
+import { appOnSocket } from "./app-link-support.js";
 import { managerSocket, type SocketRequest } from "./manager-support.js";
 import { hostId, testCore } from "./support.js";
 
@@ -68,9 +74,15 @@ function configOf(
   };
 }
 
-function coreOf(config: CoreConfig) {
+function coreOf(
+  config: CoreConfig,
+  testReplacements?: Parameters<typeof createCore>[1]["testReplacements"],
+) {
   const logs: string[] = [];
-  const core = createCore(config, { log: (line) => logs.push(line) });
+  const core = createCore(config, {
+    log: (line) => logs.push(line),
+    testReplacements,
+  });
   cores.add(core);
   return { core, logs };
 }
@@ -85,6 +97,106 @@ async function serving(config: CoreConfig) {
 }
 
 describe("a whole core", () => {
+  it("keeps a staged app connected and lets it start late during a writeout reported by the manager", async () => {
+    const app = defineApp({
+      ...base,
+      id: "sanctum.example",
+      version: "1.0.0",
+      permissions: [],
+      actions: [],
+    });
+    const dataDir = await hostFolder();
+    const packagesDir = join(dataDir, "packages");
+    const appSockets = join(dataDir, "sockets");
+    const packageFolder = join(packagesDir, app.id, app.version);
+    const manifest = JSON.stringify(toStaticManifest(app));
+    await mkdir(packageFolder, { recursive: true });
+    await writeFile(join(packageFolder, manifestFileName), manifest);
+    const container = `/api/apps/${app.id}/container`;
+    const { socketPath, received } = await managerSocket((request) => {
+      const { method, url } = request;
+      if (url === "/api/host/writeout") {
+        return {
+          status: 200,
+          body: { pendingBytes: 16_777_216, thresholdBytes: 8_388_608 },
+        };
+      }
+      if (url === "/api/capabilities") {
+        return {
+          status: 200,
+          body: { appContainers: true, memoryLimits: true },
+        };
+      }
+      if (url.startsWith("/api/apps/staged")) {
+        return {
+          status: 200,
+          body: {
+            apps: { [app.id]: { version: app.version, folder: app.version } },
+          },
+        };
+      }
+      if (url === container) {
+        return method === "PUT"
+          ? { status: 200, body: { kept: false } }
+          : { status: 200, body: { state: "running" } };
+      }
+      if (url === "/api/apps/updates")
+        return { status: 200, body: { updates: {} } };
+      return manager(request);
+    });
+    const appTimeoutMs = 2_000;
+    const { core, logs } = coreOf(
+      configOf(dataDir, socketPath, { packagesDir, newHomeApps: [app.id] }),
+      { moduleOptions: { appSockets, appTimeoutMs } },
+    );
+    await core.start();
+    await vi.waitFor(() => {
+      expect(logs).toContainEqual(expect.stringContaining("host: writing out"));
+      expect(received).toContainEqual(
+        expect.objectContaining({ method: "PUT", url: container }),
+      );
+    });
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const runner = await appOnSocket(
+        join(appSockets, app.id, coreSocketName),
+      );
+      const welcome = once(runner.socket, "data");
+      runner.say({
+        type: "hello",
+        protocol: protocolVersion,
+        app: app.id,
+        version: app.version,
+        manifest: manifestDigest(manifest),
+      });
+      await welcome;
+      expect(runner.heard[0]?.type).toBe("welcome");
+      await vi.advanceTimersByTimeAsync(120_001);
+      expect(logs).toContainEqual(
+        expect.stringContaining("isn't ready yet while the host writes out"),
+      );
+
+      const startSent = once(runner.socket, "data");
+      runner.say({ type: "ready" });
+      await startSent;
+      const start = runner.heard.find(
+        (message) => message.type === "call" && message.body.kind === "start",
+      );
+      if (start?.type !== "call")
+        throw new Error("The app did not receive its start call");
+
+      await vi.advanceTimersByTimeAsync(appTimeoutMs + 1);
+      expect(core.modules!.apps.info(app.id)?.state).toBe("starting");
+      runner.say({ type: "answer", call: start.id, outcome: { ok: true } });
+      await vi.waitFor(() => {
+        expect(core.modules!.apps.info(app.id)?.state).toBe("running");
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it.each(["an entity", "a device"])(
     "keeps an app that reported %s before its first start finished",
     async (reported) => {

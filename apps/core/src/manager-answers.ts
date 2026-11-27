@@ -284,7 +284,6 @@ export const startedBody = z.object({
 export const hostWriteout = z.object({
   pendingBytes: z.number().nonnegative(),
   thresholdBytes: z.number().nonnegative(),
-  writingOut: z.boolean(),
 });
 export type HostWriteout = z.infer<typeof hostWriteout>;
 

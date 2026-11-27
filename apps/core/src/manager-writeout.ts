@@ -30,7 +30,7 @@ export function createWriteoutFollower(options: {
   return {
     /** The manager's answer, or null from one that can't say. */
     heard(answer: HostWriteout | null) {
-      if (answer?.writingOut) {
+      if (answer && answer.pendingBytes > answer.thresholdBytes) {
         if (lastSaidAt === undefined) {
           log(
             `host: writing out ${megabytes(answer.pendingBytes)} MB to its disks, past ${megabytes(answer.thresholdBytes)} MB; apps get more time to answer`,
