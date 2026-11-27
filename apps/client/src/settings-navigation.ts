@@ -32,24 +32,29 @@ export function useSettingsNavigation(
 ) {
   const [setupStep, setSetupStep] = useState<SetupTarget>();
   const onStarted = useCallback(() => setSetupStep(undefined), []);
-  const remembered = useRef<Route>(undefined);
+  const remembered = useRef<Route[]>([]);
   const route = routes.at(-1);
   const parent = routes.at(-2);
-  const [first, area] = routes;
+  const [first] = routes;
   const isInSettings =
     first?.app === overview.app && first.page === overview.page;
 
-  // Keep the first page above the overview, which can be reopened with
-  // Back to Settings. A removed app's settings can no longer be reopened.
+  // Keep the pages above the overview, such as Devices and a category's
+  // page over it, which reopen where they were with Back to Settings. A
+  // removed app's settings can no longer be reopened, nor a page over them.
   useEffect(() => {
-    if (isInSettings) remembered.current = area;
-    if (
-      remembered.current &&
-      !isSettingsRouteAvailable(remembered.current, apps)
-    ) {
-      remembered.current = undefined;
+    if (isInSettings) {
+      remembered.current = routes.slice(1).map((each) => {
+        if (each.page !== personSettingsPage || !each.params.added) return each;
+        const { added: _, ...params } = each.params;
+        return { ...each, params };
+      });
     }
-  }, [area, apps, isInSettings]);
+    const gone = remembered.current.findIndex(
+      (each) => !isSettingsRouteAvailable(each, apps),
+    );
+    if (gone !== -1) remembered.current = remembered.current.slice(0, gone);
+  }, [routes, apps, isInSettings]);
 
   function openOverview() {
     setSetupStep(undefined);
@@ -57,13 +62,17 @@ export function useSettingsNavigation(
   }
 
   function openSettings() {
-    const area = remembered.current;
-    if (isInSettings || !area || !isSettingsRouteAvailable(area, apps)) {
+    const above = remembered.current;
+    if (
+      isInSettings ||
+      above.length === 0 ||
+      !above.every((each) => isSettingsRouteAvailable(each, apps))
+    ) {
       openOverview();
       return;
     }
     setSetupStep(undefined);
-    show([overview, area]);
+    show([overview, ...above]);
   }
 
   // A person's page, under People, as if opened from there.

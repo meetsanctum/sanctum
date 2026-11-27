@@ -1,10 +1,9 @@
 import type { AppInfo, DeviceInfo, Places } from "@meetsanctum/app-sdk";
 import type { ClientInfo, Me, PersonInfo } from "@meetsanctum/auth-protocol";
-import { Button, useTemperatureUnit, type LiveFeed } from "@meetsanctum/ui-sdk";
+import { useTemperatureUnit, type LiveFeed } from "@meetsanctum/ui-sdk";
 import {
   Bot,
   Sparkles,
-  ChevronRight,
   Gauge,
   House,
   Layers,
@@ -18,7 +17,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
-import { Row } from "./components";
+import { AreaGroup, AreaRow } from "./components";
 import { useAgents } from "./agents/data";
 import { agentsTitle, assistantAppsOf } from "./agents/words";
 import { useModels } from "./models/data";
@@ -256,59 +255,4 @@ function useOtherClients(live: LiveFeed) {
     };
   }, [live]);
   return others;
-}
-
-// A card of areas that belong together, set apart from the next by space
-// alone.
-function AreaGroup(props: { children: ReactNode }) {
-  return (
-    <ul className="m-0 flex list-none flex-col rounded-lg bg-card p-1.5 text-card-foreground">
-      {props.children}
-    </ul>
-  );
-}
-
-// An area: its icon, its name over how it stands, and the chevron that
-// says it opens a page.
-function AreaRow(props: {
-  icon: LucideIcon;
-  title: string;
-  detail: ReactNode;
-  // What a screen reader hears of a detail that isn't words alone.
-  spoken?: string;
-  onOpen: () => void;
-}) {
-  const Icon = props.icon;
-  return (
-    <li>
-      <Button
-        variant="row"
-        size="row"
-        type="button"
-        onClick={props.onOpen}
-        aria-label={
-          props.spoken ? `${props.title}: ${props.spoken}` : undefined
-        }
-      >
-        <span
-          aria-hidden="true"
-          className="flex size-8 shrink-0 items-center justify-center rounded-full bg-foreground/8"
-        >
-          <Icon className="size-4" />
-        </span>
-        {typeof props.detail === "string" ? (
-          <Row title={props.title} detail={props.detail} />
-        ) : (
-          <span className="flex min-w-0 flex-col gap-px leading-tight">
-            <span className="truncate text-sm font-medium">{props.title}</span>
-            {props.detail}
-          </span>
-        )}
-        <ChevronRight
-          aria-hidden="true"
-          className="ms-auto size-4 shrink-0 text-muted-foreground"
-        />
-      </Button>
-    </li>
-  );
 }

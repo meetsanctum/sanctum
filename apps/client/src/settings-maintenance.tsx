@@ -47,7 +47,7 @@ import {
   quietText,
   updatesOf,
 } from "./maintenance";
-import { DeviceLine } from "./settings-devices";
+import { DeviceLine } from "./device-line";
 
 // Maintenance: what the home's devices need from the household, the same on
 // every client. Settings has a section of what's due, second after Needs

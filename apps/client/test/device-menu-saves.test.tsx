@@ -101,7 +101,14 @@ describe("what a device's menu saves", () => {
 
   async function show() {
     await act(async () => {
-      root.render(<DevicesSection apps={[zigbee]} live={live} home={home} />);
+      root.render(
+        <DevicesSection
+          apps={[zigbee]}
+          live={live}
+          home={home}
+          group="security"
+        />,
+      );
     });
   }
 

@@ -400,12 +400,13 @@ describe("Settings → Devices' firmware", () => {
     vi.unstubAllGlobals();
   });
 
-  async function show() {
+  // A category's page of Settings → Devices.
+  async function show(group = "lights") {
     await act(async () =>
       root.render(
         <SettingsPage
-          page="devices"
-          params={{}}
+          page="device-group"
+          params={{ id: group }}
           open={() => undefined}
           back={() => undefined}
           apps={[zigbee]}
@@ -684,7 +685,7 @@ describe("Settings → Devices' firmware", () => {
   });
 
   it("dims the checks a device cannot have, with why", async () => {
-    await show();
+    await show("buttons");
 
     const items = await openMenu("Office button: more");
     const named = (label: string) =>

@@ -14,7 +14,7 @@ import {
   pushLive,
   refresh,
 } from "./home-shell-harness";
-import { light, zigbee } from "./settings-devices-fixtures";
+import { light, remote, zigbee } from "./settings-devices-fixtures";
 
 beforeAll(() =>
   Promise.all([import("../src/settings"), import("../src/automations/page")]),
@@ -97,15 +97,37 @@ describe("the default app page", () => {
   it("opens the device list and goes back to the app that opened it", async () => {
     homeData.installed = [driver];
     homeData.manifests.set(driver.id, { summary, driver: { hooks: [] } });
-    homeData.devices = [light("hall-light", "Hall Light")];
+    homeData.devices = [light("hall-light", "Hall Light"), remote];
     await refresh();
     await openFromOverview("Zigbee");
 
     await act(async () => showDevices()!.click());
     expect(pageTitle()).toBe("Devices");
+    const lights = () =>
+      container.querySelector<HTMLButtonElement>(
+        'main button[aria-label="Lights: 1 device"]',
+      );
+    expect(lights()).not.toBeNull();
+
+    // A category's page has its devices, and Back to Devices puts focus
+    // on the category's row again.
+    await act(async () => lights()!.click());
+    expect(pageTitle()).toBe("Lights");
     expect(container.querySelector("main")?.textContent).toContain(
       "Hall Light",
     );
+    expect(container.querySelector("main")?.textContent).not.toContain(
+      remote.name,
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          '.top-bar button[aria-label="Back to Devices"]',
+        )!
+        .click(),
+    );
+    expect(pageTitle()).toBe("Devices");
+    expect(document.activeElement).toBe(lights());
 
     await act(async () =>
       container

@@ -39,6 +39,18 @@ top of Home summarises temperature or humidity, motion, contacts, lights,
 switches and how many media players are playing across the home, including
 devices you haven't added to Home.
 
+## Settings → Devices lists each device once
+
+**Settings → Devices** lists the categories the home has devices in, in
+the same order, with **Unknown Devices** last. Each row counts its devices,
+after how many need attention and how many have an update. Choosing one
+opens a page with only its devices, where you rename them, move them to
+another room, update and remove them. **Add devices** is on both pages.
+
+There a device is in one category, the one for its
+[type](/devices/types/). A motion sensor that measures the light level
+is under Presence.
+
 ## A room's page groups tiles by device
 
 A room's page lists the categories in the same order, with **Unknown

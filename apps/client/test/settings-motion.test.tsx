@@ -245,12 +245,13 @@ describe("Settings → Devices' motion settings", () => {
     vi.unstubAllGlobals();
   });
 
-  async function show() {
+  // A category's page of Settings → Devices.
+  async function show(group = "presence") {
     await act(async () =>
       root.render(
         <SettingsPage
-          page="devices"
-          params={{}}
+          page="device-group"
+          params={{ id: group }}
           open={() => undefined}
           back={() => undefined}
           apps={[zigbee]}
@@ -335,6 +336,7 @@ describe("Settings → Devices' motion settings", () => {
       ),
     );
 
+    await show("lights");
     expect(
       (await openMenu("Office light: more")).some((each) =>
         each.textContent?.startsWith("Motion settings"),

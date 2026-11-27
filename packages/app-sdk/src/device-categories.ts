@@ -1,10 +1,12 @@
+import { deviceTypes, type DeviceType } from "./device-types.js";
 import type { CapabilityKind } from "./devices.js";
 
 // Where a device's parts show: the categories the sidebar lists, a room's
 // page has a section for each of, and the home's status reports. A category
 // holds capabilities, not devices, so a device shows wherever a part of it
 // fits: a motion sensor that measures is under Presence and under
-// Environment.
+// Environment. A device as a whole is in the one category of its type, so
+// a list of devices by category shows each once.
 
 type DeviceCategoryDefinition = {
   id: string;
@@ -41,4 +43,14 @@ export function deviceCategoryOf(kind: string) {
   return deviceCategories.find((category) =>
     category.holds.some((each) => each.kind === kind),
   );
+}
+
+/**
+ * The category a device of this type is in, by the capability its type
+ * needs: a motion sensor's is Presence, even one that measures. An unknown
+ * device is in none.
+ */
+export function deviceCategoryOfType(type: DeviceType) {
+  const [kind] = deviceTypes.find((each) => each.id === type)?.needs ?? [];
+  return kind ? deviceCategoryOf(kind) : undefined;
 }

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { stageText } from "../src/add-devices-cards";
 import { countdown } from "../src/add-devices-joining";
-import { deviceDetail, deviceStatus } from "../src/settings-devices";
+import { deviceDetail, deviceStatus } from "../src/device-line";
 import { light, now, office, remote } from "./settings-devices-fixtures";
 
 // The device's own zone, which the expectations here are worked out in.

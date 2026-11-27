@@ -12,9 +12,11 @@ import {
 } from "./home-shell-fixtures";
 import {
   backShown,
+  backTo,
   container,
   homeData,
   mockCoreJson,
+  openArea,
   openFromOverview,
   pageTitle,
   placesSnapshot,
@@ -50,25 +52,6 @@ async function openKitchen() {
 }
 
 const title = () => container.querySelector("header")?.textContent;
-
-// One of Settings' areas, from its row on Settings' first page.
-async function openArea(name: string) {
-  await act(async () => {
-    [
-      ...container.querySelectorAll<HTMLButtonElement>(
-        'main nav[aria-label="Settings"] button',
-      ),
-    ]
-      .find((button) => button.textContent?.startsWith(name))!
-      .click();
-  });
-}
-
-// The way back before a page's title, by the page it returns to.
-const backTo = (name: string) =>
-  container.querySelector<HTMLButtonElement>(
-    `.top-bar button[aria-label="Back to ${name}"]`,
-  );
 
 // Settings and Automations load when first opened (Home.tsx): loaded here
 // first, they open as quickly as the tests look for them.
@@ -149,116 +132,6 @@ describe("navigation", () => {
     homeData.installed = [];
     await refresh();
     expect(pageTitle()).toBe("Kitchen");
-  });
-});
-
-describe("Settings' pages", () => {
-  const goHome = async () =>
-    act(async () => {
-      [...container.querySelectorAll<HTMLButtonElement>("aside button")]
-        .find((button) => button.textContent?.startsWith("Home"))!
-        .click();
-    });
-
-  it("open a step of the setup guide on its page, over Settings' first", async () => {
-    await act(async () => {
-      [...container.querySelectorAll<HTMLButtonElement>("main button")]
-        .find((button) => button.textContent === "Add devices")!
-        .click();
-    });
-
-    expect(pageTitle()).toBe("Devices");
-    expect(container.querySelector('[role="dialog"]')?.textContent).toContain(
-      "Add devices",
-    );
-  });
-
-  it("keep how Sanctum is doing and its updates on one System page, with Back to Settings", async () => {
-    await openFromOverview("Settings");
-    await openArea("System");
-
-    expect(pageTitle()).toBe("System");
-    expect(
-      container.querySelector('section[aria-labelledby="status-sanctum"]'),
-    ).not.toBeNull();
-    expect(
-      container.querySelector('section[aria-labelledby="status-updates"]'),
-    ).not.toBeNull();
-    await act(async () => backTo("Settings")!.click());
-    expect(pageTitle()).toBe("Settings");
-  });
-
-  it("open again where Settings was left, until it is left on its first page", async () => {
-    await openFromOverview("Settings");
-    await openArea("Devices");
-    await goHome();
-    await openFromOverview("Settings");
-    expect(pageTitle()).toBe("Devices");
-
-    await act(async () => backTo("Settings")!.click());
-    await goHome();
-    await openFromOverview("Settings");
-    expect(pageTitle()).toBe("Settings");
-  });
-
-  it("opens Needs attention from Home even when Settings was left on another page", async () => {
-    const lamp = light("lamp", "Lamp", {
-      availability: "offline",
-      roomId: "kitchen",
-    });
-    homeData.devices = [lamp];
-    await refresh();
-    await openFromOverview("Settings");
-    await openArea("Devices");
-    await goHome();
-
-    await act(async () =>
-      container
-        .querySelector<HTMLButtonElement>(
-          'main button[aria-label="Lamp is offline"]',
-        )!
-        .click(),
-    );
-
-    expect(pageTitle()).toBe("Settings");
-    expect(container.querySelector("#settings-attention")).not.toBeNull();
-  });
-
-  it("reopens the remembered area from a Settings page opened outside Settings", async () => {
-    homeData.pins = ["sanctum.settings"];
-    await refresh();
-    await openFromOverview("Settings");
-    await openArea("Devices");
-    await openFromOverview("Moods");
-    await act(async () =>
-      container
-        .querySelector<HTMLButtonElement>(
-          '.top-bar button[aria-label="Moods settings"]',
-        )!
-        .click(),
-    );
-    expect(pageTitle()).toBe("Moods Settings");
-
-    await act(async () =>
-      container
-        .querySelector<HTMLButtonElement>(
-          'aside ul[aria-label="Pinned apps"] button[aria-label="Settings"]',
-        )!
-        .click(),
-    );
-
-    expect(pageTitle()).toBe("Devices");
-    expect(backTo("Settings")).not.toBeNull();
-  });
-
-  it("starts each Settings page at the top of its scroll area", async () => {
-    await openFromOverview("Settings");
-    const main = container.querySelector("main")!;
-    main.scrollTop = 250;
-
-    await openArea("Devices");
-
-    expect(container.querySelector("main")!.scrollTop).toBe(0);
   });
 });
 

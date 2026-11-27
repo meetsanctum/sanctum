@@ -14,6 +14,7 @@ import { dashboardBackground, type OnHome } from "./dashboards";
 import { AddAppsSection, AppsSection } from "./settings-apps";
 import { ClientsSection } from "./settings-clients";
 import { DevicesSection } from "./settings-devices";
+import { returnToGroup } from "./settings-device-groups";
 import { NeedsAttentionSection } from "./settings-attention";
 import { HouseholdSection } from "./settings-household";
 import { PeoplePage } from "./people/people-page";
@@ -33,6 +34,7 @@ import {
   appsSettingsPage,
   canUseSettingsPage,
   clientsSettingsPage,
+  deviceGroupSettingsPage,
   devicesSettingsPage,
   householdSettingsPage,
   maintenanceSettingsPage,
@@ -49,7 +51,8 @@ import {
 // does, Sanctum itself included, then a row for each area, which opens the
 // area's page: the household with where the home is, its people, each with
 // a page of their own, the rooms and floors,
-// the devices, Maintenance, what's due for the devices, which the
+// the devices, by category, each with a page of its own, Maintenance, what's
+// due for the devices, which the
 // dashboard's Batteries tile opens too, the activity log, which a device's
 // detail opens too, the apps the home has installed, each with a page of its
 // preferences and what it brings, which its own pages open too, with those
@@ -103,11 +106,13 @@ export function SettingsPage(props: {
   // has started.
   start?: SetupTarget;
   onStarted?: () => void;
+  onAddDevicesStarted?: () => void;
 }) {
-  const { start, onStarted, backTo } = props;
+  const { start, onStarted, onAddDevicesStarted, backTo } = props;
   useEffect(() => {
     if (start) onStarted?.();
-  }, [start, onStarted]);
+    onAddDevicesStarted?.();
+  }, [start, onStarted, onAddDevicesStarted]);
   const rooms = props.devices.places?.rooms ?? [];
   const back = backTo ? <BackButton to={backTo} onBack={props.back} /> : null;
   const openStatus = () => props.open(systemSettingsPage);
@@ -203,6 +208,7 @@ export function SettingsPage(props: {
     case devicesSettingsPage:
       return (
         <DevicesSection
+          key="groups"
           apps={props.apps}
           live={props.live}
           home={props.home}
@@ -210,8 +216,38 @@ export function SettingsPage(props: {
           adding={start === "add-devices" || props.params.add === "true"}
           notSetUp={props.status?.notSetUp}
           page={back}
+          known={props.devices.devices}
+          knownRooms={props.devices.places?.rooms}
+          onOpenGroup={(id) => props.open(deviceGroupSettingsPage, { id })}
         />
       );
+    case deviceGroupSettingsPage: {
+      const group = props.params.id;
+      return (
+        <DevicesSection
+          key={group}
+          apps={props.apps}
+          live={props.live}
+          home={props.home}
+          notSetUp={props.status?.notSetUp}
+          group={group}
+          known={props.devices.devices}
+          knownRooms={props.devices.places?.rooms}
+          // Back puts focus on the category's row it came from.
+          page={
+            backTo ? (
+              <BackButton
+                to={backTo}
+                onBack={() => {
+                  if (group) returnToGroup(group);
+                  props.back();
+                }}
+              />
+            ) : null
+          }
+        />
+      );
+    }
     case appsSettingsPage:
       return (
         <>

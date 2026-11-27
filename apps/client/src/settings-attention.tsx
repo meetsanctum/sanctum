@@ -41,7 +41,7 @@ import {
 } from "./device-parts";
 import { RepairDevice } from "./repair-device";
 import { EditDevice, type Editing } from "./edit-device";
-import { DeviceLine } from "./settings-devices";
+import { DeviceLine } from "./device-line";
 import { SanctumAttentionRow } from "./settings-status";
 import type { SystemStatus } from "./system-status";
 import { plural } from "./plural";

@@ -2,6 +2,7 @@ import type { AppInfo } from "@meetsanctum/app-sdk";
 import type { PageParams } from "@meetsanctum/ui-sdk";
 
 import { agentsTitle, canUseTitle } from "./agents/words";
+import { deviceGroupTitle } from "./device-groups";
 import { modelsTitle } from "./models/words";
 import type { SetupTarget } from "./setup-guide";
 
@@ -28,6 +29,8 @@ export const peopleSettingsPage = "people";
 export const personSettingsPage = "person";
 export const roomsSettingsPage = "rooms";
 export const devicesSettingsPage = "devices";
+/** Settings → Devices' page for one category, by its id. */
+export const deviceGroupSettingsPage = "device-group";
 export const maintenanceSettingsPage = "maintenance";
 export const activitySettingsPage = "activity";
 export const appsSettingsPage = "apps";
@@ -78,6 +81,9 @@ export function settingsPageTitle(
   if (page === appSettingsPage) {
     const app = apps.find((each) => each.id === params.id);
     return app ? appSettingsTitle(app.name) : "Settings";
+  }
+  if (page === deviceGroupSettingsPage) {
+    return deviceGroupTitle(params.id) ?? "Devices";
   }
   return pageTitles[page] ?? "Settings";
 }
