@@ -4,26 +4,24 @@ import { useEffect, useState } from "react";
 
 import type { Devices } from "./use-devices";
 
-// The button for all the lights of a room or a floor: a chip of frosted
-// glass, 36 px high, with the power symbol and its words, "Turn off
-// lights" while any light is on and "Turn on lights" while all are off. It
-// is White while any is on, by its own state and not as a pressed switch,
-// since its words already say what it does. A room's is under its name and
-// its line, above its row's moods, on Home and its page, and above its
-// lights on Lights' page; a floor's is under the floor's name. Its
-// accessible name adds whose lights they are, "Turn off lights in
-// Kitchen", since several are in reach at once. A floor's only turns its
-// lights off: its rooms come on one by one, each by its own button, so
-// while none is on it stays, disabled, and nothing moves. The core leaves
-// offline lights alone, so while all of them are offline it is disabled,
-// as their tiles are. It sends the core the way its words say, off or on,
-// and no toggle, so a screen a moment behind never does the opposite.
+// A press on all the lights of a place: a floor's button and a room's
+// Lights tile's round icon (room-lights.tsx) press through it. A floor's
+// button is a chip of frosted glass, 36 px high, under the floor's name,
+// with the power symbol and "Turn off lights", White while any light is
+// on, by its own state and not as a pressed switch, since its words
+// already say what it does. Its accessible name adds whose lights they
+// are, "Turn off lights on Ground floor", since several are in reach at
+// once. It only turns the floor's lights off: its rooms come on one by
+// one, each by its own Lights tile, so while none is on it stays,
+// disabled, and nothing moves. A press sends the core the way its words
+// say, off or on, and no toggle, so a screen a moment behind never does
+// the opposite.
 //
 // Turning off shows at once, as the lights' tiles do. Turning on shows at
-// once on the button alone: a room's turn-on rule may leave some lights
-// off, so its tiles wait for what the core says, but once any light is on
-// the button is White, so it is White from the press. The tiles take over
-// once the core has answered the press and a light shows on, when the
+// once on what was pressed alone: a room's turn-on rule may leave some
+// lights off, so its tiles wait for what the core says, but once any light
+// is on the place shows on, so it shows on from the press. The tiles take
+// over once the core has answered the press and a light shows on, when the
 // press fails or switches none, or when time runs out.
 
 /** How long a press may hold the button on while waiting for its lights. */
@@ -114,10 +112,7 @@ export function useLightsPress(lights: LightsButtonState): LightsPress {
   return { isOn, words, label: `${words} ${lights.where}`, failures, press };
 }
 
-/**
- * A room's or a floor's button for all its lights: a chip, as the room's
- * other buttons beside it are (RoomRow), White while any light is on.
- */
+/** A floor's button for all its lights: a chip, White while any is on. */
 export function LightsButton(props: { lights: LightsButtonState }) {
   const { isOn, words, label, failures, press } = useLightsPress(props.lights);
   return (
@@ -131,22 +126,6 @@ export function LightsButton(props: { lights: LightsButtonState }) {
       onClick={press}
     />
   );
-}
-
-// A room's button: off while any light is on, on otherwise.
-export function roomLightsButton(
-  lights: Tile[],
-  room: { id: string; name: string },
-  devices: Devices,
-): LightsButtonState | undefined {
-  if (lights.length === 0) return undefined;
-  return {
-    isOn: hasLightsOn(lights),
-    where: `in ${room.name}`,
-    isDisabled: lights.every((tile) => tile.disabled),
-    switchLights: (to) =>
-      devices.switchLights({ kind: "room", id: room.id }, lights, to),
-  };
 }
 
 // A floor's button, which only turns its lights off.

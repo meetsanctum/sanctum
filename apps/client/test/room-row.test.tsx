@@ -21,8 +21,9 @@ import {
 
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
-// A room's row: its lights button and apps' buttons as chips, then apps'
-// tiles, on its page and on Home, with no heading.
+// A room's row of looks: apps' buttons as chips, then apps' tiles, on its
+// page and on Home, with no heading. The room's lights are its Lights tile's,
+// first among its devices.
 
 const glow: AppInfo = {
   ...moods,
@@ -107,7 +108,7 @@ const named = (label: string) =>
 const rowOf = (room: string) =>
   [
     ...(container
-      .querySelector(`[role=group][aria-label='Lights in ${room}']`)
+      .querySelector(`[role=group][aria-label='Looks in ${room}']`)
       ?.querySelectorAll("button") ?? []),
   ].map((each) => each.getAttribute("aria-label") ?? each.textContent);
 const posted = (path: string) =>
@@ -147,13 +148,9 @@ afterEach(async () => {
 });
 
 describe("a room's row", () => {
-  it("has the lights button and apps' buttons as chips, then their tiles, with no heading", async () => {
+  it("has apps' buttons as chips, then their tiles, with no heading", async () => {
     await show("room");
-    expect(rowOf("Office")).toEqual([
-      "Turn off lights in Office",
-      "Glow in Office",
-      "Relax in Office",
-    ]);
+    expect(rowOf("Office")).toEqual(["Glow in Office", "Relax in Office"]);
     // A chip shows its name, and adds the room for a screen reader.
     expect(named("Glow in Office")?.textContent).toBe("Glow");
     expect(named("Glow in Office")?.getAttribute("aria-pressed")).toBe("true");
@@ -180,13 +177,11 @@ describe("a room's row", () => {
     expect(named("Relax in Office")?.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("puts its chips on a line of their own, the lights button first, over its tiles", async () => {
+  it("puts its chips on a line of their own, over its tiles", async () => {
     await show("room");
     const chips = named("Glow in Office")!.parentElement!;
     expect(chips.className).toContain("flex-wrap");
-    expect(chips.firstElementChild?.getAttribute("aria-label")).toBe(
-      "Turn off lights in Office",
-    );
+    expect(chips.firstElementChild).toBe(named("Glow in Office"));
     expect(chips.nextElementSibling?.matches(".tile-grid")).toBe(true);
     expect(chips.nextElementSibling?.contains(named("Relax in Office")!)).toBe(
       true,
@@ -205,11 +200,7 @@ describe("a room's row", () => {
       },
     };
     await show("room", [moods, sun]);
-    expect(rowOf("Office")).toEqual([
-      "Turn off lights in Office",
-      "Glow in Office",
-      "Relax in Office",
-    ]);
+    expect(rowOf("Office")).toEqual(["Glow in Office", "Relax in Office"]);
     const grid = named("Relax in Office")!.parentElement!;
     expect(grid.matches(".tile-grid")).toBe(true);
     expect(grid.firstElementChild).toBe(named("Glow in Office"));
@@ -267,18 +258,22 @@ describe("a room's row", () => {
       }),
     },
   ])(
-    "shows a failure on the room's lights chip when $failure",
+    "shows a failure on the room's Lights tile when $failure",
     async ({ answer }) => {
       const animate = vi.fn();
       Element.prototype.animate = animate;
       try {
         await show("room");
-        const lights = named("Turn off lights in Office")!;
+        // Its round icon switches the room's lights; the tile shows it.
+        const icon = named("Lights in Office")!;
+        const tile = buttons().find((each) =>
+          each.getAttribute("aria-label")?.startsWith("Lights in Office, "),
+        )!;
         vi.mocked(coreJson).mockImplementationOnce(answer);
         await act(async () => {
-          lights.click();
+          icon.click();
         });
-        expect(animate.mock.contexts).toContain(lights);
+        expect(animate.mock.contexts).toContain(tile);
       } finally {
         delete (Element.prototype as Partial<Element>).animate;
       }
@@ -289,12 +284,8 @@ describe("a room's row", () => {
     await show("home");
     expect(named("Glow in Office")?.getAttribute("aria-pressed")).toBe("true");
     expect(named("Glow in Hall")?.getAttribute("aria-pressed")).toBe("false");
-    expect(rowOf("Office")).toEqual([
-      "Turn off lights in Office",
-      "Glow in Office",
-      "Relax in Office",
-    ]);
-    expect(rowOf("Hall")).toEqual(["Turn on lights in Hall", "Glow in Hall"]);
+    expect(rowOf("Office")).toEqual(["Glow in Office", "Relax in Office"]);
+    expect(rowOf("Hall")).toEqual(["Glow in Hall"]);
   });
 
   it("shows a room on Home that has nothing else to show", async () => {
@@ -320,9 +311,6 @@ describe("a room's row", () => {
 
   it("leaves out an app's chips once it is turned off", async () => {
     await show("room", [moods, { ...glow, state: "off" }]);
-    expect(rowOf("Office")).toEqual([
-      "Turn off lights in Office",
-      "Relax in Office",
-    ]);
+    expect(rowOf("Office")).toEqual(["Relax in Office"]);
   });
 });

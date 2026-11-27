@@ -270,23 +270,21 @@ describe("Lights' card", () => {
 });
 
 describe("a room's lights on Lights' page", () => {
-  it("have the room's lights button over them, which says what it does", async () => {
+  // The hall's Lights tile's round icon, and whether it shows the lights on.
+  const hallIcon = () => button("Lights in Hall")!;
+  const hallOn = () => hallIcon().getAttribute("aria-pressed") === "true";
+
+  it("start with the room's Lights tile, which switches them all", async () => {
     await show("lights");
 
-    const office = button("Turn off lights in Office")!;
-    expect(office.textContent).toBe("Turn off lights");
+    const office = button("Lights in Office")!;
     expect(office.querySelector("svg.lucide-power")).not.toBeNull();
-    expect(office.dataset.on).toBe("");
-    expect(office.dataset.size).toBe("chip");
-    expect(office.classList.contains("self-start")).toBe(true);
-    expect(office.hasAttribute("aria-pressed")).toBe(false);
-    // Between the room's heading and its lights' tiles.
-    const section = office.closest("section")!;
-    expect(section.querySelector("h2, h3")?.nextElementSibling).toBe(office);
-    expect(office.nextElementSibling?.matches(".tile-grid")).toBe(true);
-    const hall = button("Turn on lights in Hall")!;
-    expect(hall.textContent).toBe("Turn on lights");
-    expect(hall.dataset.on).toBeUndefined();
+    expect(office.getAttribute("aria-pressed")).toBe("true");
+    // The first tile of the room's lights.
+    const grid = office.closest(".tile-grid")!;
+    expect(grid.firstElementChild?.contains(office)).toBe(true);
+    const hall = button("Lights in Hall")!;
+    expect(hall.getAttribute("aria-pressed")).toBe("false");
 
     await click(office);
     await click(hall);
@@ -303,25 +301,23 @@ describe("a room's lights on Lights' page", () => {
       path === "/api/devices/lights" ? answer.promise : coreAnswers(path, init),
     );
     await show("lights");
-    await click(button("Turn on lights in Hall"));
+    await click(hallIcon());
 
-    // White with its next words at once, the light's tile still off.
-    const hall = button("Turn off lights in Hall")!;
-    expect(hall.textContent).toBe("Turn off lights");
-    expect(hall.dataset.on).toBe("");
-    expect(button("Turn on lights in Hall")).toBeUndefined();
+    // Lit at once, the light's own tile still off.
+    expect(hallOn()).toBe(true);
+    expect(button("Lights in Hall, On")).toBeDefined();
 
     await act(async () => {
       answer.resolve({ on: true, switched: 1, failed: [] });
     });
     devices = [lamp, plug, light(hallLight.id, hallLight.name, "hall", true)];
     await act(async () => live.refresh());
-    expect(button("Turn off lights in Hall")?.dataset.on).toBe("");
+    expect(hallOn()).toBe(true);
 
-    // A later update can turn the button off without another press.
+    // A later update can turn the tile off without another press.
     devices = [lamp, plug, hallLight];
     await act(async () => live.refresh());
-    expect(button("Turn on lights in Hall")!.dataset.on).toBeUndefined();
+    expect(hallOn()).toBe(false);
   });
 
   it("sends a second press to turn lights off after the turn-on request", async () => {
@@ -334,9 +330,9 @@ describe("a room's lights on Lights' page", () => {
         : coreAnswers(path, init);
     });
     await show("lights");
-    await click(button("Turn on lights in Hall"));
-    await click(button("Turn off lights in Hall"));
-    expect(button("Turn on lights in Hall")!.dataset.on).toBeUndefined();
+    await click(hallIcon());
+    await click(hallIcon());
+    expect(hallOn()).toBe(false);
     expect(posted("/api/devices/lights")).toEqual([
       { place: { kind: "room", id: "hall" }, to: "on" },
     ]);
@@ -362,28 +358,28 @@ describe("a room's lights on Lights' page", () => {
     const litHall = light(hallLight.id, hallLight.name, "hall", true);
     devices = [lamp, plug, litHall];
     await show("lights");
-    await click(button("Turn off lights in Hall"));
-    await click(button("Turn on lights in Hall"));
-    expect(button("Turn off lights in Hall")!.dataset.on).toBe("");
+    await click(hallIcon());
+    await click(hallIcon());
+    expect(hallOn()).toBe(true);
 
     // The off press's answer comes while the light still shows on, then
     // its off state: neither is the turn-on press's light.
     await act(async () => off.resolve({ on: false, switched: 1, failed: [] }));
     await act(async () => live.refresh());
-    expect(button("Turn off lights in Hall")!.dataset.on).toBe("");
+    expect(hallOn()).toBe(true);
     devices = [lamp, plug, hallLight];
     await act(async () => live.refresh());
-    expect(button("Turn off lights in Hall")!.dataset.on).toBe("");
+    expect(hallOn()).toBe(true);
 
     // Once the core has answered it and the light shows on, the light's
-    // own state carries the button.
+    // own state carries the tile.
     await act(async () => on.resolve({ on: true, switched: 1, failed: [] }));
     devices = [lamp, plug, litHall];
     await act(async () => live.refresh());
-    expect(button("Turn off lights in Hall")!.dataset.on).toBe("");
+    expect(hallOn()).toBe(true);
     devices = [lamp, plug, hallLight];
     await act(async () => live.refresh());
-    expect(button("Turn on lights in Hall")!.dataset.on).toBeUndefined();
+    expect(hallOn()).toBe(false);
   });
 
   it("go back to off when the core switched none, and show a press that failed", async () => {
@@ -398,16 +394,15 @@ describe("a room's lights on Lights' page", () => {
     );
     await show("lights");
 
-    await click(button("Turn on lights in Hall"));
-    expect(button("Turn on lights in Hall")?.dataset.on).toBeUndefined();
+    await click(hallIcon());
+    expect(hallOn()).toBe(false);
 
     answer = async () => {
       throw new Error("offline");
     };
-    await click(button("Turn on lights in Hall"));
-    const hall = button("Turn on lights in Hall")!;
-    expect(hall.dataset.on).toBeUndefined();
-    expect(hall.textContent).toBe("Turn on lights");
+    await click(hallIcon());
+    expect(hallOn()).toBe(false);
+    expect(button("Lights in Hall, Off")).toBeDefined();
   });
 
   it("goes back to off five seconds after the press while the core is still pending", async () => {
@@ -418,21 +413,21 @@ describe("a room's lights on Lights' page", () => {
       path === "/api/devices/lights" ? answer.promise : coreAnswers(path, init),
     );
     await show("lights");
-    await click(button("Turn on lights in Hall"));
-    expect(button("Turn off lights in Hall")?.dataset.on).toBe("");
+    await click(hallIcon());
+    expect(hallOn()).toBe(true);
 
     await act(async () => {
       vi.advanceTimersByTime(4_900);
     });
-    expect(button("Turn off lights in Hall")).toBeDefined();
+    expect(hallOn()).toBe(true);
     await act(async () => {
       vi.advanceTimersByTime(100);
     });
-    expect(button("Turn on lights in Hall")!.dataset.on).toBeUndefined();
+    expect(hallOn()).toBe(false);
     await act(async () =>
       answer.resolve({ on: true, switched: 1, failed: [] }),
     );
-    expect(button("Turn on lights in Hall")!.dataset.on).toBeUndefined();
+    expect(hallOn()).toBe(false);
   });
 
   it("clears turn-on feedback's timer when leaving the page", async () => {
@@ -444,7 +439,7 @@ describe("a room's lights on Lights' page", () => {
     );
     await show("lights");
     const timers = vi.getTimerCount();
-    await click(button("Turn on lights in Hall"));
+    await click(hallIcon());
     expect(vi.getTimerCount()).toBe(timers + 1);
 
     await show("switches");
@@ -460,18 +455,13 @@ describe("a room's lights on Lights' page", () => {
     expect(
       [...container.querySelectorAll("button")]
         .map((each) => each.getAttribute("aria-label"))
-        .filter((label) => label?.startsWith("Turn")),
-    ).toEqual([
-      // The home's, on Lights' card.
-      "Turn off 1 light",
-      "Turn off lights in Office",
-      "Turn on lights in Hall",
-    ]);
+        .filter((label) => label?.match(/^Lights in [^,]*$/)),
+    ).toEqual(["Lights in Office", "Lights in Hall"]);
   });
 
   it("are on no other category's page", async () => {
     await show("switches");
-    expect(button("Turn off lights in Office")).toBeUndefined();
+    expect(button("Lights in Office")).toBeUndefined();
   });
 });
 

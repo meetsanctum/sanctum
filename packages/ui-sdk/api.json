@@ -1,5 +1,5 @@
 {
-  "version": "0.1.37",
+  "version": "0.1.38",
   "react": "19.3.1",
   "exports": {
     "@meetsanctum/ui-sdk": [
@@ -2707,12 +2707,15 @@
       "export declare function contactIcon(shownAs: ContactShownAs | null | undefined, open: boolean): LucideIcon;"
     ],
     "device-tile.d.ts": [
+      "import { type LucideIcon } from \"lucide-react\";",
       "import type { Tile } from \"./tiles\";",
       "export declare const DeviceTile: import(\"react\").MemoExoticComponent<(props: {",
       "    tile: Tile;",
       "    onToggle: (tile: Tile) => void;",
       "    onDim: (tile: Tile, brightness: number) => void;",
       "    onOpen?: (tile: Tile) => void;",
+      "    icon?: LucideIcon;",
+      "    label?: string;",
       "}) => import(\"react\").JSX.Element>;"
     ],
     "frame/protocol.d.ts": [
@@ -2928,6 +2931,7 @@
       "    name: string;",
       "    features: LightFeatures;",
       "    state: LightState;",
+      "    mixedAppearance?: boolean;",
       "    disabled?: boolean;",
       "    failures?: number;",
       "    onCommand: (command: LightCommand) => void;",
@@ -2955,6 +2959,7 @@
       "    name: string;",
       "    features: LightFeatures;",
       "    state: LightState;",
+      "    mixedAppearance?: boolean;",
       "    disabled?: boolean;",
       "    failures?: number;",
       "    onCommand: (command: LightCommand) => void;",
@@ -3146,6 +3151,7 @@
       "    onDim: (tile: Tile, brightness: number) => void;",
       "    onOpen?: (tile: Tile) => void;",
       "    lead?: (section: TileSection) => ReactNode;",
+      "    firstTile?: (section: TileSection) => ReactNode;",
       "}): import(\"react\").JSX.Element[];"
     ],
     "tiles.d.ts": [

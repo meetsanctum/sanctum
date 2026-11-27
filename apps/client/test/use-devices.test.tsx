@@ -7,6 +7,7 @@ import type {
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { light } from "./place-pages-fixtures";
 import {
   capability,
   client,
@@ -353,6 +354,92 @@ describe("failed commands", () => {
 });
 
 describe("commands from here", () => {
+  function showLight(
+    id: string,
+    brightness: number,
+    sync: "synced" | "pending" | "conflict" = "synced",
+  ) {
+    const lamp = light(id, id, "room", true);
+    const capability = lamp.capabilities[0]!;
+    if (capability.kind !== "light") throw new Error("Expected a light");
+    const state = { on: true, brightness };
+    devices.apply({
+      type: "device",
+      id,
+      device: { ...lamp, capabilities: [{ ...capability, state, sync }] },
+    });
+  }
+
+  it("previews room brightness and restores only the light that failed delivery", async () => {
+    act(() => {
+      devices.apply({ type: "places", places });
+      showLight("desk", 60);
+      showLight("shelf", 80);
+    });
+    const result = deferred<LightsResult>();
+    client.lights.mockReturnValue(result.promise);
+    let setting!: Promise<LightsResult>;
+    act(() => {
+      setting = devices.setLights({ kind: "room", id: "room" }, devices.tiles, {
+        brightness: 30,
+      });
+    });
+    expect(devices.tiles.map((tile) => tile.brightness)).toEqual([30, 30]);
+
+    await act(async () => {
+      showLight("shelf", 30);
+      result.resolve({
+        on: true,
+        switched: 1,
+        failed: [{ device: "desk", capability: "light" }],
+      });
+      await setting;
+    });
+    expect(
+      devices.tiles.map(({ brightness, failures }) => [brightness, failures]),
+    ).toEqual([
+      [60, 1],
+      [30, undefined],
+    ]);
+  });
+
+  it.each([true, false])(
+    "reports a late room failure once only if all deliveries fail to confirm (%s)",
+    async (allFail) => {
+      act(() => {
+        devices.apply({ type: "places", places });
+        showLight("desk", 60);
+        showLight("shelf", 80);
+      });
+      const result = deferred<LightsResult>();
+      client.lights.mockReturnValue(result.promise);
+      let setting!: Promise<LightsResult>;
+      const failureKey = "room-lights:room";
+      act(() => {
+        setting = devices.setLights(
+          { kind: "room", id: "room" },
+          devices.tiles,
+          { brightness: 30 },
+          failureKey,
+        );
+        showLight("desk", 30, "pending");
+        showLight("shelf", 30, "pending");
+        showLight("desk", 60, "conflict");
+      });
+      expect(devices.failures.get(failureKey)).toBeUndefined();
+      await act(async () => {
+        result.resolve({ on: true, switched: 2, failed: [] });
+        await setting;
+      });
+      expect(devices.failures.get(failureKey)).toBeUndefined();
+
+      act(() => {
+        showLight("shelf", allFail ? 80 : 30, allFail ? "conflict" : "synced");
+        showLight("desk", 60, "conflict");
+      });
+      expect(devices.failures.get(failureKey)).toBe(allFail ? 1 : undefined);
+    },
+  );
   it("show on the tile as they will be before the core answers", async () => {
     await seed();
     const response = deferred<CapabilityInfo>();

@@ -20,9 +20,16 @@ import {
 import { placeContacts } from "./contact";
 import { noRoomName, readingsOf, sensorReadings } from "./device-tiles";
 import { byFloor, FloorSection, roomsOn } from "./floor-groups";
-import { floorLightsButton, roomLightsButton } from "./lights-button";
+import { floorLightsButton } from "./lights-button";
 import { placeMotionText } from "./motion";
 import { PlaceReadings, unitOf } from "./place-pages";
+import {
+  roomLightsKey,
+  roomLightsTile,
+  RoomLightsTile,
+  useRoomLights,
+  type RoomLights,
+} from "./room-lights";
 import {
   isRowEmpty,
   RoomRow,
@@ -36,8 +43,9 @@ import { useTileHandlers, type Devices } from "./use-devices";
 // Home's rooms: after the home's status, each room by name that has
 // something to show, under its name, which opens its page. A room's line
 // says what its motion and sensors say, as its page's header does; then its
-// row, its lights button, Natural Light and its moods, as on its page; then its
-// devices on Home, in the household's order, under "Devices". Devices on Home
+// row, Natural Light and its moods, as on its page; then under "Devices"
+// its Lights tile (room-lights.tsx) and its devices on Home, in the
+// household's order. Devices on Home
 // with no room come last, under a name that opens their page as a room's
 // does. A room's page stays complete and fixed; Home shows only what was put
 // on it, so a sensor needs no tile here for its readings. A room with
@@ -64,6 +72,7 @@ export function HomeRooms(props: {
 }) {
   const { devices, entities } = props;
   const { onToggle, onDim } = useTileHandlers(devices);
+  const roomLights = useRoomLights(devices);
   const clock = useHomeClock();
   const places = homePlaces(devices, props.onHome);
   const unit = unitOf(devices);
@@ -72,27 +81,27 @@ export function HomeRooms(props: {
   const shown = places.flatMap((place) => {
     const { room, own, onHome } = place;
     const lights = own.filter((tile) => tile.kind === "light");
-    const row = room
-      ? roomRowOf(
-          props.apps,
-          entities,
+    const row = room ? roomRowOf(props.apps, entities, room.id, lights) : null;
+    const lightsTile = room
+      ? roomLightsTile(
+          lights,
           room.id,
-          roomLightsButton(lights, room, devices),
+          devices.failures.get(roomLightsKey(room.id)),
         )
-      : null;
+      : undefined;
     const motion = room ? placeMotionText(clock, own, now) : null;
     const contact = room ? placeContacts(own) : null;
     const readings = room ? readingsOf(sensorReadings(own), unit) : [];
     const hasLine = !!motion || !!contact || readings.length > 0;
     const hasRow = row !== null && !isRowEmpty(row);
-    return hasLine || hasRow || onHome.length > 0
+    return hasLine || hasRow || onHome.length > 0 || lightsTile
       ? [
           {
             id: place.id,
             name: place.name,
             room,
             onHome,
-            lights,
+            lightsTile,
             row: hasRow ? row : null,
             motion,
             contact,
@@ -139,6 +148,7 @@ export function HomeRooms(props: {
       press={entities.press}
       onToggle={onToggle}
       onDim={onDim}
+      roomLights={roomLights}
       openDevice={props.openDevice}
       openRoom={openRoom}
       openNoRoom={openNoRoom}
@@ -184,8 +194,8 @@ type HomeRoomProps = {
     room: Room | null;
     /** Its devices on Home, in the household's order. */
     onHome: Tile[];
-    /** Its lights, which its lights button switches. */
-    lights: Tile[];
+    /** Its Lights tile, for a room with lights. */
+    lightsTile: Tile | undefined;
     row: ReturnType<typeof roomRowOf> | null;
     motion: string | null;
     contact: ReturnType<typeof placeContacts> | null;
@@ -197,32 +207,28 @@ type HomeRoomProps = {
   press: SectionEntities["press"];
   onToggle: (tile: Tile) => void;
   onDim: (tile: Tile, brightness: number) => void;
+  roomLights: RoomLights;
   openDevice: (tile: Tile) => void;
   openRoom: (roomId: string) => void;
   openNoRoom: () => void;
 };
 
-// A room draws again only when what it shows changed: its tiles and lights
-// keep their identity while unchanged, as do its app entries' source objects.
-// The lights button's press is made from the room and its lights.
+// A room draws again only when what it shows changed: its tiles keep their
+// identity while unchanged, as do its app entries' source objects, and its
+// Lights tile is compared by what it says.
 function sameRoom(before: HomeRoomProps, after: HomeRoomProps) {
-  const { onHome, lights, row, ...place } = before.place;
-  const {
-    onHome: nextOnHome,
-    lights: nextLights,
-    row: nextRow,
-    ...nextPlace
-  } = after.place;
+  const { onHome, row, ...place } = before.place;
+  const { onHome: nextOnHome, row: nextRow, ...nextPlace } = after.place;
   return (
     before.level === after.level &&
     before.press === after.press &&
     before.onToggle === after.onToggle &&
     before.onDim === after.onDim &&
+    before.roomLights === after.roomLights &&
     before.openDevice === after.openDevice &&
     before.openRoom === after.openRoom &&
     before.openNoRoom === after.openNoRoom &&
     sameItems(onHome, nextOnHome) &&
-    sameItems(lights, nextLights) &&
     sameRoomRow(row, nextRow) &&
     sameData(place, nextPlace)
   );
@@ -261,7 +267,7 @@ const HomeRoom = memo(function HomeRoom(props: HomeRoomProps) {
       {place.row && (
         <RoomRow row={place.row} roomName={place.name} press={props.press} />
       )}
-      {place.onHome.length > 0 && (
+      {(place.lightsTile || place.onHome.length > 0) && (
         <div className="flex flex-col gap-2">
           <DevicesHeading id={devicesId} level={props.level}>
             Devices
@@ -271,6 +277,14 @@ const HomeRoom = memo(function HomeRoom(props: HomeRoomProps) {
             aria-labelledby={devicesId}
             className="tile-grid auto-rows-(--cell)"
           >
+            {place.lightsTile && (
+              <RoomLightsTile
+                tile={place.lightsTile}
+                roomName={place.name}
+                lights={props.roomLights}
+                onOpen={props.openDevice}
+              />
+            )}
             {place.onHome.map((tile) => (
               <DeviceTile
                 key={tile.key}

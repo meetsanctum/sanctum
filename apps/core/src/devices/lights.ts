@@ -13,6 +13,7 @@ import {
   type LightsChange,
   type LightsPlace,
   type LightsResult,
+  type LightsSet,
   type LightsSwitch,
   type TurnOnLight,
 } from "@meetsanctum/app-sdk";
@@ -32,8 +33,9 @@ import type { HoldDirection, Holds, Remote } from "./holds.js";
 import type { View } from "./views.js";
 
 // The lights of a room, a floor, a zone or the whole home together: a
-// room's, a floor's and Lights' button, and the lights condition and step
-// of workflows, so they work with no lighting app. Toggling turns them all
+// room's Lights tile, which also sets their brightness or colour together,
+// a floor's button and Lights' card, and the lights condition and step of
+// workflows, so they work with no lighting app. Toggling turns them all
 // off while any is on, and on otherwise. A light that is offline is left
 // alone and does not count, and "all off" means none is on: a light that
 // has yet to report counts as not on. Each light's command passes the gate
@@ -114,7 +116,19 @@ export const lightsAre = choice({
   allOff: "every light is off",
 });
 
-const request = z.strictObject({ place: lightsPlace, to: lightsSwitch });
+const lightsSet = z.union([
+  z.strictObject({ brightness: z.number().int().min(0).max(100) }),
+  z.strictObject({ colorTemperature: z.number().int().min(50).max(1000) }),
+  z.strictObject({
+    hue: z.number().min(0).max(360),
+    saturation: z.number().min(0).max(100),
+  }),
+]) satisfies z.ZodType<LightsSet>;
+
+const request = z.union([
+  z.strictObject({ place: lightsPlace, to: lightsSwitch }),
+  z.strictObject({ place: lightsPlace, set: lightsSet }),
+]);
 
 type Light = {
   device: DeviceInfo;
@@ -183,6 +197,38 @@ function stepOf(
 }
 
 const keyOf = (device: string, capability: string) => `${device}/${capability}`;
+
+// What of a set a light can take: a brightness where it dims, a colour
+// temperature within its range, a colour where it has colour; or nothing.
+function fieldsOf({ capability }: Light, set: LightCommand): LightCommand {
+  const { features } = capability;
+  const fields: LightCommand = {};
+  if (features.brightness && set.brightness !== undefined) {
+    fields.brightness = set.brightness;
+  }
+  const range = features.colorTemperature;
+  if (range && set.colorTemperature !== undefined) {
+    fields.colorTemperature = Math.min(
+      range.max,
+      Math.max(range.min, set.colorTemperature),
+    );
+  }
+  if (features.color && set.hue !== undefined && set.saturation !== undefined) {
+    fields.hue = set.hue;
+    fields.saturation = set.saturation;
+  }
+  return fields;
+}
+
+function withSettings(rule: LightCommand, fields: LightCommand): LightCommand {
+  const command: LightCommand = { ...rule, ...fields };
+  if (fields.colorTemperature !== undefined) {
+    delete command.hue;
+    delete command.saturation;
+  }
+  if (fields.hue !== undefined) delete command.colorTemperature;
+  return command;
+}
 
 export function createLights(options: {
   devices: Pick<Devices, "list" | "command" | "commandFor">;
@@ -381,6 +427,40 @@ export function createLights(options: {
     return { on, ...(await sendAll(switching, send)) };
   }
 
+  // Sets a place's lights together, as a room's Lights tile and its detail
+  // do. While any is on, only those that are on change, each to what was
+  // asked as far as it can take it, so a mood's colour stays when only its
+  // brightness was asked. While none is on, the place comes on as its rooms'
+  // rules say, with what was asked; a light that can't dim comes on with a
+  // brightness asked of it too, but stays off for a colour it can't show. A
+  // brightness of 0 turns them off.
+  async function setWith(
+    place: LightsPlace,
+    set: LightsSet,
+    view: View,
+    send: (light: Light, command: LightCommand) => Promise<unknown>,
+  ): Promise<LightsResult> {
+    if (set.brightness === 0) {
+      return switchWith(place, "off", view, send);
+    }
+    const lights = lightsIn(place, view);
+    const lit = lights.filter(isOn);
+    const sending = lit.length
+      ? lit.flatMap((light) => {
+          const command = fieldsOf(light, set);
+          return Object.keys(command).length ? [{ light, command }] : [];
+        })
+      : turningOn(lights).flatMap(({ light, command }) => {
+          const fields = fieldsOf(light, set);
+          if (Object.keys(fields).length === 0) {
+            return set.brightness !== undefined ? [{ light, command }] : [];
+          }
+          return [{ light, command: withSettings(command, fields) }];
+        });
+    const result = await sendAll(sending, send);
+    return { on: lit.length > 0 || result.switched > 0, ...result };
+  }
+
   // Steps each light that can dim one way, from the level last asked of it,
   // or where a remote's hold left it once it says so.
   async function stepWith(
@@ -441,22 +521,10 @@ export function createLights(options: {
     }
     const set = ask.set!;
     return lights.map((light) => {
-      const { features } = light.capability;
-      const fields: LightCommand = {};
-      const ignored: SetField[] = [];
-      if (set.brightness !== undefined) {
-        if (features.brightness) fields.brightness = set.brightness;
-        else ignored.push("brightness");
-      }
-      if (set.colorTemperature !== undefined) {
-        const range = features.colorTemperature;
-        if (range) {
-          fields.colorTemperature = Math.min(
-            range.max,
-            Math.max(range.min, set.colorTemperature),
-          );
-        } else ignored.push("colorTemperature");
-      }
+      const fields = fieldsOf(light, set);
+      const ignored = (["brightness", "colorTemperature"] as const).filter(
+        (field) => set[field] !== undefined && fields[field] === undefined,
+      );
       if (Object.keys(fields).length === 0) {
         return { light, why: "unsupported", ignored };
       }
@@ -466,12 +534,7 @@ export function createLights(options: {
       if (isOn(light)) return { light, command: fields, ...partly };
       const rule = ruleFor(light);
       if (!rule) return { light, why: "kept_off" };
-      const command: LightCommand = { ...rule, ...fields };
-      if (fields.colorTemperature !== undefined) {
-        delete command.hue;
-        delete command.saturation;
-      }
-      return { light, command, ...partly };
+      return { light, command: withSettings(rule, fields), ...partly };
     });
   }
 
@@ -583,14 +646,16 @@ export function createLights(options: {
         throw new ActionCallError("invalid_request");
       }
       gate.admit(principal, { tier: "write" });
-      const { place, to } = parsed.data;
-      return switchWith(place, to, {}, (light, command) =>
+      const send = (light: Light, command: LightCommand) =>
         devices.commandFor(principal, {
           device: light.device.id,
           capability: light.capability.id,
           command,
-        }),
-      );
+        });
+      const { data } = parsed;
+      return "set" in data
+        ? setWith(data.place, data.set, {}, send)
+        : switchWith(data.place, data.to, {}, send);
     },
 
     // A workflow's step, as the workflow; no app sent it. Brightening or

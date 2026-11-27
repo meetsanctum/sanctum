@@ -100,12 +100,17 @@ export const isSwitchable = (
 ): capability is Switchable =>
   capability.kind === "light" || capability.kind === "switch";
 
+type LightTile = Tile & { supportsBrightness?: boolean };
+
+export const supportsBrightness = (tile: LightTile) =>
+  tile.supportsBrightness ?? tile.dims;
+
 function tileOf(
   device: DeviceInfo,
   capability: Switchable,
   several: boolean,
   roomId: string | null,
-): Tile {
+): LightTile {
   const base = {
     key: tileKey(device.id, capability.id),
     deviceId: device.id,
@@ -117,6 +122,9 @@ function tileOf(
     look: "off" as const,
     on: false,
     dims: false,
+    ...(capability.kind === "light" && capability.features.brightness
+      ? { supportsBrightness: true }
+      : {}),
     disabled: false,
   };
   if (device.availability === "offline") {
@@ -653,6 +661,8 @@ function roomTilesOf(
 export function sectionsOfRoom(
   tiles: readonly Tile[],
   devices: readonly DeviceInfo[],
+  // The group Lights tile can have the section to itself.
+  includeLights = false,
 ): TileSection[] {
   const placed = roomTilesOf(tiles, devices);
   const of = (category: DeviceCategory | undefined) =>
@@ -668,7 +678,11 @@ export function sectionsOfRoom(
         title: category.title,
         tiles: of(category.id),
       }))
-      .filter((section) => section.tiles.length > 0),
+      .filter(
+        (section) =>
+          section.tiles.length > 0 ||
+          (includeLights && section.id === "lights"),
+      ),
     ...(unknown.length > 0
       ? [{ id: "unknown", title: "Unknown devices", tiles: unknown }]
       : []),

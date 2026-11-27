@@ -279,7 +279,7 @@ describe("Home with floors", () => {
 });
 
 describe("Lights' page with floors", () => {
-  it("heads its rooms by floor, each floor and each room with its lights button", async () => {
+  it("heads its rooms by floor, each floor with its lights button and each room with its Lights tile", async () => {
     await show(<LightsHarness />);
     expect(outline()).toEqual([
       "h2 First floor",
@@ -295,8 +295,12 @@ describe("Lights' page with floors", () => {
     expect(said(lightsCard("Lights")!)).toEqual(["Lights", "2 on"]);
     expect(button("Turn off lights on Ground floor")?.disabled).toBe(false);
     expect(button("Turn off lights on First floor")?.disabled).toBe(true);
-    expect(button("Turn off lights in Kitchen")).toBeDefined();
-    expect(button("Turn on lights in Bedroom")).toBeDefined();
+    expect(button("Lights in Kitchen")?.getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(button("Lights in Bedroom")?.getAttribute("aria-pressed")).toBe(
+      "false",
+    );
   });
 });
 

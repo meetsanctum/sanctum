@@ -298,30 +298,27 @@ describe("Home", () => {
 
     // The attic has nothing, and devices with no room come last.
     expect(sections()).toEqual([
-      // The hall's light is off Home, but its room's switch is there.
-      {
-        heading: "Hall",
-        groups: [["Lights in Hall", "Turn on lights in Hall"]],
-      },
+      // The hall's light is off Home, but its room's Lights tile is there.
+      { heading: "Hall", groups: [["Devices", "Lights"]] },
       {
         heading: "Office",
         groups: [
-          ["Lights in Office", "Turn off lights in Office", "Relax", "Work"],
-          ["Devices", "Desk strip", "Lamp"],
+          ["Looks in Office", "Relax", "Work"],
+          ["Devices", "Lights", "Desk strip", "Lamp"],
         ],
       },
       { heading: "No room", groups: [["Devices", "Loose lamp"]] },
     ]);
-    // Each room's devices, No room's too, under Devices, a level under the
-    // room's name.
+    // Each room's devices, its Lights tile first, No room's too, under
+    // Devices, a level under the room's name.
     expect(
       [...container.querySelectorAll("h3")].map((each) => each.textContent),
-    ).toEqual(["Devices", "Devices"]);
+    ).toEqual(["Devices", "Devices", "Devices"]);
     const office = container.querySelector(
       'section[aria-labelledby="home-office"]',
     )!;
     const row = office.querySelector(
-      '[role=group][aria-label="Lights in Office"]',
+      '[role=group][aria-label="Looks in Office"]',
     )!;
     const grid = office.querySelector("[role=group][aria-labelledby]")!;
     const heading = office.querySelector("h3")!;

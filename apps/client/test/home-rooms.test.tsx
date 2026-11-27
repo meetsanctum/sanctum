@@ -4,6 +4,7 @@ import { expect, it, vi } from "vitest";
 
 // Load the harness first so room sections use its data fixtures.
 import { container, homeData, pushLive, refresh } from "./home-shell-harness";
+import * as roomLights from "../src/room-lights";
 import * as roomSections from "../src/room-sections";
 import { homeDashboard } from "./home-shell-fixtures";
 import { moods, relax, sensor } from "./place-pages-fixtures";
@@ -13,8 +14,13 @@ vi.mock(import("../src/room-sections"), async (original) => {
   const actual = await original();
   return { ...actual, RoomRow: vi.fn(actual.RoomRow) };
 });
+vi.mock(import("../src/room-lights"), async (original) => {
+  const actual = await original();
+  return { ...actual, RoomLightsTile: vi.fn(actual.RoomLightsTile) };
+});
 
-// A room on Home draws again only when what it shows changes.
+// A room on Home draws again only when what it shows changes: each room
+// here with lights draws its Lights tile, and one with moods its row.
 
 it("redraws only the room whose device changes", async () => {
   homeData.rooms = [
@@ -29,7 +35,7 @@ it("redraws only the room whose device changes", async () => {
   ];
   await refresh();
 
-  const rows = vi.mocked(roomSections.RoomRow);
+  const rows = vi.mocked(roomLights.RoomLightsTile);
   const drawn = () => rows.mock.calls.map(([props]) => props.roomName);
   expect(drawn()).toEqual(expect.arrayContaining(["Kitchen", "Office"]));
   rows.mockClear();
@@ -65,7 +71,7 @@ it("redraws only the room whose sensor reading changes without a tile on Home", 
     '[aria-labelledby="home-kitchen"] [data-slot="readings"]',
   );
   expect(readings?.textContent).toContain("21.5°");
-  const rows = vi.mocked(roomSections.RoomRow);
+  const rows = vi.mocked(roomLights.RoomLightsTile);
   rows.mockClear();
 
   await act(async () => {

@@ -183,6 +183,17 @@ it("opens a room's contact tile on the device's first page", async () => {
   expect(selected?.getAttribute("aria-label")).toBe("Motion");
 });
 
+it("opens the room's shared light controls from its Lights tile", async () => {
+  await press("Office");
+  await press("Lights in Office, 40%");
+
+  expect(dialog()?.querySelector("h2")?.textContent).toBe("Lights");
+  expect(dialog()?.textContent).toContain("Office · 40%");
+  expect(
+    dialog()?.querySelector('[role="tab"][aria-label="Brightness"]'),
+  ).not.toBeNull();
+});
+
 it("updates the name in an open device detail", async () => {
   await press("Lamp, 40%");
   expect(dialog()?.querySelector("h2")?.textContent).toBe("Lamp");

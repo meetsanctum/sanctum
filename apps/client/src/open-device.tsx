@@ -10,6 +10,8 @@ import {
 import { DeviceDetail } from "./device-detail";
 import { useHomeDevices } from "./home-devices";
 import { tileKey } from "./device-tiles";
+import { roomOfLightsKey } from "./room-lights";
+import { RoomLightsDetail } from "./room-lights-detail";
 
 type Opened = {
   /** The tile whose detail is open, kept while it closes. */
@@ -19,9 +21,9 @@ type Opened = {
   openFirstPage: boolean;
 };
 
-// Which device's detail is open, kept apart from Home's own state: opening
-// or closing a device's detail then draws only the detail, not the whole
-// shell under it.
+// Which device's detail is open, or which room's Lights tile's
+// (room-lights-detail.tsx), kept apart from Home's own state: opening or
+// closing a detail then draws only the detail, not the whole shell under it.
 function createOpenDevice() {
   let opened: Opened = { key: null, open: false, openFirstPage: false };
   const listeners = new Set<() => void>();
@@ -34,7 +36,10 @@ function createOpenDevice() {
       set({ key: tile.key, open: true, openFirstPage: false }),
     openFromRoom: (tile: Tile) =>
       set({
-        key: tileKey(tile.deviceId, tile.capabilityId),
+        // A room's Lights tile stands for no device.
+        key: roomOfLightsKey(tile.key)
+          ? tile.key
+          : tileKey(tile.deviceId, tile.capabilityId),
         open: true,
         openFirstPage: true,
       }),
@@ -96,5 +101,17 @@ function ShownDetail(
   props: Omit<ComponentProps<typeof DeviceDetail>, "devices">,
 ) {
   const devices = useHomeDevices();
-  return <DeviceDetail {...props} devices={devices} />;
+  const roomId = roomOfLightsKey(props.tileKey);
+  return roomId ? (
+    <RoomLightsDetail
+      container={props.container}
+      roomId={roomId}
+      open={props.open}
+      onClose={props.onClose}
+      onCovering={props.onCovering}
+      devices={devices}
+    />
+  ) : (
+    <DeviceDetail {...props} devices={devices} />
+  );
 }

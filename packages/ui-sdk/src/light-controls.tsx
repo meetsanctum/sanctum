@@ -25,6 +25,8 @@ export function LightControls(props: {
   name: string;
   features: LightFeatures;
   state: LightState;
+  /** Colour and white can come from different lights in a group. */
+  mixedAppearance?: boolean;
   /** Offline: shown, with nothing to press. */
   disabled?: boolean;
   /** How many commands to the light have failed here, so each shows. */
@@ -58,6 +60,7 @@ export function LightControls(props: {
           name={name}
           features={features}
           state={state}
+          mixedAppearance={props.mixedAppearance}
           disabled={disabled}
           failures={failures}
           onCommand={props.onCommand}
