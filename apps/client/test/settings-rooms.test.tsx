@@ -98,7 +98,7 @@ describe("what removing a room says", () => {
     expect(
       removalWarning({
         devices: [{ id: "lamp", name: "Kitchen light" }],
-        entities: [{ app: "a", type: "moods.mood", title: "Mood", count: 1 }],
+        entities: [{ app: "a", type: "mood", title: "Mood", count: 1 }],
         workflows: [{ id: "w", name: "Night" }],
       }),
     ).toEqual([
@@ -113,7 +113,7 @@ describe("what removing a room says", () => {
           { id: "plug", name: "Kettle" },
         ],
         entities: [
-          { app: "a", type: "moods.mood", title: "Mood", count: 4 },
+          { app: "a", type: "mood", title: "Mood", count: 4 },
           { app: "b", type: "awnings.awning", title: "Awning", count: 1 },
         ],
         workflows: [
@@ -398,7 +398,7 @@ describe("Settings → Rooms", () => {
         { id: "lamp", name: "Kitchen light" },
       ],
       entities: [
-        { app: "sanctum.moods", type: "moods.mood", title: "Mood", count: 4 },
+        { app: "sanctum.moods", type: "mood", title: "Mood", count: 4 },
       ],
       workflows: [{ id: "night", name: "Night" }],
     };

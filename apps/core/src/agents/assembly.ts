@@ -209,6 +209,12 @@ export function assembleAgentTools(
     readableDeviceKinds,
     places: () => places.list(),
     devices,
-    apps: { name: appName, action: apps.action, call: apps.call },
+    entities,
+    apps: {
+      name: appName,
+      action: apps.action,
+      runner: apps.runner,
+      call: apps.call,
+    },
   });
 }

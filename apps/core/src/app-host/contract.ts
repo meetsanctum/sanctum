@@ -12,6 +12,7 @@ import {
   assistantOfferOf,
   deviceActionActivitySchema,
   roomSectionKinds,
+  sameSchema,
   standardEntityTypes,
   tierSchema,
   tileShapeProblemsOf,
@@ -295,6 +296,8 @@ export type DeclaredAction = {
   // The app's own device a call acts on, by its input's `device`, and what
   // Activity says a call did.
   aboutDevice: DeviceActionActivity | null;
+  // The standard type whose entities it runs, with their input, or null.
+  runs: string | null;
 };
 
 /** A workflow trigger as its manifest declares it. */
@@ -387,6 +390,32 @@ function offersOf(manifest: StaticManifest) {
   return offers;
 }
 
+// An action that runs a type's entities runs a standard type with a run that
+// the app provides, read or write, answering the type's run output and, when
+// it's offered to AI agents, needing the type's switch, one action for each
+// type, as the SDK checks (entity-runs.ts): readers such as the run tool
+// trust it.
+function assertRuns(manifest: StaticManifest) {
+  const provided = new Set(manifest.provides.entities.map(({ id }) => id));
+  const ran = new Set<string>();
+  for (const action of manifest.actions) {
+    if (action.runs === undefined) continue;
+    const type = standardEntityTypes.find((each) => each.id === action.runs);
+    const offer = assistantOfferOf(action.assistant);
+    if (
+      !type?.run ||
+      !provided.has(type.id) ||
+      (action.tier !== "read" && action.tier !== "write") ||
+      !sameSchema(type.run.output, action.output) ||
+      (offer && !offer.needs?.includes(type.id)) ||
+      ran.has(type.id)
+    ) {
+      throw new Error(`Its action ${action.id} can't run ${action.runs}`);
+    }
+    ran.add(type.id);
+  }
+}
+
 // A card's checks and buttons must run the app's own read or write actions
 // with an input they take (widgets.ts), read here from the manifest.
 function widgetState(widget: WidgetDefinition, manifest: StaticManifest) {
@@ -457,9 +486,11 @@ export function contractOf(manifest: StaticManifest): AppContract {
         schema: action.input as JsonSchema,
         turn: action.turn === true,
         aboutDevice: action.aboutDevice ?? null,
+        runs: action.runs ?? null,
       },
     ]),
   );
+  assertRuns(manifest);
   const piece = ({
     id,
     words,
@@ -537,6 +568,7 @@ const manifestShape = z.looseObject({
       output: schema,
       turn: z.boolean().optional(),
       aboutDevice: deviceActionActivitySchema.optional(),
+      runs: z.string().optional(),
     }),
   ),
   events: z.array(named.extend({ payload: schema })),

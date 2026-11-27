@@ -507,20 +507,20 @@ describe("a room's page", () => {
           ...work,
           state: { ...(work.state as object), active: true, order: 0 },
         },
-        was: "moods.mood",
+        was: "mood",
       });
       live.publish({
         type: "entity",
         app: "sanctum.moods",
         key: "relax",
         entity: null,
-        was: "moods.mood",
+        was: "mood",
       });
       live.publish({
         type: "entity",
         app: "sanctum.moods",
         key: "bright",
-        entity: entity("sanctum.moods", "moods.mood", "bright", {
+        entity: entity("sanctum.moods", "mood", "bright", {
           placeId: "hall",
           name: "Bright",
         }),

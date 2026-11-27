@@ -28,7 +28,7 @@ const moodState = z.object({
   smart: z.boolean(),
 });
 const moodType = defineEntityType({
-  id: "moods.mood",
+  id: "moods.scene",
   title: "Mood",
   state: moodState,
 });
@@ -46,7 +46,7 @@ const deleteMood = action("moods.deleteMood", "destructive");
 const section = defineRoomSection({
   id: "moods.room",
   title: "Moods",
-  entityType: "moods.mood",
+  entityType: "moods.scene",
   kind: "tiles",
   order: 200,
   press: runMood,
@@ -80,7 +80,7 @@ describe("a room section", () => {
       {
         id: "moods.room",
         title: "Moods",
-        entityType: "moods.mood",
+        entityType: "moods.scene",
         kind: "tiles",
         order: 200,
         press: { action: "moods.runMood" },
@@ -172,7 +172,7 @@ describe("a room section", () => {
           },
         ),
       ),
-    ).toThrow(/moods.mood, but its icon does not fit a tile/);
+    ).toThrow(/moods.scene, but its icon does not fit a tile/);
   });
 });
 

@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import { z } from "zod";
 
 import type { AssistantOffer } from "./ai-agents.js";
 
@@ -24,11 +24,30 @@ export interface EntityTypeDefinition<State extends z.ZodType = z.ZodType> {
   readonly standard?: boolean;
   /** What it offers AI agents as information; left out, they never see it. */
   readonly assistant?: AssistantOffer;
+  /**
+   * Set on a standard type whose entities run, such as a mood. Each state
+   * holds an `input`, and the app that provides the type says which of its
+   * actions runs one (that action's `runs`): it takes the entity's `input`
+   * and answers `output`, and needs this type's AI switch. A reader runs
+   * an entity through that action without naming the app or the action.
+   */
+  readonly run?: {
+    readonly output: z.ZodType;
+    /** What running one does and answers, for AI agents. */
+    readonly description: string;
+  };
 }
 
 export function defineEntityType<State extends z.ZodType>(
   type: EntityTypeDefinition<State>,
 ): EntityTypeDefinition<State> {
+  // An entity that runs carries what its app's action takes.
+  if (
+    type.run &&
+    !(type.state instanceof z.ZodObject && "input" in type.state.shape)
+  ) {
+    throw new Error(`The entity type ${type.id} runs, so its state has input`);
+  }
   return type;
 }
 

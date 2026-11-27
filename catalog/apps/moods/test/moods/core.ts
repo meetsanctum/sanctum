@@ -117,7 +117,7 @@ export function startableHome(options: { devices?: DeviceInfo[] } = {}) {
       const type = entityTypeOf(moodsApp, entity.type);
       if (!type) throw new Error(`Moods does not provide ${entity.type}`);
       type.state.parse(entity.state);
-      if (entity.type === "moods.mood") state.publications += 1;
+      if (entity.type === "mood") state.publications += 1;
       const hold = state.holdPublication;
       state.holdPublication = null;
       if (hold) {

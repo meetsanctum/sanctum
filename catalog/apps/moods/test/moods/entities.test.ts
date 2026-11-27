@@ -12,13 +12,13 @@ import {
   orderMoods,
   updateMood,
 } from "../../src/moods/actions.js";
-import type { MoodState } from "../../src/moods/entities.js";
+import type { MoodState } from "@meetsanctum/app-sdk";
 import { assignSmartMood } from "../../src/moods/smart-actions.js";
 import { turnOnKey } from "../../src/schedules/turn-on.js";
 import { startableHome } from "./core.js";
 import { device, lightCapability } from "./home.js";
 
-// Moods publishes each mood as a moods.mood entity, in the tile shape room
+// Moods publishes each mood as an entity of the standard mood type, in the tile shape room
 // sections draw, with whether the room's lights show it: on every change to
 // its moods, as its rooms' lights change, and on start for whatever changed
 // while it was stopped.
@@ -89,7 +89,7 @@ function home() {
   };
 }
 
-describe("moods.mood entities", () => {
+describe("mood entities", () => {
   it("are published in the tile shape room sections draw as moods are made", async () => {
     const { start, call, entity } = home();
     await start();
@@ -101,7 +101,7 @@ describe("moods.mood entities", () => {
       lights: reading,
     });
     expect(entity(read.id)).toEqual({
-      type: "moods.mood",
+      type: "mood",
       key: read.id,
       name: "Reading",
       state: {

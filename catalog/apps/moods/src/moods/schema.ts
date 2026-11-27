@@ -7,11 +7,10 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
-import type { TurnOn } from "@meetsanctum/app-sdk";
+import type { MoodState, TurnOn } from "@meetsanctum/app-sdk";
 
 import type { PressChoice } from "../presses/presses.js";
 import type { TurnOnBehaviour } from "../schedules/store.js";
-import type { MoodState } from "./entities.js";
 import type { MoodLightState } from "./light-states.js";
 
 // Moods' own tables, in its own database file: the moods and what each

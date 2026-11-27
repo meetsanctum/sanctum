@@ -99,7 +99,7 @@ describe("Moods", () => {
     );
 
     expect(removal.json().entities).toEqual([
-      { app: "sanctum.moods", type: "moods.mood", title: "Mood", count: 1 },
+      { app: "sanctum.moods", type: "mood", title: "Mood", count: 1 },
     ]);
   });
 
@@ -194,7 +194,7 @@ describe("Moods", () => {
     // has followed the last of the lights.
     const active = async () =>
       (
-        (await get(core, "/api/entities?type=moods.mood", maya)).json() as {
+        (await get(core, "/api/entities?type=mood", maya)).json() as {
           key: string;
           state: { active: boolean };
         }[]

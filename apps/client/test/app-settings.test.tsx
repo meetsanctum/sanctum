@@ -60,7 +60,7 @@ const moods: AppInfo = {
   state: "running",
   settings: null,
   provides: {
-    entities: [{ id: "moods.mood", title: "Mood" }],
+    entities: [{ id: "mood", title: "Mood" }],
     widgets: [],
     roomSections: [],
     devicePages: [{ id: "moods.presses", title: "Presses", kinds: ["button"] }],
@@ -103,13 +103,13 @@ const manifests: Record<string, StaticManifest> = {
     actions: [{ id: "moods.runMood", title: "Run a mood" }],
     provides: {
       ...pieces,
-      entities: [{ id: "moods.mood", title: "Mood", standard: false }],
+      entities: [{ id: "mood", title: "Mood", standard: true }],
       widgets: [],
       roomSections: [
         {
           id: "moods.room",
           title: "Moods",
-          entityType: "moods.mood",
+          entityType: "mood",
           preview: [
             { icon: "sparkles", name: "Aurora", active: true },
             { icon: "moon", name: "Night", active: false },
@@ -168,7 +168,7 @@ const manifests: Record<string, StaticManifest> = {
 const mood = (key: string, placeId: string): EntityInfo => ({
   app: moods.id,
   key,
-  type: "moods.mood",
+  type: "mood",
   name: key,
   state: { placeId, icon: "sparkles", name: key, order: 0, active: false },
   updatedAt: "2026-11-03T09:00:00Z",

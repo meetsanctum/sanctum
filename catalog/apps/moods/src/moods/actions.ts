@@ -2,14 +2,16 @@ import {
   ActionError,
   defineAction,
   entityOf,
+  moodRunSchema,
+  moodType,
   type AppContext,
 } from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
-import { failedLight, sendCommands } from "../lights.js";
+import { sendCommands } from "../lights.js";
 import { refreshRoom } from "../refresh.js";
 import { lightsInRoom, type Light } from "../targets.js";
-import { moodType, publishMoods } from "./entities.js";
+import { publishMoods } from "./entities.js";
 import { moodIcons } from "./icons.js";
 import {
   lightKey,
@@ -117,11 +119,8 @@ export const mood = z.object({
     .nullable(),
 }) satisfies z.ZodType<Mood>;
 
-export const ran = z.object({
-  switched: z.number().int(),
-  // The lights that could not be set, so a page can show which.
-  failed: z.array(failedLight),
-});
+// What running or previewing a mood answers, as every mood answers.
+export const ran = moodRunSchema;
 
 export async function assertRoom(ctx: AppContext, id: string) {
   const places = await ctx.places.list();
@@ -165,7 +164,7 @@ export const createMood = defineAction({
     starts: "off",
     description:
       "Save a new mood without applying it. Give the room ID, a name, an optional icon and the desired state of each selected light, identified by device and capability.",
-    needs: ["moods.mood", "devices.control:light"],
+    needs: [moodType.id, "devices.control:light"],
   },
   async run(ctx, input) {
     await assertRoom(ctx, input.roomId);
@@ -247,15 +246,17 @@ export const runMood = defineAction({
   title: "Run a mood",
   tier: "write",
   // A mood by its entity's key, which is its id, so Automations picks one
-  // from the moods the home has.
+  // from the moods the home has. Its entities' input is this, so whoever
+  // reads moods by type runs one through it.
   input: z.object({ id: entityOf(moodType.id) }),
   output: ran,
+  runs: moodType.id,
   words: { sentence: "Run {id}", preview: { id: "Aurora" } },
   assistant: {
     starts: "on",
     description:
       "Run a saved mood in its room. This can turn off other lights in the room. Returns the number of successful light commands and the lights whose commands failed.",
-    needs: ["moods.mood", "devices.control:light"],
+    needs: [moodType.id, "devices.control:light"],
   },
   async run(ctx, input) {
     const found = await readMood(ctx.storage.db, input.id);

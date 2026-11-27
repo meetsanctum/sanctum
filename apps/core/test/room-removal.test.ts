@@ -20,22 +20,22 @@ import {
 // What removing a room takes with it: anyone reads it before they remove the
 // room, and reading it changes nothing.
 
-// An app that keeps moods in rooms and publishes them as entities in their
-// room, as Moods does for its room section.
-const moodType = defineEntityType({
-  id: "moods.mood",
-  title: "Mood",
+// An app that keeps scenes in rooms and publishes them as entities in their
+// room, by placeId as a room section's tiles are.
+const sceneType = defineEntityType({
+  id: "moods.scene",
+  title: "Scene",
   state: z.object({ placeId: z.string().nullable(), name: z.string() }),
 });
 const publish = defineAction({
   id: "moods.publish",
   title: "Publish",
   tier: "write",
-  input: z.object({ key: z.string(), state: moodType.state }),
+  input: z.object({ key: z.string(), state: sceneType.state }),
   output: z.object({}),
   async run(ctx, input) {
     await ctx.entities.publish({
-      type: moodType.id,
+      type: sceneType.id,
       key: input.key,
       name: input.state.name,
       state: input.state,
@@ -51,7 +51,7 @@ const moodsApp = defineApp({
   permissions: [],
   actions: [publish],
   events: [],
-  provides: { entities: [moodType] },
+  provides: { entities: [sceneType] },
 });
 
 async function home() {
@@ -116,7 +116,7 @@ describe("removing a room", () => {
     expect(answer.json()).toEqual({
       devices: [{ id: lamp, name: expect.any(String) }],
       entities: [
-        { app: "test.moods", type: "moods.mood", title: "Mood", count: 2 },
+        { app: "test.moods", type: "moods.scene", title: "Scene", count: 2 },
       ],
       workflows: [{ id: kitchenOff.id, name: "Kitchen lights off" }],
     });

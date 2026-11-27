@@ -6,6 +6,7 @@ import {
   controlPermission,
   historyReadPermission,
   peopleReadPermission,
+  standardEntityTypes,
   type ActivityInfo,
   type AiCanUse,
   type AiOfferInfo,
@@ -90,6 +91,16 @@ type CoreToolsOptions = {
 };
 
 const isUsable = (offer: AiOfferInfo) => offer.on && offer.missing.length === 0;
+
+// An entity's state as AI agents read it. One that runs, such as a mood,
+// leaves out its input, which only its app's action reads: agents run it by
+// its app and key.
+function stateForAgents(type: string, state: unknown) {
+  const runs = standardEntityTypes.some((each) => each.id === type && each.run);
+  if (!runs || typeof state !== "object" || state === null) return state;
+  const { input: _, ...rest } = state as Record<string, unknown>;
+  return rest;
+}
 
 // The kinds AI agents may control, of those any area offers.
 const controlKinds = (canUse: AiCanUse) =>
@@ -417,7 +428,7 @@ export function createCoreTools(options: CoreToolsOptions) {
             key: entity.key,
             type: entity.type,
             name: entity.name,
-            state: entity.state,
+            state: stateForAgents(entity.type, entity.state),
             updatedAt: entity.updatedAt,
           })),
       });

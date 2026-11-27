@@ -2,6 +2,7 @@ import {
   defineApp,
   defineDevicePage,
   defineRoomSection,
+  moodType,
   turnOnType,
   type AppContext,
   type DeviceEvent,
@@ -10,7 +11,7 @@ import {
 import { isDeepStrictEqual } from "node:util";
 
 import { moodActions, runMood } from "./moods/actions.js";
-import { moodType, publishMoods, roomsOf } from "./moods/entities.js";
+import { publishMoods, roomsOf } from "./moods/entities.js";
 import { smartMoodActions } from "./moods/smart-actions.js";
 import { keepRoomMoods, removeRoomMoods } from "./moods/store.js";
 import { motionActions } from "./motion/actions.js";
@@ -35,10 +36,11 @@ import { lightsInRoom } from "./targets.js";
 
 // Moods: the moods that set a room's lights, in its own database. The
 // devices, places and the pages that show them are the core's and the
-// shell's. It publishes each mood as a moods.mood entity, with whether the
-// room's lights show it, following the lights to keep that current, and the
-// shell draws them in each room's row as Moods' room section, where a tap
-// runs the mood. A room's moods go with it: when the core deletes it while
+// shell's. It publishes each mood as an entity of the standard mood type,
+// with whether the room's lights show it, following the lights to keep that
+// current, and the shell draws them in each room's row as Moods' room
+// section, where a tap runs the mood with runMood: the action that runs
+// its mood entities, for whoever reads them. A room's moods go with it: when the core deletes it while
 // Moods runs, and when Moods starts for one deleted while it did not.
 // Workflows may run its moods; the core's own lights pieces switch a place's
 // lights and ask whether they are on. It says what each press of a remote
@@ -59,7 +61,7 @@ let running:
 export default defineApp({
   id: "sanctum.moods",
   name: "Moods",
-  version: "0.13.1",
+  version: "0.14.0",
   core: "^2.0.0",
   summary:
     "Moods for each room, and what remotes and motion do with its lights.",

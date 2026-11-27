@@ -23,6 +23,7 @@ import {
 import type { EntityTypeDefinition } from "./entities.js";
 import { staticProblems } from "./device-problems.js";
 import { assertDriver } from "./driver.js";
+import { assertEntityRuns } from "./entity-runs.js";
 import {
   needsProblems,
   permissionIds,
@@ -38,6 +39,7 @@ import {
   type RoomSectionInfo,
 } from "./room-sections.js";
 import { turnOnType } from "./lights.js";
+import { moodType } from "./moods.js";
 import { protocolVersion } from "./protocol-version.js";
 import { assertAssistantSpeech } from "./assistant-speech.js";
 import { settingsSchemaOf, type SettingsSchema } from "./settings.js";
@@ -80,6 +82,8 @@ export * from "./listening.js";
 export * from "./live.js";
 export * from "./media.js";
 export * from "./models.js";
+export * from "./moods.js";
+export { sameSchema } from "./entity-runs.js";
 export * from "./requests.js";
 export * from "./sentences.js";
 export * from "./hearing.js";
@@ -102,12 +106,14 @@ export * from "./workflows.js";
 /**
  * The core's standard entity types, which any app may provide and, with
  * entities.read:<type>, read. The core reads some itself: sun for its
- * workflows, and lights.turnOn when it turns a place's lights on.
+ * workflows, lights.turnOn when it turns a place's lights on, and mood,
+ * which its run tool runs for AI agents.
  */
 export const standardEntityTypes: readonly EntityTypeDefinition[] = [
   sunType,
   forecastType,
   turnOnType,
+  moodType,
 ];
 
 /** How dangerous an action is; the core maps tiers to auto-run or approval. */
@@ -168,6 +174,12 @@ export interface ActionDefinition<
    * join when they are about the same device and by the same caller.
    */
   readonly aboutDevice?: DeviceActionActivity;
+  /**
+   * The id of a standard type with a run, such as mood, that it runs: it
+   * takes one of the app's entities' `input` and answers the type's run
+   * output (entity-runs.ts).
+   */
+  readonly runs?: string;
   /** How Automations words it as a workflow's step or condition. */
   readonly words?: PieceWords;
   /**
@@ -449,6 +461,7 @@ export function defineApp(app: AppDefinition): AppDefinition {
     ),
   );
   assertRoomSections(app);
+  assertEntityRuns(app, standardEntityTypes);
   assertDevicePages({ permissions: asked, provides: app.provides });
   assertWorkflowPieces(app);
   assertDriver(app, asked);
@@ -514,6 +527,7 @@ export function toStaticManifest(app: AppDefinition) {
       output: z.toJSONSchema(action.output),
       assistant: action.assistant ?? null,
       ...(action.turn ? { turn: true as const } : {}),
+      ...(action.runs !== undefined ? { runs: action.runs } : {}),
       ...(action.aboutDevice
         ? { aboutDevice: { done: action.aboutDevice.done } }
         : {}),
