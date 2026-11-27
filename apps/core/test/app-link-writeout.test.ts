@@ -156,7 +156,7 @@ describe("an app's link while the host writes out", () => {
 
     await vi.waitFor(() =>
       expect(gone).toEqual([
-        "it was still busy with a call after its grace expired",
+        "it was still busy with a call 20 ms past its deadline, and more while the host wrote out to its disks",
       ]),
     );
     expect(await call).toBe("ended");

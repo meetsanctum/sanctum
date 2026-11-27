@@ -192,7 +192,7 @@ export function createAppLink(options: {
   // `spared` hears the first look that waits.
   function deadline(
     ms: number,
-    expired: () => void,
+    expired: (wasSpared: boolean) => void,
     set: (timer: NodeJS.Timeout) => void,
     spared?: () => void,
   ) {
@@ -211,7 +211,7 @@ export function createAppLink(options: {
         set(setTimeout(look, Math.min(heartbeatMs, left)));
         return;
       }
-      expired();
+      expired(isTold);
     };
     set(setTimeout(look, ms));
   }
@@ -581,10 +581,12 @@ export function createAppLink(options: {
           open.ended = id !== connection.lifetime;
           deadline(
             graceMs,
-            () =>
+            (wasSpared) =>
               drop(
                 connection,
-                "it was still busy with a call after its grace expired",
+                wasSpared
+                  ? `it was still busy with a call ${graceMs} ms past its deadline, and more while the host wrote out to its disks`
+                  : `it was still busy with a call ${graceMs} ms past its deadline`,
                 true,
               ),
             (timer) => {
