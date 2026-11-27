@@ -2,6 +2,10 @@ import type { DeviceCategory } from "@meetsanctum/app-sdk";
 import { icons, type LucideIcon } from "@meetsanctum/ui-sdk";
 
 // The sidebar, Home's status row and Settings → Devices share this order.
+// Lights leads the categories, the one with something to press, followed by
+// Environment, Security and Presence, as in a room's line of readings. Media
+// comes before Buttons. On Home, the Attention tile comes before the
+// categories while there's a problem.
 export const categoryOrder = [
   "lights",
   "environment",
