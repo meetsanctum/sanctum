@@ -217,17 +217,16 @@ function ClientMenu(props: {
   person?: string;
   onEdit: (action: Editing["action"]) => void;
 }) {
+  const kind =
+    props.client.kind === "shared" ? "Shared device" : "Personal device";
+  const owner = props.person ? `, ${props.person}` : "";
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label={
-            props.person
-              ? `${props.client.name}, ${props.person}: more`
-              : `${props.client.name}: more`
-          }
+          aria-label={`${kind}, ${props.client.name}${owner}: more`}
           className="ms-auto"
         >
           <EllipsisVertical />
