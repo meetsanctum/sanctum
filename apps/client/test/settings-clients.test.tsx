@@ -59,6 +59,7 @@ const tablet: ClientInfo = {
   reduceEffects: false,
   reduceMotion: false,
 };
+const tabletMenu = "Kitchen tablet, shared";
 
 describe("a client's detail", () => {
   it.each([
@@ -200,11 +201,41 @@ describe("Settings → Linked Devices", () => {
     await act(async () => item.click());
   }
 
+  it("distinguishes shared and personal device menus when their names overlap", async () => {
+    const sam = { id: "sam", name: "Sam", avatar: null, colour: "#fcd2b3" };
+    vi.mocked(coreJson)
+      .mockResolvedValueOnce([
+        { ...macbook, name: "MacBook Air" },
+        {
+          ...macbook,
+          id: "sam-mac",
+          name: "MacBook Air",
+          personId: sam.id,
+          current: false,
+        },
+        { ...tablet, name: "MacBook Air, Maya Chen" },
+      ] satisfies ClientInfo[])
+      .mockResolvedValueOnce([maya, sam]);
+    await refreshClients();
+
+    expect(
+      [
+        ...document.querySelectorAll<HTMLButtonElement>(
+          "li button[aria-label$=': more']",
+        ),
+      ].map((each) => each.getAttribute("aria-label")),
+    ).toEqual([
+      "MacBook Air, Maya Chen: more",
+      "MacBook Air, Sam: more",
+      "MacBook Air, Maya Chen, shared: more",
+    ]);
+  });
+
   it("signs a device out from its menu, saying what that means, but never this one", async () => {
     await act(async () =>
       document
         .querySelector<HTMLButtonElement>(
-          `button[aria-label="${macbook.name}: more"]`,
+          `button[aria-label="${macbook.name}, ${maya.name}: more"]`,
         )!
         .dispatchEvent(
           new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
@@ -221,7 +252,7 @@ describe("Settings → Linked Devices", () => {
       ),
     );
 
-    await editClient(tablet.name, "Sign out");
+    await editClient(tabletMenu, "Sign out");
     const dialog = document.querySelector("[role=dialog]")!;
     expect(dialog.querySelector("h2")?.textContent).toBe(
       `Sign out ${tablet.name}?`,
@@ -247,7 +278,7 @@ describe("Settings → Linked Devices", () => {
   });
 
   it("tells the person who needs to sign in again on a personal device", async () => {
-    await editClient(phone.name, "Sign out");
+    await editClient(`${phone.name}, ${maya.name}`, "Sign out");
     const dialog = document.querySelector("[role=dialog]")!;
     expect(dialog.textContent).toContain("Maya signs in again to use it.");
   });
@@ -278,7 +309,7 @@ describe("Settings → Linked Devices", () => {
   }
 
   it("turns a client's Reduce effects and Reduce motion on and off, each on its own", async () => {
-    await editClient("Kitchen tablet", "Effects and motion");
+    await editClient(tabletMenu, "Effects and motion");
     const dialog = document.querySelector<HTMLElement>("[role=dialog]")!;
     expect(dialog.textContent).toContain("Effects and motion");
     expect(toggle("Reduce effects").getAttribute("role")).toBe("switch");
@@ -310,7 +341,7 @@ describe("Settings → Linked Devices", () => {
   });
 
   it("puts a switch back where it couldn't be saved", async () => {
-    await editClient("Kitchen tablet", "Effects and motion");
+    await editClient(tabletMenu, "Effects and motion");
     vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(500, "unknown"));
     await act(async () => toggle("Reduce effects").click());
     expect(isOn("Reduce effects")).toBe(false);
@@ -320,7 +351,7 @@ describe("Settings → Linked Devices", () => {
   });
 
   it("keeps a saved switch value when the client list cannot refresh", async () => {
-    await editClient("Kitchen tablet", "Effects and motion");
+    await editClient(tabletMenu, "Effects and motion");
     const original = vi.mocked(coreJson).getMockImplementation()!;
     vi.mocked(coreJson).mockImplementation((path, init) =>
       path === "/api/auth/clients"
@@ -338,7 +369,7 @@ describe("Settings → Linked Devices", () => {
   });
 
   it("lets a press go while a save is on its way, and keeps its failure out of a reopened dialog", async () => {
-    await editClient("Kitchen tablet", "Effects and motion");
+    await editClient(tabletMenu, "Effects and motion");
     let refuseSave!: (error: Error) => void;
     const save = new Promise<ClientInfo>((_, reject) => {
       refuseSave = reject;
@@ -350,14 +381,14 @@ describe("Settings → Linked Devices", () => {
     expect(isOn("Reduce motion")).toBe(false);
 
     await act(async () => button("Done").click());
-    await editClient("Kitchen tablet", "Effects and motion");
+    await editClient(tabletMenu, "Effects and motion");
     await act(async () => refuseSave(new CoreError(500, "unknown")));
     expect(document.querySelector("[role=dialog] [role=alert]")).toBeNull();
     expect(isOn("Reduce effects")).toBe(false);
   });
 
   it("updates the open dialog when they are changed elsewhere", async () => {
-    await editClient("Kitchen tablet", "Effects and motion");
+    await editClient(tabletMenu, "Effects and motion");
     shownTablet = { ...shownTablet, reduceMotion: true };
     await refreshClients();
     expect(isOn("Reduce motion")).toBe(true);
@@ -370,7 +401,7 @@ describe("Settings → Linked Devices", () => {
   it.each([false, true])(
     "keeps newer switch values when an earlier save's answer arrives (refresh fails: %s)",
     async (refreshFails) => {
-      await editClient("Kitchen tablet", "Effects and motion");
+      await editClient(tabletMenu, "Effects and motion");
       let finishSave!: (client: ClientInfo) => void;
       vi.mocked(coreJson).mockReturnValueOnce(
         new Promise<ClientInfo>((resolve) => {
@@ -404,7 +435,7 @@ describe("Settings → Linked Devices", () => {
       "Shared · Web browser · Not used yet",
     );
     expect(container.textContent).not.toContain("Reduced");
-    await editClient("Kitchen tablet", "Effects and motion");
+    await editClient(tabletMenu, "Effects and motion");
     const dialog = document.querySelector<HTMLElement>("[role=dialog]")!;
     expect(dialog.textContent).toContain(
       "Update Sanctum in your home to change these settings.",
@@ -413,7 +444,7 @@ describe("Settings → Linked Devices", () => {
   });
 
   it("takes the next press while Clients are still being read after a save", async () => {
-    await editClient("Kitchen tablet", "Effects and motion");
+    await editClient(tabletMenu, "Effects and motion");
     await act(async () => toggle("Reduce effects").click());
     const reading = new Promise<never>(() => {});
     vi.mocked(coreJson).mockImplementation(async (path, init) => {
@@ -448,11 +479,11 @@ describe("Settings → Linked Devices", () => {
           })
         : original(path, init),
     );
-    await editClient("Kitchen tablet", "Rename");
+    await editClient(tabletMenu, "Rename");
     await type(document.querySelector("[role=dialog] input")!, "Hall tablet");
     await act(async () => button("Save").click());
     await act(async () => button("Cancel").click());
-    await editClient("Maya's MacBook", "Rename");
+    await editClient(`${macbook.name}, ${maya.name}`, "Rename");
     await act(async () => finishRename(undefined));
 
     const input = document.querySelector<HTMLInputElement>(

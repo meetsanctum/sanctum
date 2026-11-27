@@ -177,6 +177,7 @@ export function ClientsSection(props: {
                 />
                 <ClientMenu
                   client={client}
+                  person={person?.name}
                   onEdit={(action) => setEditing({ action, client })}
                 />
               </li>
@@ -209,17 +210,27 @@ export function ClientsSection(props: {
   );
 }
 
+// Named by the device and whose it is: two people's devices can share a
+// name, such as two Macs called MacBook Air.
 function ClientMenu(props: {
   client: ClientInfo;
+  person?: string;
   onEdit: (action: Editing["action"]) => void;
 }) {
+  // Whose it is, as its detail line starts: a person, or shared.
+  const whose =
+    props.client.kind === "shared" ? "shared" : (props.person ?? "");
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
           size="icon-sm"
-          aria-label={`${props.client.name}: more`}
+          aria-label={
+            whose
+              ? `${props.client.name}, ${whose}: more`
+              : `${props.client.name}: more`
+          }
           className="ms-auto"
         >
           <EllipsisVertical />

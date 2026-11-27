@@ -44,9 +44,10 @@ next try is right. Then it works again.
 
 ## Change your password
 
-On a Mac signed in as you, open your own page in **Settings → People** and
-choose **Change password** under **Sign-In**. Enter your current password,
-then your new one twice, and choose **Change password**.
+On a Mac signed in as you, open your own page: choose your picture at the
+bottom of the sidebar, then **Profile**, or choose your name in **Settings →
+People**. Then choose **Change password** under **Sign-In**. Enter your
+current password, then your new one twice, and choose **Change password**.
 
 Your current password is checked on your Mac before anything changes, and
 neither password leaves it. Your other devices stay signed in. To sign one
