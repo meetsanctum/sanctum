@@ -50,7 +50,7 @@ export function signInLine(clock: HomeClock, signIn: SignIn, now?: Date) {
     case "signs-in":
       return "Signs in";
     case "invited":
-      return `Invite works until ${untilText(clock, signIn.endsAt, now)}`;
+      return `Invite works until ${untilText(clock, signIn.invite.endsAt, now)}`;
     case "invite-ended":
       return "Invite ended";
     case "none":

@@ -6,6 +6,7 @@ import { ClaimHost } from "./auth/ClaimHost";
 import { PairDevice } from "./auth/PairDevice";
 import { replaceClient, selectHost } from "./auth/session";
 import { SignIn } from "./auth/SignIn";
+import { JoinHome } from "./auth/JoinHome";
 import { WhoUses } from "./auth/WhoUses";
 import { onTokenInvalid } from "./core-fetch";
 import { Home } from "./Home";
@@ -21,6 +22,7 @@ type View =
   | { name: "who"; host: FoundHost }
   | { name: "sign-in"; host: FoundHost; recheck?: StoredHost }
   | { name: "pair"; host: FoundHost; recheck?: StoredHost }
+  | { name: "join"; host: FoundHost }
   | { name: "home"; host: StoredHost }
   | { name: "changed"; host: StoredHost; url: string; found?: FoundHost };
 
@@ -30,6 +32,7 @@ const views = new Set([
   "who",
   "sign-in",
   "pair",
+  "join",
   "home",
   "changed",
 ]);
@@ -84,7 +87,10 @@ export function App() {
   // other screen trusts only the stored host's pin. A change of trust may
   // bring the page back in a fresh session, on this view.
   const checking =
-    view.name === "claim" || view.name === "sign-in" || view.name === "pair"
+    view.name === "claim" ||
+    view.name === "sign-in" ||
+    view.name === "pair" ||
+    view.name === "join"
       ? view.host.id
       : null;
   // Runs when the host being checked or the screen changes, with the view
@@ -164,6 +170,17 @@ export function App() {
             home(stored);
           }}
           onForgotten={back}
+          onJoin={recheck ? undefined : () => setView({ name: "join", host })}
+        />
+      );
+    }
+    case "join": {
+      const { host } = view;
+      return (
+        <JoinHome
+          host={host}
+          onBack={() => setView({ name: "sign-in", host })}
+          onJoined={home}
         />
       );
     }

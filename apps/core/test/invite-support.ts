@@ -48,15 +48,21 @@ export async function invite(
   core: TestCore,
   token: string,
   personId: string,
-  call: { remoteAddress?: string } = {},
+  kind: InviteInfo["kind"] = "invite",
+  replacesInviteId?: string,
 ) {
   const secret = newInviteSecret();
   const started = registration(secret);
   const start = await post(
     core,
     "/api/auth/invites/start",
-    { personId, registrationRequest: started.registrationRequest },
-    { token, ...call },
+    {
+      personId,
+      kind,
+      replacesInviteId,
+      registrationRequest: started.registrationRequest,
+    },
+    { token },
   );
   if (start.statusCode !== 200) {
     return { response: start } as const;
@@ -70,7 +76,7 @@ export async function invite(
       registrationRecord: started.finish(registrationResponse),
       keyStretching: keyStretching.version,
     },
-    { token, ...call },
+    { token },
   );
   return {
     response: finish,

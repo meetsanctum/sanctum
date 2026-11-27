@@ -56,6 +56,8 @@ type Making = {
   address: string;
   clientId: string;
   personId: string;
+  inviteKind: InviteInfo["kind"];
+  replacesInviteId?: string;
   inviteId: string;
   lookup: string;
 };
@@ -147,12 +149,30 @@ export function createInvites(
 
   function info(invite: Invite): InviteInfo {
     return {
+      id: invite.id,
       personId: invite.personId,
       kind: invite.kind,
       createdAt: invite.createdAt.toISOString(),
       endsAt: invite.expiresAt.toISOString(),
       ended: endingOf(invite),
     };
+  }
+
+  function checkMake(
+    personId: string,
+    kind: InviteInfo["kind"],
+    replacesInviteId: string | undefined,
+  ) {
+    if (!people.get(personId)) {
+      throw new AuthError("not_found");
+    }
+    if ((kind === "reset") !== Boolean(loginOf(personId))) {
+      throw new AuthError("invite_kind_changed");
+    }
+    const current = inviteOf(personId);
+    if (current && !endingOf(current) && current.id !== replacesInviteId) {
+      throw new AuthError("invite_changed");
+    }
   }
 
   function username(value: string) {
@@ -216,9 +236,7 @@ export function createInvites(
       address: string,
       input: InviteStart,
     ): InviteStarted {
-      if (!people.get(input.personId)) {
-        throw new AuthError("not_found");
-      }
+      checkMake(input.personId, input.kind, input.replacesInviteId);
       const inviteId = randomUUID();
       // A lookup no invite holds, ended ones included, since those keep
       // theirs to tell a late code it ended.
@@ -243,6 +261,8 @@ export function createInvites(
         address,
         clientId: principal.client.id,
         personId: input.personId,
+        inviteKind: input.kind,
+        replacesInviteId: input.replacesInviteId,
         inviteId,
         lookup,
       });
@@ -260,9 +280,8 @@ export function createInvites(
         throw new AuthError("expired");
       }
       const made = db.transaction(() => {
-        if (!people.get(entry.personId)) {
-          throw new AuthError("not_found");
-        }
+        const kind = entry.inviteKind;
+        checkMake(entry.personId, kind, entry.replacesInviteId);
         const holder = db
           .select({ personId: authInvites.personId })
           .from(authInvites)
@@ -274,7 +293,6 @@ export function createInvites(
           throw new AuthError("expired");
         }
         const at = now();
-        const kind = loginOf(entry.personId) ? "reset" : "invite";
         db.delete(authInvites)
           .where(eq(authInvites.personId, entry.personId))
           .run();
@@ -311,6 +329,9 @@ export function createInvites(
       const invite = inviteOf(input.personId);
       if (!invite || endingOf(invite)) {
         throw new AuthError("not_found");
+      }
+      if (invite.id !== input.inviteId) {
+        throw new AuthError("invite_changed");
       }
       db.update(authInvites)
         .set({ endedReason: "cancelled", endedAt: now() })

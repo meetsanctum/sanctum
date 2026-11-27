@@ -1,6 +1,7 @@
 import type {
   ChangePerson,
   ClientInfo,
+  InviteInfo,
   PersonInfo,
   RemoveLogin,
   RemovePerson,
@@ -12,12 +13,21 @@ import {
   useHomeClock,
   type LiveFeed,
 } from "@meetsanctum/ui-sdk";
-import { useEffect, useId, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 
 import { ColourPicker } from "../colour-picker";
 import { Avatar, BackButton, Row, Section } from "../components";
 import { CoreError, coreJson } from "../core-fetch";
 import { Confirm, type Asking } from "./confirm";
+import { InviteDialog, type Inviting } from "./invite-dialog";
+import { cancelInvite } from "./invites";
 import {
   devicesOf,
   holdsLastSignIn,
@@ -46,14 +56,25 @@ const tryAgain = "That didn't work. Try again.";
 export function PersonPage(props: {
   live: LiveFeed;
   personId: string;
+  // Just added: asks whether they will sign in, once.
+  ask?: boolean;
   back: () => void;
   backTo?: string;
 }) {
   const { data, failed, refresh } = usePeople(props.live, true);
   const [asking, setAsking] = useState<Asking>();
+  const [inviting, setInviting] = useState<Inviting>();
   const [saving, setSaving] = useState(false);
   const person = data?.people.find((each) => each.id === props.personId);
   const { back } = props;
+
+  // A person just added: whether they will sign in, asked once.
+  const asked = useRef(false);
+  useEffect(() => {
+    if (!props.ask || asked.current || !person) return;
+    asked.current = true;
+    setInviting({ person, kind: "invite", ask: true });
+  }, [props.ask, person]);
 
   // Removed here or elsewhere: the page has nothing left to show.
   const gone = !!data && !person;
@@ -93,6 +114,27 @@ export function PersonPage(props: {
   const done = async () => {
     await refresh();
   };
+  const askCancelCode = (code: InviteInfo, trigger: HTMLButtonElement) => {
+    const reset = code.kind === "reset";
+    setAsking({
+      title: reset ? "Cancel password code?" : "Cancel invite?",
+      description: `The ${reset ? "password" : "invite"} code stops working.`,
+      confirm: reset ? "Cancel code" : "Cancel invite",
+      trigger,
+      run: async () => {
+        try {
+          await cancelInvite(code.personId, code.id);
+        } finally {
+          await done();
+        }
+      },
+      problem: (error) =>
+        error instanceof CoreError &&
+        (error.code === "invite_changed" || error.code === "not_found")
+          ? "This code is no longer active. Close this to see the current details."
+          : tryAgain,
+    });
+  };
 
   function askRemoval(
     snapshot: NonNullable<typeof data>,
@@ -105,7 +147,7 @@ export function PersonPage(props: {
     const name = firstName(target.name);
     const removePerson = kind === "person";
     const codeEnds =
-      signIn.state === "signs-in" && signIn.resetEndsAt
+      signIn.state === "signs-in" && signIn.reset
         ? "The password code stops working."
         : signIn.state === "invited" && removePerson
           ? "The invite code stops working."
@@ -163,6 +205,17 @@ export function PersonPage(props: {
         isLast={isLast}
         stale={failed}
         onRemove={(trigger) => askRemoval(data, person, "sign-in", trigger)}
+        onInvite={(kind) =>
+          setInviting({
+            person,
+            kind,
+            replacesInviteId:
+              kind === "invite" && signIn.state === "invited"
+                ? signIn.invite.id
+                : undefined,
+          })
+        }
+        onCancelCode={askCancelCode}
       />
       {(signIn.state === "signs-in" || devices.length > 0) && (
         <Devices
@@ -200,6 +253,11 @@ export function PersonPage(props: {
         </Button>
       </div>
       <Confirm asking={asking} onClose={() => setAsking(undefined)} />
+      <InviteDialog
+        inviting={inviting}
+        onClose={() => setInviting(undefined)}
+        onRefresh={() => void refresh()}
+      />
     </>
   );
 }
@@ -306,31 +364,59 @@ function SignInCard(props: {
   isLast: boolean;
   stale: boolean;
   onRemove: (trigger: HTMLButtonElement) => void;
+  onInvite: (kind: "invite" | "reset") => void;
+  onCancelCode: (code: InviteInfo, trigger: HTMLButtonElement) => void;
 }) {
   const clock = useHomeClock();
   const { signIn, person } = props;
+  const reset = signIn.state === "signs-in" ? signIn.reset : null;
   const noteId = `${person.id}-last`;
+  const actions = (children: ReactNode) => (
+    <div className="flex flex-wrap gap-2">{children}</div>
+  );
   return (
     <Section id={`${person.id}-sign-in`} title="Sign-In">
       {signIn.state === "signs-in" ? (
         <div className="flex flex-col gap-3">
-          {signIn.resetEndsAt ? (
+          {reset ? (
             <Row
               title={`Signs in as ${signIn.username}`}
-              detail={`Password code works until ${untilText(clock, signIn.resetEndsAt)}`}
+              detail={`Password code works until ${untilText(clock, reset.endsAt)}`}
             />
           ) : (
             <p className="m-0 text-sm">Signs in as {signIn.username}</p>
           )}
-          <Button
-            variant="outline"
-            className="self-start"
-            disabled={props.isLast || props.stale}
-            aria-describedby={props.isLast ? noteId : undefined}
-            onClick={(event) => props.onRemove(event.currentTarget)}
-          >
-            Remove sign-in
-          </Button>
+          {actions(
+            <>
+              {reset ? (
+                <Button
+                  variant="outline"
+                  disabled={props.stale}
+                  onClick={(event) =>
+                    props.onCancelCode(reset, event.currentTarget)
+                  }
+                >
+                  Cancel code
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  disabled={props.stale}
+                  onClick={() => props.onInvite("reset")}
+                >
+                  Reset password
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                disabled={props.isLast || props.stale}
+                aria-describedby={props.isLast ? noteId : undefined}
+                onClick={(event) => props.onRemove(event.currentTarget)}
+              >
+                Remove sign-in
+              </Button>
+            </>,
+          )}
           {props.isLast && (
             <p id={noteId} className={`m-0 ${label}`}>
               {person.name} is the only person who signs in, so this sign-in
@@ -339,7 +425,40 @@ function SignInCard(props: {
           )}
         </div>
       ) : (
-        <p className="m-0 text-sm">{signInText(clock, signIn)}</p>
+        <div className="flex flex-col gap-3">
+          <p className="m-0 text-sm">{signInText(clock, signIn)}</p>
+          {actions(
+            signIn.state === "invited" ? (
+              <>
+                <Button
+                  variant="outline"
+                  disabled={props.stale}
+                  onClick={() => props.onInvite("invite")}
+                >
+                  New invite code
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={props.stale}
+                  onClick={(event) =>
+                    props.onCancelCode(signIn.invite, event.currentTarget)
+                  }
+                >
+                  Cancel invite
+                </Button>
+              </>
+            ) : (
+              <Button
+                disabled={props.stale}
+                onClick={() => props.onInvite("invite")}
+              >
+                {signIn.state === "invite-ended"
+                  ? "New invite code"
+                  : "Invite to sign in"}
+              </Button>
+            ),
+          )}
+        </div>
       )}
     </Section>
   );
@@ -351,7 +470,7 @@ function signInText(
 ) {
   switch (signIn.state) {
     case "invited":
-      return `Invite works until ${untilText(clock, signIn.endsAt)}`;
+      return `Invite works until ${untilText(clock, signIn.invite.endsAt)}`;
     case "invite-ended":
       return signIn.ended === "cancelled"
         ? "The code was cancelled."

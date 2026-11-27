@@ -12,14 +12,20 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CoreError, coreJson } from "../src/core-fetch";
+import { cancelInvite, makeInvite } from "../src/people/invites";
 import { PeoplePage } from "../src/people/people-page";
 import { PersonPage } from "../src/people/person-page";
 import { entry } from "./activity-fixtures";
+import { deferred } from "./deferred";
 
 // Settings → People and a person's page: the list says how each person
 // signs in, and removing a sign-in or a person asks first, naming what
 // ends, and never takes the home's last sign-in.
 
+vi.mock("../src/people/invites", () => ({
+  makeInvite: vi.fn(),
+  cancelInvite: vi.fn(),
+}));
 vi.mock("../src/core-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/core-fetch")>()),
   coreJson: vi.fn(),
@@ -268,6 +274,7 @@ describe("a person's page", () => {
   it("removes a sign-in after saying what ends, Cancel first", async () => {
     invites = [
       {
+        id: "reset",
         personId: "maya",
         kind: "reset",
         ended: null,
@@ -403,6 +410,7 @@ describe("a person's page", () => {
   it("removes a person and goes back after saying what ends", async () => {
     invites = [
       {
+        id: "invite",
         personId: "sam",
         kind: "invite",
         ended: null,
@@ -426,5 +434,200 @@ describe("a person's page", () => {
     expect(posted).toEqual([["/api/people/remove", { id: "sam" }]]);
     expect(back).toHaveBeenCalledOnce();
     expect(container.textContent).not.toContain("Sam");
+  });
+});
+
+describe("inviting someone to sign in", () => {
+  async function show(personId: string, ask = false) {
+    await act(async () =>
+      root.render(
+        <PersonPage
+          live={live}
+          personId={personId}
+          ask={ask}
+          back={() => {}}
+        />,
+      ),
+    );
+  }
+
+  const made = {
+    code: "K7QXM4PD",
+    info: {
+      id: "invite",
+      personId: "sam",
+      kind: "invite",
+      createdAt: new Date().toISOString(),
+      endsAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+      ended: null,
+    },
+  } satisfies Awaited<ReturnType<typeof makeInvite>>;
+
+  beforeEach(() => {
+    vi.mocked(makeInvite).mockReset().mockResolvedValue(made);
+    vi.mocked(cancelInvite).mockReset();
+  });
+
+  it("shows the code once, with the steps on the person's device", async () => {
+    await show("sam");
+    await act(async () => button("Invite to sign in")!.click());
+    await act(nextTick);
+
+    expect(makeInvite).toHaveBeenCalledWith(
+      { personId: "sam", kind: "invite" },
+      expect.any(AbortSignal),
+    );
+    expect(dialog().textContent).toContain("Invite Sam to sign in");
+    expect(dialog().textContent).toContain("K7QX-M4PD");
+    expect(dialog().textContent).toContain(
+      "You can’t see it again after you close this.",
+    );
+    expect(dialog().textContent).toContain(
+      "On Sam’s Mac, open Sanctum and choose your home.",
+    );
+    expect(dialog().textContent).toContain(
+      "Choose Just me, then I have an invite code.",
+    );
+    await confirm("Done");
+    await act(nextTick);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it("asks whether someone just added will sign in, and Not now makes no code", async () => {
+    await show("sam", true);
+    await act(nextTick);
+    expect(dialog().textContent).toContain("Will Sam sign in?");
+    await confirm("Not now");
+    expect(makeInvite).not.toHaveBeenCalled();
+  });
+
+  it("explains what replacing an active invite does before making a code", async () => {
+    invites = [made.info];
+    await show("sam");
+    await act(async () => button("New invite code")!.click());
+    expect(dialog().textContent).toContain(
+      "The previous code will stop working",
+    );
+    expect(makeInvite).not.toHaveBeenCalled();
+    await confirm("Cancel");
+    expect(makeInvite).not.toHaveBeenCalled();
+    await act(async () => button("New invite code")!.click());
+    await confirm("Make new code");
+    expect(makeInvite).toHaveBeenCalledWith(
+      { personId: "sam", kind: "invite", replacesInviteId: "invite" },
+      expect.any(AbortSignal),
+    );
+    expect(dialog().textContent).toContain("K7QX-M4PD");
+  });
+
+  it.each([
+    { personId: "sam", kind: "invite", label: "Cancel invite" },
+    { personId: "maya", kind: "reset", label: "Cancel code" },
+  ] as const)(
+    "confirms before cancelling a $kind code",
+    async ({ personId, kind, label }) => {
+      invites = [{ ...made.info, personId, kind }];
+      await show(personId);
+      await act(async () => button(label)!.click());
+      expect(dialog().textContent).toContain("code stops working");
+      expect(cancelInvite).not.toHaveBeenCalled();
+      await confirm(label);
+      expect(cancelInvite).toHaveBeenCalledWith(personId, made.info.id);
+    },
+  );
+
+  it("refreshes when the code shown for cancellation has been replaced", async () => {
+    invites = [made.info];
+    vi.mocked(cancelInvite).mockRejectedValue(
+      new CoreError(409, "invite_changed"),
+    );
+    await show("sam");
+    await act(async () => button("Cancel invite")!.click());
+    invites = [{ ...made.info, id: "replacement" }];
+    await confirm("Cancel invite");
+    expect(cancelInvite).toHaveBeenLastCalledWith("sam", "invite");
+    expect(dialog().textContent).toContain("This code is no longer active.");
+    await confirm("Cancel");
+    await act(async () => button("Cancel invite")!.click());
+    await confirm("Cancel invite");
+    expect(cancelInvite).toHaveBeenLastCalledWith("sam", "replacement");
+  });
+
+  it("refreshes when the person's sign-in has changed", async () => {
+    vi.mocked(makeInvite).mockImplementationOnce(async () => {
+      logins.push({ personId: "sam", username: "sam" });
+      throw new CoreError(409, "invite_kind_changed");
+    });
+    await show("sam");
+    await act(async () => button("Invite to sign in")!.click());
+    expect(dialog().textContent).toContain("Sam’s sign-in has changed.");
+    await confirm("Done");
+    expect(button("Reset password")).toBeDefined();
+  });
+
+  it("keeps the dialog open while making the code", async () => {
+    const making = deferred<typeof made>();
+    vi.mocked(makeInvite).mockReturnValueOnce(making.promise);
+    await show("sam");
+    await act(async () => button("Invite to sign in")!.click());
+    expect(button("Done")).toBeUndefined();
+    expect(button("Close")).toBeUndefined();
+    await act(nextTick);
+    await act(async () => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Escape",
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+      document
+        .querySelector('[data-slot="dialog-overlay"]')!
+        .dispatchEvent(
+          new MouseEvent("pointerdown", { bubbles: true, cancelable: true }),
+        );
+    });
+    expect(dialog().textContent).toContain("Making a code");
+    await act(async () => making.resolve(made));
+    expect(dialog().textContent).toContain("K7QX-M4PD");
+    expect(button("Done")).toBeDefined();
+  });
+
+  it("selects the visible code for manual copying when the clipboard refuses", async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error("Clipboard denied"));
+    vi.stubGlobal("navigator", {
+      userAgent: navigator.userAgent,
+      clipboard: { writeText },
+    });
+    await show("sam");
+    await act(async () => button("Invite to sign in")!.click());
+    await confirm("Copy code");
+    expect(writeText).toHaveBeenCalledWith("K7QX-M4PD");
+    expect(dialog().textContent).toContain("Copy it manually");
+    expect(window.getSelection()?.toString()).toBe("K7QX-M4PD");
+  });
+
+  it("ignores a clipboard result from an earlier code", async () => {
+    const copying = deferred<void>();
+    const writeText = vi.fn(() => copying.promise);
+    vi.stubGlobal("navigator", {
+      userAgent: navigator.userAgent,
+      clipboard: { writeText },
+    });
+    vi.mocked(makeInvite)
+      .mockResolvedValueOnce(made)
+      .mockResolvedValueOnce({
+        ...made,
+        code: "X7QXM4PD",
+      });
+    await show("sam");
+    await act(async () => button("Invite to sign in")!.click());
+    await confirm("Copy code");
+    await confirm("Done");
+    await act(async () => button("Invite to sign in")!.click());
+    expect(dialog().textContent).toContain("X7QX-M4PD");
+    await act(async () => copying.resolve());
+    expect(button("Copy code")).toBeDefined();
+    expect(button("Copied")).toBeUndefined();
   });
 });

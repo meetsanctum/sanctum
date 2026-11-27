@@ -1,4 +1,8 @@
-import type { PasswordProblem } from "@meetsanctum/auth-protocol";
+import {
+  isUsername,
+  normaliseUsername,
+  passwordProblem,
+} from "@meetsanctum/auth-protocol";
 
 import { productName } from "../brand";
 import { CoreError } from "../core-fetch";
@@ -42,8 +46,33 @@ export function problemText(error: unknown): string {
   return `Can't reach ${productName}. Check that this device is on your home Wi-Fi.`;
 }
 
-export function passwordProblemText(problem: PasswordProblem) {
-  return problem === "too_short"
-    ? "Use at least 8 characters."
-    : "That password is too long.";
+export type CredentialProblem = {
+  field?: "username" | "password" | "repeated";
+  text: string;
+};
+
+export function credentialProblem(
+  username: string,
+  password: string,
+  repeated: string,
+): CredentialProblem | undefined {
+  if (!isUsername(normaliseUsername(username))) {
+    return {
+      field: "username",
+      text: "Use 3 to 30 letters, digits, dots or underscores.",
+    };
+  }
+  const tooWeak = passwordProblem(password);
+  if (tooWeak) {
+    return {
+      field: "password",
+      text:
+        tooWeak === "too_short"
+          ? "Use at least 8 characters."
+          : "That password is too long.",
+    };
+  }
+  if (password !== repeated) {
+    return { field: "repeated", text: "Enter the same password twice." };
+  }
 }

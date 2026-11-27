@@ -173,7 +173,12 @@ export function SettingsPage(props: {
           page={back}
           live={props.live}
           me={props.me}
-          onOpen={(id) => props.open(personSettingsPage, { id })}
+          onOpen={(id, added) =>
+            props.open(
+              personSettingsPage,
+              added ? { id, added: "yes" } : { id },
+            )
+          }
         />
       );
     case personSettingsPage:
@@ -182,6 +187,7 @@ export function SettingsPage(props: {
           key={props.params.id}
           live={props.live}
           personId={props.params.id}
+          ask={props.params.added === "yes"}
           back={props.back}
           backTo={backTo}
         />

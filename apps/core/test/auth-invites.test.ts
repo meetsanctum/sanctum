@@ -24,6 +24,7 @@ import {
   hostId,
   maya,
   post,
+  registration,
   setLogin,
   sharedClient,
   signIn,
@@ -184,6 +185,7 @@ describe("inviting a person to sign in", () => {
       (
         await post(core, "/api/auth/invites/start", {
           personId: jonas.id,
+          kind: "invite",
           registrationRequest: "abc",
         })
       ).statusCode,
@@ -270,7 +272,7 @@ describe("inviting a person to sign in", () => {
       const cancellation = await post(
         core,
         "/api/auth/invites/cancel",
-        { personId: jonas.id },
+        { personId: jonas.id, inviteId: made.info!.id },
         { token: claim.token },
       );
       expect(cancellation.statusCode).toBe(204);
@@ -299,7 +301,7 @@ describe("inviting a person to sign in", () => {
     const cancelled = await post(
       core,
       "/api/auth/invites/cancel",
-      { personId: jonas.id },
+      { personId: jonas.id, inviteId: made.info!.id },
       { token: claim.token },
     );
     expect(cancelled.statusCode).toBe(204);
@@ -308,6 +310,70 @@ describe("inviting a person to sign in", () => {
     const fresh = await invite(core, claim.token, jonas.id);
     expect(fresh.info).toMatchObject({ ended: null });
     expect(core.db.select().from(authInvites).all()).toHaveLength(1);
+    expect((await redeem(core, fresh.code!)).outcome).toBe("joined");
+  });
+
+  it("keeps a replacement active when another device cancels the old invite", async () => {
+    const { core, claim, jonas, made } = await invited();
+    const fresh = await invite(
+      core,
+      claim.token,
+      jonas.id,
+      "invite",
+      made.info!.id,
+    );
+
+    const cancelled = await post(
+      core,
+      "/api/auth/invites/cancel",
+      { personId: jonas.id, inviteId: made.info!.id },
+      { token: claim.token },
+    );
+    expect(cancelled.statusCode).toBe(409);
+    expect(cancelled.json()).toEqual({ error: "invite_changed" });
+    expect((await redeem(core, fresh.code!)).outcome).toBe("joined");
+  });
+
+  it("replaces only the active invite the sender confirmed", async () => {
+    const { core, claim, jonas, made } = await invited();
+    const refused = await invite(core, claim.token, jonas.id);
+    expect(refused.response.statusCode).toBe(409);
+    expect(refused.response.json()).toEqual({ error: "invite_changed" });
+
+    const pending = registration("QXM4PD");
+    const started = await post(
+      core,
+      "/api/auth/invites/start",
+      {
+        personId: jonas.id,
+        kind: "invite",
+        replacesInviteId: made.info!.id,
+        registrationRequest: pending.registrationRequest,
+      },
+      { token: claim.token },
+    );
+    expect(started.statusCode).toBe(200);
+    const { registrationId, registrationResponse } = started.json();
+    const fresh = await invite(
+      core,
+      claim.token,
+      jonas.id,
+      "invite",
+      made.info!.id,
+    );
+    expect(fresh.response.statusCode).toBe(200);
+    const finished = await post(
+      core,
+      "/api/auth/invites/finish",
+      {
+        registrationId,
+        registrationRecord: pending.finish(registrationResponse),
+        keyStretching: keyStretching.version,
+      },
+      { token: claim.token },
+    );
+    expect(finished.statusCode).toBe(409);
+    expect(finished.json()).toEqual({ error: "invite_changed" });
     expect((await redeem(core, fresh.code!)).outcome).toBe("joined");
   });
 
@@ -420,6 +486,53 @@ describe("inviting a person to sign in", () => {
 });
 
 describe("resetting a forgotten password", () => {
+  it("refuses to save an invite if the person gained a sign-in during registration", async () => {
+    const { core, claim, jonas, made } = await invited();
+    const pending = registration("QXM4PD");
+    const started = await post(
+      core,
+      "/api/auth/invites/start",
+      {
+        personId: jonas.id,
+        kind: "invite",
+        replacesInviteId: made.info!.id,
+        registrationRequest: pending.registrationRequest,
+      },
+      { token: claim.token },
+    );
+    expect(started.statusCode).toBe(200);
+    const { registrationId, registrationResponse } = started.json();
+    const login = await setLogin(core, claim.token, {
+      personId: jonas.id,
+      username: "jonas",
+      password: "an existing password",
+    });
+    expect(login.statusCode).toBe(204);
+    const reset = await invite(core, claim.token, jonas.id, "reset");
+    expect(reset.info?.kind).toBe("reset");
+
+    const finished = await post(
+      core,
+      "/api/auth/invites/finish",
+      {
+        registrationId,
+        registrationRecord: pending.finish(registrationResponse),
+        keyStretching: keyStretching.version,
+      },
+      { token: claim.token },
+    );
+    expect(finished.statusCode).toBe(409);
+    expect(finished.json()).toEqual({ error: "invite_kind_changed" });
+    expect(
+      await get(core, "/api/auth/invites", { token: claim.token }).then(
+        (response) => response.json(),
+      ),
+    ).toEqual([reset.info]);
+    expect(
+      (await invite(core, claim.token, jonas.id)).response.statusCode,
+    ).toBe(409);
+  });
+
   it("clears the reset code when the person's sign-in is removed", async () => {
     const { core, claim, jonas } = await invited();
     const login = await setLogin(core, claim.token, {
@@ -428,7 +541,7 @@ describe("resetting a forgotten password", () => {
       password: "an existing password",
     });
     expect(login.statusCode).toBe(204);
-    const reset = await invite(core, claim.token, jonas.id);
+    const reset = await invite(core, claim.token, jonas.id, "reset");
     expect(reset.info).toMatchObject({ kind: "reset", ended: null });
 
     const removed = await post(
@@ -445,7 +558,7 @@ describe("resetting a forgotten password", () => {
     const core = await testCore();
     const claim = await claimed(core);
 
-    const made = await invite(core, claim.token, claim.person.id);
+    const made = await invite(core, claim.token, claim.person.id, "reset");
     expect(made.info).toMatchObject({ kind: "reset" });
     expect((await signIn(core)).outcome).toBe("signed-in");
 

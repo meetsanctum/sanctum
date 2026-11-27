@@ -19,7 +19,8 @@ export function PeoplePage(props: {
   page: ReactNode;
   live: LiveFeed;
   me?: Me;
-  onOpen: (personId: string) => void;
+  // Opens a person's page; `added` when they were just added here.
+  onOpen: (personId: string, added?: boolean) => void;
 }) {
   const clock = useHomeClock();
   const { data, failed } = usePeople(props.live);
@@ -71,7 +72,7 @@ export function PeoplePage(props: {
         onOpenChange={setAdding}
         trigger={addButton}
         taken={people.map((person) => person.colour)}
-        onAdded={(person) => props.onOpen(person.id)}
+        onAdded={(person) => props.onOpen(person.id, true)}
       />
     </>
   );

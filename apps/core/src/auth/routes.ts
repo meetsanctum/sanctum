@@ -123,6 +123,8 @@ const schemas = {
   removeLogin: z.object({ personId: id }) satisfies z.ZodType<RemoveLogin>,
   inviteStart: z.object({
     personId: id,
+    kind: z.enum(["invite", "reset"]),
+    replacesInviteId: id.optional(),
     registrationRequest: message,
   }) satisfies z.ZodType<InviteStart>,
   inviteFinish: z.object({
@@ -130,7 +132,10 @@ const schemas = {
     registrationRecord: message,
     keyStretching: stretching,
   }) satisfies z.ZodType<InviteFinish>,
-  cancelInvite: z.object({ personId: id }) satisfies z.ZodType<CancelInvite>,
+  cancelInvite: z.object({
+    personId: id,
+    inviteId: id,
+  }) satisfies z.ZodType<CancelInvite>,
   redeemStart: z.object({
     lookup: z.string().max(8),
     startLoginRequest: message,

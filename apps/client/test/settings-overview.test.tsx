@@ -79,6 +79,13 @@ const live = createLiveFeed();
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+    },
+  );
   clients = [maya.client, tablet, { ...tablet, id: "phone", name: "Phone" }];
   agents = [{ id: "codex" }, { id: "claude" }];
   people = [
@@ -125,6 +132,7 @@ async function show(
     apps?: AppInfo[];
     devices?: DeviceInfo[];
     places?: Places;
+    me?: Me;
   } = {},
 ) {
   await act(async () =>
@@ -136,7 +144,7 @@ async function show(
         back={() => wentBack++}
         backTo={props.backTo}
         apps={props.apps ?? []}
-        me={maya}
+        me={props.me ?? maya}
         core={{ state: "online", version: "1.2.3" } as never}
         live={live}
         devices={{ devices: props.devices ?? [], places: props.places }}
@@ -163,13 +171,6 @@ const row = (area: string) =>
   ].find((button) => button.textContent?.startsWith(area))!;
 
 it("adds a person and opens their Settings page using the returned ID", async () => {
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      observe() {}
-      unobserve() {}
-    },
-  );
   const added: PersonInfo = {
     id: "new-person",
     name: "Ida West",
@@ -217,11 +218,39 @@ it("adds a person and opens their Settings page using the returned ID", async ()
     method: "POST",
     json: { name: "Ida West", colour: "#fcd2b3" },
   });
-  expect(opened).toEqual([["person", { id: added.id }]]);
+  expect(opened).toEqual([["person", { id: added.id, added: "yes" }]]);
 
   const [page, params] = opened[0]!;
   await show({ page, params });
   expect(container.textContent).toContain("Ida West");
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+    "Will Ida West sign in?",
+  );
+});
+
+it("offers the same password reset on personal and shared devices", async () => {
+  vi.mocked(coreJson).mockImplementation(async (path) => {
+    if (path === "/api/people") return [maya.person] as never;
+    if (path === "/api/auth/logins") {
+      return [{ personId: "maya", username: "maya" }] as never;
+    }
+    if (
+      path === "/api/auth/invites" ||
+      path === "/api/auth/clients" ||
+      path === "/api/auth/agents"
+    ) {
+      return [] as never;
+    }
+    throw new Error(`unexpected ${path}`);
+  });
+  for (const me of [maya, { client: tablet, person: null }]) {
+    await show({ page: "person", params: { id: "maya" }, me });
+    expect(
+      [...container.querySelectorAll("button")].some(
+        (button) => button.textContent === "Reset password",
+      ),
+    ).toBe(true);
+  }
 });
 
 describe("Settings' first page", () => {

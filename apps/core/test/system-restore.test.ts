@@ -116,7 +116,7 @@ describe("a restore from a backup", () => {
       "invite",
     );
     expect(
-      (await invite(before, admin.token, admin.person.id)).info?.kind,
+      (await invite(before, admin.token, admin.person.id, "reset")).info?.kind,
     ).toBe("reset");
     await writeFile(join(before.dataDir, restoreMarkerFile), marker);
 
