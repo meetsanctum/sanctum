@@ -22,7 +22,7 @@ if tar -xzOf "$tarball" package/dist/cli.js | grep -E '(from |import\()"@meetsan
 fi
 
 # Install outside the workspace so a missing dependency cannot resolve there.
-install_dir="$(mktemp -d "$destination/install.XXXXXX")"
+install_dir="$(mktemp -d "${TMPDIR:-/tmp}/sanctum-mcp-install.XXXXXX")"
 trap 'rm -rf "$install_dir"' EXIT
 cd "$install_dir"
 npm install --ignore-scripts --no-audit --no-fund "$tarball"
