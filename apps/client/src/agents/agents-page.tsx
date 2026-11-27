@@ -247,6 +247,7 @@ function AssistantAppRow(props: { app: AppInfo; onOpen: () => void }) {
         className="-mx-2.5 w-[calc(100%+20px)]"
       >
         <AppIcon
+          appId={props.app.id}
           icon={props.app.icon ?? plainIcon}
           className={cn(
             "size-8 [&_svg]:size-4",

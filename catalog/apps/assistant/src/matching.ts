@@ -1,6 +1,11 @@
 import type { SentenceBlank } from "@meetsanctum/app-sdk";
 
-import type { ChoiceName, Choices, Intent, Language } from "./sentences.js";
+import type {
+  ChoiceName,
+  Choices,
+  Intent,
+  LanguageSentences,
+} from "./sentences.js";
 
 // Matches what someone said or typed against the Assistant's templates, with
 // the home's names in their blanks. Speech recognition hands back the words
@@ -98,7 +103,7 @@ function nameOf(names: readonly string[], matched: string) {
 /** The first sentence that matches the words, or null for none. */
 export function match(
   text: string,
-  language: Language,
+  language: LanguageSentences,
   names: HomeNames,
 ): Matched | null {
   const words = normalized(text);

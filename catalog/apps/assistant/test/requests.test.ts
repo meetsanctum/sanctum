@@ -4,7 +4,7 @@ import {
   type AiToolAnswer,
   type AssistantRequestCall,
   type RequestContext,
-  type RequestLanguage,
+  type SpeechLanguage,
   type RequestReply,
 } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
@@ -77,7 +77,7 @@ type Tools = Record<
 async function ask(
   text: string,
   options: {
-    language?: RequestLanguage;
+    language?: SpeechLanguage;
     from?: "speaker" | "client";
     room?: { id: string; name: string } | null;
     tools?: Tools;

@@ -142,6 +142,7 @@ export function CanUsePage(props: {
                       className="-mx-2.5 w-[calc(100%+20px)]"
                     >
                       <AppIcon
+                        appId={app.id}
                         icon={app.icon ?? plainIcon}
                         className="size-9 [&_svg]:size-5"
                       />

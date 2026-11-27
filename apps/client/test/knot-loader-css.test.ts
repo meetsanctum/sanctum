@@ -87,6 +87,30 @@ it("keeps Back's extended hit area out of the Mac window drag region", () => {
   ]).toContainEqual(["-webkit-app-region", "no-drag"]);
 });
 
+// A pseudo-element inside :is() makes the whole rule invalid, which would
+// leave every button in the bars a handle for the window.
+it.each([".top-bar", ".overlay-header", ".sidebar-top"])(
+  "keeps %s buttons and their extended hit areas out of the Mac window drag region",
+  (bar) => {
+    const controls = rules
+      .filter(({ declarations }) =>
+        declarations.includes("-webkit-app-region:no-drag"),
+      )
+      .flatMap(({ selectors }) => selectors)
+      .flatMap((selector) => {
+        const match = /^\[data-platform=macos\] (\S+) (\S+)$/.exec(selector);
+        return match?.[1]?.split(/[(),]/).includes(bar) ? [match[2]] : [];
+      });
+    expect(controls).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^(?:button|:is\((?:\w+,)*button(?:,\w+)*\))$/),
+        expect.stringMatching(/^button::?before$/),
+        expect.stringMatching(/^button::?after$/),
+      ]),
+    );
+  },
+);
+
 it("gives the sign-in and dashboard bars the same height on narrow screens", () => {
   for (const bar of [".sheet-bar", ".top-bar"]) {
     const heights = rules
