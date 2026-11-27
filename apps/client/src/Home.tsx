@@ -643,7 +643,13 @@ function HomeScreen(
             isOnline={!isVeiled && core.state === "online"}
             onAdded={(app) => {
               appAdded(app);
-              settingsOf(app.id)();
+              // It opens as from Apps, where it gets going, unless someone
+              // opened something else while it was being added.
+              setRoutes((current) =>
+                current.at(-1) === route
+                  ? [{ app: app.id, page: mainPage, params: {} }]
+                  : current,
+              );
             }}
           />
         </ShellFrame>
