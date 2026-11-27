@@ -1,4 +1,4 @@
-import type { DeviceInfo } from "@meetsanctum/app-sdk";
+import { languages, type DeviceInfo } from "@meetsanctum/app-sdk";
 import type { Server } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -13,7 +13,6 @@ import {
   createSpeech,
   SpeechSwitchedOff,
   SpeechUnavailable,
-  voices,
 } from "../src/speech/speech.js";
 import * as wyoming from "../src/speech/wyoming.js";
 import { fakeManager } from "./manager-support.js";
@@ -308,10 +307,15 @@ describe("createSpeech", () => {
     try {
       speech.start();
       await vi.advanceTimersByTimeAsync(0);
-      expect(loaded).toEqual([voices.en, voices.de]);
+      expect(loaded).toEqual([languages.en.voice, languages.de.voice]);
       listening = true;
       await vi.advanceTimersByTimeAsync(10_000);
-      expect(loaded).toEqual([voices.en, voices.de, voices.en, voices.de]);
+      expect(loaded).toEqual([
+        languages.en.voice,
+        languages.de.voice,
+        languages.en.voice,
+        languages.de.voice,
+      ]);
       await vi.advanceTimersByTimeAsync(60_000);
       expect(loaded).toHaveLength(4);
       expect(logged).toEqual([]);
@@ -345,7 +349,10 @@ describe("createSpeech", () => {
     );
     expect(asked).toContainEqual({
       type: "synthesize",
-      data: { text: "Das Essen ist fertig.", voice: { name: voices.de } },
+      data: {
+        text: "Das Essen ist fertig.",
+        voice: { name: languages.de.voice },
+      },
     });
     speech.stop();
   });

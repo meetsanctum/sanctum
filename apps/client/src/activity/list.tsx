@@ -82,8 +82,9 @@ function Mark(props: { entry: ActivityInfo; apps: readonly AppInfo[] }) {
     entry.run?.app ??
     (who.kind === "app" ? who.id : null) ??
     (entry.source.includes(".") ? entry.source : null);
+  const app = props.apps.find((app) => app.id === appId);
   const icon =
-    props.apps.find((app) => app.id === appId)?.icon ??
+    app?.icon ??
     (entry.action.startsWith("service.") || entry.action.startsWith("zigbee.")
       ? zigbee
       : entry.run || entry.action === "workflow.run"
@@ -91,7 +92,11 @@ function Mark(props: { entry: ActivityInfo; apps: readonly AppInfo[] }) {
         : null);
   if (icon) {
     return (
-      <AppIcon icon={icon} className="size-8 shrink-0 [&_svg]:size-[18px]" />
+      <AppIcon
+        appId={app?.id}
+        icon={icon}
+        className="size-8 shrink-0 [&_svg]:size-[18px]"
+      />
     );
   }
   const Icon = iconOf(entry);

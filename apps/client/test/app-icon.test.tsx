@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+
+import { appIconSchema } from "@meetsanctum/app-sdk";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
@@ -13,6 +16,34 @@ it.each(["unknown-glyph", "constructor"])(
 );
 
 describe("approved app artwork", () => {
+  it.each([
+    ["apple-home-devices.webp", "apple-home-devices"],
+    ["esphome.webp", "esphome"],
+    ["ollama.webp", "ollama"],
+  ])("renders %s for its catalog manifest", (asset, catalogApp) => {
+    const manifest = JSON.parse(
+      readFileSync(
+        new URL(
+          `../../../catalog/apps/${catalogApp}/sanctum-app.json`,
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    const icon = appIconSchema.parse(manifest.icon);
+    const markup = renderToStaticMarkup(
+      <AppIcon appId={manifest.id} icon={icon} />,
+    );
+    expect(markup).toContain(`/app-icons/${asset}`);
+
+    const fallback = renderToStaticMarkup(
+      <AppIcon appId="sanctum.example" icon={icon} />,
+    );
+    expect(fallback).toContain(`lucide-${icon.glyph}`);
+    expect(fallback).toContain(`background:var(--${icon.color})`);
+    expect(fallback).not.toContain("<img");
+  });
+
   it.each([
     ["settings", "graphite", "settings"],
     ["swatch-book", "ember", "moods"],

@@ -24,9 +24,8 @@ import {
 
 import { appArtwork } from "./app-artwork";
 
-// Known glyph/colour pairs use the approved artwork. Other pairs keep a line
-// glyph on their chosen colour. Keep this list explicit so the shell does
-// not ship every Lucide icon.
+// Keep the fallback glyphs explicit so the shell ships only the Lucide
+// icons it uses.
 const glyphs: Record<string, LucideIcon> = {
   "brush-cleaning": BrushCleaning,
   "calendar-days": CalendarDays,
@@ -49,8 +48,15 @@ const glyphs: Record<string, LucideIcon> = {
 
 export const plainIcon = { glyph: "app-window", color: "graphite" } as const;
 
-export function AppIcon(props: { icon: AppIconInfo; className?: string }) {
-  const artwork = appArtwork.get(`${props.icon.glyph}:${props.icon.color}`);
+export function AppIcon(props: {
+  appId?: string;
+  icon: AppIconInfo;
+  className?: string;
+}) {
+  const key = `${props.icon.glyph}:${props.icon.color}`;
+  const artwork =
+    (props.appId ? appArtwork.get(`${props.appId}:${key}`) : undefined) ??
+    appArtwork.get(key);
   const Glyph = Object.hasOwn(glyphs, props.icon.glyph)
     ? glyphs[props.icon.glyph]!
     : AppWindow;

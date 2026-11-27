@@ -15,7 +15,7 @@ import {
   type Subject,
 } from "./replies.js";
 import { readMoods, runMood } from "./moods.js";
-import { languages } from "./sentences.js";
+import { languageSentences } from "./sentences.js";
 import { agentsPage, callTool, type Overview } from "./tools.js";
 
 // Answers a request: matches its words against the sentences with the
@@ -184,7 +184,8 @@ async function changeLights(
     throw new Error("Not a change of lights");
   }
   const target = targetOf(matched, intent.where, overview, request, words);
-  if (!target) return { text: languages[request.language].notUnderstood };
+  if (!target)
+    return { text: languageSentences[request.language].notUnderstood };
   if ("reply" in target) return { text: target.reply };
 
   let input: Record<string, unknown>;
@@ -192,7 +193,7 @@ async function changeLights(
   if (intent.do === "set") {
     const percent = matched.choices.percent;
     if (percent === undefined) {
-      return { text: languages[request.language].notUnderstood };
+      return { text: languageSentences[request.language].notUnderstood };
     }
     input = { place: target.place, set: { brightness: percent } };
     state = { is: "at", percent };
@@ -202,7 +203,7 @@ async function changeLights(
         ? matched.choices.switch
         : (intent.to ?? matched.choices.step);
     if (to === undefined) {
-      return { text: languages[request.language].notUnderstood };
+      return { text: languageSentences[request.language].notUnderstood };
     }
     input = { place: target.place, to };
     state = { is: to };
@@ -260,7 +261,7 @@ export async function answerRequest(
   ctx: RequestContext,
   request: AssistantRequestCall,
 ): Promise<RequestReply> {
-  const language = languages[request.language];
+  const language = languageSentences[request.language];
   const words = replies[request.language];
   try {
     // Undo and timer requests don't need the home's names. Lighting phrases

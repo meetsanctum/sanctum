@@ -39,7 +39,8 @@ import type {
 } from "./index.js";
 import { homeClock, type HomeClock, type HourCycle } from "./clock.js";
 import type { HostResources } from "./host.js";
-import type { RequestLanguage, RequestReply } from "./requests.js";
+import type { SpeechLanguage } from "./languages.js";
+import type { RequestReply } from "./requests.js";
 import {
   openVoiceRun,
   type ListenCalls,
@@ -180,7 +181,7 @@ export interface CoreCalls extends ListenCalls {
   /** Answers the request this call runs for, once; Sanctum's Assistant only. */
   replyRequest(reply: RequestReply): Promise<void>;
   /** Sets the home's one language for speech; Sanctum's Assistant only, needs `ai.assistant`. */
-  setSpeechLanguage(set: { language: RequestLanguage }): Promise<void>;
+  setSpeechLanguage(set: { language: SpeechLanguage }): Promise<void>;
   log(message: string): void;
 }
 
@@ -487,7 +488,7 @@ export interface AppContext {
    * learns a new language and keeps hearing in the old one until it can.
    */
   readonly speech: {
-    setLanguage(language: RequestLanguage): Promise<void>;
+    setLanguage(language: SpeechLanguage): Promise<void>;
   };
   log(message: string): void;
 }

@@ -2,7 +2,7 @@ import {
   type AiToolAnswer,
   type AssistantRequestCall,
   type RequestContext,
-  type RequestLanguage,
+  type SpeechLanguage,
   type RequestReply,
 } from "@meetsanctum/app-sdk";
 
@@ -74,7 +74,7 @@ type Tools = Record<
 export async function ask(
   text: string,
   options: {
-    language?: RequestLanguage;
+    language?: SpeechLanguage;
     from?: "speaker" | "client";
     room?: { id: string; name: string } | null;
     tools?: Tools;

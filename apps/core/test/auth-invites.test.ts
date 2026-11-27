@@ -18,6 +18,8 @@ import {
   registerInvite,
 } from "./invite-support.js";
 import {
+  changePassword,
+  choosePassword,
   claimed,
   deferredDelivery,
   get,
@@ -553,6 +555,33 @@ describe("resetting a forgotten password", () => {
     expect(removed.statusCode).toBe(204);
     expect(core.db.select().from(authInvites).all()).toEqual([]);
   });
+
+  it.each(["choose", "change"] as const)(
+    "ends a waiting reset code once the person sets their own password (%s)",
+    async (how) => {
+      const core = await testCore();
+      const claim = await claimed(core);
+      const made = await invite(core, claim.token, claim.person.id, "reset");
+
+      const set =
+        how === "choose"
+          ? await choosePassword(core, claim.token, "a new password")
+          : await changePassword(core, claim.token, {
+              current: maya.password,
+              next: "a new password",
+            });
+      expect(set).toMatchObject({ statusCode: 204 });
+
+      const used = await redeem(core, made.code!, {
+        username: maya.username,
+        password: "the code holder's password",
+      });
+      expect(used.outcome).not.toBe("joined");
+      expect((await signIn(core, { password: "a new password" })).outcome).toBe(
+        "signed-in",
+      );
+    },
+  );
 
   it("keeps the current password until the code is used", async () => {
     const core = await testCore();
