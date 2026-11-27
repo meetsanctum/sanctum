@@ -213,6 +213,7 @@ function AppGrid(props: {
           >
             <span className="relative">
               <AppIcon
+                appId={app.id}
                 icon={app.icon}
                 className={
                   props.badge === "pin" ? "size-16 opacity-55" : "size-16"
