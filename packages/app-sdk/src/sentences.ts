@@ -192,3 +192,37 @@ export const assistantSentencesSchema = z.partialRecord(
     .min(1)
     .max(sentenceLimits.perLanguage),
 ) satisfies z.ZodType<AssistantSentences>;
+
+/**
+ * What a smart speaker says, in each language, for speech outside the
+ * Assistant's sentences, such as "I can only help with lights and moods":
+ * the Assistant's, since it knows what it understands. Silence gets nothing.
+ */
+export type NotUnderstood = Partial<Record<RequestLanguage, string>>;
+
+/** How long a not-understood reply is at most. */
+export const notUnderstoodMaxLength = 200;
+
+export const notUnderstoodSchema = z.partialRecord(
+  z.enum(requestLanguages),
+  z.string().max(notUnderstoodMaxLength).trim().min(1),
+) satisfies z.ZodType<NotUnderstood>;
+
+/** What's wrong with not-understood replies, or nothing. */
+export function notUnderstoodIssues(
+  notUnderstood: unknown,
+  sentences: AssistantSentences | undefined,
+): string[] {
+  const parsed = notUnderstoodSchema.safeParse(notUnderstood);
+  if (!parsed.success) {
+    return [
+      `Its not-understood replies don't fit: ${z.prettifyError(parsed.error)}`,
+    ];
+  }
+  return Object.keys(parsed.data)
+    .filter((language) => !sentences?.[language as RequestLanguage])
+    .map(
+      (language) =>
+        `It says what it didn't understand in ${language}, but has no ${language} sentences`,
+    );
+}

@@ -91,8 +91,8 @@ it("teaches the Assistant's sentences and hears a speaker's words with them", as
       name === "piper" && wanted.has("piper") ? piper.url : null;
     manager.serviceConnection = async (name) =>
       name === "speech-to-phrase" && wanted.has(name)
-        ? { url: stp.url, token: "secret" }
-        : null;
+        ? { state: "running", url: stp.url, token: "secret" }
+        : { state: "starting", url: null, token: null };
     manager.hostStatus = async () => ({
       ...hostStatus,
       network: {

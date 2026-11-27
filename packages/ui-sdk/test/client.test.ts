@@ -101,7 +101,11 @@ const ownCard = entity("test.lights", "card", "lights.card");
 const sun = entity("sanctum.weather", "sun", "sun");
 const forecast = entity("sanctum.weather", "forecast", "weather.forecast");
 
-function setup(permissions: string[], requests: AppInfo["requests"] = []) {
+function setup(
+  permissions: string[],
+  requests: AppInfo["requests"] = [],
+  id = "test.lights",
+) {
   const live = createLiveFeed();
   const json = vi.fn(
     async (path: string, _init?: unknown): Promise<unknown> => {
@@ -109,6 +113,8 @@ function setup(permissions: string[], requests: AppInfo["requests"] = []) {
       if (path === "/api/places") return places;
       if (path === "/api/entities") return [ownCard, sun, forecast];
       if (path === "/api/apps/test.lights/settings") return { dim: true };
+      if (path === "/api/speech/hearing")
+        return { state: "ready", language: "en" };
       return { ok: true };
     },
   );
@@ -121,7 +127,7 @@ function setup(permissions: string[], requests: AppInfo["requests"] = []) {
     ask,
   };
   const app: AppInfo = {
-    id: "test.lights",
+    id,
     name: "Lights",
     version: "0.1.0",
     icon: null,
@@ -563,6 +569,33 @@ describe("an app's client", () => {
     expect(messages).toEqual([
       { type: "settings", app: "test.lights", settings: {} },
     ]);
+  });
+});
+
+describe("how speech recognition is doing", () => {
+  it("is the Assistant's page's alone, read and then followed live", async () => {
+    const hearing = { state: "learning", language: "de" } as const;
+    const assistant = setup(["ai.assistant"], [], "sanctum.assistant");
+    const messages: LiveMessage[] = [];
+    assistant.client.subscribe({
+      message: (message) => messages.push(message),
+    });
+    expect(await assistant.client.hearing()).toEqual({
+      state: "ready",
+      language: "en",
+    });
+    assistant.live.publish({ type: "hearing", hearing });
+    expect(messages).toEqual([{ type: "hearing", hearing }]);
+
+    const other = setup([], [], "sanctum.example");
+    const theirs: LiveMessage[] = [];
+    other.client.subscribe({ message: (message) => theirs.push(message) });
+    other.live.publish({ type: "hearing", hearing });
+    expect(theirs).toEqual([]);
+    await expect(other.client.hearing()).rejects.toThrow(
+      "to be Sanctum's Assistant",
+    );
+    expect(other.json).not.toHaveBeenCalled();
   });
 });
 

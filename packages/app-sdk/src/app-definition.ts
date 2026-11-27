@@ -17,7 +17,7 @@ import type { DriverAdd, DriverAddResult } from "./found-devices.js";
 import type { DriverDevice } from "./firmware.js";
 import type { DriverRemoval } from "./pairing.js";
 import type { AssistantRequestCall } from "./requests.js";
-import type { AssistantSentences } from "./sentences.js";
+import type { AssistantSentences, NotUnderstood } from "./sentences.js";
 import type { RoomSectionDefinition } from "./room-sections.js";
 import type { TriggerDefinition } from "./workflows.js";
 import type {
@@ -98,6 +98,12 @@ export interface AppDefinition extends AppManifestFields {
    * with the home's names filled in (sentences.ts).
    */
   readonly sentences?: AssistantSentences;
+  /**
+   * Sanctum's Assistant only: what a smart speaker says for speech outside
+   * its sentences, in each language it has sentences for. Without one,
+   * the speaker says nothing.
+   */
+  readonly notUnderstood?: NotUnderstood;
   /**
    * A driver app's side of the Drivers contract: the core hands it every
    * command for its own devices, as the actor behind the command. It

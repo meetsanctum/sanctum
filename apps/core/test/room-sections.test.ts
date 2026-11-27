@@ -263,6 +263,7 @@ describe("room sections", () => {
         secrets: { get: () => null, put() {}, remove() {} },
         models: { source: () => null },
         assistant: {
+          canActFor: () => true,
           list: () => [],
           call: async () => ({ text: "", isError: true }),
         },

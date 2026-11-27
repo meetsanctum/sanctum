@@ -7,6 +7,7 @@ import {
   lanRanges,
   appManifestSchema,
   assistantAppId,
+  notUnderstoodIssues,
   sentenceIssues,
   assistantOfferOf,
   deviceActionActivitySchema,
@@ -430,6 +431,18 @@ export function contractOf(manifest: StaticManifest): AppContract {
       throw new Error("Only Sanctum's Assistant brings sentences");
     }
     const issues = sentenceIssues(manifest.sentences);
+    if (issues.length > 0) throw new Error(issues.join("; "));
+  }
+  if ("notUnderstood" in manifest && manifest.notUnderstood !== undefined) {
+    if (manifest.id !== assistantAppId || !manifest.requests) {
+      throw new Error(
+        "Only Sanctum's Assistant says what it didn't understand",
+      );
+    }
+    const issues = notUnderstoodIssues(
+      manifest.notUnderstood,
+      "sentences" in manifest ? manifest.sentences : undefined,
+    );
     if (issues.length > 0) throw new Error(issues.join("; "));
   }
   const actions = new Map<string, DeclaredAction>(

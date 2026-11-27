@@ -3,6 +3,7 @@ import type { AppInfo, HardwareOffer } from "./index.js";
 import type { DashboardInfo } from "./dashboards.js";
 import type { DeviceInfo } from "./devices.js";
 import type { EntityInfo } from "./entities.js";
+import type { Hearing } from "./hearing.js";
 import type { PairingInfo } from "./pairing.js";
 import type { Places } from "./places.js";
 import type { AppSettings } from "./settings.js";
@@ -97,6 +98,9 @@ export type LiveSystem = { type: "system"; going: "restart" | "shutdown" };
  */
 export type LiveOffer = { type: "offer"; offer: HardwareOffer | null };
 
+/** How speech recognition is doing changed: for the Assistant's page. */
+export type LiveHearing = { type: "hearing"; hearing: Hearing };
+
 export type LiveMessage =
   | LiveDevice
   | LivePress
@@ -110,4 +114,5 @@ export type LiveMessage =
   | LivePins
   | LiveActivity
   | LiveOffer
-  | LiveSystem;
+  | LiveSystem
+  | LiveHearing;

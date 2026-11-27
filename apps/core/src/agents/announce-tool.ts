@@ -13,6 +13,7 @@ import {
   SpeechSwitchedOff,
   SpeechUnavailable,
   type Speech,
+  type SpeechLanguage,
 } from "../speech/speech.js";
 import {
   answer,
@@ -42,6 +43,11 @@ class NotHeard extends Error {
   }
 }
 
+const languageNames: Record<SpeechLanguage, string> = {
+  en: "English",
+  de: "German",
+};
+
 const announceLimits = {
   // Each agent's, and the home's, in the last minute.
   agent: { agentPerMinute: 6, homePerMinute: 20 },
@@ -52,6 +58,8 @@ const announceLimits = {
 export function createAnnounceTool(options: {
   devices: { list(): DeviceInfo[]; get(id: string): DeviceInfo | null };
   speech: Pick<Speech, "speak">;
+  // The home's language for speech.
+  language: () => SpeechLanguage;
   record: (entry: NewActivityEntry) => string;
   agentWho: (id: string) => ActivityAuthor;
   now?: () => number;
@@ -104,7 +112,7 @@ export function createAnnounceTool(options: {
   const input = z.strictObject({
     speaker: z.string().min(1).max(64),
     text: z.string().trim().min(1).max(maxAnnouncementText),
-    language: z.enum(speechLanguages).default("en"),
+    language: z.enum(speechLanguages).optional(),
   });
 
   return {
@@ -116,7 +124,7 @@ export function createAnnounceTool(options: {
         `The speakers, by id: ${speakers()
           .map((device) => `${device.id} (${JSON.stringify(device.name)})`)
           .join(", ")}.`,
-        `\`text\` is up to ${maxAnnouncementText} characters, said as written in \`language\`, English unless the person speaks German.`,
+        `\`text\` is up to ${maxAnnouncementText} characters, said as written in \`language\`: the home's, ${languageNames[options.language()]}, unless the person speaks ${options.language() === "en" ? "German" : "English"}.`,
         "Each speaker says one thing at a time: what you send while it speaks waits its turn, up to two waiting, and the call answers once it's sent. A few a minute per speaker. A speaker says nothing while offline, muted or turned all the way down.",
         "Announce only what the person asked to have said, and say where it went.",
         notInstructions,
@@ -133,7 +141,8 @@ export function createAnnounceTool(options: {
         throw areasOff([announcePermission]);
       const parsed = input.safeParse(raw);
       if (!parsed.success) return invalidInput();
-      const { speaker: id, text, language } = parsed.data;
+      const { speaker: id, text } = parsed.data;
+      const language = parsed.data.language ?? options.language();
       const device = options.devices.get(id);
       if (!device) return noSpeaker();
       try {

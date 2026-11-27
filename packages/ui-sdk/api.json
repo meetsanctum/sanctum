@@ -1,5 +1,5 @@
 {
-  "version": "0.1.38",
+  "version": "0.1.39",
   "react": "19.3.1",
   "exports": {
     "@meetsanctum/ui-sdk": [
@@ -2555,7 +2555,7 @@
     ],
     "client.d.ts": [
       "import { type PressCaptureListener } from \"./presses\";",
-      "import type { ActionDefinition, ActionInput, ActionOutput, AppInfo, AppSettings, CapabilityInfo, CapabilityKind, CommandOf, DeviceInfo, EntityInfo, LiveMessage, Places } from \"@meetsanctum/app-sdk\";",
+      "import type { ActionDefinition, ActionInput, ActionOutput, AppInfo, AppSettings, CapabilityInfo, CapabilityKind, CommandOf, DeviceInfo, EntityInfo, Hearing, LiveMessage, Places } from \"@meetsanctum/app-sdk\";",
       "export type LiveListener = {",
       "    message?(message: LiveMessage): void;",
       "    refresh?(): void;",
@@ -2592,6 +2592,7 @@
       "    capturePresses(device: string, listener: PressCaptureListener): {",
       "        stop(): Promise<void>;",
       "    };",
+      "    hearing(): Promise<Hearing>;",
       "    subscribe(listener: LiveListener): () => void;",
       "}",
       "export declare function deviceKindsOf(permissions: readonly string[]): {",
@@ -2755,6 +2756,8 @@
       "    op: \"entities\";",
       "} | {",
       "    op: \"settings\";",
+      "} | {",
+      "    op: \"hearing\";",
       "} | {",
       "    op: \"ask\";",
       "    permissions: string[];",

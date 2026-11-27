@@ -49,8 +49,7 @@ export function createManagerServices(options: {
       return answer.service.url ?? null;
     },
 
-    // Where a service answers while it runs and the token it takes from the
-    // core, or null while it doesn't run.
+    // How a service is doing, where it answers, and its token for the core.
     async serviceConnection(service: string, signal?: AbortSignal) {
       const answer = parseBody(
         serviceStatus,
@@ -62,8 +61,8 @@ export function createManagerServices(options: {
           signal,
         ),
       );
-      const { url, token } = answer.service;
-      return url ? { url, token: token ?? null } : null;
+      const { state, url, token } = answer.service;
+      return { state: state ?? null, url: url ?? null, token: token ?? null };
     },
 
     // The core wants a service for itself, as Piper for the speech it makes:

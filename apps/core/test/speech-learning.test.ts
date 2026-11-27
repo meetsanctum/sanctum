@@ -1,11 +1,11 @@
-import type { AssistantSentences } from "@meetsanctum/app-sdk";
+import type { AssistantSentences, Hearing } from "@meetsanctum/app-sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ManagerRefusal } from "../src/manager.js";
 import { createLearning } from "../src/speech/learning.js";
-import { noVoiceMs, train, transcribe } from "../src/speech/words.js";
 import * as words from "../src/speech/words.js";
-import { fakeSpeechToPhrase } from "./speech-support.js";
+import { fakeSpeechToPhrase, speechSound } from "./speech-support.js";
+import { deferredResult } from "./support.js";
 
 // What speech recognition knows: the core hears a run's words over
 // Wyoming, and teaches the service the Assistant's sentences with the
@@ -22,149 +22,6 @@ async function service(options: Parameters<typeof fakeSpeechToPhrase>[0]) {
   servers.push(fake.server);
   return fake;
 }
-
-// Sound as a run has it, in 100 ms chunks, ending with listening: as fast
-// as it can come, or as a speaker sends it.
-function sound(chunks: number, everyMs = 5) {
-  let stopped = false;
-  return {
-    stopListening: () => {
-      stopped = true;
-    },
-    get stopped() {
-      return stopped;
-    },
-    sound: (async function* () {
-      for (let i = 0; i < chunks && !stopped; i += 1) {
-        yield Buffer.alloc(3_200);
-        await new Promise((resolve) => setTimeout(resolve, everyMs));
-      }
-    })(),
-  };
-}
-
-describe("hearing a run's words", () => {
-  it("answers the words once the service hears speech end, and stops listening", async () => {
-    const fake = await service({ transcript: "turn off the office lights" });
-    const run = sound(50);
-    const words = await transcribe({
-      host: "127.0.0.1",
-      port: fake.port,
-      language: "en",
-      sound: run.sound,
-      stopListening: run.stopListening,
-      signal: new AbortController().signal,
-    });
-    expect(words).toBe("turn off the office lights");
-    expect(run.stopped).toBe(true);
-    expect(fake.heard.map((event) => event.type).slice(0, 3)).toEqual([
-      "describe",
-      "transcribe",
-      "audio-start",
-    ]);
-    expect(fake.heard[1]!.data).toEqual({ language: "en" });
-  });
-
-  it("answers empty for speech it doesn't know", async () => {
-    const fake = await service({ transcript: "" });
-    const run = sound(50);
-    expect(
-      await transcribe({
-        host: "127.0.0.1",
-        port: fake.port,
-        language: "en",
-        sound: run.sound,
-        stopListening: run.stopListening,
-        signal: new AbortController().signal,
-      }),
-    ).toBe("");
-  });
-
-  it(
-    "answers nothing heard when nobody began to speak in time",
-    { timeout: 10_000 },
-    async () => {
-      const fake = await service({ voiceAfter: null });
-      const run = sound(60, 100);
-      const started = Date.now();
-      expect(
-        await transcribe({
-          host: "127.0.0.1",
-          port: fake.port,
-          language: "en",
-          sound: run.sound,
-          stopListening: run.stopListening,
-          signal: new AbortController().signal,
-        }),
-      ).toBeNull();
-      expect(run.stopped).toBe(true);
-      expect(Date.now() - started).toBeGreaterThanOrEqual(noVoiceMs - 100);
-    },
-  );
-
-  it("asks for the transcript once listening ends before speech does", async () => {
-    const fake = await service({
-      endAfter: null,
-      transcript: "lights on",
-      answerAfterStopMs: 1_200,
-    });
-    const run = sound(5);
-    expect(
-      await transcribe({
-        host: "127.0.0.1",
-        port: fake.port,
-        language: "en",
-        sound: run.sound,
-        stopListening: run.stopListening,
-        signal: new AbortController().signal,
-      }),
-    ).toBe("lights on");
-    expect(fake.heard.at(-1)?.type).toBe("audio-stop");
-  });
-
-  it("rejects a refused training connection", async () => {
-    const fake = await fakeSpeechToPhrase();
-    await new Promise<void>((resolve) => fake.server.close(() => resolve()));
-    await expect(
-      train({
-        host: "127.0.0.1",
-        port: fake.port,
-        token: "secret",
-        lesson: { language: "en", templates: ["lights on"], lists: {} },
-      }),
-    ).rejects.toThrow("ECONNREFUSED");
-  });
-
-  it("rejects an already cancelled transcription before dialing", async () => {
-    const run = sound(1);
-    await expect(
-      transcribe({
-        host: "127.0.0.1",
-        port: 0,
-        language: "en",
-        sound: run.sound,
-        stopListening: run.stopListening,
-        signal: AbortSignal.abort(),
-      }),
-    ).rejects.toThrow("cancelled");
-  });
-
-  it("teaches a lesson with the service's token, or fails without it", async () => {
-    const fake = await service({ token: "secret" });
-    const lesson = {
-      language: "en",
-      templates: ["turn off the {room} lights"],
-      lists: { room: ["Office"] },
-    };
-    await expect(
-      train({ host: "127.0.0.1", port: fake.port, token: "secret", lesson }),
-    ).resolves.toEqual({ digest: "digest-1", changed: true });
-    expect(fake.lessons).toEqual([lesson]);
-    await expect(
-      train({ host: "127.0.0.1", port: fake.port, token: "wrong", lesson }),
-    ).rejects.toThrow("valid token");
-  });
-});
 
 function learningSetup(
   fake: { url: string },
@@ -186,11 +43,13 @@ function learningSetup(
     mood: [] as string[],
   };
   const calls: string[] = [];
-  let running = true;
+  let state = "running";
   const manager = {
-    serviceConnection: vi.fn(async () =>
-      running ? { url: fake.url, token: "secret" } : null,
-    ),
+    serviceConnection: vi.fn(async () => ({
+      state,
+      url: state === "running" ? fake.url : null,
+      token: state === "running" ? "secret" : null,
+    })),
     wantServiceForCore: vi.fn(async (name: string) => {
       calls.push(`want ${name}`);
     }),
@@ -199,6 +58,7 @@ function learningSetup(
     }),
   };
   const logs: string[] = [];
+  const hearings: Hearing[] = [];
   const learning = createLearning({
     manager,
     sentences: () => sentences,
@@ -206,10 +66,12 @@ function learningSetup(
     language: () => language,
     speakersListen: () => listens,
     retrainAfterMs: 200,
+    onHearing: (hearing) => hearings.push(hearing),
     log: (line) => logs.push(line),
   });
   return {
     learning,
+    hearings,
     calls,
     names,
     logs,
@@ -217,7 +79,8 @@ function learningSetup(
     setSentences: (next: AssistantSentences | null) => (sentences = next),
     setListens: (next: boolean) => (listens = next),
     setLanguage: (next: "en" | "de") => (language = next),
-    setRunning: (next: boolean) => (running = next),
+    setRunning: (next: boolean) => (state = next ? "running" : "starting"),
+    setState: (next: string) => (state = next),
   };
 }
 
@@ -270,6 +133,7 @@ describe("what speech recognition learns", () => {
   });
 
   it("keeps the previous lesson when its templates lose their names", async () => {
+    const describe = vi.spyOn(words, "describeLanguages").mockResolvedValue([]);
     const teach = vi
       .spyOn(words, "train")
       .mockResolvedValue({ digest: "digest-1", changed: true });
@@ -292,10 +156,12 @@ describe("what speech recognition learns", () => {
     } finally {
       learning.stop();
       teach.mockRestore();
+      describe.mockRestore();
     }
   });
 
   it("retries teaching after a speaker finds the service unavailable", async () => {
+    const describe = vi.spyOn(words, "describeLanguages").mockResolvedValue([]);
     const teach = vi
       .spyOn(words, "train")
       .mockResolvedValue({ digest: "digest-1", changed: true });
@@ -311,7 +177,7 @@ describe("what speech recognition learns", () => {
       setRunning(false);
       await expect(
         learning.transcriber()!({
-          ...sound(5),
+          ...speechSound(5),
           language: "en",
           signal: new AbortController().signal,
         }),
@@ -330,6 +196,7 @@ describe("what speech recognition learns", () => {
     } finally {
       learning.stop();
       teach.mockRestore();
+      describe.mockRestore();
     }
   });
 
@@ -344,7 +211,7 @@ describe("what speech recognition learns", () => {
       );
       fake.forgetLesson();
       const run = () => ({
-        ...sound(5),
+        ...speechSound(5),
         language: "en" as const,
         signal: new AbortController().signal,
       });
@@ -358,7 +225,10 @@ describe("what speech recognition learns", () => {
         expect(learning.transcriber()).toBeTypeOf("function"),
       );
       expect(fake.lessons).toEqual([fake.lessons[0], fake.lessons[0]]);
-      await expect(learning.transcriber()!(run())).resolves.toBe(transcript);
+      await expect(learning.transcriber()!(run())).resolves.toEqual({
+        text: transcript,
+        language: "en",
+      });
     } finally {
       learning.stop();
     }
@@ -551,5 +421,262 @@ describe("what speech recognition learns", () => {
     vi.useRealTimers();
     await vi.waitFor(() => expect(fake.lessons).toHaveLength(1));
     learning.stop();
+  });
+
+  it("learns a new language at once, hearing in the old one until it can", async () => {
+    const fake = await service({ transcript: "turn on the office lights" });
+    const sentences = {
+      en: ["turn (on|off) the {room} lights"],
+      de: ["schalte das licht im {room} (ein|aus)"],
+    };
+    const { learning, hearings, setLanguage } = learningSetup(fake, {
+      sentences,
+    });
+    learning.start();
+    await vi.waitFor(() => expect(learning.hearing().state).toBe("ready"));
+    expect(hearings).toEqual([
+      { state: "downloading", language: "en" },
+      { state: "ready", language: "en" },
+    ]);
+    expect(learning.hearsIn()).toBe("en");
+
+    setLanguage("de");
+    learning.languageChanged();
+    // Not a minute later: the new language is learned now.
+    await vi.waitFor(() =>
+      expect(fake.lessons.at(-1)).toMatchObject({ language: "de" }),
+    );
+    await vi.waitFor(() =>
+      expect(learning.hearing()).toEqual({ state: "ready", language: "de" }),
+    );
+    expect(learning.hearsIn()).toBe("de");
+    expect(hearings.slice(2)).toEqual([
+      // The service had only English loaded.
+      { state: "downloading", language: "de" },
+      { state: "ready", language: "de" },
+    ]);
+
+    learning.stop();
+  });
+
+  it("keeps hearing with the old lesson when the new language has no sentences", async () => {
+    const models = vi.spyOn(words, "describeLanguages").mockResolvedValue([]);
+    const teach = vi
+      .spyOn(words, "train")
+      .mockResolvedValue({ digest: "en", changed: true });
+    const { learning, manager, setLanguage } = learningSetup({
+      url: "tcp://127.0.0.1:10300",
+    });
+    try {
+      learning.start();
+      await vi.waitFor(() => expect(learning.hearsIn()).toBe("en"));
+      setLanguage("de");
+      learning.languageChanged();
+      expect(learning.hearing()).toEqual({
+        state: "failed",
+        language: "de",
+        failure: "no_sentences",
+      });
+      expect(learning.hearsIn()).toBe("en");
+      expect(learning.notHearing()).toBeNull();
+      expect(learning.transcriber()).toBeTypeOf("function");
+      expect(teach).toHaveBeenCalledOnce();
+      expect(manager.releaseServiceForCore).not.toHaveBeenCalled();
+    } finally {
+      learning.stop();
+      models.mockRestore();
+      teach.mockRestore();
+    }
+  });
+
+  it("waits for submitted training before teaching the latest language", async () => {
+    const german = deferredResult<{
+      digest: string;
+      changed: boolean;
+    }>();
+    const models = vi
+      .spyOn(words, "describeLanguages")
+      .mockResolvedValue(["en", "de"]);
+    const teach = vi
+      .spyOn(words, "train")
+      .mockResolvedValueOnce({ digest: "en", changed: true })
+      .mockReturnValueOnce(german.promise)
+      .mockResolvedValueOnce({ digest: "en", changed: true });
+    const { learning, setLanguage } = learningSetup(
+      { url: "tcp://127.0.0.1:10300" },
+      { sentences: { en: ["lights on"], de: ["licht an"] } },
+    );
+    try {
+      learning.start();
+      await vi.waitFor(() => expect(learning.hearsIn()).toBe("en"));
+      setLanguage("de");
+      learning.languageChanged();
+      await vi.waitFor(() => expect(teach).toHaveBeenCalledTimes(2));
+      expect(learning.hearing()).toEqual({ state: "learning", language: "de" });
+
+      setLanguage("en");
+      learning.languageChanged();
+      expect(teach).toHaveBeenCalledTimes(2);
+      expect(teach.mock.calls[1]?.[0].signal?.aborted).toBe(false);
+      expect(learning.hearing()).toEqual({ state: "learning", language: "en" });
+
+      german.resolve({ digest: "de", changed: true });
+      await vi.waitFor(() =>
+        expect(learning.hearing()).toEqual({ state: "ready", language: "en" }),
+      );
+      expect(teach.mock.calls.map(([call]) => call.lesson.language)).toEqual([
+        "en",
+        "de",
+        "en",
+      ]);
+    } finally {
+      learning.stop();
+      models.mockRestore();
+      teach.mockRestore();
+    }
+  });
+
+  it("does not publish a previous language's lesson failure", async () => {
+    const { learning, hearings, setLanguage } = learningSetup(
+      { url: "" },
+      {
+        sentences: {
+          en: ["set the mood to {mood}"],
+          de: ["licht an"],
+        },
+      },
+    );
+    try {
+      learning.start();
+      await vi.waitFor(() =>
+        expect(learning.hearing()).toMatchObject({ failure: "no_names" }),
+      );
+      setLanguage("de");
+      learning.languageChanged();
+      expect(hearings.filter(({ language }) => language === "de")).toEqual([
+        { state: "downloading", language: "de" },
+      ]);
+    } finally {
+      learning.stop();
+    }
+  });
+
+  it("reports a failed service until the manager recovers", async () => {
+    const models = vi.spyOn(words, "describeLanguages").mockResolvedValue([]);
+    const teach = vi
+      .spyOn(words, "train")
+      .mockResolvedValue({ digest: "en", changed: true });
+    const { learning, manager, setState } = learningSetup({
+      url: "tcp://127.0.0.1:10300",
+    });
+    setState("failed");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      learning.start();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(learning.hearing()).toEqual({
+        state: "failed",
+        language: "en",
+        failure: "unavailable",
+      });
+      expect(teach).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(manager.serviceConnection).toHaveBeenCalledTimes(2);
+      expect(learning.hearing()).toMatchObject({ failure: "unavailable" });
+      setState("running");
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(learning.hearing()).toEqual({ state: "ready", language: "en" });
+    } finally {
+      learning.stop();
+      models.mockRestore();
+      teach.mockRestore();
+    }
+  });
+
+  it("only learns, with no download, in a language whose model the service has", async () => {
+    const fake = await service({});
+    const { learning, hearings } = learningSetup(fake);
+    learning.start();
+    await vi.waitFor(() => expect(learning.hearing().state).toBe("ready"));
+    // The core starts again; the service kept its English model.
+    learning.stop();
+    hearings.length = 0;
+    learning.start();
+    await vi.waitFor(() => expect(learning.hearing().state).toBe("ready"));
+    expect(hearings).toEqual([
+      { state: "downloading", language: "en" },
+      { state: "learning", language: "en" },
+      { state: "ready", language: "en" },
+    ]);
+    learning.stop();
+  });
+
+  it("says what keeps it from hearing", async () => {
+    const off = learningSetup({ url: "" }, { sentences: null });
+    off.learning.start();
+    expect(off.learning.hearing()).toEqual({
+      state: "failed",
+      language: "en",
+      failure: "assistant_off",
+    });
+    off.learning.stop();
+
+    const german = learningSetup({ url: "" });
+    german.setLanguage("de");
+    german.learning.start();
+    expect(german.learning.hearing()).toMatchObject({
+      failure: "no_sentences",
+    });
+    german.learning.stop();
+
+    const quiet = learningSetup({ url: "" }, { listens: false });
+    quiet.learning.start();
+    expect(quiet.learning.hearing()).toEqual({
+      state: "no_speaker",
+      language: "en",
+    });
+    quiet.learning.stop();
+
+    const nameless = learningSetup(
+      { url: "" },
+      { sentences: { en: ["set the mood to {mood}"] } },
+    );
+    nameless.learning.start();
+    await vi.waitFor(() =>
+      expect(nameless.learning.hearing()).toMatchObject({
+        failure: "no_names",
+      }),
+    );
+    nameless.learning.stop();
+
+    const full = learningSetup({ url: "" });
+    full.manager.wantServiceForCore.mockRejectedValue(
+      new ManagerRefusal("Not enough memory", 409),
+    );
+    full.learning.start();
+    await vi.waitFor(() =>
+      expect(full.learning.hearing()).toMatchObject({ failure: "memory" }),
+    );
+    full.learning.stop();
+  });
+
+  it("is unavailable while a lesson fails, and ready once one is learned", async () => {
+    let failing = true;
+    const fake = await service({
+      trainError: () => (failing ? "out of space" : undefined),
+    });
+    const { learning } = learningSetup(fake);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      learning.start();
+      await vi.waitFor(() =>
+        expect(learning.hearing()).toMatchObject({ failure: "unavailable" }),
+      );
+      failing = false;
+      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.waitFor(() => expect(learning.hearing().state).toBe("ready"));
+    } finally {
+      learning.stop();
+    }
   });
 });

@@ -52,20 +52,27 @@ export async function fakeSpeechToPhrase(
     token?: string;
     voiceAfter?: number | null;
     endAfter?: number | null;
-    transcript?: string;
+    // The words it hears, or each time what they are now.
+    transcript?: string | (() => string);
     trainError?: () => string | undefined;
+    beforeTrain?: (
+      lesson: Record<string, unknown>,
+    ) => Promise<void> | undefined;
     answerAfterStopMs?: number;
   } = {},
 ) {
   const lessons: Record<string, unknown>[] = [];
   const heard: Heard[] = [];
   let hasLesson = true;
+  // The language of the model it has loaded, once it has been taught.
+  let loaded: string | null = null;
   const server = createServer((socket) => {
     socket.on("error", () => {});
     let buffered = Buffer.alloc(0);
     let bytes = 0;
     let voice = false;
     let answered = false;
+    let runLanguage: string | null = null;
     const send = (type: string, data: object = {}) => {
       const body = Buffer.from(JSON.stringify(data));
       socket.write(
@@ -80,7 +87,12 @@ export async function fakeSpeechToPhrase(
     const answer = () => {
       if (answered) return;
       answered = true;
-      send("transcript", { text: options.transcript ?? "" });
+      const { transcript } = options;
+      send("transcript", {
+        text:
+          typeof transcript === "function" ? transcript() : (transcript ?? ""),
+        ...(runLanguage && { language: runLanguage }),
+      });
     };
     socket.on("data", (chunk: Buffer) => {
       buffered = Buffer.concat([buffered, chunk]);
@@ -107,7 +119,13 @@ export async function fakeSpeechToPhrase(
         heard.push({ type: head.type, data, bytes: payload });
         if (head.type === "describe") {
           send("info", {
-            asr: [{ models: hasLesson ? [{ name: "test" }] : [] }],
+            asr: [
+              {
+                models: hasLesson
+                  ? [{ name: "test", languages: loaded ? [loaded] : [] }]
+                  : [],
+              },
+            ],
           });
         }
         if (head.type === "train") {
@@ -118,14 +136,19 @@ export async function fakeSpeechToPhrase(
           } else if (error) {
             send("error", { text: error });
           } else {
-            lessons.push(lesson);
-            hasLesson = true;
-            send("trained", {
-              digest: `digest-${lessons.length}`,
-              changed: true,
+            void Promise.resolve(options.beforeTrain?.(lesson)).then(() => {
+              lessons.push(lesson);
+              hasLesson = true;
+              loaded =
+                typeof lesson.language === "string" ? lesson.language : null;
+              send("trained", {
+                digest: `digest-${lessons.length}`,
+                changed: true,
+              });
             });
           }
         }
+        if (head.type === "audio-start") runLanguage = loaded;
         if (head.type === "audio-chunk" && hasLesson && !answered) {
           bytes += payload;
           const voiceAfter =
@@ -164,5 +187,25 @@ export async function fakeSpeechToPhrase(
     },
     url: `tcp://127.0.0.1:${address.port}`,
     port: address.port,
+  };
+}
+
+// Sound as a run has it, in 100 ms chunks, ending with listening: as fast
+// as it can come, or as a speaker sends it.
+export function speechSound(chunks: number, everyMs = 5) {
+  let stopped = false;
+  return {
+    stopListening: () => {
+      stopped = true;
+    },
+    get stopped() {
+      return stopped;
+    },
+    sound: (async function* () {
+      for (let i = 0; i < chunks && !stopped; i += 1) {
+        yield Buffer.alloc(3_200);
+        await new Promise((resolve) => setTimeout(resolve, everyMs));
+      }
+    })(),
   };
 }

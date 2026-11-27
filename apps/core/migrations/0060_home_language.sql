@@ -1,0 +1,1 @@
+ALTER TABLE `home` ADD `language` text DEFAULT 'en' NOT NULL;

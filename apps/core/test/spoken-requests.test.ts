@@ -8,6 +8,7 @@ import {
   createSpokenRequests,
   oneMomentAfterMs,
   type Speaker,
+  type Transcriber,
 } from "../src/speech/spoken.js";
 import { deferredResult } from "./support.js";
 
@@ -25,12 +26,13 @@ type Asked = Parameters<
 function setup(
   options: {
     answers?: boolean;
-    heard?: string | null;
+    heard?: Awaited<ReturnType<Transcriber>>;
     transcript?: Promise<string | null>;
     turnFinished?: Promise<void>;
     prepare?: (text: string, signal?: AbortSignal) => Promise<void>;
     beforeDispatch?: () => Promise<void>;
     speakers?: Record<string, Speaker>;
+    notUnderstood?: string;
   } = {},
 ) {
   const recorded: NewActivityEntry[] = [];
@@ -69,6 +71,7 @@ function setup(
         : options.heard;
     },
     language: () => "en",
+    notUnderstood: () => options.notUnderstood ?? null,
     speaker: (device) => speakers[device] ?? null,
     drives: (by, device) => drives && by === driver && device in speakers,
     requests: {
@@ -159,6 +162,22 @@ afterEach(() => {
 });
 
 describe("a smart speaker's request", () => {
+  it("uses the recognizer's language when it changes before the run's audio starts", async () => {
+    const text = "mach das licht an";
+    const { wake, asked, until, listening } = setup({
+      heard: { text, language: "de" },
+    });
+    const opened = await wake();
+    if (!opened.accepted) throw new Error(opened.refusal);
+    try {
+      await until(() => asked.length === 1);
+      expect(asked[0]?.request.asked).toMatchObject({ text, language: "de" });
+    } finally {
+      asked[0]?.answer.resolve(null);
+      listening.close(driver, { run: opened.run, end: "played" });
+    }
+  });
+
   it("limits microphone runs even when they end before any words are heard", () => {
     const { listening, asked } = setup();
     for (let attempt = 0; attempt < 12; attempt++) {
@@ -288,6 +307,30 @@ describe("a smart speaker's request", () => {
       });
       expect(asked).toEqual([]);
     }
+  });
+
+  it("says the Assistant's words for speech it doesn't know, never for silence", async () => {
+    const notUnderstood = "I can only help with lights and moods";
+    const unknown = setup({ heard: "", notUnderstood });
+    const opened = await unknown.wake();
+    if (!opened.accepted) throw new Error(opened.refusal);
+    await unknown.until(() =>
+      unknown.steps(opened.run).some((step) => step.step === "reply"),
+    );
+    expect(unknown.replied).toEqual([{ text: notUnderstood }]);
+    expect(unknown.asked).toEqual([]);
+
+    const silent = setup({ heard: null, notUnderstood });
+    const quiet = await silent.wake();
+    if (!quiet.accepted) throw new Error(quiet.refusal);
+    await silent.until(() =>
+      silent.steps(quiet.run).some((step) => step.step === "done"),
+    );
+    expect(silent.steps(quiet.run)).toContainEqual({
+      step: "error",
+      error: "nothing-heard",
+    });
+    expect(silent.replied).toEqual([]);
   });
 
   it("ends in an error the speaker shows when the Assistant can't answer", async () => {

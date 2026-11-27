@@ -133,6 +133,7 @@ function fakeClient(options: {
     command: vi.fn(),
     entities: vi.fn(async () => options.entities),
     settings: vi.fn(async () => options.settings ?? {}),
+    hearing: vi.fn(),
     capturePresses: vi.fn(),
     ask: vi.fn(async () => true),
     subscribe(listener) {

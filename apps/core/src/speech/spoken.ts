@@ -13,6 +13,7 @@ import type { TurnOpener } from "../agents/assistants.js";
 import { minuteWindows } from "../agents/limits.js";
 import { ActionCallError } from "../app-host/errors.js";
 import type { Hearer, HeardRun, RunMoments } from "./listening.js";
+import type { SpeechTranscript } from "./words.js";
 
 // A smart speaker someone asks: its run (listening.ts) becomes a request to
 // Sanctum's Assistant, opened by the core for the speaker, never by an app.
@@ -43,16 +44,16 @@ export const spokenPhrases = {
 } as const satisfies Record<string, Record<RequestLanguage, string>>;
 
 /**
- * Hears a run's words from its sound, in the home's language, and stops
- * listening once speech ends: null when nothing was said, "" for speech it
- * doesn't know.
+ * Hears a run's words and stops listening once speech ends: null when nothing
+ * was said, empty text for speech it doesn't know. A plain string uses the
+ * language supplied when the run started.
  */
 export type Transcriber = (run: {
   sound: AsyncIterable<Buffer>;
   stopListening(): void;
   language: RequestLanguage;
   signal: AbortSignal;
-}) => Promise<string | null>;
+}) => Promise<SpeechTranscript | string | null>;
 
 /** A smart speaker as a request names it. */
 export type Speaker = {
@@ -101,8 +102,11 @@ export function createSpokenRequests(options: {
   // Why nothing hears words now: the Assistant has no sentences in the
   // home's language, or speech recognition isn't ready.
   notHearing?: () => "no_sentences" | "no_speech_to_text";
-  // The home's one language for speech.
+  // The language speech recognition hears in: the home's one language.
   language: () => RequestLanguage;
+  // What the speaker says for speech outside the Assistant's sentences, or
+  // null for nothing.
+  notUnderstood?: (language: RequestLanguage) => string | null;
   speaker: (device: string) => Speaker | null;
   // Whether `driver` still drives the device and runs.
   drives: (driver: string, device: string) => boolean;
@@ -293,7 +297,7 @@ export function createSpokenRequests(options: {
     const request: Asking = { run, cancel: new AbortController() };
     asking.set(key, request);
     const releaseSpeech = options.speech()?.keepRepliesReady?.();
-    const language = options.language();
+    const startingLanguage = options.language();
     const { signal } = request.cancel;
     const runEnded = ended(run.signal);
     const interrupted = ended(signal).then(() => "ended" as const);
@@ -316,12 +320,12 @@ export function createSpokenRequests(options: {
         transcriber({
           sound: run.sound,
           stopListening: () => run.stopListening(),
-          language,
+          language: startingLanguage,
           signal,
         });
       const heard = await Promise.race([
         transcribe().then(
-          (text) => ({ text }),
+          (transcript) => ({ transcript }),
           (error: unknown) => ({ error }),
         ),
         interrupted.then(() => null),
@@ -333,9 +337,31 @@ export function createSpokenRequests(options: {
         return;
       }
       run.stopListening();
-      const { text } = heard;
+      const transcript: SpeechTranscript | null =
+        typeof heard.transcript === "string"
+          ? { text: heard.transcript }
+          : heard.transcript;
+      const text = transcript?.text ?? null;
+      const language = transcript?.language ?? startingLanguage;
       const words = text?.trim().slice(0, requestTextMaxLength).trim();
       if (!words) {
+        // Speech it doesn't know gets the Assistant's words; silence, none.
+        const sorry =
+          text === null ? null : (options.notUnderstood?.(language) ?? null);
+        const url =
+          sorry &&
+          (await prepareReply(
+            run,
+            { text: sorry },
+            language,
+            AbortSignal.any([run.signal, signal]),
+          ));
+        if (sorry && url && !signal.aborted) {
+          run.reply(url, sorry);
+          await runEnded;
+          return;
+        }
+        if (signal.aborted) return;
         run.fail(text === null ? "nothing-heard" : "not-understood");
         return;
       }

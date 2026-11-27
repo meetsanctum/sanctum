@@ -247,6 +247,8 @@ export async function createModules(
       eventBus.publish({ name: "location.changed", ...change }),
     onTimeZoneChange: (at, previousZone) =>
       workflows.followTimeZone(at, previousZone),
+    // Speech recognition learns the new language.
+    onLanguageChange: () => learning?.languageChanged(),
     // A room's devices move to No room as it goes, which Devices tells once
     // the removal has committed.
     onRoomRemoving: (roomId) => devices.prepareRoomRemoval(roomId),
@@ -474,12 +476,15 @@ export async function createModules(
     spoken,
     isSpeaker,
     learning,
+    hearing,
+    assistantChanged,
   } = assembleSpeakerAudio(options, {
     canUse: agentsCanUse,
     devices,
     places,
     apps: () => apps,
     record: activity.for("devices"),
+    onHearing: live.hearing,
   });
   // The home's AI models, which the household adds in Settings, and the
   // turns in which apps ask the one in use.
@@ -548,11 +553,7 @@ export async function createModules(
       // Its first successful start also restores workflows after a restart
       // interrupted adding it back.
       if (app.state === "running") workflows.forApps.added(app.id);
-      // The Assistant brings what speech recognition learns.
-      if (app.id === assistantAppId) {
-        if (!apps.answersRequests()) listening.cancelRuns();
-        learning?.changed();
-      }
+      if (app.id === assistantAppId) assistantChanged();
       // A driver that starts or stops lets devices join, or lists what it
       // found, or no longer does.
       pairing.refresh();
@@ -738,6 +739,7 @@ export async function createModules(
   });
 
   return {
+    hearing,
     activity,
     blobs,
     activityViews,

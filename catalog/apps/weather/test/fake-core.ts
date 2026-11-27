@@ -75,6 +75,7 @@ export function fakeCore(app: AppDefinition) {
     aiTools: absent,
     callAiTool: absent,
     replyRequest: absent,
+    setSpeechLanguage: absent,
     openListen: absent,
     sendListen: absent,
     readListen: absent,

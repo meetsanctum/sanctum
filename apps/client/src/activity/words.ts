@@ -589,6 +589,10 @@ function setupEntry(clock: HomeClock, entry: ActivityInfo): Words | null {
       );
     case "home.update":
       return said("Changed the home's details");
+    case "home.language":
+      return said(
+        `Set the home's language to ${entry.detail?.language === "de" ? "German" : "English"}`,
+      );
     case "home.suggestLocation":
       return said("Looked up where the home is");
     case "login.set":

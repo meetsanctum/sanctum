@@ -1,6 +1,10 @@
 import { connect } from "node:net";
 
-import { listenRate } from "@meetsanctum/app-sdk";
+import {
+  listenRate,
+  requestLanguages,
+  type RequestLanguage,
+} from "@meetsanctum/app-sdk";
 
 import { createReader, SpeechError, type WyomingEvent } from "./wyoming.js";
 
@@ -27,6 +31,8 @@ export type Lesson = {
 };
 
 export class MissingSpeechLesson extends SpeechError {}
+
+export type SpeechTranscript = { text: string; language?: RequestLanguage };
 
 // One connection to the service: events out, and the next event back
 // within a time.
@@ -140,8 +146,8 @@ function open(endpoint: { host: string; port: number }, signal?: AbortSignal) {
 /**
  * Hears a run's words: streams its sound and stops listening once the
  * service has the transcript, or when nobody began to speak within
- * `noVoiceMs` of the first sound. Answers null when nobody spoke, "" for
- * speech outside what it learned, or the words.
+ * `noVoiceMs` of the first sound. Returns null when nobody spoke or a
+ * transcript with empty text for speech outside what it learned.
  */
 export async function transcribe(options: {
   host: string;
@@ -150,11 +156,11 @@ export async function transcribe(options: {
   sound: AsyncIterable<Buffer>;
   stopListening(): void;
   signal: AbortSignal;
-}): Promise<string | null> {
+}): Promise<SpeechTranscript | null> {
   const connection = open(options, options.signal);
   const format = { rate: listenRate, width: 2, channels: 1 };
   let voice = false;
-  let transcript: string | null = null;
+  let answered = false;
   let firstSound: number | null = null;
   let answerBy: number | null = null;
   try {
@@ -194,10 +200,15 @@ export async function transcribe(options: {
         );
         if (event?.type === "voice-started") voice = true;
         if (event?.type === "transcript") {
-          transcript =
-            typeof event.data.text === "string" ? event.data.text : "";
+          answered = true;
           options.stopListening();
-          return;
+          const text =
+            typeof event.data.text === "string" ? event.data.text : "";
+          if (!voice && text === "") return null;
+          const language = requestLanguages.find(
+            (language) => language === event.data.language,
+          );
+          return { text, ...(language && { language }) };
         }
         if (
           !voice &&
@@ -205,27 +216,60 @@ export async function transcribe(options: {
           Date.now() - firstSound >= noVoiceMs
         ) {
           options.stopListening();
-          return;
+          return null;
         }
       }
     })();
     const sent = (async () => {
       for await (const chunk of options.sound) {
-        if (options.signal.aborted || transcript !== null) break;
+        if (options.signal.aborted || answered) break;
         firstSound ??= Date.now();
         connection.send("audio-chunk", format, chunk);
       }
-      if (!options.signal.aborted && transcript === null) {
+      if (!options.signal.aborted && !answered) {
         connection.send("audio-stop");
         answerBy = performance.now() + answerMs;
       }
     })();
-    await Promise.all([answer, sent]);
-    if (transcript === null || (!voice && transcript === "")) return null;
+    const [transcript] = await Promise.all([answer, sent]);
     return transcript;
   } finally {
     connection.close();
     options.stopListening();
+  }
+}
+
+/**
+ * The languages of the models the service has loaded: the one it was last
+ * taught in, since it started.
+ */
+export async function describeLanguages(options: {
+  host: string;
+  port: number;
+  signal?: AbortSignal;
+}): Promise<RequestLanguage[]> {
+  const languagesIn = (value: unknown) =>
+    Array.isArray(value)
+      ? requestLanguages.filter((language) => value.includes(language))
+      : [];
+  const connection = open(options, options.signal);
+  try {
+    await connection.connected;
+    connection.send("describe");
+    const info = await connection.next(connectMs);
+    const asr: unknown = info?.data.asr;
+    if (info?.type !== "info" || !Array.isArray(asr)) {
+      throw new SpeechError("Speech recognition didn't describe its models");
+    }
+    return asr.flatMap((program: { models?: unknown }) =>
+      Array.isArray(program?.models)
+        ? program.models.flatMap((model: { languages?: unknown }) =>
+            languagesIn(model?.languages),
+          )
+        : [],
+    );
+  } finally {
+    connection.close();
   }
 }
 

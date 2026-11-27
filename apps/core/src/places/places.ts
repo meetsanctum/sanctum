@@ -4,6 +4,7 @@ import {
   type Floor,
   type HomeLocation,
   type Places,
+  type RequestLanguage,
   type Room,
   type Zone,
 } from "@meetsanctum/app-sdk";
@@ -12,7 +13,11 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
-import type { ChangedBy, RecordActivity } from "../activity/activity.js";
+import type {
+  ActivityAuthor,
+  ChangedBy,
+  RecordActivity,
+} from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
 import { suggestLocation } from "./location.js";
 import { floors, home, rooms, zoneRooms, zones } from "./schema.js";
@@ -210,6 +215,8 @@ export function createPlaces(
     onLocationChange?: (change: LocationChange) => void;
     // Move dependent timers in the same transaction as the zone change.
     onTimeZoneChange?: (at: Date, previousZone: string) => void;
+    // The home's language for speech changed, once it has committed.
+    onLanguageChange?: (language: RequestLanguage) => void;
     // Capture dependent state before the foreign-key cascade; the returned
     // notification runs only once the removal has committed, before
     // onChange, so what follows the devices hears them move first.
@@ -389,6 +396,31 @@ export function createPlaces(
      * falling back to the host's zone while the home has none.
      */
     clock: () => clockOf(read.home.get()),
+
+    /** The home's one language for speech, English until it's set. */
+    language: (): RequestLanguage => read.home.get()?.language ?? "en",
+
+    /**
+     * Sets the home's language for speech, which only Sanctum's Assistant
+     * does, for someone in the home.
+     */
+    setLanguage(by: ActivityAuthor, language: RequestLanguage) {
+      if ((read.home.get()?.language ?? "en") === language) return;
+      db.transaction(() => {
+        const set = { language, updatedAt: now() };
+        db.insert(home)
+          .values({ id: 1, name: defaultHomeName, ...set })
+          .onConflictDoUpdate({ target: home.id, set })
+          .run();
+        record({
+          action: "home.language",
+          outcome: "ok",
+          ...by,
+          detail: { language },
+        });
+      });
+      options.onLanguageChange?.(language);
+    },
 
     location: locationNow,
 

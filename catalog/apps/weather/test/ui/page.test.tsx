@@ -100,6 +100,7 @@ function fakeClient(entities: EntityInfo[]) {
     command: vi.fn(),
     entities: vi.fn(async () => entities),
     settings: vi.fn(async () => ({})),
+    hearing: vi.fn(),
     capturePresses: vi.fn(),
     ask: vi.fn(async () => true),
     subscribe(listener) {

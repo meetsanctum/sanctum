@@ -51,6 +51,9 @@
 // may say it only confirms what worked.
 // 27 lets the Assistant bring the sentences a smart speaker understands, in
 // its manifest.
-export const protocolVersion = 27;
+// 28 lets the Assistant set the home's language for speech
+// (ctx.speech.setLanguage) and say, in its manifest, what a smart speaker
+// answers for speech it didn't understand.
+export const protocolVersion = 28;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 11;

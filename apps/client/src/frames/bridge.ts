@@ -309,6 +309,8 @@ function operationOf(
       return () => client.entities();
     case "settings":
       return () => client.settings();
+    case "hearing":
+      return () => client.hearing();
     case "ask": {
       const { permissions } = message;
       return Array.isArray(permissions) &&

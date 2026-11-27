@@ -7,6 +7,7 @@ import {
   type AppRemoval,
   type AvailableApp,
   type HardwareOffer,
+  type RequestLanguage,
   type StaticManifest,
 } from "@meetsanctum/app-sdk";
 import type { FastifyInstance } from "fastify";
@@ -131,6 +132,9 @@ export function registerAppRoutes(
     offers: HardwareOffers;
     gate: Gate;
     authenticate: Auth["authenticate"];
+    // The home's language for speech, which typed requests are in unless
+    // they say otherwise.
+    language: () => RequestLanguage;
   },
 ) {
   const { host, available, adding, removing, deleting, offers, gate } = options;
@@ -256,7 +260,7 @@ export function registerAppRoutes(
       who: { personId: principal.person?.id, clientId: principal.client.id },
       asked: {
         text: parsed.data.text,
-        language: parsed.data.language ?? "en",
+        language: parsed.data.language ?? options.language(),
         room: null,
         from: { kind: "client", name: principal.client.name },
       },

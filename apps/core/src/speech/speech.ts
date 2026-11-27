@@ -18,6 +18,7 @@ export const voices = {
   de: "de_DE-thorsten-medium",
 } as const;
 export type SpeechLanguage = keyof typeof voices;
+type KeptPhrase = { language: SpeechLanguage; text: string };
 export const speechLanguages = Object.keys(voices) as SpeechLanguage[];
 
 /** The service the manager runs for it. */
@@ -99,8 +100,8 @@ export function createSpeech(options: {
   // without one, a confirmation's words are said.
   chime?: readonly SpeechAudio[];
   // Words said the same each time, such as "One moment": said as each voice
-  // loads, and kept.
-  keptPhrases?: readonly { language: SpeechLanguage; text: string }[];
+  // loads, and kept. A function's are read each time, as an app's change.
+  keptPhrases?: readonly KeptPhrase[] | (() => readonly KeptPhrase[]);
   log: (message: string) => void;
   now?: () => number;
 }) {
@@ -117,13 +118,15 @@ export function createSpeech(options: {
   } | null = null;
   let running = false;
   // Phrases said the same each time, once Piper has said them.
-  const keptPhrases = options.keptPhrases ?? [];
+  const keptPhrases = (): readonly KeptPhrase[] => {
+    const phrases = options.keptPhrases ?? [];
+    return typeof phrases === "function" ? phrases() : phrases;
+  };
   const keptSpeech = new Map<string, SpeechAudio[]>();
   const keyOf = (language: SpeechLanguage, text: string) =>
     `${language}\n${text}`;
-  const kept = new Set(
-    keptPhrases.map(({ language, text }) => keyOf(language, text)),
-  );
+  const isKept = (key: string) =>
+    keptPhrases().some(({ language, text }) => keyOf(language, text) === key);
 
   async function hostNetwork() {
     if (address && now() - address.at < addressKeptMs) return address.value;
@@ -170,7 +173,7 @@ export function createSpeech(options: {
             });
             // Only the voice's loading counts, not what it says.
             while (!(await spoken.next()).done);
-            for (const phrase of keptPhrases) {
+            for (const phrase of keptPhrases()) {
               if (phrase.language !== language || signal.aborted) continue;
               // Saying it keeps it.
               const saying = said(at, phrase.text, language, signal);
@@ -363,7 +366,7 @@ export function createSpeech(options: {
         signal,
       });
     const key = keyOf(language, text);
-    if (!kept.has(key)) return spoken();
+    if (!isKept(key)) return spoken();
     return (async function* () {
       const ready = keptSpeech.get(key);
       if (ready) {
@@ -375,7 +378,9 @@ export function createSpeech(options: {
         chunks.push(audio);
         yield audio;
       }
-      if (!signal.aborted && chunks.length > 0) keptSpeech.set(key, chunks);
+      if (!signal.aborted && chunks.length > 0 && isKept(key)) {
+        keptSpeech.set(key, chunks);
+      }
     })();
   }
 
@@ -395,6 +400,15 @@ export function createSpeech(options: {
   }
 
   return {
+    pruneKeptPhrases() {
+      const keys = new Set(
+        keptPhrases().map(({ language, text }) => keyOf(language, text)),
+      );
+      for (const key of keptSpeech.keys()) {
+        if (!keys.has(key)) keptSpeech.delete(key);
+      }
+    },
+
     start() {
       if (running) return;
       running = true;
