@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../src/App";
-import { checkHost } from "../src/auth/device";
+import { checkHost, signIn, SignInError } from "../src/auth/device";
 import {
   checkInviteCode,
   finishJoin,
@@ -13,8 +13,10 @@ import {
   type CheckedCode,
 } from "../src/auth/join";
 import { suggestedUsername } from "../src/auth/JoinHome";
-import { CoreError } from "../src/core-fetch";
+import { CoreError, setCredential } from "../src/core-fetch";
+import { setCoreBaseUrl } from "../src/core-url";
 import type { FoundHost, Shell } from "../src/shell";
+import { deferred } from "./deferred";
 
 // Joining with an invite code from the sign-in screens: Just me says so,
 // Sign in links to it, the code is checked as it fills, and Welcome
@@ -23,6 +25,7 @@ import type { FoundHost, Shell } from "../src/shell";
 vi.mock("../src/auth/device", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/auth/device")>()),
   checkHost: vi.fn(),
+  signIn: vi.fn(),
 }));
 vi.mock("../src/auth/join", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/auth/join")>()),
@@ -55,6 +58,12 @@ let root: Root;
 let container: HTMLDivElement;
 let publish: (hosts: FoundHost[]) => void;
 let saved: unknown[];
+let trust: {
+  check: ReturnType<typeof vi.fn<ShellTrust["check"]>>;
+  resumed: ReturnType<typeof vi.fn<ShellTrust["resumed"]>>;
+} & ShellTrust;
+let save: Shell["credentials"]["save"];
+type ShellTrust = NonNullable<Shell["trust"]>;
 
 beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -70,6 +79,15 @@ beforeEach(async () => {
     vi.fn(() => new Promise<Response>(() => {})),
   );
   saved = [];
+  save = async (host) => {
+    saved.push(host);
+  };
+  trust = {
+    check: vi.fn(async () => {}),
+    resumed: vi.fn(async () => null),
+    candidate: async () => null,
+    failure: async () => null,
+  };
   vi.stubGlobal("sanctumShell", {
     platform: "macos",
     deviceName: async () => "Maya's MacBook",
@@ -83,12 +101,10 @@ beforeEach(async () => {
     credentials: {
       isSecure: async () => true,
       load: async () => null,
-      save: async (host) => {
-        saved.push(host);
-      },
+      save: (host) => save(host),
       forget: async () => {},
     },
-    trust: null,
+    trust,
     preferences: { get: async () => null, set: async () => {} },
   } satisfies Shell);
   vi.mocked(checkHost).mockResolvedValue({
@@ -106,6 +122,8 @@ beforeEach(async () => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  setCredential(null);
+  setCoreBaseUrl(null);
   vi.unstubAllGlobals();
   vi.resetAllMocks();
 });
@@ -170,6 +188,30 @@ describe("joining with an invite code", () => {
     expect(title()).toBe("Sign in to Office");
   });
 
+  it("keeps checking the chosen home's certificate when joining after a failed sign-in", async () => {
+    vi.mocked(signIn).mockRejectedValue(
+      new SignInError("wrong_username_or_password"),
+    );
+    await click("Just me");
+    await fill("Username", "maya");
+    await fill("Password", "incorrect");
+    await click("Sign in");
+    expect(signIn).toHaveBeenCalledOnce();
+    await click("I have an invite code");
+    expect(trust.check).toHaveBeenLastCalledWith(office.id, {
+      name: "join",
+      host: office,
+    });
+  });
+
+  it("resumes Join after the desktop replaces its session", async () => {
+    trust.resumed.mockResolvedValueOnce({ name: "join", host: office });
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await act(async () => root.render(<App />));
+    expect(title()).toBe("Join Office");
+  });
+
   it("checks the code once it's whole, then welcomes the person", async () => {
     vi.mocked(checkInviteCode).mockResolvedValue(checked());
     await openJoin();
@@ -203,6 +245,8 @@ describe("joining with an invite code", () => {
       "This code doesn’t work. Check each character, or try again in a few minutes.",
     );
     expect(codeField().value).toBe("K7QXM4PD");
+    expect(codeField().selectionStart).toBe(0);
+    expect(codeField().selectionEnd).toBe(8);
     expect(codeField().getAttribute("aria-invalid")).toBe("true");
   });
 
@@ -251,6 +295,39 @@ describe("joining with an invite code", () => {
     expect(saved).toEqual([
       expect.objectContaining({ token: "client_token", kind: "personal" }),
     ]);
+    expect(container.querySelector(".home-screen")).not.toBeNull();
+  });
+
+  it("keeps Back disabled until the joined device's credentials are saved", async () => {
+    const joining = deferred<RedeemFinished>();
+    const saving = deferred<void>();
+    save = vi.fn(() => saving.promise);
+    vi.mocked(checkInviteCode).mockResolvedValue(checked());
+    vi.mocked(finishJoin).mockReturnValue(joining.promise);
+    await openJoin();
+    await type(codeField(), "K7QXM4PD");
+    await fill("Password", "staple battery horse");
+    await fill("Repeat password", "staple battery horse");
+    await click("Join");
+    const back = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Back"]',
+    )!;
+    expect(back.disabled).toBe(true);
+    await click("Back");
+    expect(title()).toBe("Welcome, Maya Keller");
+
+    await act(async () =>
+      joining.resolve({
+        token: "client_token",
+        confirmation: "mac",
+        client: { id: "macbook", kind: "personal" },
+        person: maya,
+      } as RedeemFinished),
+    );
+    expect(save).toHaveBeenCalledOnce();
+    expect(back.disabled).toBe(true);
+    await act(async () => saving.resolve());
+    expect(container.querySelector(".home-screen")).not.toBeNull();
   });
 
   it("keeps a reset's username", async () => {

@@ -3,7 +3,6 @@ import {
   normaliseUsername,
   pairingCodeAlphabet,
   pairingCodeLength,
-  passwordProblem,
 } from "@meetsanctum/auth-protocol";
 import {
   Button,
@@ -24,7 +23,11 @@ import {
   JoinError,
   type CheckedCode,
 } from "./join";
-import { passwordProblemText, problemText } from "./messages";
+import {
+  credentialProblem,
+  problemText,
+  type CredentialProblem,
+} from "./messages";
 import { rememberSignIn } from "./session";
 import {
   Busy,
@@ -223,11 +226,6 @@ function EnterCode(props: {
   );
 }
 
-type Problem = {
-  field?: "username" | "password" | "repeated";
-  text: string;
-};
-
 function Welcome(props: {
   host: FoundHost;
   code: CheckedCode;
@@ -242,33 +240,20 @@ function Welcome(props: {
   );
   const [password, setPassword] = useState("");
   const [repeated, setRepeated] = useState("");
-  const [problem, setProblem] = useState<Problem>();
+  const [problem, setProblem] = useState<CredentialProblem>();
   const [working, setWorking] = useState(false);
   const secure = useSecureStorage();
   const attempt = useAuthAttempt();
   const problemId = useId();
-  const about = (field: Problem["field"]) =>
+  const about = (field: CredentialProblem["field"]) =>
     problem?.field === field ? problemId : undefined;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!isUsername(normaliseUsername(username))) {
-      setProblem({
-        field: "username",
-        text: "Use 3 to 30 letters, digits, dots or underscores.",
-      });
-      return;
-    }
-    const tooWeak = passwordProblem(password);
-    if (tooWeak) {
-      setProblem({ field: "password", text: passwordProblemText(tooWeak) });
-      return;
-    }
-    if (password !== repeated) {
-      setProblem({ field: "repeated", text: "Enter the same password twice." });
-      return;
-    }
-    setProblem(undefined);
+    if (working) return;
+    const invalid = credentialProblem(username, password, repeated);
+    setProblem(invalid);
+    if (invalid) return;
     setWorking(true);
     const signal = attempt.start();
     try {
@@ -313,7 +298,7 @@ function Welcome(props: {
     }
   };
 
-  const problemLine = (field: Problem["field"]) =>
+  const problemLine = (field: CredentialProblem["field"]) =>
     problem && problem.field === field ? (
       <SheetProblem id={problemId}>{problem.text}</SheetProblem>
     ) : null;
@@ -323,6 +308,7 @@ function Welcome(props: {
       title={`Welcome, ${person.name}`}
       subtitle={`Choose how you’ll sign in to ${props.host.name}. Your password never leaves this device.`}
       back={{
+        disabled: working,
         onBack: () => {
           attempt.cancel();
           props.onBack();

@@ -187,9 +187,6 @@ export function SettingsPage(props: {
           key={props.params.id}
           live={props.live}
           personId={props.params.id}
-          you={
-            props.me?.client.kind === "personal" ? props.me.person?.id : null
-          }
           ask={props.params.added === "yes"}
           back={props.back}
           backTo={backTo}

@@ -22,7 +22,7 @@ export function Sheet(props: {
   // a screen that only asks something.
   warning?: boolean;
   // Where Back goes, named for it where its title is short enough.
-  back?: { to?: string; onBack: () => void };
+  back?: { to?: string; onBack: () => void; disabled?: boolean };
   // The pairing code and its steps need the width of a wall display.
   wide?: boolean;
   children: ReactNode;
@@ -41,7 +41,7 @@ export function Sheet(props: {
       >
         {props.back && (
           <div className="-mb-3 flex">
-            <BackButton to={props.back.to} onBack={props.back.onBack} />
+            <BackButton {...props.back} />
           </div>
         )}
         <header className="flex flex-col items-center gap-2 text-center">

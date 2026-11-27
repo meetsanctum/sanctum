@@ -21,7 +21,7 @@ import { coreJson } from "../core-fetch";
 export type MadeInvite = { code: string; info: InviteInfo };
 
 export async function makeInvite(
-  personId: string,
+  target: Omit<InviteStart, "registrationRequest">,
   signal?: AbortSignal,
 ): Promise<MadeInvite> {
   const opaque = await loadOpaque();
@@ -32,7 +32,7 @@ export async function makeInvite(
   const started = await coreJson<InviteStarted>("/api/auth/invites/start", {
     method: "POST",
     signal,
-    json: { personId, registrationRequest } satisfies InviteStart,
+    json: { ...target, registrationRequest } satisfies InviteStart,
   });
   const { registrationRecord } = opaque.client.finishRegistration({
     clientRegistrationState,
@@ -52,9 +52,9 @@ export async function makeInvite(
   return { code: `${started.lookup}${secret}`, info };
 }
 
-export async function cancelInvite(personId: string) {
+export async function cancelInvite(personId: string, inviteId: string) {
   await coreJson("/api/auth/invites/cancel", {
     method: "POST",
-    json: { personId } satisfies CancelInvite,
+    json: { personId, inviteId } satisfies CancelInvite,
   });
 }

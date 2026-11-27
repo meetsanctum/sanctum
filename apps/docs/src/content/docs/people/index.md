@@ -1,6 +1,6 @@
 ---
 title: People and signing in
-description: Add the people who live in your home, invite them to sign in on their own phone or computer, and remove them.
+description: Add the people who live in your home, invite them to sign in on their Mac, and remove them.
 sidebar:
   order: 1
 ---
@@ -8,7 +8,7 @@ sidebar:
 Everyone who lives in your home has a place in **Settings → People**: their
 name and colour, which show who did what at home. Anyone can use the home's
 shared devices, such as a wall display or a kitchen tablet, without signing
-in. Someone who signs in can also use Sanctum on their own phone or computer.
+in. Someone who signs in can also use the Sanctum Mac app.
 
 Every device that shows Sanctum sees the same People page and can do the
 same things on it, a shared tablet too. Usernames show only on a person's
@@ -30,14 +30,14 @@ The device you invite from makes the code, and Sanctum never sees it.
 1. On the person's page in **Settings → People**, choose **Invite to sign
    in**.
 2. Give them the code. Choose **Copy code** to send it in a message.
-3. On their own phone or computer, they open Sanctum, choose your home, then
+3. In the Sanctum Mac app, they choose your home, then
    **Just me** and **I have an invite code**.
 4. They enter the code, then choose their own username and password. Their
    password never leaves their device.
 
 The code works once, for 24 hours. You can't see it again after you close
-it: choose **New invite code** to make another, which ends the first, or
-**Cancel invite** to end it.
+it. To end it and make another, choose **New invite code** and confirm. To
+end it without making another, choose **Cancel invite** and confirm.
 
 After five wrong tries, a code stops working for 15 minutes, even if the
 next try is right. Then it works again.
@@ -45,10 +45,11 @@ next try is right. Then it works again.
 ## Reset a password
 
 If someone forgets their password, open their page and choose **Reset
-password**. Give them the new code: on their device, they choose **Just
+password**. Give them the new code: in the Mac app, they choose **Just
 me**, then **I have an invite code**, enter it and choose a new password.
 Their current password keeps working until the code is used, so a reset
-started by mistake changes nothing. **Cancel code** ends it.
+started by mistake changes nothing. To end the code, choose **Cancel code**
+and confirm.
 
 ## Remove a sign-in or a person
 

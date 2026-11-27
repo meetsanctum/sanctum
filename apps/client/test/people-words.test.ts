@@ -43,6 +43,7 @@ function client(changes: Partial<ClientInfo>): ClientInfo {
 
 function invite(changes: Partial<InviteInfo>): InviteInfo {
   return {
+    id: "invite",
     personId: "sam",
     kind: "invite",
     createdAt: "2026-11-27T17:00:00Z",
@@ -81,11 +82,11 @@ describe("signing in", () => {
     expect(signInOf(household, "alex")).toEqual({
       state: "signs-in",
       username: "alex",
-      resetEndsAt: null,
+      reset: null,
     });
     expect(signInOf(household, "maya")).toMatchObject({
       state: "signs-in",
-      resetEndsAt: household.invites[1]!.endsAt,
+      reset: household.invites[1],
     });
     expect(signInOf(household, "sam")).toMatchObject({ state: "invited" });
     expect(signInOf(household, "ida")).toMatchObject({

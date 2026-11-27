@@ -295,6 +295,7 @@ export type InviteEnded = "expired" | "cancelled";
  * working until the code is used. One per person at most.
  */
 export type InviteInfo = {
+  id: string;
   personId: string;
   kind: "invite" | "reset";
   createdAt: string;
@@ -303,7 +304,13 @@ export type InviteInfo = {
   ended: InviteEnded | null;
 };
 
-export type InviteStart = { personId: string; registrationRequest: string };
+export type InviteStart = {
+  personId: string;
+  kind: InviteInfo["kind"];
+  /** The active code the sender confirmed they want to replace, if any. */
+  replacesInviteId?: string;
+  registrationRequest: string;
+};
 export type InviteStarted = RegistrationStarted & {
   /** The code's first characters, which find the invite. */
   lookup: string;
@@ -313,7 +320,7 @@ export type InviteFinish = {
   registrationRecord: string;
   keyStretching: number;
 };
-export type CancelInvite = { personId: string };
+export type CancelInvite = { personId: string; inviteId: string };
 
 // Redeeming takes four calls: OPAQUE's first round with the code's secret,
 // the check that the code and the home are right (the person then sees whose
@@ -377,6 +384,8 @@ export type AuthErrorCode =
   | "last_login"
   // An invite code that was right but can no longer be redeemed.
   | "invite_ended"
+  | "invite_changed"
+  | "invite_kind_changed"
   | "too_many_attempts"
   | "busy"
   | "host_starting"

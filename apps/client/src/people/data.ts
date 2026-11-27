@@ -93,8 +93,8 @@ export function usePeople(live: LiveFeed, includeClients = false) {
 
 /** How a person stands with signing in. */
 export type SignIn =
-  | { state: "signs-in"; username: string; resetEndsAt: string | null }
-  | { state: "invited"; endsAt: string }
+  | { state: "signs-in"; username: string; reset: InviteInfo | null }
+  | { state: "invited"; invite: InviteInfo }
   | { state: "invite-ended"; ended: InviteEnded }
   | { state: "none" };
 
@@ -105,14 +105,13 @@ export function signInOf(data: PeopleData, personId: string): SignIn {
     return {
       state: "signs-in",
       username: login.username,
-      resetEndsAt:
-        invite?.kind === "reset" && !invite.ended ? invite.endsAt : null,
+      reset: invite?.kind === "reset" && !invite.ended ? invite : null,
     };
   }
   if (invite?.kind === "invite") {
     return invite.ended
       ? { state: "invite-ended", ended: invite.ended }
-      : { state: "invited", endsAt: invite.endsAt };
+      : { state: "invited", invite };
   }
   return { state: "none" };
 }

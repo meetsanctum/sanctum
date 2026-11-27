@@ -32,6 +32,7 @@ const views = new Set([
   "who",
   "sign-in",
   "pair",
+  "join",
   "home",
   "changed",
 ]);
@@ -86,7 +87,10 @@ export function App() {
   // other screen trusts only the stored host's pin. A change of trust may
   // bring the page back in a fresh session, on this view.
   const checking =
-    view.name === "claim" || view.name === "sign-in" || view.name === "pair"
+    view.name === "claim" ||
+    view.name === "sign-in" ||
+    view.name === "pair" ||
+    view.name === "join"
       ? view.host.id
       : null;
   // Runs when the host being checked or the screen changes, with the view

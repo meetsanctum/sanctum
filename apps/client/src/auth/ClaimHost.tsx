@@ -1,8 +1,3 @@
-import {
-  isUsername,
-  normaliseUsername,
-  passwordProblem,
-} from "@meetsanctum/auth-protocol";
 import { Button } from "@meetsanctum/ui-sdk";
 import { useId, useState, type FormEvent } from "react";
 
@@ -10,18 +5,15 @@ import { ColourPicker, identityColours } from "../colour-picker";
 import { Avatar } from "../components";
 import { getShell, type FoundHost, type StoredHost } from "../shell";
 import { checkHost, claimHost } from "./device";
-import { passwordProblemText, problemText } from "./messages";
+import {
+  credentialProblem,
+  problemText,
+  type CredentialProblem,
+} from "./messages";
 import { rememberSignIn } from "./session";
 import { Busy, Sheet, SheetActions, SheetField, SheetProblem } from "./sheet";
 import { StorageNotice, useSecureStorage } from "./SignIn";
 import { useAuthAttempt } from "./use-auth-attempt";
-
-// What a problem is about: one of the fields, which then names it, or the
-// set-up as a whole.
-type Problem = {
-  field?: "username" | "password" | "repeated";
-  text: string;
-};
 
 // Setting up a new host: the first person joins its household. The password
 // is registered on this device and never sent.
@@ -35,33 +27,19 @@ export function ClaimHost(props: {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [repeated, setRepeated] = useState("");
-  const [problem, setProblem] = useState<Problem>();
+  const [problem, setProblem] = useState<CredentialProblem>();
   const [working, setWorking] = useState(false);
   const secure = useSecureStorage();
   const attempt = useAuthAttempt();
   const problemId = useId();
-  const about = (field: Problem["field"]) =>
+  const about = (field: CredentialProblem["field"]) =>
     problem?.field === field ? problemId : undefined;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const tooWeak = passwordProblem(password);
-    if (!isUsername(normaliseUsername(username))) {
-      setProblem({
-        field: "username",
-        text: "Use 3 to 30 letters, digits, dots or underscores.",
-      });
-      return;
-    }
-    if (tooWeak) {
-      setProblem({ field: "password", text: passwordProblemText(tooWeak) });
-      return;
-    }
-    if (password !== repeated) {
-      setProblem({ field: "repeated", text: "Enter the same password twice." });
-      return;
-    }
-    setProblem(undefined);
+    const invalid = credentialProblem(username, password, repeated);
+    setProblem(invalid);
+    if (invalid) return;
     setWorking(true);
     const signal = attempt.start();
     try {
@@ -92,7 +70,7 @@ export function ClaimHost(props: {
     }
   };
 
-  const problemLine = (field: Problem["field"]) =>
+  const problemLine = (field: CredentialProblem["field"]) =>
     problem && problem.field === field ? (
       <SheetProblem id={problemId}>{problem.text}</SheetProblem>
     ) : null;

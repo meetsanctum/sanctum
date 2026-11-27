@@ -146,13 +146,18 @@ export function Section(props: {
  * for that page: on a phone its chevron alone, as the bar's other buttons
  * are there. A page whose title is too long to name it says Back.
  */
-export function BackButton(props: { to?: string; onBack: () => void }) {
+export function BackButton(props: {
+  to?: string;
+  onBack: () => void;
+  disabled?: boolean;
+}) {
   const isPhone = usePhone();
   return (
     <Button
       variant={isPhone ? "ghost" : "outline"}
       size={isPhone ? "bar" : "default"}
       aria-label={props.to ? `Back to ${props.to}` : "Back"}
+      disabled={props.disabled}
       onClick={props.onBack}
       className="me-2"
     >
