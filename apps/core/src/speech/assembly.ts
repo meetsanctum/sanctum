@@ -12,6 +12,7 @@ import type { AgentsCanUse } from "../agents/can-use.js";
 import type { Entities } from "../entities/entities.js";
 import type { ManagerClient } from "../manager.js";
 import { createAnnouncements } from "./announcements.js";
+import { readChime } from "./chimes.js";
 import { assembleHearing, hasListeningPart } from "./hearing.js";
 import { createLearning } from "./learning.js";
 import { createSpeech, speechService } from "./speech.js";
@@ -181,7 +182,8 @@ export function assembleSpeech(options: {
           devices,
           areaOn,
           hears: options.hears,
-          chime: [successChime()],
+          chime: [readChime("success")],
+          errorChime: [readChime("error")],
           publishedPort: speaker.publishedPort,
           keptPhrases: () => [
             ...Object.values(spokenPhrases).flatMap((phrase) =>
@@ -229,19 +231,4 @@ export function assembleSpeech(options: {
       await announcements?.stop();
     },
   };
-}
-
-// Two soft, rising notes with fades to avoid clicks at their edges.
-function successChime() {
-  const rate = 22_050;
-  const noteLength = Math.round(rate * 0.14);
-  const samples = new Int16Array(noteLength * 2);
-  for (const [note, frequency] of [660, 880].entries()) {
-    for (let i = 0; i < noteLength; i++) {
-      const fade = Math.sin((Math.PI * i) / noteLength) ** 2;
-      const wave = Math.sin((2 * Math.PI * frequency * i) / rate);
-      samples[note * noteLength + i] = Math.round(4_000 * fade * wave);
-    }
-  }
-  return { rate, samples };
 }

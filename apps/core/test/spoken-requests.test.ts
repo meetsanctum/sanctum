@@ -33,6 +33,8 @@ function setup(
     beforeDispatch?: () => Promise<void>;
     speakers?: Record<string, Speaker>;
     notUnderstood?: string;
+    // Before the error chime is told to the speaker.
+    beforeErrorChime?: () => Promise<void>;
   } = {},
 ) {
   const recorded: NewActivityEntry[] = [];
@@ -43,6 +45,7 @@ function setup(
   }[] = [];
   const spokenLate: unknown[] = [];
   const replied: { text: string; confirmation?: boolean }[] = [];
+  const errorChimes: { device: string; afterSteps: string[] }[] = [];
   const forgotten: string[] = [];
   let answers = options.answers ?? true;
   let room = true;
@@ -99,6 +102,21 @@ function setup(
         input.beforeTelling();
         spokenLate.push(input);
       },
+      playError: async (input) => {
+        await options.beforeErrorChime?.();
+        input.beforeTelling();
+        errorChimes.push({
+          device: input.device,
+          // What the core had told the run by then.
+          afterSteps: (
+            await Promise.all(
+              [...read.keys()].map((run) =>
+                listening.read(driver, { run, after: 0 }),
+              ),
+            )
+          ).flatMap(kinds),
+        });
+      },
     }),
     record: (entry) => void recorded.push(entry),
     log: () => {},
@@ -142,6 +160,7 @@ function setup(
     asked,
     spokenLate,
     replied,
+    errorChimes,
     forgotten,
     wake,
     steps,
@@ -309,6 +328,23 @@ describe("a smart speaker's request", () => {
     }
   });
 
+  it("plays the error chime for speech it doesn't know without words, never for silence", async () => {
+    const unknown = setup({ heard: "  " });
+    const opened = await unknown.wake();
+    if (!opened.accepted) throw new Error(opened.refusal);
+    await unknown.until(() => unknown.errorChimes.length === 1);
+    expect(unknown.errorChimes[0]!.device).toBe("device:speaker");
+
+    const silent = setup({ heard: null });
+    const quiet = await silent.wake();
+    if (!quiet.accepted) throw new Error(quiet.refusal);
+    await silent.until(() =>
+      silent.steps(quiet.run).some((step) => step.step === "done"),
+    );
+    await new Promise((done) => setTimeout(done, 10));
+    expect(silent.errorChimes).toEqual([]);
+  });
+
   it("says the Assistant's words for speech it doesn't know, never for silence", async () => {
     const notUnderstood = "I can only help with lights and moods";
     const unknown = setup({ heard: "", notUnderstood });
@@ -348,6 +384,38 @@ describe("a smart speaker's request", () => {
       outcome: "failed",
       reason: "unavailable",
     });
+  });
+
+  it("plays the error chime once the run has ended in its error", async () => {
+    const { wake, asked, until, errorChimes } = setup();
+    const opened = await wake();
+    if (!opened.accepted) throw new Error(opened.refusal);
+    await until(() => asked.length === 1);
+    asked[0]!.fail(new ActionCallError("unavailable"));
+    await until(() => errorChimes.length === 1);
+    // A speaker stops what it plays when its run ends in an error, so the
+    // chime is told only after the run's end.
+    expect(errorChimes[0]).toEqual({
+      device: "device:speaker",
+      afterSteps: ["stopped", "heard", "error", "done"],
+    });
+  });
+
+  it("plays no error chime once a newer request from the speaker took over", async () => {
+    const told = deferredResult<void>();
+    const { wake, asked, until, errorChimes } = setup({
+      beforeErrorChime: () => told.promise,
+    });
+    const first = await wake();
+    if (!first.accepted) throw new Error(first.refusal);
+    await until(() => asked.length === 1);
+    asked[0]!.fail(new ActionCallError("unavailable"));
+    const second = await wake();
+    if (!second.accepted) throw new Error(second.refusal);
+    await until(() => asked.length === 2);
+    told.resolve();
+    await new Promise((done) => setTimeout(done, 10));
+    expect(errorChimes).toEqual([]);
   });
 
   it("ends the first request when a second wake word comes, and says nothing of its answer", async () => {

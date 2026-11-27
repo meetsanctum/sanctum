@@ -205,3 +205,7 @@ Sanctum publishes a standalone speech-to-text image of
 [Speech-to-Phrase](deploy/speech-to-phrase/README.md), by the Open Home
 Foundation under the Apache License 2.0. Its English and German models, by
 NVIDIA under CC BY 4.0, download the first time a language is used.
+
+The chimes a smart speaker plays when a request worked or failed are the
+success and error cues of [Cuelume](apps/core/sounds/README.md)'s `press`
+theme, by Daniel Belyi under the MIT licence, rendered into files.

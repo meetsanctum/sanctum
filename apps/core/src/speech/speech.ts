@@ -99,6 +99,8 @@ export function createSpeech(options: {
   // The success chime a confirmation plays on a smart speaker, kept ready;
   // without one, a confirmation's words are said.
   chime?: readonly SpeechAudio[];
+  // The error chime a smart speaker plays after a request of its failed.
+  errorChime?: readonly SpeechAudio[];
   // Words said the same each time, such as "One moment": said as each voice
   // loads, and kept. A function's are read each time, as an app's change.
   keptPhrases?: readonly KeptPhrase[] | (() => readonly KeptPhrase[]);
@@ -344,6 +346,29 @@ export function createSpeech(options: {
     return announcement;
   }
 
+  // How an announcement reaches a speaker: its driver is told the address,
+  // and told again once the speaker fetched it.
+  function announcing(device: string, actor: Actor, finishing?: true) {
+    return {
+      finishing: finishing === true,
+      // A finishing reply can queue behind an acknowledgement whose
+      // listening run hasn't ended yet. Give it time for that run too.
+      dispatchWithinMs: finishing
+        ? listeningRunMs + dispatchWithinMs
+        : dispatchWithinMs,
+      onFetched: async (url: string) => {
+        try {
+          await options.devices.announce(device, url, actor, true);
+        } catch (error) {
+          options.log(
+            `Speech couldn't confirm the speaker's fetch: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      },
+      tell: (url: string) => options.devices.announce(device, url, actor),
+    };
+  }
+
   async function* played(sound: readonly SpeechAudio[]) {
     yield* sound;
   }
@@ -475,30 +500,7 @@ export function createSpeech(options: {
       onDelivery?: (fetched: boolean) => void;
       signal?: AbortSignal;
     }) {
-      const how = {
-        finishing: input.finishing === true,
-        // A finishing reply can queue behind an acknowledgement whose
-        // listening run hasn't ended yet. Give it time for that run too.
-        dispatchWithinMs: input.finishing
-          ? listeningRunMs + dispatchWithinMs
-          : dispatchWithinMs,
-        onFetched: async (url: string) => {
-          try {
-            await options.devices.announce(
-              input.device,
-              url,
-              input.actor,
-              true,
-            );
-          } catch (error) {
-            options.log(
-              `Speech couldn't confirm the speaker's fetch: ${error instanceof Error ? error.message : String(error)}`,
-            );
-          }
-        },
-        tell: (url: string) =>
-          options.devices.announce(input.device, url, input.actor),
-      };
+      const how = announcing(input.device, input.actor, input.finishing);
       const chime = input.confirmation ? options.chime : undefined;
       const announcement = chime
         ? await prepare(input, { ...how, sound: chime }).catch(
@@ -521,6 +523,29 @@ export function createSpeech(options: {
           });
       }
       return { encoded: announcement.encoded };
+    },
+
+    /**
+     * Plays the error chime on a smart speaker after a request of its
+     * failed, as `actor`, after what the speaker has still to say and
+     * whether or not AI agents may speak, since it finishes what someone
+     * asked: resolves once the speaker has been told to play it. Needs no
+     * Piper. Throws as `speak` does, and SpeechUnavailable without an error
+     * chime.
+     */
+    async playError(input: {
+      device: string;
+      actor: Actor;
+      beforeTelling?: () => void;
+      signal?: AbortSignal;
+    }) {
+      const sound = options.errorChime;
+      if (!sound) throw new SpeechUnavailable("There's no error chime.");
+      // Its text is never said: the sound plays in its place.
+      await prepare(
+        { ...input, text: "", language: "en" },
+        { ...announcing(input.device, input.actor, true), sound },
+      );
     },
 
     /**

@@ -54,6 +54,7 @@ function setup(options: {
   cidr?: string;
   want?: (signal: AbortSignal) => Promise<void>;
   chime?: { rate: number; samples: Int16Array }[];
+  errorChime?: { rate: number; samples: Int16Array }[];
   hears?: () => boolean;
   log?: (message: string) => void;
 }) {
@@ -97,6 +98,7 @@ function setup(options: {
     ...(options.hears ? { hears: options.hears } : {}),
     publishedPort: 4180,
     ...(options.chime ? { chime: options.chime } : {}),
+    ...(options.errorChime ? { errorChime: options.errorChime } : {}),
     log: options.log ?? (() => {}),
   });
   return {
@@ -427,6 +429,51 @@ describe("createSpeech", () => {
     } finally {
       speech.stop();
       synthesize.mockRestore();
+    }
+  });
+
+  it("tells a speaker the error chime's address, without Piper and whatever the area says", async () => {
+    const errorChime = [{ rate: 22_050, samples: new Int16Array(2048) }];
+    const { speech, told } = setup({
+      devices: [],
+      serviceUrl: null,
+      areaOn: false,
+      errorChime,
+    });
+    announcements!.port = () => 4180;
+    speech.start();
+    try {
+      await speech.playError({
+        device: "a",
+        actor: { kind: "app", id: "sanctum.example" },
+      });
+      expect(told).toEqual([
+        {
+          device: "a",
+          url: expect.stringMatching(
+            /^http:\/\/192\.168\.1\.20:4180\/a\/.+\.flac$/,
+          ),
+        },
+      ]);
+    } finally {
+      speech.stop();
+    }
+  });
+
+  it("plays no error chime where there is none", async () => {
+    const { speech, told } = setup({ devices: [], serviceUrl: null });
+    announcements!.port = () => 4180;
+    speech.start();
+    try {
+      await expect(
+        speech.playError({
+          device: "a",
+          actor: { kind: "app", id: "sanctum.example" },
+        }),
+      ).rejects.toThrow(SpeechUnavailable);
+      expect(told).toEqual([]);
+    } finally {
+      speech.stop();
     }
   });
 

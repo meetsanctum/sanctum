@@ -24,6 +24,8 @@ import type { SpeechTranscript } from "./words.js";
 //
 // A reply that only confirms an action that worked plays the speaker's
 // success chime in place of its words, or says them where the chime can't.
+// A request that fails without words to say ends in the error the speaker
+// shows, then plays its error chime.
 // Once words are heard, a reply not ready 5 s after listening stops gets
 // "One moment". The reply follows through the speaker's announcement queue,
 // whether or not AI agents may speak there, since it finishes what someone
@@ -145,6 +147,11 @@ export function createSpokenRequests(options: {
           beforeTelling: () => void;
           signal: AbortSignal;
         }): Promise<unknown>;
+        playError?(input: {
+          device: string;
+          actor: { kind: "app"; id: string };
+          beforeTelling: () => void;
+        }): Promise<void>;
       }
     | undefined;
   record: (entry: NewActivityEntry) => void;
@@ -216,6 +223,41 @@ export function createSpokenRequests(options: {
           : {}),
       },
     });
+  }
+
+  // Whether a newer request from the speaker took over from `request`, or
+  // its driver no longer drives the speaker.
+  function overtaken({ run }: Asking) {
+    const current = asking.get(run.device);
+    return (
+      (current !== undefined && current.run !== run) ||
+      !options.drives(run.driver, run.device)
+    );
+  }
+
+  // Ends a request's run in `error`, which the speaker shows, then plays the
+  // error chime there, unless a newer request has taken over by then. The
+  // chime follows the run's end: a speaker stops a reply that is playing
+  // when its run ends in an error.
+  function failAloud(request: Asking, error: "failed" | "not-understood") {
+    request.run.fail(error);
+    const speech = options.speech();
+    if (!speech?.playError) return;
+    speech
+      .playError({
+        device: request.run.device,
+        actor: { kind: "app", id: assistantAppId },
+        beforeTelling: () => {
+          if (overtaken(request)) throw new ActionCallError("turn_ended");
+        },
+      })
+      .catch((error: unknown) => {
+        if (!overtaken(request)) {
+          options.log(
+            `speech: a smart speaker's error chime wasn't played (${error instanceof Error ? error.message : String(error)})`,
+          );
+        }
+      });
   }
 
   // Says a reply after "One moment", unless a newer request took over.
@@ -333,7 +375,7 @@ export function createSpokenRequests(options: {
       if (!heard || signal.aborted) return;
       if ("error" in heard) {
         recorded(request, speaker, { ok: false, reason: reasonOf(heard) });
-        run.fail("failed");
+        failAloud(request, "failed");
         return;
       }
       run.stopListening();
@@ -362,7 +404,10 @@ export function createSpokenRequests(options: {
           return;
         }
         if (signal.aborted) return;
-        run.fail(text === null ? "nothing-heard" : "not-understood");
+        // Silence ends quietly: the speaker may have heard its wake word in
+        // a room's noise.
+        if (text === null) run.fail("nothing-heard");
+        else failAloud(request, "not-understood");
         return;
       }
       run.heard(words);
@@ -422,13 +467,13 @@ export function createSpokenRequests(options: {
       if (first !== "late") {
         if ("error" in first) {
           recorded(request, speaker, { ok: false, reason: reasonOf(first) });
-          run.fail("failed");
+          failAloud(request, "failed");
           return;
         }
         if (first.reply) {
           if (!("url" in first) || !first.url) {
             recorded(request, speaker, { ok: false, reason: "unavailable" });
-            run.fail("failed");
+            failAloud(request, "failed");
             return;
           }
           run.reply(first.url, first.reply.text);
