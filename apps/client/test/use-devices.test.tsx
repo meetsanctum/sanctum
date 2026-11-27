@@ -359,6 +359,7 @@ describe("commands from here", () => {
     brightness: number | null,
     sync: "synced" | "pending" | "conflict" = "synced",
     color = false,
+    white = false,
   ) {
     const lamp = light(id, id, "room", brightness !== null);
     const capability = lamp.capabilities[0]!;
@@ -373,7 +374,11 @@ describe("commands from here", () => {
         capabilities: [
           {
             ...capability,
-            features: { ...capability.features, color },
+            features: {
+              ...capability.features,
+              color,
+              colorTemperature: white ? { min: 153, max: 500 } : null,
+            },
             state,
             sync,
           },
@@ -470,6 +475,32 @@ describe("commands from here", () => {
     expect(
       devices.tiles.find((tile) => tile.deviceId === "desk")?.failures,
     ).toBe(1);
+  });
+
+  it("marks only lights a failed room white would have changed", async () => {
+    act(() => {
+      devices.apply({ type: "places", places });
+      showLight("fixed-on", 60);
+      showLight("fixed-off", null);
+      showLight("tunable-white", 60, "synced", false, true);
+      showLight("colour-only", 60, "synced", true);
+    });
+    client.lights.mockRejectedValue(new Error("unavailable"));
+    await act(async () => {
+      await expect(
+        devices.setLights({ kind: "room", id: "room" }, devices.tiles, {
+          colorTemperature: 333,
+        }),
+      ).rejects.toThrow("unavailable");
+    });
+    expect(
+      devices.tiles.map(({ deviceId, failures }) => [deviceId, failures]),
+    ).toEqual([
+      ["fixed-on", undefined],
+      ["fixed-off", 1],
+      ["tunable-white", 1],
+      ["colour-only", 1],
+    ]);
   });
 
   it.each([true, false])(

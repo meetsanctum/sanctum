@@ -30,6 +30,7 @@ import { useMinuteClock } from "./device-firmware";
 import {
   supportsBrightness,
   supportsColour,
+  supportsWhite,
   tileKey,
   tilesOf,
 } from "./device-tiles";
@@ -558,11 +559,12 @@ export function useDevices(live: LiveFeed) {
   // brightness changes only the lights that are on while any is, so it
   // shows on them as pending at once, as a light's own drag does; while
   // none is on the place comes on by its rooms' rules, which only the core
-  // knows. A colour or a white reaches lights that can show it, those that
-  // are off included, at a level only the core works out. Those wait for
-  // its live state. A brightness of 0 switches them off. Requests go in
-  // turn with the room's other presses. The core names the lights it could
-  // not set. When the whole call fails, each that it would have set failed.
+  // knows. A colour or a white reaches lights that can show it, even those
+  // that are off. A white also turns on fixed-white lights. Appearance
+  // requests wait for the core's live state. A brightness of 0 switches
+  // them off. Requests go in turn with the room's other presses. The core
+  // names the lights it could not set. When the whole call fails, each
+  // that it would have set failed.
   const setLights = useCallback(
     async (
       place: LightsPlace,
@@ -575,12 +577,14 @@ export function useDevices(live: LiveFeed) {
       }
       const reachable = lights.filter((tile) => !tile.disabled);
       const lit = reachable.filter((tile) => tile.on);
-      const setting =
-        set.hue !== undefined
-          ? reachable.filter(supportsColour)
-          : set.brightness !== undefined && lit.length > 0
-            ? lit
-            : reachable;
+      let setting = lit.length > 0 ? lit : reachable;
+      if (set.hue !== undefined) {
+        setting = reachable.filter(supportsColour);
+      } else if (set.colorTemperature !== undefined) {
+        setting = reachable.filter(
+          (tile) => !tile.on || supportsWhite(tile) || supportsColour(tile),
+        );
+      }
       const keys = setting.map((tile) => tile.key);
       const answered =
         set.brightness !== undefined && lit.length > 0
