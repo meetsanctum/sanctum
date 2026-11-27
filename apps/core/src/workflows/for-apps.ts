@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import type { RecordActivity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
@@ -45,7 +46,7 @@ export function createWorkflowsForApps(options: {
     using(app: string, deviceIds: readonly string[]) {
       return using(app, deviceIds)
         .map(({ id, name, enabled }) => ({ id, name, enabled }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort((a, b) => compare("en")(a.name, b.name));
     },
 
     /**

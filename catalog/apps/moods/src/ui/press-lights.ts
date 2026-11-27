@@ -1,4 +1,5 @@
 import type { DeviceInfo, Places } from "@meetsanctum/app-sdk";
+import { compare } from "@meetsanctum/ui-sdk";
 
 import type { PressPlace } from "../presses/presses.js";
 
@@ -82,7 +83,7 @@ export function lightGroups(
     (a, b) => Number(b.id === firstRoomId) - Number(a.id === firstRoomId),
   );
   const options = lightOptions(devices).sort((a, b) =>
-    a.name.localeCompare(b.name),
+    compare("en")(a.name, b.name),
   );
   const groups = rooms.map((room) => ({
     id: room.id,

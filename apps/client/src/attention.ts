@@ -7,6 +7,7 @@ import {
   type TemperatureUnit,
 } from "@meetsanctum/app-sdk";
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import {
   givenUpWords,
@@ -73,7 +74,7 @@ export function needingAttention(
     .sort(
       (a, b) =>
         rank[a.reasons[0]!] - rank[b.reasons[0]!] ||
-        a.device.name.localeCompare(b.device.name),
+        compare("en")(a.device.name, b.device.name),
     );
 }
 
@@ -119,7 +120,7 @@ export function appsNotRunning(
   const rank = (app: AppInfo) => (isStopped(app) ? 0 : 1);
   return apps
     .filter((app) => worthTelling(app, notSetUp))
-    .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+    .sort((a, b) => rank(a) - rank(b) || compare("en")(a.name, b.name));
 }
 
 // When it began waiting, on the home clock.

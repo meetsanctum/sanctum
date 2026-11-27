@@ -8,6 +8,7 @@ import {
 } from "@meetsanctum/ui-sdk";
 import { Minus, Pin, Plus, Search } from "lucide-react";
 import { useState } from "react";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import { AppIcon, plainIcon } from "./app-icon";
 import type { Route } from "./apps";
@@ -43,7 +44,7 @@ export function listedApps(
       icon: info.icon ?? plainIcon,
       onOpen: () => show([{ app: info.id, page: mainPage, params: {} }]),
     })),
-  ].sort((a, b) => a.name.localeCompare(b.name));
+  ].sort((a, b) => compare("en")(a.name, b.name));
 }
 
 /** The app on show: the one whose page it is. */

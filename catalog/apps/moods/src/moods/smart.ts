@@ -2,6 +2,7 @@ import type { Light } from "../targets.js";
 import type { MoodIcon } from "./icons.js";
 import { keyOf, lightKey, type MoodLight } from "./light-states.js";
 import type { Mood } from "./store.js";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 // Smart moods: a definition from Moods' catalog, assigned to a room with a
 // brightness and the lights it leaves off. It works out each light's state
@@ -144,7 +145,7 @@ export type SmartSettings = {
 
 // By name, then by id, so the same light takes the same colour each time.
 const byName = (a: Light, b: Light) =>
-  a.device.name.localeCompare(b.device.name) ||
+  compare("en")(a.device.name, b.device.name) ||
   a.capability.id.localeCompare(b.capability.id) ||
   a.device.id.localeCompare(b.device.id);
 

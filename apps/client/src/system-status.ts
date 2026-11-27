@@ -2,6 +2,7 @@ import type { AppInfo, TemperatureUnit } from "@meetsanctum/app-sdk";
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import { formatTemperature } from "@meetsanctum/ui-sdk";
 import { useEffect, useState } from "react";
+import { list, number, plural } from "@meetsanctum/app-sdk/words";
 
 import { productName } from "./brand";
 import { coreJson } from "./core-fetch";
@@ -165,9 +166,8 @@ export const serviceName = (service: string) =>
 
 // Figures to three places, as Finder and iOS show sizes: "1.35 GB",
 // "15.1 GB", "164 MB".
-const figures = new Intl.NumberFormat(undefined, {
-  maximumSignificantDigits: 3,
-});
+const figures = (value: number) =>
+  number("en", value, { maximumSignificantDigits: 3 });
 
 function scaled(bytes: number, base: number) {
   const units = ["KB", "MB", "GB", "TB"];
@@ -177,7 +177,7 @@ function scaled(bytes: number, base: number) {
     value /= base;
     unit += 1;
   }
-  return `${figures.format(value)} ${units[unit]}`;
+  return `${figures(value)} ${units[unit]}`;
 }
 
 /** Storage in decimal units, as Finder counts it. */
@@ -213,22 +213,23 @@ export function osText(host: HostInfo) {
 
 /** How long the host has run: "4 days, 21 hours", "2 hours, 12 minutes". */
 export function runningFor(seconds: number) {
-  const plural = (count: number, word: string) =>
-    `${count} ${word}${count === 1 ? "" : "s"}`;
   const days = Math.floor(seconds / 86_400);
   const hours = Math.floor((seconds % 86_400) / 3_600);
   const minutes = Math.floor((seconds % 3_600) / 60);
   if (days > 0) {
     return hours > 0
-      ? `${plural(days, "day")}, ${plural(hours, "hour")}`
-      : plural(days, "day");
+      ? `${plural("en", days, { one: "# day", other: "# days" })}, ${plural("en", hours, { one: "# hour", other: "# hours" })}`
+      : plural("en", days, { one: "# day", other: "# days" });
   }
   if (hours > 0) {
     return minutes > 0
-      ? `${plural(hours, "hour")}, ${plural(minutes, "minute")}`
-      : plural(hours, "hour");
+      ? `${plural("en", hours, { one: "# hour", other: "# hours" })}, ${plural("en", minutes, { one: "# minute", other: "# minutes" })}`
+      : plural("en", hours, { one: "# hour", other: "# hours" });
   }
-  return plural(Math.max(1, minutes), "minute");
+  return plural("en", Math.max(1, minutes), {
+    one: "# minute",
+    other: "# minutes",
+  });
 }
 
 /** Wi-Fi's signal in a word, by its level in dBm. */
@@ -250,7 +251,7 @@ export function connectionText(network: NonNullable<HostInfo["network"]>) {
         ? "Ethernet"
         : `Ethernet · ${
             network.speedMbps >= 1000
-              ? `${figures.format(network.speedMbps / 1000)} Gb/s`
+              ? `${figures(network.speedMbps / 1000)} Gb/s`
               : `${network.speedMbps} Mb/s`
           }`;
     default:
@@ -264,7 +265,7 @@ export function processorText(processor: HostInfo["processor"]) {
     processor.mhz === null
       ? null
       : processor.mhz >= 1000
-        ? `${figures.format(processor.mhz / 1000)} GHz`
+        ? `${figures(processor.mhz / 1000)} GHz`
         : `${processor.mhz} MHz`;
   const cores = `${processor.cores} core${processor.cores === 1 ? "" : "s"}`;
   return speed ? `${cores} at ${speed}` : cores;
@@ -455,11 +456,8 @@ export function fineText(host: HostInfo) {
     host.power && "power",
   ].filter((each): each is string => typeof each === "string");
   if (checked.length === 0) return "Nothing needs you";
-  const list =
-    checked.length === 1
-      ? checked[0]!
-      : `${checked.slice(0, -1).join(", ")} and ${checked.at(-1)}`;
-  return `${list[0]!.toUpperCase()}${list.slice(1)} ${checked.length === 1 ? "is" : "are"} fine`;
+  const fine = list("en", checked);
+  return `${fine[0]!.toUpperCase()}${fine.slice(1)} ${checked.length === 1 ? "is" : "are"} fine`;
 }
 
 /** What follows "Everything's running" on System's row: "6.92 GB free · 57°C". */

@@ -1,4 +1,5 @@
 import type { RoomRemoval } from "@meetsanctum/app-sdk";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import type { AppHost } from "../app-host/host.js";
 import type { Devices } from "../devices/devices.js";
@@ -31,7 +32,7 @@ export function roomRemoval(
     .list()
     .filter((device) => device.roomId === roomId)
     .map(({ id, name }) => ({ id, name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => compare("en")(a.name, b.name));
 
   const titles = new Map<string, string>(
     modules.apps

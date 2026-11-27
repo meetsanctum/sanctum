@@ -11,6 +11,7 @@ import {
 import { Button } from "@meetsanctum/ui-sdk";
 import { Search } from "lucide-react";
 import { useMemo, useRef, useState, type ReactNode } from "react";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import {
   Dialog,
@@ -214,7 +215,7 @@ function sectionsFor(
 
   // A room's devices and lights, in the sidebar's order.
   const rooms = [...(home.places?.rooms ?? [])].sort((a, b) =>
-    a.name.localeCompare(b.name),
+    compare("en")(a.name, b.name),
   );
   const roomSections: Section[] = rooms.map((room) => {
     const entries: Entry[] = [];

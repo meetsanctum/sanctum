@@ -11,7 +11,7 @@ import {
   type HomeClock,
 } from "@meetsanctum/app-sdk/clock";
 
-import { plural } from "./plural";
+import { compare, plural } from "@meetsanctum/app-sdk/words";
 
 // Maintenance: what the home's devices need from the household, as Settings,
 // its Maintenance page, the dashboard's Batteries tile and a device's own
@@ -42,7 +42,7 @@ export function lowBatteryText(battery?: number) {
     : `Battery low, ${battery}%: replace it soon`;
 }
 
-const byName = (a: DeviceInfo, b: DeviceInfo) => a.name.localeCompare(b.name);
+const byName = (a: DeviceInfo, b: DeviceInfo) => compare("en")(a.name, b.name);
 
 /**
  * Every device on a battery, the next to replace first: quiet ones, the
@@ -98,8 +98,12 @@ export function maintenanceHint(devices: readonly DeviceInfo[], now: number) {
   const updates = updatesOf(devices).length;
   return (
     [
-      batteries ? plural(batteries, "battery", "batteries") : null,
-      updates ? plural(updates, "update") : null,
+      batteries
+        ? plural("en", batteries, { one: "# battery", other: "# batteries" })
+        : null,
+      updates
+        ? plural("en", updates, { one: "# update", other: "# updates" })
+        : null,
     ]
       .filter(Boolean)
       .join(" · ") || undefined

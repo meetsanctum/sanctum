@@ -9,6 +9,7 @@ import {
   type DriverCommand,
 } from "@meetsanctum/app-sdk";
 import { and, asc, eq } from "drizzle-orm";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import type {
   Activity,
@@ -177,7 +178,7 @@ export function createDevices(
     return reads
       .everyDevice()
       .map((device) => deviceInfo(device, byDevice.get(device.id) ?? []))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => compare("en")(a.name, b.name));
   }
 
   function loadAll(): DeviceInfo[] {

@@ -1,4 +1,5 @@
 import type { AvailableApp } from "@meetsanctum/app-sdk";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import type { AppCapacity } from "../manager-answers.js";
 import type { AppNeed } from "../manager.js";
@@ -140,7 +141,7 @@ export function createAvailableApps(options: {
     async list(): Promise<AvailableApp[]> {
       return (await read()).apps
         .map(({ app }) => app)
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort((a, b) => compare("en")(a.name, b.name));
     },
     /**
      * Every app it could add, and whether that's all of them: an unstaged
@@ -175,7 +176,7 @@ export function createAvailableApps(options: {
       });
       const matches = apps
         .filter(({ app }) => app.requests.some(({ id }) => id === permissionId))
-        .sort((left, right) => left.app.name.localeCompare(right.app.name));
+        .sort((left, right) => compare("en")(left.app.name, right.app.name));
       const found = matches[0]?.app;
       if (found) return found.shortfalls.length > 0 ? undefined : found;
       return isComplete && !isEmpty ? null : undefined;

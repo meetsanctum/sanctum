@@ -1,5 +1,5 @@
 {
-  "version": "0.1.43",
+  "version": "0.1.44",
   "react": "19.3.1",
   "exports": {
     "@meetsanctum/ui-sdk": [
@@ -48,6 +48,7 @@
       "PageParams",
       "PageProps",
       "PageSection",
+      "PluralForms",
       "PowerButton",
       "PressCaptureListener",
       "PressGroup",
@@ -75,10 +76,12 @@
       "buttonLabel",
       "buttonVariants",
       "capturePresses",
+      "compare",
       "contactIcon",
       "convertTemperature",
       "createAppClient",
       "createLiveFeed",
+      "date",
       "defineAppUi",
       "deviceKindsOf",
       "formatLightLevel",
@@ -94,7 +97,10 @@
       "languageIds",
       "languages",
       "lightColour",
+      "list",
       "mainPage",
+      "number",
+      "plural",
       "pressGroups",
       "pressLabel",
       "pressTitle",
@@ -2918,6 +2924,7 @@
       "export * from \"./use-app-settings\";",
       "export * from \"./widget-card\";",
       "export * from \"./widget-icons\";",
+      "export * from \"./words\";",
       "export { Button, buttonVariants } from \"./components/ui/button\";",
       "export { Input } from \"./components/ui/input\";",
       "export { InputOTP, InputOTPDisplay, InputOTPGroup, InputOTPSeparator, InputOTPSlot, } from \"./components/ui/input-otp\";",
@@ -3280,6 +3287,9 @@
       "import type { WidgetIcon } from \"@meetsanctum/app-sdk\";",
       "import { type LucideIcon } from \"lucide-react\";",
       "export declare const widgetIconOf: Record<WidgetIcon, LucideIcon>;"
+    ],
+    "words.d.ts": [
+      "export { compare, date, list, number, plural, type PluralForms, } from \"@meetsanctum/app-sdk/words\";"
     ]
   }
 }

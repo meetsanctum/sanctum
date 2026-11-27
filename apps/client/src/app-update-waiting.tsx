@@ -6,6 +6,7 @@ import {
 import { Button } from "@meetsanctum/ui-sdk";
 import { CircleAlert, Info } from "lucide-react";
 import { useState } from "react";
+import { list } from "@meetsanctum/app-sdk/words";
 
 import { Asks } from "./add-app-sheet";
 import { NoticeCard } from "./app-state";
@@ -45,9 +46,7 @@ function needsList(waiting: AppWaitingUpdate) {
     const title = permissionWords(request.id).title;
     return title.charAt(0).toLowerCase() + title.slice(1);
   });
-  return titles.length < 2
-    ? (titles[0] ?? "")
-    : `${titles.slice(0, -1).join(", ")} and ${titles.at(-1)}`;
+  return list("en", titles);
 }
 
 /** What its notice says, and Needs attention's line. */

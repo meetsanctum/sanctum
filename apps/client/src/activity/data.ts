@@ -6,6 +6,7 @@ import type {
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import type { LiveFeed } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { date } from "@meetsanctum/app-sdk/words";
 
 import { coreJson } from "../core-fetch";
 
@@ -75,7 +76,7 @@ function headingForDay(
 ) {
   if (day === today) return "Today";
   if (day === yesterday) return "Yesterday";
-  return new Date(day).toLocaleDateString("en-GB", {
+  return date("en", day, {
     timeZone: clock.timeZone,
     weekday: "long",
     day: "numeric",

@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import type { OnHome } from "./dashboards";
 import { homePlaces } from "./home-dashboard";
@@ -79,7 +80,7 @@ export function EditHome(props: { devices: Devices; home: OnHome }) {
         (device) =>
           roomOf(device) === (place.room?.id ?? null) && !onHome.has(device.id),
       )
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort((a, b) => compare("en")(a.name, b.name))
       .map((device) => ({ device, tile: firstTile(device.id) }));
     return shownOnHome.length + others.length > 0
       ? [{ ...place, shownOnHome, others }]

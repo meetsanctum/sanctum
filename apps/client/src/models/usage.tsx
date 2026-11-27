@@ -2,6 +2,7 @@ import type { AppInfo, ModelsInfo } from "@meetsanctum/app-sdk";
 import { Button, SegmentedControl } from "@meetsanctum/ui-sdk";
 import { LineChart, type DaysLineChartProps } from "@meetsanctum/ui-sdk/charts";
 import { useId, useState } from "react";
+import { date, number } from "@meetsanctum/app-sdk/words";
 
 import { AppIcon } from "../app-icon";
 import { Row, Section } from "../components";
@@ -49,7 +50,7 @@ function withOthers(
 
 const sum = (tokens: readonly (number | null)[]) =>
   tokens.reduce<number>((total, each) => total + (each ?? 0), 0);
-const count = (value: number) => value.toLocaleString();
+const count = (value: number) => number("en", value);
 
 // The top of the scale: 1, 2 or 5 times a power of ten, at least the most.
 function niceTop(most: number) {
@@ -70,11 +71,7 @@ function scaleText(value: number) {
 const startOf = (day: string) => Date.parse(`${day}T00:00:00Z`);
 
 const dateText = (start: number) =>
-  new Date(start).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
+  date("en", start, { day: "numeric", month: "short", timeZone: "UTC" });
 
 function Chart(props: {
   series: DaysLineChartProps["series"];

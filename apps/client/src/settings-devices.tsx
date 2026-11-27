@@ -19,6 +19,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import { AddDevices } from "./add-devices";
 import { categoryLooks } from "./category-looks";
@@ -73,7 +74,7 @@ import type { ServiceNotSetUp } from "./system-status";
 // red with a sign, unless an update or a check has something to say, as
 // Maintenance says it (maintenance.ts).
 
-const byName = (a: DeviceInfo, b: DeviceInfo) => a.name.localeCompare(b.name);
+const byName = (a: DeviceInfo, b: DeviceInfo) => compare("en")(a.name, b.name);
 
 export function DevicesSection(props: {
   apps: AppInfo[];

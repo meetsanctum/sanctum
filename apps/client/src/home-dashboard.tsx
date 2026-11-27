@@ -16,6 +16,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import { placeContacts } from "./contact";
 import { noRoomName, readingsOf, sensorReadings } from "./device-tiles";
@@ -332,7 +333,7 @@ export function homePlaces(
     .sort(
       (a, b) =>
         position.get(a.deviceId)! - position.get(b.deviceId)! ||
-        a.name.localeCompare(b.name),
+        compare("en")(a.name, b.name),
     );
   const rooms = devices.places?.rooms ?? [];
   return [

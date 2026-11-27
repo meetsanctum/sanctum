@@ -13,6 +13,7 @@ import {
   type LiveFeed,
 } from "@meetsanctum/ui-sdk";
 import { useCallback, useMemo, useState } from "react";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import { entityKey, shownType, useAppEntities } from "./app-entities";
 import { isShown, looksRunning, stateShort } from "./app-state";
@@ -124,7 +125,7 @@ export function useSectionEntities(
         .sort(
           (a, b) =>
             a.tile.order - b.tile.order ||
-            a.tile.name.localeCompare(b.tile.name),
+            compare("en")(a.tile.name, b.tile.name),
         ),
     [entities],
   );

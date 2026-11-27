@@ -12,6 +12,7 @@ import type {
 } from "@meetsanctum/app-sdk";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import type { ChangedBy, NewActivityEntry } from "../activity/activity.js";
 import { ActionCallError } from "../app-host/errors.js";
@@ -264,7 +265,7 @@ export function createModels(
     const sources = rows();
     const apps = options
       .appsUsing()
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => compare("en")(a.name, b.name));
     const daily = usage(
       sources.map(({ id }) => id),
       apps.map(({ id }) => id),

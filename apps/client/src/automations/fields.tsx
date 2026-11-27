@@ -15,6 +15,7 @@ import {
 import { cn } from "cn";
 import { Check, Sun, Volume2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import {
   capitalize,
@@ -572,8 +573,8 @@ export function FieldControl(props: {
             options={[...devices]
               .sort(
                 (a, b) =>
-                  roomName(a.roomId).localeCompare(roomName(b.roomId)) ||
-                  a.name.localeCompare(b.name),
+                  compare("en")(roomName(a.roomId), roomName(b.roomId)) ||
+                  compare("en")(a.name, b.name),
               )
               .map((device) => ({
                 value: device.id,
@@ -645,7 +646,7 @@ export function FieldControl(props: {
           options={home.entities
             .filter((entity) => entity.type === kind.type)
             .map((entity) => ({ value: entity.key, label: entity.name }))
-            .sort((a, b) => a.label.localeCompare(b.label))}
+            .sort((a, b) => compare("en")(a.label, b.label))}
           selected={props.value as string | undefined}
           onSelect={props.onChange}
         />

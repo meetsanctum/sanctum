@@ -1,5 +1,5 @@
 import type { ActionOutput, DeviceInfo } from "@meetsanctum/app-sdk";
-import { lightColour, type Tile } from "@meetsanctum/ui-sdk";
+import { compare, lightColour, type Tile } from "@meetsanctum/ui-sdk";
 
 import type { listMoods } from "../moods/actions.js";
 import type { MoodIcon } from "../moods/icons.js";
@@ -42,7 +42,7 @@ export function roomLights(
     )
     .sort(
       (a, b) =>
-        a.device.name.localeCompare(b.device.name) ||
+        compare("en")(a.device.name, b.device.name) ||
         a.capability.id.localeCompare(b.capability.id),
     );
 }

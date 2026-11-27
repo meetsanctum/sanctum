@@ -12,6 +12,7 @@ import {
 } from "@meetsanctum/app-sdk";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import type { Auth } from "../auth/auth.js";
 import { AuthError } from "../auth/errors.js";
@@ -150,7 +151,7 @@ export function registerAppRoutes(
   app.get("/api/apps", async (request): Promise<AppInfo[]> => {
     gate.admit(request.principal!, { tier: "read" });
     if (!host.hasInstalled()) throw new ActionCallError("unavailable");
-    return infos().sort((a, b) => a.name.localeCompare(b.name));
+    return infos().sort((a, b) => compare("en")(a.name, b.name));
   });
 
   // Which apps the home could add is household information too.

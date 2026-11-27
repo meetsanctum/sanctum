@@ -1,5 +1,6 @@
 import type { EntityInfo } from "@meetsanctum/app-sdk";
 import { and, eq, notInArray, sql, type SQL } from "drizzle-orm";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import type { DeclaredEntityType } from "../app-host/contract.js";
 import type { CoreDatabase } from "../database.js";
@@ -136,7 +137,7 @@ export function createEntities(
       .sort(
         (a, b) =>
           a.app.localeCompare(b.app) ||
-          a.name.localeCompare(b.name) ||
+          compare("en")(a.name, b.name) ||
           a.key.localeCompare(b.key),
       );
   }
