@@ -142,6 +142,8 @@ const referenceNames = Object.fromEntries(
 ) as Record<SentenceBlank, string[]>;
 
 // Brackets that open and close in order, and blanks with none inside.
+// Speech recognition takes choices only in round brackets, so an optional
+// part's choices are written [(a|b)], never [a|b].
 function bracketsIssue(template: string) {
   const open: string[] = [];
   const pairs: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
@@ -151,6 +153,8 @@ function bracketsIssue(template: string) {
       open.push(character);
     } else if (character in pairs) {
       if (open.pop() !== pairs[character]) return "its brackets don't match";
+    } else if (character === "|" && open.at(-1) === "[") {
+      return "an optional part's choices need round brackets: [(a|b)]";
     }
   }
   return open.length > 0 ? "its brackets don't match" : null;

@@ -11,9 +11,10 @@ import {
   PageSection,
   defineAppUi,
   icons,
+  useReducedMotion,
   type PageProps,
 } from "@meetsanctum/ui-sdk";
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import { notUnderstood, version } from "../../sanctum-app.json";
 import { useAssistant } from "./use-assistant";
@@ -38,18 +39,33 @@ const help = "m-0 text-[13px] leading-[18px] text-muted-foreground";
 const card = "flex flex-col gap-3 rounded-xl bg-foreground/5 p-4";
 const languages = Object.keys(languageNames) as RequestLanguage[];
 
-// A bar for a step whose length nobody knows: a segment that breathes, and
-// holds still under Reduce motion.
+// A bar for a step whose length nobody knows: a segment that slides across
+// and starts again, moved by its transform alone, and held still in the
+// middle under Reduce motion.
 function StepBar(props: { label: string }) {
+  const segment = useRef<HTMLSpanElement>(null);
+  const isStill = useReducedMotion();
+  useEffect(() => {
+    if (isStill || !segment.current?.animate) return;
+    // The segment is 30% of the track: from wholly before it to wholly past.
+    const sliding = segment.current.animate(
+      [{ transform: "translateX(-100%)" }, { transform: "translateX(334%)" }],
+      { duration: 1600, easing: "ease-in-out", iterations: Infinity },
+    );
+    return () => sliding.cancel();
+  }, [isStill]);
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-sm font-medium">{props.label}</span>
       <div
-        className="h-1.5 overflow-hidden bg-foreground/10"
+        className="h-1.5 overflow-hidden rounded-full bg-foreground/10"
         role="progressbar"
         aria-label={props.label}
       >
-        <span className="ml-[35%] block h-full w-[30%] bg-foreground motion-safe:animate-pulse" />
+        <span
+          ref={segment}
+          className={`block h-full w-[30%] rounded-full bg-foreground ${isStill ? "ml-[35%]" : ""}`}
+        />
       </div>
     </div>
   );

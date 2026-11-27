@@ -82,6 +82,15 @@ describe("the Assistant's sentences", () => {
     ).toEqual([]);
   });
 
+  it("give an optional part's choices round brackets of their own", () => {
+    expect(sentenceIssues({ de: ["mach [das|die] Licht aus"] })).toEqual([
+      expect.stringContaining(
+        "an optional part's choices need round brackets: [(a|b)]",
+      ),
+    ]);
+    expect(sentenceIssues({ de: ["mach [(das|die)] Licht aus"] })).toEqual([]);
+  });
+
   it("keep to their limits per language", () => {
     expect(
       sentenceIssues({ en: Array(sentenceLimits.perLanguage + 1).fill("hi") }),
