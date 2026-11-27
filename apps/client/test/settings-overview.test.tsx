@@ -70,6 +70,7 @@ const weather: AppInfo = {
 let container: HTMLDivElement;
 let root: Root;
 let clients: ClientInfo[];
+let people: { name: string }[];
 let agents: unknown[];
 let models: unknown[];
 let opened: [string, PageParams | undefined][];
@@ -80,6 +81,12 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   clients = [maya.client, tablet, { ...tablet, id: "phone", name: "Phone" }];
   agents = [{ id: "codex" }, { id: "claude" }];
+  people = [
+    { name: "Maya" },
+    { name: "Jonas" },
+    { name: "Ida" },
+    { name: "Sam" },
+  ];
   models = [
     {
       id: "mac",
@@ -95,6 +102,7 @@ beforeEach(() => {
   wentBack = 0;
   vi.mocked(coreJson).mockImplementation(async (path: string) => {
     if (path === "/api/auth/clients") return clients as never;
+    if (path === "/api/people") return people as never;
     if (path === "/api/auth/agents") return agents as never;
     if (path === "/api/models") return { sources: models } as never;
     throw new Error(`unexpected ${path}`);
@@ -166,6 +174,7 @@ describe("Settings' first page", () => {
 
     expect(rows()).toEqual([
       "HouseholdOffice · Zurich · Celsius",
+      "PeopleMaya and 3 more",
       "Rooms and Floors2 rooms on 1 floor",
       "Devices2 devices",
       "Maintenance1 battery",
@@ -183,6 +192,7 @@ describe("Settings' first page", () => {
 
   it("says what a new home doesn't have yet", async () => {
     clients = [maya.client];
+    people = [{ name: "Maya" }];
     agents = [];
     models = [];
     await show({
@@ -192,6 +202,7 @@ describe("Settings' first page", () => {
 
     expect(rows()).toEqual([
       "HouseholdOffice · Zurich · Celsius",
+      "PeopleMaya",
       "Rooms and FloorsNo rooms yet",
       "DevicesNone yet",
       "MaintenanceNothing to do",
@@ -231,6 +242,7 @@ describe("Settings' first page", () => {
 
     for (const area of [
       "Household",
+      "People",
       "Rooms and Floors",
       "Devices",
       "Maintenance",
@@ -244,6 +256,7 @@ describe("Settings' first page", () => {
 
     expect(opened.map(([page]) => page)).toEqual([
       "household",
+      "people",
       "rooms",
       "devices",
       "maintenance",

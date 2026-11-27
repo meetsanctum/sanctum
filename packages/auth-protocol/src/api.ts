@@ -258,6 +258,9 @@ export type SetLoginFinish = {
 };
 export type RemoveLogin = { personId: string };
 
+/** `GET /api/auth/logins`: who signs in, and with which username. */
+export type LoginInfo = { personId: string; username: string };
+
 // Changing your own password proves the current one and registers the new
 // one in the same two calls.
 export type PasswordStart = {

@@ -481,6 +481,51 @@ export function createClients(
       return clients.filter(({ kind }) => kind !== "agent").length;
     },
 
+    // A person's personal clients and the agents they added, refused from
+    // their next request on, inside the caller's transaction, which closes
+    // their live connections with `close` once it commits.
+    revokePersonal(personId: string, at: Date): string[] {
+      const theirs = db
+        .select({ id: authClients.id })
+        .from(authClients)
+        .where(
+          and(
+            eq(authClients.personId, personId),
+            eq(authClients.kind, "personal"),
+            isNull(authClients.revokedAt),
+          ),
+        );
+      const affected = and(
+        isNull(authClients.revokedAt),
+        or(
+          inArray(authClients.id, theirs),
+          inArray(authClients.addedByClientId, theirs),
+        ),
+      );
+      const ids = db
+        .select({ id: authClients.id })
+        .from(authClients)
+        .where(affected)
+        .all()
+        .map(({ id }) => id);
+      if (ids.length === 0) return ids;
+      db.update(authTokens)
+        .set({ revokedAt: at })
+        .where(
+          and(inArray(authTokens.clientId, ids), isNull(authTokens.revokedAt)),
+        )
+        .run();
+      db.update(authClients)
+        .set({ revokedAt: at })
+        .where(inArray(authClients.id, ids))
+        .run();
+      return ids;
+    },
+
+    close(ids: readonly string[]) {
+      for (const id of ids) connections.closeClient(id);
+    },
+
     // Refused from its next request on; its live connections close now. The
     // agents it added go with it.
     revoke(principal: Principal, input: { id: string }) {

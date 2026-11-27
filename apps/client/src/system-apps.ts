@@ -23,6 +23,9 @@ export const automationsApp = {
 } as const;
 
 export const householdSettingsPage = "household";
+export const peopleSettingsPage = "people";
+/** Settings' page for one person, by their id. */
+export const personSettingsPage = "person";
 export const roomsSettingsPage = "rooms";
 export const devicesSettingsPage = "devices";
 export const maintenanceSettingsPage = "maintenance";
@@ -53,6 +56,7 @@ export const setupPage: Record<SetupTarget, string> = {
 const pageTitles: Record<string, string> = {
   main: "Settings",
   [householdSettingsPage]: "Household",
+  [peopleSettingsPage]: "People",
   [roomsSettingsPage]: roomsTitle,
   [devicesSettingsPage]: "Devices",
   [maintenanceSettingsPage]: "Maintenance",
