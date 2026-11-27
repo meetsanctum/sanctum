@@ -1,6 +1,6 @@
 import { CircleAlert } from "lucide-react";
 
-import { Alert, AlertDescription, AlertTitle } from "./alert";
+import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 
 /**
  * What went wrong, said in what failed: a red sign, then what happened in
@@ -19,16 +19,9 @@ export function Problem(props: {
 }) {
   return (
     <Alert className={props.className}>
-      <CircleAlert
-        aria-hidden="true"
-        className="mt-px size-4.5 shrink-0 text-destructive"
-      />
-      <div className="min-w-0 wrap-anywhere">
-        <AlertTitle>{props.title}</AlertTitle>
-        {props.children && (
-          <AlertDescription>{props.children}</AlertDescription>
-        )}
-      </div>
+      <CircleAlert aria-hidden="true" />
+      <AlertTitle>{props.title}</AlertTitle>
+      {props.children && <AlertDescription>{props.children}</AlertDescription>}
     </Alert>
   );
 }

@@ -6,7 +6,12 @@ import type {
   PairingInfo,
   Room,
 } from "@meetsanctum/app-sdk";
-import { Button, ScrollArea, type LiveFeed } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  Problem,
+  ScrollArea,
+  type LiveFeed,
+} from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { ChevronLeft } from "lucide-react";
 import {
@@ -23,7 +28,7 @@ import { FoundPage, foundKey } from "./add-devices-found";
 import { JoiningPage, type JoiningState } from "./add-devices-joining";
 import { OfferedAppSheet } from "./add-devices-offer";
 import { productName } from "./brand";
-import { Problem } from "./components/ui/problem";
+
 import { CoreError, coreJson } from "./core-fetch";
 import { problemReason, updateDevice } from "./device-parts";
 import { EditDevice, type Editing } from "./edit-device";

@@ -1,5 +1,5 @@
 import type { DeviceInfo, HistoryKept } from "@meetsanctum/app-sdk";
-import { Button, Input } from "@meetsanctum/ui-sdk";
+import { Button, Input, Problem } from "@meetsanctum/ui-sdk";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { productName } from "./brand";
@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./components/ui/dialog";
-import { Problem } from "./components/ui/problem";
+
 import { CoreError, coreJson } from "./core-fetch";
 import type { EditAction } from "./device-menu";
 import { problemReason, updateDevice } from "./device-parts";

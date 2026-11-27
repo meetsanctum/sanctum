@@ -59,7 +59,13 @@ describe("Settings → Add devices", () => {
     vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(500, "app_failed"));
     await act(async () => button("Done").click());
     const alert = document.querySelector("[role=dialog] [role=alert]")!;
-    expect([...alert.querySelectorAll("p")].map((p) => p.textContent)).toEqual([
+    expect(
+      [
+        ...alert.querySelectorAll(
+          "[data-slot=alert-title], [data-slot=alert-description]",
+        ),
+      ].map((p) => p.textContent),
+    ).toEqual([
       "Looking didn't stop",
       "Devices can still join until the time is up.",
     ]);

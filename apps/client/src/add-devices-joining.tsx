@@ -1,5 +1,5 @@
 import type { DeviceInfo, JoinedDevice } from "@meetsanctum/app-sdk";
-import { Button, isMotionReduced } from "@meetsanctum/ui-sdk";
+import { Button, isMotionReduced, Problem } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { CircleAlert } from "lucide-react";
 import {
@@ -12,7 +12,7 @@ import {
 
 import { JoinedCard, type CardWork } from "./add-devices-cards";
 import { foundKey } from "./add-devices-found";
-import { Problem } from "./components/ui/problem";
+
 import { KnotLoader } from "./knot-loader";
 import { knotPath } from "./knot";
 import { plural } from "./plural";

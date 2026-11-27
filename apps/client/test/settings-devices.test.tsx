@@ -401,7 +401,11 @@ describe("Settings → Devices", () => {
       const dialog = document.querySelector("[role=dialog]")!;
       const alert = dialog.querySelector("[role=alert]")!;
       expect(
-        [...alert.querySelectorAll("p")].map((line) => line.textContent),
+        [
+          ...alert.querySelectorAll(
+            "[data-slot=alert-title], [data-slot=alert-description]",
+          ),
+        ].map((line) => line.textContent),
       ).toEqual([title, "It isn't there any more."]);
       expect(button(submit).disabled).toBe(false);
     },

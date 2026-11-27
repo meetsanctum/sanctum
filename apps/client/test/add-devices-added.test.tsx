@@ -180,7 +180,11 @@ describe("Add devices, with a device it added", () => {
       await act(async () => blink.click());
       const alert = page().querySelector("[role=alert]")!;
       expect(
-        [...alert.querySelectorAll("p")].map((line) => line.textContent),
+        [
+          ...alert.querySelectorAll(
+            "[data-slot=alert-title], [data-slot=alert-description]",
+          ),
+        ].map((line) => line.textContent),
       ).toEqual([
         "Kitchen sensor didn't blink",
         "Sanctum ran into a problem. Try again in a moment.",

@@ -134,7 +134,11 @@ describe("Add devices navigation while requests finish", () => {
       );
       const alert = dialog().querySelector("[role=alert]")!;
       expect(
-        [...alert.querySelectorAll("p")].map((line) => line.textContent),
+        [
+          ...alert.querySelectorAll(
+            "[data-slot=alert-title], [data-slot=alert-description]",
+          ),
+        ].map((line) => line.textContent),
       ).toEqual([
         "Looking didn't stop",
         "Sanctum ran into a problem. Try again in a moment.",

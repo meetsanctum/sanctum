@@ -254,7 +254,11 @@ describe("actions on a device's Add devices card", () => {
     expect(field.value).toBe("Hall");
     const alert = form.querySelector("[role=alert]")!;
     expect(
-      [...alert.querySelectorAll("p")].map((line) => line.textContent),
+      [
+        ...alert.querySelectorAll(
+          "[data-slot=alert-title], [data-slot=alert-description]",
+        ),
+      ].map((line) => line.textContent),
     ).toEqual([
       "Couldn't add Hall",
       "Sanctum ran into a problem. Try again in a moment.",

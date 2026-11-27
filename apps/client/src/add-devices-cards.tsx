@@ -4,7 +4,7 @@ import type {
   JoinedDevice,
   Room,
 } from "@meetsanctum/app-sdk";
-import { Button, Input, SegmentedControl } from "@meetsanctum/ui-sdk";
+import { Button, Input, Problem, SegmentedControl } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { Check, CircleAlert } from "lucide-react";
 import {
@@ -19,7 +19,7 @@ import {
 } from "react";
 
 import { productName } from "./brand";
-import { Problem } from "./components/ui/problem";
+
 import { coreJson } from "./core-fetch";
 import {
   DeviceIcon,
@@ -85,7 +85,8 @@ export function stageText(joined: JoinedDevice, device?: DeviceInfo) {
 
 type Tone = "neutral" | "success" | "error";
 
-// A card's tint runs out before its foot.
+// A card's tint runs out before its foot, so a problem there, such as
+// Blink's, stands on the glass alone.
 const tones: Record<Tone, string> = {
   neutral:
     "from-white/12 to-white/0 to-85% inset-shadow-[0_1px_0_rgb(255_255_255/0.1),0_0_0_1px_rgb(255_255_255/0.12)]",
