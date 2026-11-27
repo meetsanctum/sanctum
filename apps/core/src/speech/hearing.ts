@@ -2,8 +2,9 @@ import type { RequestLanguage } from "@meetsanctum/app-sdk";
 
 import type { NewActivityEntry } from "../activity/activity.js";
 import type { AppHost } from "../app-host/host.js";
-import type { Devices } from "../devices/devices.js";
+import type { DeviceChange, Devices } from "../devices/devices.js";
 import type { PlacesModule } from "../places/places.js";
+import type { NotHearing } from "./learning.js";
 import { createListening } from "./listening.js";
 import type { Speech } from "./speech.js";
 import { createSpokenRequests, type Transcriber } from "./spoken.js";
@@ -17,6 +18,15 @@ function listens(device: ReturnType<Devices["get"]>) {
   );
 }
 
+export function hasListeningPart(device: ReturnType<Devices["get"]>) {
+  return Boolean(listens(device));
+}
+
+function canListen(device: ReturnType<Devices["get"]>) {
+  const part = listens(device);
+  return part?.kind === "audio" && part.observed?.muted !== true;
+}
+
 export function assembleHearing(options: {
   devices: Devices;
   places: Pick<PlacesModule, "list">;
@@ -24,6 +34,8 @@ export function assembleHearing(options: {
   speech: () => Speech | undefined;
   // The core declines runs when no transcriber is available.
   transcriber?: () => Transcriber | null;
+  // Why nothing hears runs, when nothing does.
+  notHearing?: () => NotHearing;
   language?: () => RequestLanguage;
   record: (entry: NewActivityEntry) => void;
   now?: () => number;
@@ -32,6 +44,7 @@ export function assembleHearing(options: {
   const { devices, places, apps, log } = options;
   const spoken = createSpokenRequests({
     transcriber: options.transcriber ?? (() => null),
+    notHearing: options.notHearing ?? (() => "no_speech_to_text"),
     language: options.language ?? (() => "en"),
     speaker(id) {
       const device = devices.get(id);
@@ -62,7 +75,7 @@ export function assembleHearing(options: {
   });
   const listening = createListening({
     idFor: (driver, key) => devices.idFor(driver, key),
-    listens: (id) => Boolean(listens(devices.get(id))),
+    listens: (id) => canListen(devices.get(id)),
     hearer: spoken.hearer,
     refused: spoken.refused,
     now: options.now,
@@ -79,14 +92,22 @@ export function assembleHearing(options: {
         listening.stop();
         spoken.stop();
       },
-      /** A device went: its run and its request end. */
-      deviceGone(id: string) {
-        listening.deviceGone(id);
-        spoken.deviceGone(id);
+      deviceChanged({ before, after, id }: DeviceChange) {
+        if (after === null) {
+          listening.deviceGone(id);
+          spoken.deviceGone(id);
+        } else if (canListen(before) && !canListen(after)) {
+          listening.deviceGone(id);
+          spoken.cancelDevice(id);
+        }
+      },
+      cancelRuns() {
+        listening.cancelRuns();
+        spoken.stop();
       },
     },
     spoken,
     /** Whether a device is a smart speaker that listens. */
-    isSpeaker: (id: string) => Boolean(listens(devices.get(id))),
+    isSpeaker: (id: string) => hasListeningPart(devices.get(id)),
   };
 }

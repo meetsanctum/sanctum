@@ -68,9 +68,14 @@ async function account(core: TestCore, appId = "test.bridge") {
 // What it asked for, leaving out reading what the manager keeps for it.
 // What the apps asked the manager for: not reads, and not the core's own
 // speech, which a core with speakers off releases as it starts.
+// The core's own speech services, which it releases as it starts, aren't
+// an app's.
 const asked = (socket: { received: { method: string; url: string }[] }) =>
   socket.received.filter(
-    ({ method, url }) => method !== "GET" && !url.endsWith("/piper/core"),
+    ({ method, url }) =>
+      method !== "GET" &&
+      !url.endsWith("/piper/core") &&
+      !url.endsWith("/speech-to-phrase/core"),
   );
 
 // The manager's socket, answering for services as `answer` says, with no app's

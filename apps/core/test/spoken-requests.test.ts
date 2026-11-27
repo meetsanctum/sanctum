@@ -159,6 +159,25 @@ afterEach(() => {
 });
 
 describe("a smart speaker's request", () => {
+  it("limits microphone runs even when they end before any words are heard", () => {
+    const { listening, asked } = setup();
+    for (let attempt = 0; attempt < 12; attempt++) {
+      expect(
+        listening.open(driver, { key: "speaker", wakeWord: null }),
+      ).toMatchObject({ accepted: true });
+    }
+    expect(listening.open(driver, { key: "speaker", wakeWord: null })).toEqual({
+      accepted: false,
+      refusal: "limited",
+    });
+    expect(
+      listening.open(driver, { key: "kitchen", wakeWord: null }),
+    ).toMatchObject({ accepted: true });
+    expect(asked).toEqual([]);
+    listening.stop();
+    listening.clearFinished();
+  });
+
   it("asks the Assistant for the speaker, with its room and name, and says the reply in its run", async () => {
     const { wake, asked, until, steps, listening, recorded, spoken } = setup();
     const opened = await wake();

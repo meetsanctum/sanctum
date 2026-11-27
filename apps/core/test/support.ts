@@ -132,6 +132,7 @@ export async function testCore(
     holdSettleMs?: number;
     agentCommandLimits?: ModuleOptions["agentCommandLimits"];
     transcriber?: ModuleOptions["transcriber"];
+    speechRetrainAfterMs?: number;
     // Starts the core on another core's data, as after a restart.
     dataDir?: string;
     // Certificates from a test's CA: the core serves their chain over HTTPS
@@ -252,6 +253,7 @@ export async function testCore(
           holdSettleMs: options.holdSettleMs ?? 0,
           agentCommandLimits: options.agentCommandLimits,
           transcriber: options.transcriber,
+          speechRetrainAfterMs: options.speechRetrainAfterMs,
           timeZone:
             options.timeZone === null
               ? undefined

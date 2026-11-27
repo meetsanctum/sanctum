@@ -192,7 +192,12 @@ export const hostResources = hostStatus
 // One service, as GET /api/services/:service answers it: where it answers
 // over HTTP while it runs, as Ollama does.
 export const serviceStatus = z.object({
-  service: z.object({ url: z.string().optional() }),
+  service: z.object({
+    url: z.string().optional(),
+    // A secret the service takes from the core, as Speech-to-Phrase's for
+    // teaching it, given only while it runs.
+    token: z.string().optional(),
+  }),
 });
 
 // The host's last 24 hours (apps/manager/src/host/history.ts): each 5

@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+
 import type { AppHost } from "./app-host/host.js";
 import type { Blobs } from "./blobs/blobs.js";
 import type { Dashboards } from "./dashboards/dashboards.js";
@@ -5,11 +7,12 @@ import type { DeviceChange, Devices } from "./devices/devices.js";
 import type { Holds } from "./devices/holds.js";
 import type { Motion } from "./devices/motion.js";
 import type { Pairing } from "./devices/pairing.js";
-import type { EventBus } from "./event-bus.js";
+import type { EventBus, EventBusFollower } from "./event-bus.js";
 import type { History } from "./history/history.js";
 import type { createLiveUpdates } from "./live-updates.js";
 import type { Speech } from "./speech/speech.js";
-import type { Listening } from "./speech/listening.js";
+import { hasListeningPart } from "./speech/hearing.js";
+import type { Learning } from "./speech/learning.js";
 import type { Workflows } from "./workflows/workflows.js";
 
 // The core's event followers, in delivery order. Handlers call through so
@@ -23,6 +26,7 @@ export function setCoreFollowers(
     devices,
     history,
     holds,
+    learning,
     listening,
     live,
     motion,
@@ -36,7 +40,8 @@ export function setCoreFollowers(
     devices: Pick<Devices, "renameAll">;
     history: Pick<History, "deviceChanged">;
     holds: Pick<Holds, "pressed">;
-    listening: Pick<Listening, "deviceGone">;
+    learning?: Pick<Learning, "changed" | "speakersChanged">;
+    listening: { deviceChanged(change: DeviceChange): void };
     live: Pick<
       ReturnType<typeof createLiveUpdates>,
       "device" | "press" | "places" | "entity"
@@ -54,6 +59,26 @@ export function setCoreFollowers(
     >;
   },
 ) {
+  // Only names affect the lesson. Speaker registrations affect service demand.
+  const recognition: EventBusFollower | undefined = learning && {
+    "device.changed": ({ before, after }) => {
+      if (hasListeningPart(before) !== hasListeningPart(after)) {
+        learning.speakersChanged();
+      }
+      const lightName = (device: DeviceChange["before"]) =>
+        device?.capabilities.some((part) => part.kind === "light")
+          ? device.name
+          : undefined;
+      if (lightName(before) !== lightName(after)) learning.changed();
+    },
+    "places.changed": ({ before, after }) => {
+      const names = (places: typeof before) =>
+        [places.rooms, places.floors].map((list) =>
+          list.map(({ name }) => name).sort(),
+        );
+      if (!isDeepStrictEqual(names(before), names(after))) learning.changed();
+    },
+  };
   eventBus.setFollowers([
     ["holds", { "device.pressed": (press) => holds.pressed(press) }],
     [
@@ -66,15 +91,14 @@ export function setCoreFollowers(
       },
     ],
     ["events for apps", apps.eventsForApps],
-    // A speaker that goes takes its run with it.
+    // A speaker that goes or mutes takes its run with it.
     [
       "listening",
       {
-        "device.changed": ({ id, after }: DeviceChange) => {
-          if (after === null) listening.deviceGone(id);
-        },
+        "device.changed": (change) => listening.deviceChanged(change),
       },
     ],
+    ...(recognition ? ([["speech recognition", recognition]] as const) : []),
     // Speaker registrations change whether the home needs speech.
     ...(speech
       ? ([

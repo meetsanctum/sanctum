@@ -95,7 +95,12 @@ export type TestManager = ServiceManager &
   StatusManager &
   PowerManager &
   Pick<ManagerClient, "hostResources" | "serviceUrl"> &
-  Partial<Pick<ManagerClient, "wantServiceForCore" | "releaseServiceForCore">> &
+  Partial<
+    Pick<
+      ManagerClient,
+      "wantServiceForCore" | "releaseServiceForCore" | "serviceConnection"
+    >
+  > &
   SpaceManager & {
     discovery?: SightingsManager["discovery"];
     deleteAppData?: (app: string) => Promise<void>;

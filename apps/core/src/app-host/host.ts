@@ -1,5 +1,6 @@
 import {
   aiAssistantPermission,
+  registerPermission,
   type AppGoBack,
   type AppRunning,
   type AppSettings,
@@ -311,6 +312,10 @@ export function createAppHost(options: {
     onPermission(entry, permission, granted) {
       if (!granted && permission === aiAssistantPermission) {
         requests.stopped(entry);
+      }
+      // A driver that may no longer register devices hands over no runs.
+      if (!granted && permission === registerPermission) {
+        options.listening?.driverStopped(entry.app.id);
       }
       runChoices.onPermission(entry, permission, granted);
     },

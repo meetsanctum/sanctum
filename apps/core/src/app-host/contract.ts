@@ -7,6 +7,7 @@ import {
   lanRanges,
   appManifestSchema,
   assistantAppId,
+  sentenceIssues,
   assistantOfferOf,
   deviceActionActivitySchema,
   roomSectionKinds,
@@ -421,6 +422,15 @@ export function contractOf(manifest: StaticManifest): AppContract {
         `The Assistant's request handler needs ${aiAssistantPermission}`,
       );
     }
+  }
+  // So do the sentences smart speakers understand, which must fit what
+  // speech recognition can learn in a large home.
+  if ("sentences" in manifest && manifest.sentences !== undefined) {
+    if (manifest.id !== assistantAppId || !manifest.requests) {
+      throw new Error("Only Sanctum's Assistant brings sentences");
+    }
+    const issues = sentenceIssues(manifest.sentences);
+    if (issues.length > 0) throw new Error(issues.join("; "));
   }
   const actions = new Map<string, DeclaredAction>(
     manifest.actions.map((action) => [

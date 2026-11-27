@@ -297,8 +297,10 @@ function declinedWords(reason: string | null) {
   switch (reason) {
     case "assistant_off":
       return "The Assistant is off";
+    case "no_sentences":
+      return "The Assistant doesn't understand the home's language yet";
     case "no_speech_to_text":
-      return "Speech recognition isn't running";
+      return "Speech recognition isn't ready";
     case "limited":
       return "It had too many requests in the last minute";
     default:

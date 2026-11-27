@@ -1,39 +1,110 @@
-import { announcePermission } from "@meetsanctum/app-sdk";
+import {
+  announcePermission,
+  assistantAppId,
+  type RequestLanguage,
+} from "@meetsanctum/app-sdk";
 
 import type { AgentsCanUse } from "../agents/can-use.js";
 import type { ManagerClient } from "../manager.js";
 import { createAnnouncements } from "./announcements.js";
-import { assembleHearing } from "./hearing.js";
+import { assembleHearing, hasListeningPart } from "./hearing.js";
+import { createLearning } from "./learning.js";
 import { createSpeech, speechLanguages, speechService } from "./speech.js";
 import { spokenPhrases } from "./spoken.js";
 
 type HearingOptions = Parameters<typeof assembleHearing>[0];
 
+// Smart speakers' sound, both ways: what Sanctum says on them (speech.ts),
+// the runs their drivers open (hearing.ts) and what speech recognition knows
+// (learning.ts). Speech owns whether Piper runs, and learning whether
+// Speech-to-Phrase does: Piper runs for announcements, or while speech
+// recognition does, for the replies.
 export function assembleSpeakerAudio(
   config: Pick<
     Parameters<typeof assembleSpeech>[0],
     "speaker" | "manager" | "log"
   > &
-    Pick<HearingOptions, "transcriber">,
+    Pick<HearingOptions, "transcriber"> & {
+      manager: Partial<Pick<ManagerClient, "serviceConnection">>;
+      // Speaker requests use English.
+      language?: () => RequestLanguage;
+      speechRetrainAfterMs?: number;
+    },
   options: Pick<HearingOptions, "devices" | "places" | "apps" | "record"> & {
     canUse: Pick<AgentsCanUse, "areaOn">;
   },
 ) {
+  const { manager } = config;
+  const language = config.language ?? (() => "en" as const);
+  const { devices, places, apps } = options;
+  const learning =
+    manager.serviceConnection &&
+    manager.wantServiceForCore &&
+    manager.releaseServiceForCore
+      ? createLearning({
+          manager: {
+            serviceConnection: manager.serviceConnection,
+            wantServiceForCore: manager.wantServiceForCore,
+            releaseServiceForCore: manager.releaseServiceForCore,
+          },
+          sentences: () =>
+            apps().answersRequests()
+              ? (apps().manifest(assistantAppId)?.sentences ?? null)
+              : null,
+          names: () => {
+            const { rooms, floors } = places.list();
+            return {
+              room: rooms.map((room) => room.name),
+              floor: floors.map((floor) => floor.name),
+              light: devices
+                .list()
+                .filter((device) =>
+                  device.capabilities.some((part) => part.kind === "light"),
+                )
+                .map((device) => device.name),
+              // A standard mood type will name the home's moods.
+              mood: [],
+            };
+          },
+          language,
+          onWanted: () => speech.speech?.hearingChanged(),
+          speakersListen: () => devices.list().some(hasListeningPart),
+          retrainAfterMs: config.speechRetrainAfterMs,
+          log: config.log,
+        })
+      : undefined;
   const speech = assembleSpeech({
     speaker: config.speaker,
-    manager: config.manager,
+    manager,
     log: config.log,
-    devices: options.devices,
+    devices,
     areaOn: () => options.canUse.areaOn(announcePermission),
-    hears: () => Boolean(config.transcriber?.()),
+    hears: () =>
+      config.transcriber
+        ? Boolean(config.transcriber())
+        : (learning?.wanted() ?? false),
   });
   const hearing = assembleHearing({
     ...options,
-    transcriber: config.transcriber,
+    transcriber: config.transcriber ?? (() => learning?.transcriber() ?? null),
+    notHearing: () => learning?.notHearing() ?? "no_speech_to_text",
+    language,
     log: config.log,
     speech: () => speech.speech,
   });
-  return { ...speech, ...hearing };
+  return {
+    ...speech,
+    ...hearing,
+    learning,
+    async startSpeech() {
+      await speech.startSpeech();
+      learning?.start();
+    },
+    async stopSpeech() {
+      learning?.stop();
+      await speech.stopSpeech();
+    },
+  };
 }
 
 export function assembleSpeech(options: {

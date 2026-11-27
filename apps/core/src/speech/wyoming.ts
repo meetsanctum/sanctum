@@ -17,7 +17,12 @@ const maxHeaderBytes = 64 * 1024;
 /** The most audio one answer may hold, in bytes (about 5 minutes). */
 const maxAudioBytes = 16 * 1024 * 1024;
 
-type Event = { type: string; data: Record<string, unknown>; payload: Buffer };
+export type WyomingEvent = {
+  type: string;
+  data: Record<string, unknown>;
+  payload: Buffer;
+};
+type Event = WyomingEvent;
 
 function parsed(bytes: Buffer): unknown {
   try {
@@ -28,7 +33,7 @@ function parsed(bytes: Buffer): unknown {
 }
 
 /** Reads Wyoming events from a socket's bytes as they come. */
-function createReader() {
+export function createReader() {
   let buffered: Buffer = Buffer.alloc(0);
   return {
     push(bytes: Buffer) {

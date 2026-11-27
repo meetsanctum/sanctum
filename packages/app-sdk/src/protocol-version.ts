@@ -49,6 +49,8 @@
 // 26 lets a smart speaker ask: a request says where it was asked from and,
 // from a speaker, in which room, in place of the client's name, and a reply
 // may say it only confirms what worked.
-export const protocolVersion = 26;
+// 27 lets the Assistant bring the sentences a smart speaker understands, in
+// its manifest.
+export const protocolVersion = 27;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 11;
