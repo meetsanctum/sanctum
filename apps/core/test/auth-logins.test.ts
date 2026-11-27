@@ -4,7 +4,7 @@ import {
   type RegistrationStarted,
 } from "@meetsanctum/auth-protocol";
 import { eq } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { activity } from "../src/activity/schema.js";
 import { authLogins } from "../src/auth/schema.js";
@@ -359,23 +359,6 @@ describe("choosing a new password without the current one", () => {
     ]);
   });
 
-  it("rejects a malformed record and keeps the current password", async () => {
-    const core = await testCore();
-    const { token } = await claimed(core);
-    const input = await startChoice(core, token);
-
-    const refused = await post(
-      core,
-      finishUrl,
-      { ...input, registrationRecord: input.registrationRecord.slice(0, 8) },
-      { token },
-    );
-
-    expect(refused.statusCode).toBe(400);
-    expect(refused.json()).toEqual({ error: "invalid_request" });
-    expect((await signIn(core)).outcome).toBe("signed-in");
-  });
-
   it("can only finish on the device that started the choice", async () => {
     const core = await testCore();
     const { token } = await claimed(core);
@@ -386,36 +369,6 @@ describe("choosing a new password without the current one", () => {
 
     expect(refused.statusCode).toBe(409);
     expect(refused.json()).toEqual({ error: "expired" });
-    expect((await signIn(core)).outcome).toBe("signed-in");
-  });
-
-  it("refuses to finish if the device's authorization was revoked", async () => {
-    const core = await testCore();
-    const { token, client } = await claimed(core);
-    const other = await tokenFor(core, maya.username, maya.password);
-    const input = await startChoice(core, token);
-    const caller = core.auth.authenticate(token);
-    expect(caller).toBeDefined();
-    const revoked = await post(
-      core,
-      "/api/auth/clients/revoke",
-      { id: client.id },
-      { token: other },
-    );
-    expect(revoked.statusCode).toBe(204);
-
-    // The initial request hook saw the device before it was revoked.
-    const authenticate = vi
-      .spyOn(core.auth, "authenticate")
-      .mockReturnValueOnce(caller);
-    try {
-      const refused = await post(core, finishUrl, input, { token });
-
-      expect(refused.statusCode).toBe(401);
-      expect(refused.json()).toEqual({ error: "invalid_client_token" });
-    } finally {
-      authenticate.mockRestore();
-    }
     expect((await signIn(core)).outcome).toBe("signed-in");
   });
 

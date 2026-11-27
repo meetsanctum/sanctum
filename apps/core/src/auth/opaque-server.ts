@@ -18,24 +18,6 @@ function protocol<T>(step: () => T) {
 }
 
 export function createOpaqueServer(serverSetup: string, limiter: Limiter) {
-  // With no record, a made-up response that looks like a real one.
-  function startLogin(
-    identifier: string,
-    record: string | null,
-    startLoginRequest: string,
-  ) {
-    limiter.work();
-    return protocol(() =>
-      opaque.server.startLogin({
-        serverSetup,
-        registrationRecord: record,
-        startLoginRequest,
-        userIdentifier: identifier,
-      }),
-    );
-  }
-
-  let validationRequest: string | undefined;
   return {
     registrationResponse(identifier: string, registrationRequest: string) {
       limiter.work();
@@ -48,15 +30,21 @@ export function createOpaqueServer(serverSetup: string, limiter: Limiter) {
       ).registrationResponse;
     },
 
-    startLogin,
-
-    validateRegistrationRecord(identifier: string, record: string) {
-      // OPAQUE reads the record when starting a sign-in. A throwaway request
-      // lets it check the record without needing anyone's password.
-      validationRequest ??= opaque.client.startLogin({
-        password: "",
-      }).startLoginRequest;
-      startLogin(identifier, record, validationRequest);
+    // With no record, a made-up response that looks like a real one.
+    startLogin(
+      identifier: string,
+      record: string | null,
+      startLoginRequest: string,
+    ) {
+      limiter.work();
+      return protocol(() =>
+        opaque.server.startLogin({
+          serverSetup,
+          registrationRecord: record,
+          startLoginRequest,
+          userIdentifier: identifier,
+        }),
+      );
     },
 
     // The session key, or none when the device's last message does not check.

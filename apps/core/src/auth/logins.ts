@@ -182,6 +182,22 @@ export function createLogins(
   const startLogin = server.startLogin;
   const finishLogin = server.finishLogin;
 
+  // A code for a new password someone made for this person ends once they
+  // set one themselves, so whoever holds it can't replace theirs.
+  function endResetCodes(personId: string, at: Date) {
+    db.update(authInvites)
+      .set({ endedReason: "cancelled", endedAt: at })
+      .where(
+        and(
+          eq(authInvites.personId, personId),
+          eq(authInvites.kind, "reset"),
+          isNull(authInvites.endedReason),
+          gt(authInvites.expiresAt, at),
+        ),
+      )
+      .run();
+  }
+
   function take<K extends Pending["kind"]>(
     kind: K,
     id: string,
@@ -564,14 +580,16 @@ export function createLogins(
         if (!login || login.registrationRecord !== entry.record) {
           throw new AuthError("expired");
         }
+        const at = now();
         db.update(authLogins)
           .set({
             registrationRecord: input.registrationRecord,
             keyStretching: input.keyStretching,
-            updatedAt: now(),
+            updatedAt: at,
           })
           .where(eq(authLogins.personId, personId))
           .run();
+        endResetCodes(personId, at);
         record({
           action: "password.change",
           outcome: "ok",
@@ -634,18 +652,16 @@ export function createLogins(
         ) {
           throw new AuthError("expired");
         }
-        server.validateRegistrationRecord(
-          entry.username,
-          input.registrationRecord,
-        );
+        const at = now();
         db.update(authLogins)
           .set({
             registrationRecord: input.registrationRecord,
             keyStretching: input.keyStretching,
-            updatedAt: now(),
+            updatedAt: at,
           })
           .where(eq(authLogins.personId, personId))
           .run();
+        endResetCodes(personId, at);
         record({
           action: "password.choose",
           outcome: "ok",

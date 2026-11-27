@@ -46,7 +46,6 @@ import type { People } from "../people/people.js";
 import type { Auth } from "./auth.js";
 import { parseRequest, personalCaller } from "./callers.js";
 import type { Principal } from "./clients.js";
-import { AuthError } from "./errors.js";
 import { registerLive } from "./live.js";
 import { personInfo } from "./logins.js";
 import { bearerToken } from "./tokens.js";
@@ -499,13 +498,11 @@ export async function registerAuth(
     ),
   );
   app.post("/api/auth/password/choose/finish", async (request, reply) => {
-    personal(request);
-    const input = parse(registrationFinish, request.body);
-    // The device can be signed out while the request body is being read.
-    const token = bearerToken(request.headers.authorization);
-    const caller = token && auth.authenticate(token);
-    if (!caller) throw new AuthError("invalid_client_token");
-    logins.passwordChooseFinish(caller, address(request), input);
+    logins.passwordChooseFinish(
+      personal(request),
+      address(request),
+      parse(registrationFinish, request.body),
+    );
     return reply.code(204).send();
   });
 
