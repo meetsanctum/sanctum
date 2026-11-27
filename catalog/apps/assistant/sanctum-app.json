@@ -1,7 +1,7 @@
 {
   "id": "sanctum.assistant",
   "name": "Assistant",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "core": "^2.0.0",
   "protocol": 28,
   "summary": "Controls lights by voice or typed request.",
@@ -92,13 +92,30 @@
       "needed": true,
       "asked": null,
       "startsOn": false
+    },
+    {
+      "id": "devices.read:audio",
+      "reason": "To list your smart speakers on its page.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
+    },
+    {
+      "id": "places.read",
+      "reason": "To say which room each smart speaker is in.",
+      "needed": true,
+      "asked": null,
+      "startsOn": false
     }
   ],
   "icon": {
     "glyph": "message-circle-more",
     "color": "iris"
   },
-  "pages": [],
+  "pages": [
+    "main",
+    "setup"
+  ],
   "settings": null,
   "actions": [
     {

@@ -380,6 +380,10 @@ function Framed(props: {
                     }
                     back={() => send({ type: "back" })}
                     openSettings={() => send({ type: "openSettings" })}
+                    openDevice={(device) =>
+                      send({ type: "openDevice", device })
+                    }
+                    addDevices={() => send({ type: "addDevices" })}
                   />
                 </main>
               ) : null}

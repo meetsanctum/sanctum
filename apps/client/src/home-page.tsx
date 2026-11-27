@@ -288,6 +288,14 @@ function HomePageWithDevices({
               open={opener(route.app)}
               back={back}
               openSettings={settingsOf(route.app)}
+              openDevice={(id) => {
+                // A device's detail opens on its first tile, as from a room.
+                const tile = devices.tiles.find((each) => each.deviceId === id);
+                if (tile) openRoomDevice(tile);
+              }}
+              addDevices={() =>
+                opener(settingsApp.id)(devicesSettingsPage, { add: "true" })
+              }
               mode={deviceMode}
               household={devices.places?.home}
               isAway={isVeiled}

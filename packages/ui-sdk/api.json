@@ -1,5 +1,5 @@
 {
-  "version": "0.1.39",
+  "version": "0.1.40",
   "react": "19.3.1",
   "exports": {
     "@meetsanctum/ui-sdk": [
@@ -2320,6 +2320,8 @@
       "    open(page: string, params?: PageParams): void;",
       "    back(): void;",
       "    openSettings(): void;",
+      "    openDevice(device: string): void;",
+      "    addDevices(): void;",
       "};",
       "export type DevicePageProps = {",
       "    device: DeviceInfo;",
@@ -2788,6 +2790,11 @@
       "    type: \"back\";",
       "} | {",
       "    type: \"openSettings\";",
+      "} | {",
+      "    type: \"openDevice\";",
+      "    device: string;",
+      "} | {",
+      "    type: \"addDevices\";",
       "} | {",
       "    type: \"ready\";",
       "} | {",

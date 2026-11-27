@@ -3,6 +3,8 @@ import {
   assistantAppId,
   defineAction,
   defineApp,
+  placesReadPermission,
+  readPermission,
   requestLanguages,
 } from "@meetsanctum/app-sdk";
 import { z } from "zod";
@@ -15,7 +17,8 @@ import { notUnderstood, sentences } from "./sentences.js";
 // sentences, in English and German, and does what they ask through the
 // tools every AI agent gets: lights on, off, brighter, dimmer or to a
 // brightness, for the speaker's room, a room, a floor, a light or the whole
-// home, and putting back what it changed. It asks no model.
+// home, and putting back what it changed. It asks no model. Its page is in
+// ./ui.
 
 /** Sets the home's one language, which smart speakers hear and speak. */
 const language = defineAction({
@@ -33,14 +36,26 @@ const language = defineAction({
 export const app = defineApp({
   id: assistantAppId,
   name: "Assistant",
-  version: "0.1.0",
+  // 0.2.0: its page, which lists the smart speakers by room.
+  version: "0.2.0",
   core: "^2.0.0",
   summary: "Controls lights by voice or typed request.",
   icon: { glyph: "message-circle-more", color: "iris" },
+  pages: ["main", "setup"],
   permissions: [
     {
       id: aiAssistantPermission,
       reason: "To do what you ask, with what AI agents may use.",
+      needed: true,
+    },
+    {
+      id: readPermission("audio"),
+      reason: "To list your smart speakers on its page.",
+      needed: true,
+    },
+    {
+      id: placesReadPermission,
+      reason: "To say which room each smart speaker is in.",
       needed: true,
     },
   ],

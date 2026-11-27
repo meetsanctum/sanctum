@@ -565,6 +565,52 @@ describe("the shell's end", () => {
     expect(shellEvents.filter((event) => event.type === "bar")).toEqual([]);
   });
 
+  it("opens only a device the app may read, and Add devices", async () => {
+    const speaker = {
+      id: "speaker",
+      driver: "sanctum.esphome",
+      capabilities: [{ id: "audio", kind: "audio", features: {}, state: {} }],
+    } as unknown as DeviceInfo;
+    const lamp = {
+      id: "lamp",
+      driver: "sanctum.zigbee",
+      capabilities: [{ id: "light", kind: "light", features: {}, state: {} }],
+    } as unknown as DeviceInfo;
+    json.mockImplementation(async (path: string) =>
+      path === "/api/devices" ? [speaker, lamp] : [],
+    );
+    const { port } = await framePort({
+      ...info,
+      permissions: ["devices.read:audio"],
+    });
+    port.postMessage({ type: "openDevice", device: "lamp" });
+    port.postMessage({ type: "openDevice", device: 7 });
+    port.postMessage({ type: "openDevice", device: "speaker" });
+    port.postMessage({ type: "addDevices" });
+    await vi.waitFor(() =>
+      expect(
+        shellEvents.filter(({ type }) =>
+          ["openDevice", "addDevices"].includes(type),
+        ),
+      ).toEqual(
+        expect.arrayContaining([
+          { type: "addDevices" },
+          { type: "openDevice", device: "speaker" },
+        ]),
+      ),
+    );
+    expect(shellEvents.filter(({ type }) => type === "openDevice")).toEqual([
+      { type: "openDevice", device: "speaker" },
+    ]);
+  });
+
+  it("opens no device for an app that may read none", async () => {
+    const { port } = await framePort();
+    port.postMessage({ type: "openDevice", device: "speaker" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(shellEvents.filter(({ type }) => type === "openDevice")).toEqual([]);
+  });
+
   it("believes no height but a whole one up to its limit, and no key but Escape", async () => {
     const { port } = await framePort();
     for (const height of [-1, 1.5, tallest + 1, "10"]) {

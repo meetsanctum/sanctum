@@ -34,6 +34,8 @@ export type FrameEvent =
   | { type: "open"; page: string; params: PageParams }
   | { type: "back" }
   | { type: "openSettings" }
+  | { type: "openDevice"; device: string }
+  | { type: "addDevices" }
   | { type: "size"; height: number }
   | { type: "key"; key: "Escape" };
 
@@ -124,8 +126,11 @@ export function openBridge(options: {
         return;
       case "back":
       case "openSettings":
+      case "addDevices":
       case "ready":
         return on({ type: message.type });
+      case "openDevice":
+        return void openDevice(message.device);
       case "size": {
         const { height } = message;
         if (
@@ -146,6 +151,19 @@ export function openBridge(options: {
           type: "failed",
           reason: message.reason === "stopped" ? "stopped" : "files",
         });
+    }
+  }
+
+  // A device the app may read, as its own client lists them: any other id
+  // opens nothing.
+  async function openDevice(device: unknown) {
+    if (!isText(device)) return;
+    try {
+      const readable = await client().devices();
+      if (isClosed || !readable.some(({ id }) => id === device)) return;
+      on({ type: "openDevice", device });
+    } catch {
+      // A page that can't read devices opens none.
     }
   }
 

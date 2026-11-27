@@ -30,6 +30,9 @@ export function AppFrame(props: {
   open: (page: string, params?: PageParams) => void;
   back: () => void;
   openSettings: () => void;
+  /** Opens a device's detail, one the app may read, as the bridge checks. */
+  openDevice: (device: string) => void;
+  addDevices: () => void;
   mode: FrameContext["mode"];
   /** How the household reads things: its unit, its zone and its hours. */
   household: FrameHousehold | undefined;
@@ -67,6 +70,10 @@ export function AppFrame(props: {
           return latest.current.back();
         case "openSettings":
           return latest.current.openSettings();
+        case "openDevice":
+          return latest.current.openDevice(event.device);
+        case "addDevices":
+          return latest.current.addDevices();
       }
     },
   });

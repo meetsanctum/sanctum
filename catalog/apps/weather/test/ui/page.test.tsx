@@ -166,6 +166,8 @@ async function show(
               open={() => {}}
               back={() => {}}
               openSettings={() => {}}
+              openDevice={() => {}}
+              addDevices={() => {}}
             />
           </AppScope>
         </HomeTimeZoneProvider>

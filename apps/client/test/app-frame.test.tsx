@@ -114,6 +114,8 @@ async function show(
         open={() => {}}
         back={() => {}}
         openSettings={() => {}}
+        openDevice={() => {}}
+        addDevices={() => {}}
         mode="day"
         household={options.household}
         isAway={options.isAway ?? false}
