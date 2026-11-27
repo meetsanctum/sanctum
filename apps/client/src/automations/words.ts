@@ -14,6 +14,8 @@ import { pressLabel } from "@meetsanctum/ui-sdk";
 
 import { compare, list, number, plural } from "@meetsanctum/app-sdk/words";
 
+const compareNames = compare("en");
+
 /**
  * Whether a capability fits a device field: the state it compares, and the
  * command a step sends, which it must be able to do by the features its
@@ -546,5 +548,5 @@ export function compareGroups(a: string, b: string) {
       ? firstGroups.length
       : firstGroups.length + 1;
   };
-  return rank(a) - rank(b) || compare("en")(a, b);
+  return rank(a) - rank(b) || compareNames(a, b);
 }

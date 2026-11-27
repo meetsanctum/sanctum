@@ -14,6 +14,8 @@ import {
 } from "../moods/light-states.js";
 import type { Light } from "../targets.js";
 
+const compareNames = compare("en");
+
 // The mood editor's draft: each of the room's lights on or off, with the
 // level and colour it has when on, kept while it is off so it comes back
 // on as it was.
@@ -42,7 +44,7 @@ export function roomLights(
     )
     .sort(
       (a, b) =>
-        compare("en")(a.device.name, b.device.name) ||
+        compareNames(a.device.name, b.device.name) ||
         a.capability.id.localeCompare(b.capability.id),
     );
 }

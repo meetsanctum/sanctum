@@ -1,11 +1,12 @@
-import type { RoomRemoval } from "@meetsanctum/app-sdk";
-import { compare } from "@meetsanctum/app-sdk/words";
+import { compare, type RoomRemoval } from "@meetsanctum/app-sdk";
 
 import type { AppHost } from "../app-host/host.js";
 import type { Devices } from "../devices/devices.js";
 import type { Entities } from "../entities/entities.js";
 import type { Workflows } from "../workflows/workflows.js";
 import { PlacesError, type PlacesModule } from "./places.js";
+
+const compareNames = compare("en");
 
 // What removing a room takes with it, for the warning someone reads before
 // removing it; nothing changes here. Its devices move to No room and stay
@@ -32,7 +33,7 @@ export function roomRemoval(
     .list()
     .filter((device) => device.roomId === roomId)
     .map(({ id, name }) => ({ id, name }))
-    .sort((a, b) => compare("en")(a.name, b.name));
+    .sort((a, b) => compareNames(a.name, b.name));
 
   const titles = new Map<string, string>(
     modules.apps

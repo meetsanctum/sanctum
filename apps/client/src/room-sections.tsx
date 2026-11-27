@@ -20,6 +20,8 @@ import { isShown, looksRunning, stateShort } from "./app-state";
 import { coreJson } from "./core-fetch";
 import { tileKey } from "./device-tiles";
 
+const compareNames = compare("en");
+
 // Apps' room sections: the shell draws each from the app's entities of the
 // section's type in the room, in the room's row (RoomRow): buttons as chips
 // and tiles with their names under them. No app
@@ -125,7 +127,7 @@ export function useSectionEntities(
         .sort(
           (a, b) =>
             a.tile.order - b.tile.order ||
-            compare("en")(a.tile.name, b.tile.name),
+            compareNames(a.tile.name, b.tile.name),
         ),
     [entities],
   );

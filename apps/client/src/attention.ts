@@ -29,6 +29,8 @@ import {
   type ServiceNotSetUp,
 } from "./system-status";
 
+const compareNames = compare("en");
+
 // What needs attention: the apps that aren't running and the devices that
 // need someone to do something, the most pressing first, in the words
 // Settings' section and the dashboard's Attention tile share. Each is a
@@ -74,7 +76,7 @@ export function needingAttention(
     .sort(
       (a, b) =>
         rank[a.reasons[0]!] - rank[b.reasons[0]!] ||
-        compare("en")(a.device.name, b.device.name),
+        compareNames(a.device.name, b.device.name),
     );
 }
 
@@ -120,7 +122,7 @@ export function appsNotRunning(
   const rank = (app: AppInfo) => (isStopped(app) ? 0 : 1);
   return apps
     .filter((app) => worthTelling(app, notSetUp))
-    .sort((a, b) => rank(a) - rank(b) || compare("en")(a.name, b.name));
+    .sort((a, b) => rank(a) - rank(b) || compareNames(a.name, b.name));
 }
 
 // When it began waiting, on the home clock.

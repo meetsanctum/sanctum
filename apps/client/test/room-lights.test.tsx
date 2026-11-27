@@ -356,7 +356,7 @@ describe("a room's Lights tile", () => {
     ).toBe("true");
 
     await click(button("White", dialog()!));
-    await click(button(`${new Intl.NumberFormat().format(2000)} K`, dialog()!));
+    await click(button("2,000 K", dialog()!));
     expect(posted()).toEqual([
       {
         place: { kind: "room", id: "office" },

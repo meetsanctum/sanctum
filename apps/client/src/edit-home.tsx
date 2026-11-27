@@ -14,6 +14,8 @@ import type { OnHome } from "./dashboards";
 import { homePlaces } from "./home-dashboard";
 import type { Devices } from "./use-devices";
 
+const compareNames = compare("en");
+
 // Edit Home, from Home's ⋮ menu: each room by name, then devices with no
 // room, with its devices on Home in their order and under them those that
 // are not. A device's round turns − or + to take it off Home or put it
@@ -80,7 +82,7 @@ export function EditHome(props: { devices: Devices; home: OnHome }) {
         (device) =>
           roomOf(device) === (place.room?.id ?? null) && !onHome.has(device.id),
       )
-      .sort((a, b) => compare("en")(a.name, b.name))
+      .sort((a, b) => compareNames(a.name, b.name))
       .map((device) => ({ device, tile: firstTile(device.id) }));
     return shownOnHome.length + others.length > 0
       ? [{ ...place, shownOnHome, others }]

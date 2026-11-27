@@ -3,6 +3,8 @@ import { compare } from "@meetsanctum/ui-sdk";
 
 import type { PressPlace } from "../presses/presses.js";
 
+const compareNames = compare("en");
+
 // The lights a press can be for, on its Which lights page: offered by
 // room, with a choice of them kept each once and in a stable order.
 
@@ -83,7 +85,7 @@ export function lightGroups(
     (a, b) => Number(b.id === firstRoomId) - Number(a.id === firstRoomId),
   );
   const options = lightOptions(devices).sort((a, b) =>
-    compare("en")(a.name, b.name),
+    compareNames(a.name, b.name),
   );
   const groups = rooms.map((room) => ({
     id: room.id,

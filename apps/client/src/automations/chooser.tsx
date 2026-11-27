@@ -34,6 +34,8 @@ import {
   type Names,
 } from "./words";
 
+const compareNames = compare("en");
+
 // Add a trigger, a condition or a step: what it's about first, a room's
 // devices like the sidebar lists them, then the apps' pieces and the core's
 // own by their groups. Each entry is a piece or one of its presets, with
@@ -215,7 +217,7 @@ function sectionsFor(
 
   // A room's devices and lights, in the sidebar's order.
   const rooms = [...(home.places?.rooms ?? [])].sort((a, b) =>
-    compare("en")(a.name, b.name),
+    compareNames(a.name, b.name),
   );
   const roomSections: Section[] = rooms.map((room) => {
     const entries: Entry[] = [];

@@ -545,7 +545,8 @@ export function tilesOf(
   });
 }
 
-const byName = (a: Tile, b: Tile) => compare("en")(a.name, b.name);
+const compareNames = compare("en");
+const byName = (a: Tile, b: Tile) => compareNames(a.name, b.name);
 
 /** Tiles in a section for each room, in the order of the home's rooms; those without a room come last. */
 /** The id of the section of tiles in no room, among rooms' sections. */

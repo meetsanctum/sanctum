@@ -1,4 +1,5 @@
 import {
+  compare,
   homeLocationSchema,
   temperatureUnits,
   type Floor,
@@ -12,7 +13,6 @@ import { homeClock, hourCycles } from "@meetsanctum/app-sdk/clock";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { compare } from "@meetsanctum/app-sdk/words";
 
 import type {
   ActivityAuthor,
@@ -177,8 +177,9 @@ export type LocationChange = {
   after: HomeLocation | null;
 };
 
+const compareNames = compare("en");
 const byName = <T extends { name: string }>(a: T, b: T) =>
-  compare("en")(a.name, b.name);
+  compareNames(a.name, b.name);
 
 /**
  * The rooms a room, a floor or a zone covers in these places, or undefined

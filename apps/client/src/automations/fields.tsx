@@ -31,6 +31,8 @@ import {
   type FieldSchema,
 } from "./words";
 
+const compareNames = compare("en");
+
 // The control for one field of a piece's config, chosen by the marker its
 // JSON Schema carries: it opens from the field's token in a sentence, and
 // shows in All options beside the field's title. A value is applied as it
@@ -573,8 +575,8 @@ export function FieldControl(props: {
             options={[...devices]
               .sort(
                 (a, b) =>
-                  compare("en")(roomName(a.roomId), roomName(b.roomId)) ||
-                  compare("en")(a.name, b.name),
+                  compareNames(roomName(a.roomId), roomName(b.roomId)) ||
+                  compareNames(a.name, b.name),
               )
               .map((device) => ({
                 value: device.id,
@@ -646,7 +648,7 @@ export function FieldControl(props: {
           options={home.entities
             .filter((entity) => entity.type === kind.type)
             .map((entity) => ({ value: entity.key, label: entity.name }))
-            .sort((a, b) => compare("en")(a.label, b.label))}
+            .sort((a, b) => compareNames(a.label, b.label))}
           selected={props.value as string | undefined}
           onSelect={props.onChange}
         />

@@ -11,6 +11,8 @@ import { useCallback, useEffect, useState } from "react";
 import type { Preview } from "../preview.js";
 import type { TargetState } from "../target.js";
 
+const compareNames = compare("en");
+
 // What natural light's page shows: the lights that take a colour
 // temperature, by room once it may read the home's rooms, where each that
 // follows the curve stands (its own naturalLight.target entities), whether
@@ -184,7 +186,7 @@ export function useNaturalLight(): NaturalLightView {
           : [];
       }),
     )
-    .sort((a, b) => compare("en")(a.name, b.name));
+    .sort((a, b) => compareNames(a.name, b.name));
   const rooms = places ? roomsOf(places, lights) : null;
 
   const follow = useCallback(

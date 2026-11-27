@@ -13,6 +13,8 @@ import { compare } from "@meetsanctum/app-sdk/words";
 import { AppIcon, plainIcon } from "./app-icon";
 import type { Route } from "./apps";
 
+const compareNames = compare("en");
+
 /** Where Apps is on show, as a route's app. */
 export const appsPage = "sanctum.apps";
 
@@ -44,7 +46,7 @@ export function listedApps(
       icon: info.icon ?? plainIcon,
       onOpen: () => show([{ app: info.id, page: mainPage, params: {} }]),
     })),
-  ].sort((a, b) => compare("en")(a.name, b.name));
+  ].sort((a, b) => compareNames(a.name, b.name));
 }
 
 /** The app on show: the one whose page it is. */

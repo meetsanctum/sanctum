@@ -1,4 +1,5 @@
 import {
+  compare,
   capabilityOf,
   isCapabilityKind,
   shownAsOf,
@@ -9,7 +10,6 @@ import {
   type DriverCommand,
 } from "@meetsanctum/app-sdk";
 import { and, asc, eq } from "drizzle-orm";
-import { compare } from "@meetsanctum/app-sdk/words";
 
 import type {
   Activity,
@@ -51,6 +51,8 @@ import {
   type Settled,
 } from "./sync.js";
 import { deviceInfo, viewOf, type View } from "./views.js";
+
+const compareNames = compare("en");
 
 // The Devices module: the registry of what driver apps bring in, their typed
 // capabilities, state and commands, and the Drivers contract. A driver
@@ -178,7 +180,7 @@ export function createDevices(
     return reads
       .everyDevice()
       .map((device) => deviceInfo(device, byDevice.get(device.id) ?? []))
-      .sort((a, b) => compare("en")(a.name, b.name));
+      .sort((a, b) => compareNames(a.name, b.name));
   }
 
   function loadAll(): DeviceInfo[] {

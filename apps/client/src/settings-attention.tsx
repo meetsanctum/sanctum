@@ -46,6 +46,8 @@ import { SanctumAttentionRow } from "./settings-status";
 import type { SystemStatus } from "./system-status";
 import { compare, list, plural } from "@meetsanctum/app-sdk/words";
 
+const compareNames = compare("en");
+
 // Settings' Needs attention: first on the page while Sanctum itself, any app
 // or any device needs someone. Sanctum leads, with its first problem, and
 // opens System, where each says what to do. Each app that isn't running
@@ -199,7 +201,7 @@ export function NeedsAttentionSection(props: {
     const second = positionOf(b);
     return (
       rankOf(first.reason) - rankOf(second.reason) ||
-      compare("en")(first.name, second.name)
+      compareNames(first.name, second.name)
     );
   });
   const sanctum =

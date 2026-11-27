@@ -1,11 +1,13 @@
+import { compare } from "@meetsanctum/app-sdk";
 import { eq } from "drizzle-orm";
-import { compare } from "@meetsanctum/app-sdk/words";
 
 import type { RecordActivity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
 import type { WorkflowRow } from "./engine.js";
 import type { Pieces } from "./pieces.js";
 import { jobs, workflows, workflowsOffForApps } from "./schema.js";
+
+const compareNames = compare("en");
 
 // What removing an app, and adding it back, does to workflows. The workflows
 // and jobs the app keeps go with it: an app publishes all it keeps as it
@@ -46,7 +48,7 @@ export function createWorkflowsForApps(options: {
     using(app: string, deviceIds: readonly string[]) {
       return using(app, deviceIds)
         .map(({ id, name, enabled }) => ({ id, name, enabled }))
-        .sort((a, b) => compare("en")(a.name, b.name));
+        .sort((a, b) => compareNames(a.name, b.name));
     },
 
     /**

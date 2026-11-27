@@ -1,4 +1,5 @@
 import {
+  compare,
   keptWorkflow,
   runModes,
   workflowGraph,
@@ -12,7 +13,6 @@ import { hostTimeZone } from "@meetsanctum/app-sdk/clock";
 import { and, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { compare } from "@meetsanctum/app-sdk/words";
 
 import type { Activity, RecordActivity } from "../activity/activity.js";
 import type { Rule } from "../app-host/gate.js";
@@ -34,6 +34,8 @@ import { createPieces } from "./pieces.js";
 import { createRuns } from "./runs.js";
 import { workflows, workflowsOffForApps } from "./schema.js";
 import { createTimers, lateness } from "./timers.js";
+
+const compareNames = compare("en");
 
 // The Workflows module: the household's rules and apps' jobs. It keeps
 // workflows, fires their triggers from app events, device and entity
@@ -326,7 +328,7 @@ export function createWorkflows(
 
   const module = {
     list(): WorkflowInfo[] {
-      return infos(rows()).sort((a, b) => compare("en")(a.name, b.name));
+      return infos(rows()).sort((a, b) => compareNames(a.name, b.name));
     },
 
     get(workflowId: string): WorkflowInfo {
@@ -360,7 +362,7 @@ export function createWorkflows(
           id: workflowId,
           name: workflowName,
         }))
-        .sort((a, b) => compare("en")(a.name, b.name));
+        .sort((a, b) => compareNames(a.name, b.name));
     },
 
     /** The pieces a workflow may use now (GET /api/workflows/pieces). */
@@ -690,7 +692,7 @@ export function createWorkflows(
           rows().filter((workflow) => workflow.app === app),
           undefined,
           view,
-        ).sort((a, b) => compare("en")(a.name, b.name));
+        ).sort((a, b) => compareNames(a.name, b.name));
       },
     },
 

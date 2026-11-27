@@ -42,7 +42,8 @@ export function lowBatteryText(battery?: number) {
     : `Battery low, ${battery}%: replace it soon`;
 }
 
-const byName = (a: DeviceInfo, b: DeviceInfo) => compare("en")(a.name, b.name);
+const compareNames = compare("en");
+const byName = (a: DeviceInfo, b: DeviceInfo) => compareNames(a.name, b.name);
 
 /**
  * Every device on a battery, the next to replace first: quiet ones, the

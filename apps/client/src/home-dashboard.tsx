@@ -41,6 +41,8 @@ import {
 import { sameData, sameItems } from "./same-data";
 import { useTileHandlers, type Devices } from "./use-devices";
 
+const compareNames = compare("en");
+
 // Home's rooms: after the home's status, each room by name that has
 // something to show, under its name, which opens its page. A room's line
 // says what its motion and sensors say, as its page's header does; then its
@@ -333,7 +335,7 @@ export function homePlaces(
     .sort(
       (a, b) =>
         position.get(a.deviceId)! - position.get(b.deviceId)! ||
-        compare("en")(a.name, b.name),
+        compareNames(a.name, b.name),
     );
   const rooms = devices.places?.rooms ?? [];
   return [

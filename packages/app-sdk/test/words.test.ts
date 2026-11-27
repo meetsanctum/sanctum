@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { dateFormatter } from "../src/date-format.js";
 import { compare, date, list, number, plural } from "../src/words.js";
 
 // Numbers, counts, lists, dates and the order of names, each as the
@@ -10,6 +11,14 @@ describe("a language's words", () => {
     expect(number("en", 1250.5)).toBe("1,250.5");
     expect(number("de", 1250.5)).toBe("1.250,5");
     expect(number("en", 2.345, { maximumFractionDigits: 1 })).toBe("2.3");
+  });
+
+  it("distinguishes number formats with inherited options", () => {
+    const percent: Intl.NumberFormatOptions = Object.create({
+      style: "percent",
+    });
+    expect(number("en", 0.5)).toBe("0.5");
+    expect(number("en", 0.5, percent)).toBe("50%");
   });
 
   it("gives a count the noun its number takes", () => {
@@ -39,6 +48,43 @@ describe("a language's words", () => {
     } as const;
     expect(date("en", at, options)).toBe("27 November");
     expect(date("de", at, options)).toBe("27. November");
+  });
+
+  it("distinguishes date formats with inherited time zones", () => {
+    const at = Date.UTC(2026, 10, 27, 2);
+    const options = { day: "numeric", month: "short" } as const;
+    const utc: Intl.DateTimeFormatOptions = Object.assign(
+      Object.create({ timeZone: "UTC" }),
+      options,
+    );
+    const losAngeles: Intl.DateTimeFormatOptions = Object.assign(
+      Object.create({ timeZone: "America/Los_Angeles" }),
+      options,
+    );
+    expect(date("en", at, utc)).toBe("27 Nov");
+    expect(date("en", at, losAngeles)).toBe("26 Nov");
+  });
+
+  it("writes invalid dates the way the home clock does", () => {
+    const options = { timeZone: "UTC" };
+    expect(date("en", NaN, options)).toBe("Invalid Date");
+    expect(date("en", new Date(NaN), options)).toBe("Invalid Date");
+  });
+
+  it("evicts old date formatters and keeps recently used ones", () => {
+    const make = (timeZone: string) =>
+      dateFormatter(`test|${timeZone}`, "en-GB", { timeZone });
+    const [first, second, ...rest] = Intl.supportedValuesOf("timeZone").slice(
+      0,
+      129,
+    );
+    const older = make(first!);
+    const newer = make(second!);
+    for (const zone of rest.slice(0, -1)) make(zone);
+    expect(make(second!)).toBe(newer);
+    make(rest.at(-1)!);
+    expect(make(second!)).toBe(newer);
+    expect(make(first!)).not.toBe(older);
   });
 
   it("orders names with the numbers in them by value", () => {
