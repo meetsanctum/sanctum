@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   announcementKeptMs,
   createAnnouncements,
+  readyLeadMs,
   type Announcements,
 } from "../src/speech/announcements.js";
 import { assembleSpeech } from "../src/speech/assembly.js";
@@ -453,11 +454,15 @@ describe("createSpeech", () => {
     }
   });
 
-  it("does not send a URL withdrawn after the first playable frame", async () => {
+  it("does not send a URL withdrawn after the announcement becomes ready", async () => {
+    const rate = 22_050;
     const synthesize = vi
       .spyOn(wyoming, "synthesize")
       .mockImplementation(async function* () {
-        yield { rate: 22_050, samples: new Int16Array(4096) };
+        yield {
+          rate,
+          samples: new Int16Array((rate * readyLeadMs) / 1000 + 4_096),
+        };
         throw new Error("The service disconnected");
       });
     const { speech, told } = setup({
@@ -465,6 +470,7 @@ describe("createSpeech", () => {
       serviceUrl: "tcp://127.0.0.1:1",
     });
     announcements!.port = () => 4180;
+    const created = vi.spyOn(announcements!, "create");
     speech.start();
     try {
       await expect(
@@ -475,6 +481,7 @@ describe("createSpeech", () => {
           actor: { kind: "app", id: "sanctum.example" },
         }),
       ).rejects.toThrow(SpeechUnavailable);
+      expect(await created.mock.results[0]!.value.ready).toBe(true);
       expect(told).toEqual([]);
     } finally {
       speech.stop();

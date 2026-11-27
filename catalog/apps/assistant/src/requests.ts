@@ -120,7 +120,7 @@ const offline = (light: LightAnswer) => light.result === "offline";
 const off = (light: LightAnswer) =>
   light.result === "skipped" && light.why === "off";
 // A light the room's rule keeps off when the room comes on, as its Lights
-// tile does: what was asked, not one that missed.
+// tile does.
 const keptOff = (light: LightAnswer) =>
   light.result === "skipped" && light.why === "kept_off";
 
@@ -145,6 +145,26 @@ function lightsReply(
   const missed = lights.filter(
     (light) => !done(light) && !already(light) && !keptOff(light),
   );
+  if (subject.kind === "home") {
+    const keptOffNames = lights.filter(keptOff).map((light) => light.name);
+    if (keptOffNames.length > 0) {
+      const summary = words.keptOffLights(
+        changed ? words.someChanged(state) : words.nothingChanged,
+        keptOffNames,
+        missed.length > 0,
+      );
+      return {
+        text:
+          missed.length === 0
+            ? summary
+            : words.missedLights(
+                summary,
+                missed.map((light) => light.name),
+                missed.every(offline),
+              ),
+      };
+    }
+  }
   if (missed.length === 0) {
     if (changed) {
       return { text: words.changed(subject, state), confirmation: true };

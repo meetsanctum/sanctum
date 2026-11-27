@@ -16,11 +16,10 @@ import type { SpeechAudio } from "./wyoming.js";
 // after its turn comes, from memory only. A speaker says one at a time, as a
 // second cuts the first short on it, so the rest wait their turn in order. The address is the gate, as nothing
 // that fetches it can sign in; the port answers only the home's own network
-// and nothing but these addresses. The sound streams as it is spoken, so a
-// speaker starts before the last sentence is made: once a lead of sound is
-// ready, or all of it if that's shorter. Starting on a short first sentence
-// left the speaker silent mid-reply while a long second one was still being
-// made on a busy host.
+// and nothing but these addresses. The sound streams as it is spoken. A
+// speaker starts once a lead of playable sound is ready, or all of it if
+// that's shorter. The lead gives the synthesizer time to make the next
+// sentence and reduces pauses during playback.
 
 /** The IPv4 subnet of the host interface used to reach speakers. */
 export function speakerNetwork(host: string, cidr: string) {
@@ -350,14 +349,14 @@ export function createAnnouncements(options: {
         try {
           for await (const audio of speech(announcement.stop.signal)) {
             if (announcement.stop.signal.aborted) return false;
-            encoder ??= createFlacEncoder(audio.rate);
-            announcement.rate = audio.rate;
+            if (!encoder) {
+              encoder = createFlacEncoder(audio.rate);
+              announcement.rate = audio.rate;
+            }
             announcement.samples += audio.samples.length;
             append(encoder.push(audio.samples));
-            const lead = (audio.rate * readyLeadMs) / 1000;
-            if (encoder.hasFrames() && announcement.samples >= lead) {
-              sounded(true);
-            }
+            const lead = (announcement.rate * readyLeadMs) / 1000;
+            if (encoder.encodedSamples() >= lead) sounded(true);
           }
           if (announcement.stop.signal.aborted) return false;
           if (!encoder || announcement.samples === 0) {

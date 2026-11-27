@@ -209,6 +209,56 @@ describe("createAnnouncements", () => {
     expect(await brief.encoded).toBe(true);
   });
 
+  it("waits for a lead of playable frames across chunks", async () => {
+    announcements = createAnnouncements({
+      host: "127.0.0.1",
+      port: 0,
+      log: (message) => logged.push(message),
+    });
+    const rate = 22_050;
+    const halfLead = (rate * readyLeadMs) / 2_000;
+    function gate() {
+      let resolve!: () => void;
+      const promise = new Promise<void>((open) => (resolve = open));
+      return { promise, resolve };
+    }
+    const chunks = [halfLead, halfLead, 4_096].map((length) => ({
+      length,
+      consumed: gate(),
+      next: gate(),
+    }));
+    const made = announcements.create(
+      "speaker",
+      network,
+      4180,
+      async function* () {
+        for (const { length, consumed, next } of chunks) {
+          yield { rate, samples: new Int16Array(length) };
+          consumed.resolve();
+          await next.promise;
+        }
+      },
+    );
+    const readiness = () => Promise.race([made.ready, "waiting"]);
+    try {
+      const [first, second, third] = chunks;
+      await first!.consumed.promise;
+      expect(await readiness()).toBe("waiting");
+      first!.next.resolve();
+
+      // The input now spans the lead, but the encoder still holds a partial frame.
+      await second!.consumed.promise;
+      expect(await readiness()).toBe("waiting");
+      second!.next.resolve();
+
+      await third!.consumed.promise;
+      expect(await readiness()).toBe(true);
+    } finally {
+      for (const { next } of chunks) next.resolve();
+    }
+    expect(await made.encoded).toBe(true);
+  });
+
   it("has the rest wait their turn on a speaker, in order, until what's before them has played", async () => {
     const served = await started();
     // A tenth of a second of sound.
