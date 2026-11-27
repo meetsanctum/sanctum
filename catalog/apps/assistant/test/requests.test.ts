@@ -358,19 +358,25 @@ describe("the Assistant's requests", () => {
     ]);
   });
 
-  it("says which lights couldn't take a brightness change", async () => {
-    const { replies } = await ask("set all lights to 40%", {
+  it.each([
+    {
+      name: "reports a light that cannot change brightness",
+      lights: [lit("Shelf", "skipped", "unsupported")],
+      reply: { text: "Office lights at 100%. Shelf couldn't be changed." },
+    },
+    {
+      name: "confirms a brightness change that leaves an off light alone",
+      lights: [lit("Shelf", "skipped", "off")],
+      reply: { text: "Office lights at 100%.", confirmation: true },
+    },
+  ])("$name", async ({ lights, reply }) => {
+    const { replies } = await ask("set the office lights to 100 percent", {
       tools: {
         lights: () =>
-          json({
-            change: "c1",
-            lights: [lit("Desk Lamp"), lit("Shelf", "skipped", "unsupported")],
-          }),
+          json({ change: "c1", lights: [lit("Desk Lamp"), ...lights] }),
       },
     });
-    expect(replies).toEqual([
-      { text: "All lights at 40%. Shelf couldn't be changed." },
-    ]);
+    expect(replies).toEqual([reply]);
   });
 
   it("counts the remaining lights when their names can't all fit in a reply", async () => {

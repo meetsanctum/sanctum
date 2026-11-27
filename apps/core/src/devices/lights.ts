@@ -492,10 +492,10 @@ export function createLights(options: {
     });
   }
 
-  // Colour and white bring on lights that can show them, even ones the
-  // room's rule keeps off. A white also brings on fixed-white lights.
-  // Brightness alone changes lights that are on or brings up a dark
-  // place according to its rooms' rules.
+  // A white reaches every light, including lights that are off and lights
+  // without a white of their own. A colour reaches every light that can
+  // show it, including lights that are off. Brightness alone changes the
+  // lights that are on or brings up a dark place by its rooms' rules.
   function planSet(lights: readonly Light[], set: LightSetting): Planned[] {
     const lit = lights.filter(isOn);
     const byRule = new Map(
@@ -534,10 +534,13 @@ export function createLights(options: {
           capability.sync === "pending" &&
           capability.desired?.on === true
         ) {
+          const brightness = capability.desired.brightness;
           return {
             light,
             command: withSettings(
-              { on: true, brightness: capability.desired.brightness },
+              typeof brightness === "number"
+                ? { on: true, brightness }
+                : { on: true },
               fields,
             ),
             ...partly,
