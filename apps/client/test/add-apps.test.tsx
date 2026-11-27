@@ -34,6 +34,13 @@ const example: AvailableApp = {
       startsOn: false,
     },
     {
+      id: "devices.read:audio",
+      reason: "To list your smart speakers on its page.",
+      needed: true,
+      asked: null,
+      startsOn: false,
+    },
+    {
       id: "devices.read:button",
       reason: "So a press can run what you chose.",
       needed: false,
@@ -154,6 +161,12 @@ describe("Add apps", () => {
     expect(sheet.textContent).toContain("It needs these to work:");
     expect(sheet.textContent).toContain(
       "To add your example devices and keep their state.",
+    );
+    const speakerPermission = [...sheet.querySelectorAll("li")].find((row) =>
+      row.textContent?.startsWith("See your smart speakers"),
+    );
+    expect(speakerPermission?.textContent).toContain(
+      "See whether their microphones are muted and when they last heard their wake word. To list your smart speakers on its page.",
     );
     expect(sheet.textContent).toContain(
       "It starts with this too, which you can switch off in its settings:",

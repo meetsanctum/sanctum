@@ -77,7 +77,7 @@ export function CanUsePage(props: {
         key={area.id}
         icon={permissionIconOf[words.icon]}
         title={words.title}
-        detail={areaDetail[area.id]}
+        detail={areaDetail[area.id] ?? words.detail}
         always={area.always}
         on={pending?.id === area.id ? pending.on : area.on}
         disabled={pending !== undefined}

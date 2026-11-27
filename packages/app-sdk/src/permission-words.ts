@@ -143,7 +143,8 @@ const fixed: Record<string, PermissionWords> = {
   },
   [aiAssistantPermission]: {
     title: "Do things in your home for you",
-    detail: "It can do what you allow AI agents to do in Settings",
+    detail:
+      "When you ask, this app can see your rooms, read other home information and run actions. See What AI Agents Can Use in Settings for the limits",
     icon: "bot",
   },
 };
