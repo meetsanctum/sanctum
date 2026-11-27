@@ -31,18 +31,22 @@ function createOpenDevice() {
     opened = next;
     for (const listener of listeners) listener();
   };
+  const openFromRoom = (tile: Tile) =>
+    set({
+      // A room's Lights tile stands for no device.
+      key: roomOfLightsKey(tile.key)
+        ? tile.key
+        : tileKey(tile.deviceId, tile.capabilityId),
+      open: true,
+      openFirstPage: true,
+    });
   return {
     open: (tile: Tile) =>
       set({ key: tile.key, open: true, openFirstPage: false }),
-    openFromRoom: (tile: Tile) =>
-      set({
-        // A room's Lights tile stands for no device.
-        key: roomOfLightsKey(tile.key)
-          ? tile.key
-          : tileKey(tile.deviceId, tile.capabilityId),
-        open: true,
-        openFirstPage: true,
-      }),
+    openFromRoom,
+    openFromApp(tile: Tile) {
+      if (!opened.open) openFromRoom(tile);
+    },
     close: () => {
       if (opened.open) set({ ...opened, open: false });
     },

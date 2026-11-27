@@ -116,6 +116,7 @@ export function assembleSpeakerAudio(
         learning?.hearing() ?? {
           state: "failed",
           language: language(),
+          activeLanguage: null,
           failure: "unavailable",
         }
       );

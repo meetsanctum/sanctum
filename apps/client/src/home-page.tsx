@@ -72,7 +72,7 @@ type HomePageProps = {
   openedByItsApp: boolean;
   back: () => void;
   opener: (app: string) => (page: string, params?: PageParams) => void;
-  setRoutes: (routes: Route[]) => void;
+  setRoutes: (routes: Route[] | ((current: Route[]) => Route[])) => void;
   settingsOf: (app: string) => () => void;
   settings: ReturnType<typeof useSettingsNavigation>;
   listed: ListedApp[];
@@ -97,6 +97,7 @@ type HomePageProps = {
   setEditingHome: (editing: boolean) => void;
   openDevice: (tile: Tile) => void;
   openRoomDevice: (tile: Tile) => void;
+  openAppDevice: (tile: Tile) => void;
   sectionEntities: SectionEntities;
   widgetCards: ReadonlyMap<string, ShownCard>;
   hostUrl: string;
@@ -156,6 +157,7 @@ function HomePageWithDevices({
   setEditingHome,
   openDevice,
   openRoomDevice,
+  openAppDevice,
   sectionEntities,
   widgetCards,
   hostUrl,
@@ -288,6 +290,28 @@ function HomePageWithDevices({
               open={opener(route.app)}
               back={back}
               openSettings={settingsOf(route.app)}
+              openDevice={(id) => {
+                // A device's detail opens on its first tile, as from a room.
+                const tile = devices.tiles.find((each) => each.deviceId === id);
+                if (tile) openAppDevice(tile);
+              }}
+              addDevices={(returnParams) =>
+                setRoutes((current) => {
+                  if (current.at(-1) !== route) return current;
+                  const origin = returnParams
+                    ? { ...route, params: { ...route.params, ...returnParams } }
+                    : route;
+                  return [
+                    ...current.slice(0, -1),
+                    origin,
+                    {
+                      app: settingsApp.id,
+                      page: devicesSettingsPage,
+                      params: { add: "true" },
+                    },
+                  ];
+                })
+              }
               mode={deviceMode}
               household={devices.places?.home}
               isAway={isVeiled}

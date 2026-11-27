@@ -145,6 +145,8 @@ async function show(
               open={open}
               back={back}
               openSettings={() => {}}
+              openDevice={() => {}}
+              addDevices={() => {}}
             />
           </MoodsProvider>
         </AppScope>

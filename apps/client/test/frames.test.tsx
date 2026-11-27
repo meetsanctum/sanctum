@@ -38,6 +38,13 @@ import {
   shellEvents,
   answerTo,
 } from "./frames-support";
+import { deferred } from "./deferred";
+
+const speaker = {
+  id: "speaker",
+  driver: "sanctum.example",
+  capabilities: [{ id: "audio", kind: "audio", features: {}, state: {} }],
+} as unknown as DeviceInfo;
 
 function Main(props: PageProps) {
   const client = useAppClient();
@@ -563,6 +570,88 @@ describe("the shell's end", () => {
     ]);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(shellEvents.filter((event) => event.type === "bar")).toEqual([]);
+  });
+
+  it("opens only a device the app may read, and Add devices", async () => {
+    const lamp = {
+      id: "lamp",
+      driver: "sanctum.zigbee",
+      capabilities: [{ id: "light", kind: "light", features: {}, state: {} }],
+    } as unknown as DeviceInfo;
+    json.mockImplementation(async (path: string) =>
+      path === "/api/devices" ? [speaker, lamp] : [],
+    );
+    const { port } = await framePort({
+      ...info,
+      permissions: ["devices.read:audio"],
+    });
+    port.postMessage({ type: "openDevice", device: "lamp" });
+    port.postMessage({ type: "openDevice", device: 7 });
+    port.postMessage({ type: "openDevice", device: "speaker" });
+    port.postMessage({ type: "addDevices" });
+    await vi.waitFor(() =>
+      expect(
+        shellEvents.filter(({ type }) =>
+          ["openDevice", "addDevices"].includes(type),
+        ),
+      ).toEqual(
+        expect.arrayContaining([
+          { type: "addDevices" },
+          { type: "openDevice", device: "speaker" },
+        ]),
+      ),
+    );
+    expect(shellEvents.filter(({ type }) => type === "openDevice")).toEqual([
+      { type: "openDevice", device: "speaker" },
+    ]);
+  });
+
+  it("opens no device for an app that may read none", async () => {
+    json.mockImplementation(async (path) =>
+      path === "/api/devices" ? [speaker] : [],
+    );
+    const { port } = await framePort();
+    port.postMessage({ type: "openDevice", device: "speaker" });
+    port.postMessage({ type: "ready" });
+    await vi.waitFor(() =>
+      expect(shellEvents).toContainEqual({ type: "ready" }),
+    );
+    expect(json).not.toHaveBeenCalled();
+    expect(shellEvents.filter(({ type }) => type === "openDevice")).toEqual([]);
+  });
+
+  it("counts device opens against the same limit as other requests", async () => {
+    const lookup = deferred<DeviceInfo[]>();
+    json.mockImplementation((path) =>
+      path === "/api/devices" ? lookup.promise : new Promise(() => {}),
+    );
+    const { port, answers } = await framePort({
+      ...info,
+      permissions: ["devices.read:audio"],
+    });
+    port.postMessage({ type: "request", id: 1, op: "entities" });
+    for (let each = 0; each < requestsAllowed; each++) {
+      port.postMessage({ type: "openDevice", device: "speaker" });
+    }
+    port.postMessage({ type: "request", id: 2, op: "entities" });
+    await vi.waitFor(() =>
+      expect(answerTo(answers, 2)).toMatchObject({ error: { code: "busy" } }),
+    );
+    expect(
+      json.mock.calls.filter(([path]) => path === "/api/devices"),
+    ).toHaveLength(requestsAllowed - 1);
+    lookup.resolve([speaker]);
+    await vi.waitFor(() =>
+      expect(
+        shellEvents.filter(({ type }) => type === "openDevice"),
+      ).toHaveLength(requestsAllowed - 1),
+    );
+    port.postMessage({ type: "openDevice", device: "speaker" });
+    await vi.waitFor(() =>
+      expect(
+        shellEvents.filter(({ type }) => type === "openDevice"),
+      ).toHaveLength(requestsAllowed),
+    );
   });
 
   it("believes no height but a whole one up to its limit, and no key but Escape", async () => {

@@ -6,7 +6,7 @@ import {
 } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { CircleAlert } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { NoticeCard } from "../app-state";
 import type { HostedApp } from "../apps";
@@ -30,6 +30,9 @@ export function AppFrame(props: {
   open: (page: string, params?: PageParams) => void;
   back: () => void;
   openSettings: () => void;
+  /** Opens a device's detail, one the app may read, as the bridge checks. */
+  openDevice: (device: string) => void;
+  addDevices: (returnParams?: PageParams) => void;
   mode: FrameContext["mode"];
   /** How the household reads things: its unit, its zone and its hours. */
   household: FrameHousehold | undefined;
@@ -42,7 +45,9 @@ export function AppFrame(props: {
   const [bar, setBar] = useState<Extract<FrameEvent, { type: "bar" }>>();
   const title = bar?.title;
   const latest = useRef(props);
-  useEffect(() => {
+  const pageRevision = useRef(0);
+  useLayoutEffect(() => {
+    if (latest.current.shown !== props.shown) pageRevision.current++;
     latest.current = props;
   });
 
@@ -51,6 +56,7 @@ export function AppFrame(props: {
     mode,
     household,
     isAway: props.isAway,
+    pageRevision: () => pageRevision.current,
     setup: () => ({
       page: latest.current.page,
       params: latest.current.params,
@@ -67,6 +73,10 @@ export function AppFrame(props: {
           return latest.current.back();
         case "openSettings":
           return latest.current.openSettings();
+        case "openDevice":
+          return latest.current.openDevice(event.device);
+        case "addDevices":
+          return latest.current.addDevices(event.returnParams);
       }
     },
   });

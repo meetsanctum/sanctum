@@ -101,25 +101,31 @@ export function createLearning(options: {
     return options.sentences()?.[options.language()] ?? null;
   }
 
+  function hearsIn(): RequestLanguage | null {
+    return learned && !recovering && !managerFailed ? learned.language : null;
+  }
+
   function hearing(): Hearing {
     const language = options.language();
+    const sentences = options.sentences();
+    const listens = options.speakersListen();
+    const activeLanguage = sentences && listens ? hearsIn() : null;
     const failed = (failure: HearingFailure): Hearing => ({
       state: "failed",
       language,
+      activeLanguage,
       failure,
     });
-    const sentences = options.sentences();
     if (sentences === null) return failed("assistant_off");
     if (!sentences[language]) return failed("no_sentences");
-    if (!options.speakersListen()) return { state: "no_speaker", language };
+    if (!listens) return { state: "no_speaker", language, activeLanguage };
     if (admissionProblem) return failed(admissionProblem);
     if (managerFailed) return failed("unavailable");
     if (
-      learned?.language === language &&
-      !recovering &&
+      activeLanguage === language &&
       (submitted === null || submitted === language)
     ) {
-      return { state: "ready", language };
+      return { state: "ready", language, activeLanguage };
     }
     const current = progress?.language === language ? progress : null;
     if (current?.problem) return failed(current.problem);
@@ -128,6 +134,7 @@ export function createLearning(options: {
         current?.phase ??
         (cachedLanguages.has(language) ? "learning" : "downloading"),
       language,
+      activeLanguage,
     };
   }
 
@@ -386,8 +393,7 @@ export function createLearning(options: {
     hearing,
 
     /** The language it hears in now, or null while it hears in none. */
-    hearsIn: (): RequestLanguage | null =>
-      learned && !recovering && !managerFailed ? learned.language : null,
+    hearsIn,
 
     /** Whether the core wants the service now, and Piper for its replies. */
     wanted: () => wanted === true,

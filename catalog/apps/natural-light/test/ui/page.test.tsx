@@ -183,6 +183,8 @@ async function show(
             open={() => undefined}
             back={() => undefined}
             openSettings={openSettings}
+            openDevice={() => undefined}
+            addDevices={() => undefined}
           />
         </AppScope>
       </HomeTimeZoneProvider>,

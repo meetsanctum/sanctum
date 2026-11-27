@@ -206,7 +206,8 @@ export function SettingsPage(props: {
           apps={props.apps}
           live={props.live}
           home={props.home}
-          adding={start === "add-devices"}
+          // The setup guide's step, or a page that opened Add devices.
+          adding={start === "add-devices" || props.params.add === "true"}
           notSetUp={props.status?.notSetUp}
           page={back}
         />

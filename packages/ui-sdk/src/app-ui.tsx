@@ -40,6 +40,13 @@ export type PageProps = {
    * place of the app's own.
    */
   openSettings(): void;
+  /**
+   * Opens one of the home's devices, by its id, the same detail its tile
+   * opens, over this page: one the app may read, as the shell checks.
+   */
+  openDevice(device: string): void;
+  /** Opens Add devices over this page, with optional page params to restore on return. */
+  addDevices(returnParams?: PageParams): void;
 };
 
 /** What a device page gets: the device, with the capabilities the app may read. */

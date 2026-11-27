@@ -65,6 +65,8 @@ export type FromFrame =
   | { type: "open"; page: string; params: PageParams }
   | { type: "back" }
   | { type: "openSettings" }
+  | { type: "openDevice"; device: string }
+  | { type: "addDevices"; returnParams?: PageParams }
   | { type: "ready" }
   // Its files didn't load, or it stopped working once drawn.
   | { type: "failed"; reason: "files" | "stopped"; message: string }
