@@ -127,7 +127,6 @@ const schemas = {
   inviteFinish: z.object({
     registrationId: id,
     registrationRecord: message,
-    keyStretching: stretching,
   }) satisfies z.ZodType<InviteFinish>,
   cancelInvite: z.object({ personId: id }) satisfies z.ZodType<CancelInvite>,
   redeemStart: z.object({

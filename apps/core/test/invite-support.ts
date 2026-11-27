@@ -4,16 +4,20 @@ import {
   inviteFinishBinding,
   keyStretching,
   newInviteSecret,
+  splitInviteCode,
   verifyInviteConfirmation,
   type HostView,
   type InviteInfo,
-  type SignedIn,
+  type RedeemChecked,
+  type RedeemFinish,
+  type RedeemFinished,
+  type RedeemRegistered,
 } from "@meetsanctum/auth-protocol";
 import * as opaque from "@serenity-kit/opaque";
 
 import { hostId, post, registration, type TestCore } from "./support.js";
 
-// Invites as the apps make and redeem them: the inviting device draws the
+// The inviting device draws the
 // code's secret and registers it; the invited device proves it, then
 // registers a password of its own. Fast key stretching, as for passwords.
 
@@ -62,7 +66,6 @@ export async function invite(
     {
       registrationId,
       registrationRecord: started.finish(registrationResponse),
-      keyStretching: keyStretching.version,
     },
     { token, ...call },
   );
@@ -73,21 +76,16 @@ export async function invite(
   } as const;
 }
 
-// Redeems a code as the invited device does, step by step, stopping where
-// the device or the host stops it.
-export async function redeem(
+export async function checkInvite(
   core: TestCore,
   code: string,
   options: {
-    username?: string;
-    password?: string;
     sees?: HostView;
     remoteAddress?: string;
   } = {},
 ) {
   const call = { remoteAddress: options.remoteAddress };
-  const lookup = code.slice(0, 2);
-  const secret = code.slice(2);
+  const { lookup, secret } = splitInviteCode(code);
   const login = opaque.client.startLogin({ password: secret });
   const start = await post(
     core,
@@ -123,9 +121,26 @@ export async function redeem(
   if (check.statusCode !== 200) {
     return { outcome: "refused" as const, response: check };
   }
-  const checked = check.json();
-  const username = options.username ?? "jonas";
-  const password = options.password ?? "staple battery horse";
+  return {
+    outcome: "checked" as const,
+    checked: check.json<RedeemChecked>(),
+    sessionKey: proof.sessionKey,
+    sees,
+    call,
+  };
+}
+
+type CheckedInvite = Extract<
+  Awaited<ReturnType<typeof checkInvite>>,
+  { outcome: "checked" }
+>;
+
+export async function registerInvite(
+  core: TestCore,
+  { checked, sessionKey, sees, call }: CheckedInvite,
+  username = "jonas",
+  password = "staple battery horse",
+) {
   const started = registration(password);
   const register = await post(
     core,
@@ -140,41 +155,76 @@ export async function redeem(
   if (register.statusCode !== 200) {
     return { outcome: "refused" as const, response: register, checked };
   }
-  const registrationRecord = started.finish(
-    register.json().registrationResponse,
-  );
-  const finish = await post(
-    core,
-    "/api/auth/invites/redeem/finish",
-    {
+  const registered = register.json<RedeemRegistered>();
+  const registrationRecord = started.finish(registered.registrationResponse);
+  return {
+    outcome: "registered" as const,
+    input: {
       redeemId: checked.redeemId,
       registrationRecord,
       keyStretching: keyStretching.version,
       binding: await inviteFinishBinding(
-        proof.sessionKey,
+        sessionKey,
         sees,
-        username,
+        registered.username,
         registrationRecord,
       ),
       client: phone,
     },
+  };
+}
+
+export async function finishInvite(
+  core: TestCore,
+  { checked, sessionKey, sees, call }: CheckedInvite,
+  input: RedeemFinish,
+) {
+  const finish = await post(
+    core,
+    "/api/auth/invites/redeem/finish",
+    input,
     call,
   );
   if (finish.statusCode !== 200) {
     return { outcome: "refused" as const, response: finish, checked };
   }
-  const body: SignedIn = finish.json();
+  const body = finish.json<RedeemFinished>();
   const confirmed = await verifyInviteConfirmation(
-    proof.sessionKey,
+    sessionKey,
     sees,
     body.token,
-    body.confirmation!,
+    body.confirmation,
   );
   return {
     outcome: confirmed ? ("joined" as const) : ("unconfirmed" as const),
     body,
     checked,
   };
+}
+
+// Redeems a code as the invited device does, stopping at the first refusal.
+export async function redeem(
+  core: TestCore,
+  code: string,
+  options: Parameters<typeof checkInvite>[2] & {
+    username?: string;
+    password?: string;
+  } = {},
+) {
+  const checked = await checkInvite(core, code, options);
+  if (checked.outcome !== "checked") {
+    return checked;
+  }
+  const registered = await registerInvite(
+    core,
+    checked,
+    options.username,
+    options.password,
+  );
+  if (registered.outcome !== "registered") {
+    return registered;
+  }
+  return finishInvite(core, checked, registered.input);
 }
 
 export { formatInviteCode };

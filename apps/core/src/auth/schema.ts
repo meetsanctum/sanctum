@@ -173,8 +173,8 @@ export const inviteEndings = ["wrong_code", "cancelled"] as const;
 // so the core holds a record, as for a password, never the code. Its lookup
 // finds it. A reset leaves the person's login as it is until the code is
 // used. An invite stays after it ends unused, with its lookup, so a right
-// code typed late is told it ended and the person's page can say why; using
-// it, or making the person a new one, removes it.
+// code typed late is told it ended and the invite list can give the reason.
+// Using it or making the person a new one removes it.
 export const authInvites = sqliteTable("auth_invites", {
   id: text("id").primaryKey(),
   personId: text("person_id")
@@ -184,11 +184,12 @@ export const authInvites = sqliteTable("auth_invites", {
   kind: text("kind", { enum: inviteKinds }).notNull(),
   lookup: text("lookup").notNull().unique(),
   registrationRecord: text("registration_record").notNull(),
-  keyStretching: integer("key_stretching").notNull(),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
-  // The tries started since the code last checked (invites.ts).
+  // Challenges issued since the code last checked or the cooldown elapsed.
+  // One extra count marks the first refusal during the cooldown.
   tries: integer("tries").notNull().default(0),
+  lastTriedAt: integer("last_tried_at", { mode: "timestamp_ms" }),
   // Why it ended before it ran out, and when.
   endedReason: text("ended_reason", { enum: inviteEndings }),
   endedAt: integer("ended_at", { mode: "timestamp_ms" }),

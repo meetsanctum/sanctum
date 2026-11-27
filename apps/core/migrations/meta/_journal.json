@@ -421,6 +421,13 @@
       "when": 1795738068878,
       "tag": "0059_invites",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "6",
+      "when": 1795739006759,
+      "tag": "0060_invite_cooldown",
+      "breakpoints": true
     }
   ]
 }

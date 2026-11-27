@@ -19,11 +19,11 @@ import {
   type RedeemCheck,
   type RedeemChecked,
   type RedeemFinish,
+  type RedeemFinished,
   type RedeemRegister,
   type RedeemRegistered,
   type RedeemStart,
   type RedeemStarted,
-  type SignedIn,
 } from "@meetsanctum/auth-protocol";
 import { eq } from "drizzle-orm";
 import { randomInt, randomUUID } from "node:crypto";
@@ -32,6 +32,7 @@ import type { RecordActivity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
 import type { People } from "../people/people.js";
 import { clientInfo, type Clients, type Principal } from "./clients.js";
+import { codeLookups } from "./code-lookups.js";
 import { AuthError } from "./errors.js";
 import {
   createPendingStore,
@@ -79,11 +80,6 @@ type Choosing = {
 };
 
 type Invite = typeof authInvites.$inferSelect;
-
-const lookupCharacters = [...pairingCodeAlphabet];
-const lookups = lookupCharacters.flatMap((first) =>
-  lookupCharacters.map((second) => first + second),
-);
 
 export function createInvites(
   db: CoreDatabase,
@@ -142,7 +138,7 @@ export function createInvites(
       .get();
   }
 
-  // Why an invite ended, or none while its code still works.
+  // Why an invite ended, or none while it is active.
   function endingOf(invite: Invite): InviteInfo["ended"] {
     if (invite.endedReason) return invite.endedReason;
     return invite.expiresAt <= now() ? "expired" : null;
@@ -174,25 +170,41 @@ export function createInvites(
       .get();
   }
 
-  // Ends an invite whose code was tried too often, for its page to say so.
-  function endForTries(invite: Invite, address: string) {
+  function recordAttempt(
+    invite: Invite,
+    tries: number,
+    at: Date,
+    address: string,
+  ) {
+    // After the first refusal, further requests cannot extend the cooldown.
+    if (tries > inviteTries) return;
+    const blocked = tries === inviteTries;
     db.update(authInvites)
-      .set({ endedReason: "wrong_code", endedAt: now() })
+      .set({ tries: tries + 1, lastTriedAt: blocked ? invite.lastTriedAt : at })
       .where(eq(authInvites.id, invite.id))
       .run();
-    record({
-      action: "invite.redeem",
-      outcome: "refused",
-      reason: "too_many_attempts",
-      subjectId: invite.personId,
-      address,
-    });
+    if (blocked) {
+      record({
+        action: "invite.redeem",
+        outcome: "refused",
+        reason: "too_many_attempts",
+        subjectId: invite.personId,
+        address,
+      });
+    }
   }
 
   return {
-    // Every person's invite, for People in Settings.
+    // Lists active and ended invites with their status.
     list(): InviteInfo[] {
       return db.select().from(authInvites).all().map(info);
+    },
+
+    // Restoring a backup must not bring back previously issued codes.
+    dropAll() {
+      db.delete(authInvites).run();
+      pending.drop(() => true);
+      choosing.drop(() => true);
     },
 
     // Any client invites a person, or resets their password, and registers
@@ -216,7 +228,7 @@ export function createInvites(
           .all()
           .map(({ lookup }) => lookup),
       );
-      const free = lookups.filter((lookup) => !held.has(lookup));
+      const free = codeLookups.filter((lookup) => !held.has(lookup));
       if (free.length === 0) {
         throw new AuthError("busy");
       }
@@ -273,7 +285,6 @@ export function createInvites(
             kind,
             lookup: entry.lookup,
             registrationRecord: input.registrationRecord,
-            keyStretching: input.keyStretching,
             createdAt: at,
             expiresAt: new Date(at.getTime() + inviteMs),
           })
@@ -313,10 +324,8 @@ export function createInvites(
       choosing.drop((choice) => choice.inviteId === invite.id);
     },
 
-    // OPAQUE's first round with the code's secret. Every try at a working
-    // invite counts, since a wrong code fails on the device and the host
-    // never hears of it; past the limit the invite ends. A lookup no invite
-    // has gets a made-up response that looks like a real one.
+    // Wrong codes fail on the device, so each issued challenge counts.
+    // Lookups on cooldown get the same response as unknown lookups.
     redeemStart(address: string, input: RedeemStart): RedeemStarted {
       host();
       const lookup = input.lookup.toUpperCase();
@@ -327,21 +336,19 @@ export function createInvites(
         throw new AuthError("invalid_request");
       }
       limiter.attempt(address);
-      const invite = db
+      const found = db
         .select()
         .from(authInvites)
         .where(eq(authInvites.lookup, lookup))
         .get();
-      if (invite && !endingOf(invite)) {
-        if (invite.tries + 1 > inviteTries) {
-          endForTries(invite, address);
-        } else {
-          db.update(authInvites)
-            .set({ tries: invite.tries + 1 })
-            .where(eq(authInvites.id, invite.id))
-            .run();
-        }
-      }
+      const at = now();
+      const active = found !== undefined && !endingOf(found);
+      const tries =
+        found?.lastTriedAt &&
+        at.getTime() - found.lastTriedAt.getTime() < limits.attemptWindowMs
+          ? found.tries
+          : 0;
+      const invite = active && tries >= inviteTries ? undefined : found;
       const { serverLoginState, loginResponse } = server.startLogin(
         inviteIdentifier(invite?.id ?? `lookup:${lookup}`),
         invite?.registrationRecord ?? null,
@@ -354,6 +361,9 @@ export function createInvites(
         record: invite?.registrationRecord ?? null,
         serverLoginState,
       });
+      if (active) {
+        recordAttempt(found, tries, at, address);
+      }
       return { redeemId, loginResponse };
     },
 
@@ -391,11 +401,11 @@ export function createInvites(
       if (!sessionKey || !entry.inviteId || !entry.record) {
         throw refuse("sign_in_failed");
       }
-      const invite = inviteById(entry.inviteId);
       if (!(await verifyInviteCheckBinding(sessionKey, view, input.binding))) {
-        throw refuse("channel_mismatch", invite?.personId);
+        throw refuse("channel_mismatch", inviteById(entry.inviteId)?.personId);
       }
       // Replaced or used since the start, or ended: the code no longer works.
+      const invite = inviteById(entry.inviteId);
       if (
         !invite ||
         invite.registrationRecord !== entry.record ||
@@ -407,10 +417,6 @@ export function createInvites(
       if (!person) {
         throw new AuthError("invite_ended");
       }
-      db.update(authInvites)
-        .set({ tries: 0 })
-        .where(eq(authInvites.id, invite.id))
-        .run();
       const redeemId = choosing.add({
         address,
         inviteId: invite.id,
@@ -418,6 +424,10 @@ export function createInvites(
         record: invite.registrationRecord,
         sessionKey,
       });
+      db.update(authInvites)
+        .set({ tries: 0, lastTriedAt: null })
+        .where(eq(authInvites.id, invite.id))
+        .run();
       limiter.succeeded(address);
       return {
         redeemId,
@@ -443,7 +453,7 @@ export function createInvites(
         input.registrationRequest,
       );
       entry.username = name;
-      return { registrationResponse };
+      return { registrationResponse, username: name };
     },
 
     // Saves the person's sign-in, ends the invite and creates this device's
@@ -451,9 +461,9 @@ export function createInvites(
     async redeemFinish(
       address: string,
       input: RedeemFinish,
-    ): Promise<SignedIn> {
+    ): Promise<RedeemFinished> {
       const view = host();
-      const entry = choosing.take(input.redeemId, address);
+      const entry = choosing.peek(input.redeemId, address);
       if (!entry?.username) {
         throw new AuthError("expired");
       }
@@ -465,7 +475,16 @@ export function createInvites(
         input.registrationRecord,
         input.binding,
       );
+      // It may have been used, cancelled or registered with another name
+      // while the binding was verified.
+      if (
+        choosing.peek(input.redeemId, address) !== entry ||
+        entry.username !== name
+      ) {
+        throw new AuthError("expired");
+      }
       if (!bound) {
+        choosing.take(input.redeemId, address);
         record({
           action: "invite.redeem",
           outcome: "refused",
@@ -477,15 +496,15 @@ export function createInvites(
       }
       const done = db.transaction(() => {
         const invite = inviteById(entry.inviteId);
+        const person = invite && people.get(invite.personId);
         if (
           !invite ||
+          !person ||
           invite.registrationRecord !== entry.record ||
-          endingOf(invite)
+          endingOf(invite) ||
+          (invite.kind === "reset") !== Boolean(loginOf(entry.personId))
         ) {
-          throw new AuthError("invite_ended");
-        }
-        const person = people.get(invite.personId);
-        if (!person) {
+          choosing.take(input.redeemId, address);
           throw new AuthError("invite_ended");
         }
         const holder = usernameHolder(name);
@@ -517,6 +536,7 @@ export function createInvites(
         });
         return { person, client, token };
       });
+      choosing.take(input.redeemId, address);
       return {
         token: done.token,
         confirmation: await inviteConfirmation(

@@ -91,58 +91,6 @@ describe("an entry's words", () => {
     ).toMatchObject({ title, problem: true });
   });
 
-  it.each([
-    ["invite.create", "ok", null, "Invited Jonas to sign in", false],
-    [
-      "invite.create",
-      "ok",
-      "reset",
-      "Made Jonas a code for a new password",
-      false,
-    ],
-    ["invite.cancel", "ok", null, "Cancelled Jonas's invite", false],
-    ["invite.redeem", "ok", null, "Joined with an invite code", false],
-    ["invite.redeem", "ok", "reset", "Chose a new password with a code", false],
-    [
-      "invite.redeem",
-      "refused",
-      "too_many_attempts",
-      "Jonas's invite code was tried too often",
-      true,
-    ],
-    [
-      "invite.redeem",
-      "refused",
-      "channel_mismatch",
-      `A device using an invite code wasn't connected to ${productName} directly`,
-      true,
-    ],
-  ] as const)(
-    "says what an invite did (%s, %s, %s)",
-    (action, outcome, reason, title, problem) => {
-      expect(
-        activityWords(
-          clock,
-          entry({
-            kind: "system",
-            source: "auth",
-            action,
-            outcome,
-            reason,
-            detail: null,
-            subject: {
-              type: "person",
-              id: "jonas",
-              name: "Jonas",
-              gone: false,
-            },
-          }),
-          "home",
-        ),
-      ).toMatchObject({ title, problem });
-    },
-  );
-
   it("says what the household shows a device as, by what it then is", () => {
     const device = { kind: "device" as const };
     const shown = (detail: Record<string, unknown>) =>

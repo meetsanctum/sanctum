@@ -17,9 +17,9 @@ import {
 export const inviteMs = 24 * 60 * 60_000;
 
 /**
- * How many times a code may be tried against one invite. OPAQUE fails a
- * wrong code on the device, which sends nothing more, so the core counts the
- * tries it starts, and a right code clears the count.
+ * How many challenges the core issues for an invite before a cooldown.
+ * OPAQUE fails a wrong code on the device, which sends nothing more, so the
+ * core counts challenges it issues. A successful check clears the count.
  */
 export const inviteTries = 5;
 

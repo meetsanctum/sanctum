@@ -46,6 +46,7 @@ const subjectTypes: [string, ActivityThingType][] = [
   ["person.", "person"],
   ["login.", "person"],
   ["password.", "person"],
+  ["invite.", "person"],
   ["client.", "client"],
   // The agent a setup added.
   ["agents.add", "client"],

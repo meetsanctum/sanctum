@@ -1,7 +1,6 @@
 import {
   normalisePairingCode,
   pairingAnswerMs,
-  pairingCodeAlphabet,
   pairingConfirmation,
   pairingExchangesPerRequest,
   pairingOpaque,
@@ -38,6 +37,7 @@ import type { RecordActivity } from "../activity/activity.js";
 import type { CoreDatabase } from "../database.js";
 import { changedBy } from "./callers.js";
 import { clientInfo, type Clients, type Principal } from "./clients.js";
+import { codeLookups } from "./code-lookups.js";
 import { AuthError } from "./errors.js";
 import {
   addressKey,
@@ -85,10 +85,6 @@ type Exchange = {
 };
 
 const requests = authPairingRequests;
-const lookupCharacters = [...pairingCodeAlphabet];
-const lookups = lookupCharacters.flatMap((first) =>
-  lookupCharacters.map((second) => first + second),
-);
 
 // A lookup rests this long after its request expired or was used up.
 const restMs = pairingRequestMs;
@@ -292,7 +288,7 @@ export function createPairing(
               .all()
               .map(({ lookup }) => lookup),
           );
-          const free = lookups.filter((lookup) => !reserved.has(lookup));
+          const free = codeLookups.filter((lookup) => !reserved.has(lookup));
           if (free.length === 0) {
             return { over: "host" };
           }

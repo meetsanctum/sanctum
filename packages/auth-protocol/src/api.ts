@@ -149,7 +149,7 @@ export type SignInFinish = {
 
 export type SignedIn = {
   token: string;
-  /** The host's MAC over itself and the token; sign-in only, since a claim has nothing to check yet. */
+  /** The host's MAC over itself and the token. Omitted for initial claims. */
   confirmation?: string;
   client: ClientInfo;
   person: PersonInfo;
@@ -293,7 +293,7 @@ export type InviteInfo = {
   kind: "invite" | "reset";
   createdAt: string;
   endsAt: string;
-  /** Why it ended, or none while its code still works. */
+  /** Why the invite ended, or none while it is active. */
   ended: InviteEnded | null;
 };
 
@@ -305,7 +305,6 @@ export type InviteStarted = RegistrationStarted & {
 export type InviteFinish = {
   registrationId: string;
   registrationRecord: string;
-  keyStretching: number;
 };
 export type CancelInvite = { personId: string };
 
@@ -332,7 +331,11 @@ export type RedeemRegister = {
   username: string;
   registrationRequest: string;
 };
-export type RedeemRegistered = { registrationResponse: string };
+export type RedeemRegistered = {
+  registrationResponse: string;
+  /** The canonical username to use in the finish binding. */
+  username: string;
+};
 export type RedeemFinish = {
   redeemId: string;
   registrationRecord: string;
@@ -341,6 +344,7 @@ export type RedeemFinish = {
   binding: string;
   client: NewClient;
 };
+export type RedeemFinished = SignedIn & { confirmation: string };
 
 export type AuthErrorCode =
   | "invalid_request"
@@ -359,8 +363,7 @@ export type AuthErrorCode =
   | "claimed"
   | "username_taken"
   | "last_login"
-  // An invite code that was right but ended: used, run out, cancelled or
-  // tried too often. A wrong code fails on the device and never gets here.
+  // An invite code that was right but can no longer be redeemed.
   | "invite_ended"
   | "too_many_attempts"
   | "busy"

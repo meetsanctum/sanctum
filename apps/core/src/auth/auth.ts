@@ -148,12 +148,13 @@ export async function createAuth(
       }));
     },
     // Signs every device out after a restore from a backup: every client and
-    // token is revoked and every pairing request dropped, inside the
-    // restore's transaction. Returns how many devices it signed out.
+    // token is revoked, and outstanding codes are dropped inside the restore's
+    // transaction. Returns how many devices it signed out.
     signOutEveryone(at: Date) {
       const count = clients.revokeAll(at);
       pairing.dropAll();
       agentSetups.dropAll();
+      invites.dropAll();
       return count;
     },
     authenticate: clients.authenticate,
