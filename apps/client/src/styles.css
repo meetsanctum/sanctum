@@ -345,10 +345,9 @@ body {
   }
 }
 
-/* Back at the leading edge and the logo in the middle, both centred 27 px
-   down, on the line of the Mac's window buttons (20 px in and down, in the
-   desktop app). On the Mac Back starts past them, and the bar moves the
-   window between its buttons. */
+/* Back at the leading edge, centred 27 px down, on the line of the Mac's
+   window buttons (20 px in and down, in the desktop app). On the Mac Back
+   starts past them, and the bar moves the window between its buttons. */
 .sheet-bar {
   --sheet-back-inset: 15px;
   display: grid;
@@ -375,20 +374,29 @@ body {
   -webkit-app-region: no-drag;
 }
 
-.sheet-logo {
-  grid-column: 2;
-  color: var(--white);
-}
-
-/* The sheet in the middle of the space under the bar, or from its top where
-   it is taller. What scrolls up fades out over 24 px at the bar's edge,
-   inside the 32 px above the sheet, so nothing is faded at rest. */
+/* The logo heads the sheet, clear of the bar: its top 88 px down the window,
+   lower on a tall one (11.5 % of its height), and the sheet 40 px under it.
+   Both start there on every screen, and a taller sheet grows down, so the
+   logo and the sheet's title never move between steps. They scroll as one,
+   and what scrolls up fades out over 24 px at the bar's edge, inside the
+   space above the logo, so nothing is faded at rest. Room for a scrollbar
+   is kept on both sides, so a step tall enough to scroll stays centred
+   where the one before it was. */
 .sheet-scroll {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  gap: 40px;
   overflow-y: auto;
-  padding: 32px 24px calc(40px + env(safe-area-inset-bottom));
+  scrollbar-gutter: stable both-edges;
+  padding: max(34px, calc(11.5vh - 54px)) 24px
+    calc(40px + env(safe-area-inset-bottom));
   mask-image: linear-gradient(to bottom, transparent, black 24px);
+}
+
+.sheet-logo {
+  flex-shrink: 0;
+  color: var(--white);
 }
 
 /* Under Reduce effects a hard cut at the bar's edge, with no mask. */
@@ -408,7 +416,11 @@ body {
       calc(24px + env(safe-area-inset-right));
   }
 
+  /* On a phone the logo is 24 px under the taller bar, still 88 px down,
+     past the fade, and the sheet 32 px under it. */
   .sheet-scroll {
+    gap: 32px;
+    padding-top: 24px;
     padding-inline: 16px;
   }
 }

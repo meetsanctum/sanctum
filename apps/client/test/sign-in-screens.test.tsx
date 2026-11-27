@@ -187,10 +187,36 @@ describe("choosing a home", () => {
 });
 
 describe("setting up a new home", () => {
+  it("asks how to sign in first, then the name and colour", async () => {
+    await act(async () => publish([unclaimed]));
+    await click("New home");
+    expect(title()).toBe("Set up your home");
+    expect(container.textContent).toContain("Step 1 of 2");
+    expect(container.querySelector('[data-slot="avatar"]')).toBeNull();
+
+    await fill("Username", "taylor");
+    await fill("Password", "correct-password");
+    await click("Continue");
+
+    expect(title()).toBe("Your name and colour");
+    expect(container.textContent).toContain("Step 2 of 2");
+    expect(document.activeElement).toBe(
+      [...container.querySelectorAll("label")].find(
+        (each) => each.textContent === "Your name",
+      )?.control,
+    );
+    expect(checkHost).not.toHaveBeenCalled();
+    expect(claimHost).not.toHaveBeenCalled();
+  });
+
   it("shows a person's outline in the avatar until a name is typed", async () => {
     await act(async () => publish([unclaimed]));
     await click("New home");
+    await fill("Username", "taylor");
+    await fill("Password", "correct-password");
+    await click("Continue");
     const avatar = () => container.querySelector('[data-slot="avatar"]')!;
+    expect(avatar().getAttribute("data-size")).toBe("xl");
     expect(avatar().querySelector("svg")).not.toBeNull();
 
     await fill("Your name", "Taylor Reed");
@@ -199,25 +225,59 @@ describe("setting up a new home", () => {
     expect(avatar().textContent).toBe("TR");
   });
 
-  it("marks only Repeat password when the passwords differ", async () => {
+  it("stays on the first step while the password is too short", async () => {
     await act(async () => publish([unclaimed]));
     await click("New home");
-    await fill("Your name", "Taylor");
     await fill("Username", "taylor");
-    await fill("Password", "correct-password");
-    const repeated = await fill("Repeat password", "different-password");
+    const password = await fill("Password", "short");
 
-    await click("Set up");
+    await click("Continue");
 
     const alert = container.querySelector('[role="alert"]')!;
-    expect(alert.textContent).toBe("Enter the same password twice.");
+    expect(title()).toBe("Set up your home");
+    expect(alert.textContent).toBe("Use at least 8 characters.");
     expect([...container.querySelectorAll('[aria-invalid="true"]')]).toEqual([
-      repeated,
+      password,
     ]);
-    expect(repeated.getAttribute("aria-describedby")).toBe(alert.id);
-    expect(alert.id).not.toBe("");
-    expect(checkHost).not.toHaveBeenCalled();
-    expect(claimHost).not.toHaveBeenCalled();
+    expect(password.getAttribute("aria-describedby")).toContain(alert.id);
+    expect(container.textContent).not.toContain("Repeat password");
+  });
+
+  it("shows the password on request, and keeps both steps going back", async () => {
+    await act(async () => publish([unclaimed]));
+    await click("New home");
+    await fill("Username", "taylor");
+    const password = await fill("Password", "correct-password");
+    const reveal = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Show password"]',
+    )!;
+    expect(password.type).toBe("password");
+    expect(reveal.getAttribute("aria-pressed")).toBe("false");
+    expect(reveal.getAttribute("aria-controls")).toBe(password.id);
+
+    await act(async () => reveal.click());
+
+    expect(password.type).toBe("text");
+    expect(reveal.getAttribute("aria-pressed")).toBe("true");
+
+    await click("Continue");
+    await fill("Your name", "Taylor");
+    await click("Back");
+
+    expect(title()).toBe("Set up your home");
+    const field = (label: string) =>
+      [...container.querySelectorAll("label")].find(
+        (each) => each.textContent === label,
+      )?.control as HTMLInputElement;
+    expect(field("Username").value).toBe("taylor");
+    expect(field("Password").value).toBe("correct-password");
+
+    await click("Continue");
+    expect(field("Your name").value).toBe("Taylor");
+
+    await click("Back");
+    await click("Homes");
+    expect(title()).toBe("Choose your home");
   });
 });
 
@@ -296,15 +356,17 @@ describe("who uses this device", () => {
     expect(title()).toBe("Who uses this device?");
   });
 
-  it("puts Back and the logo in the bar above the scrolling sheet", () => {
+  it("puts Back in the bar, and the logo over the sheet where it scrolls", () => {
     const bar = container.querySelector(".sheet-bar")!;
     const scroll = container.querySelector("main.sheet-scroll")!;
     expect(
       bar.querySelector('button[aria-label="Back to Homes"]')?.textContent,
     ).toBe("Homes");
-    expect(bar.querySelector(".logo")).not.toBeNull();
+    expect(bar.querySelector(".logo")).toBeNull();
     expect(bar.nextElementSibling).toBe(scroll);
-    expect(scroll.querySelector("section")).not.toBeNull();
+    const [logo, sheet] = scroll.children;
+    expect(logo!.classList).toContain("logo");
+    expect(sheet!.tagName).toBe("SECTION");
   });
 
   it("starts each step at its title", async () => {

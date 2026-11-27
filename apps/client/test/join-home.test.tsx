@@ -279,7 +279,6 @@ describe("joining with an invite code", () => {
     await type(codeField(), "K7QXM4PD");
     const username = await fill("Username", "maya");
     await fill("Password", "staple battery horse");
-    await fill("Repeat password", "staple battery horse");
     await click("Join");
 
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
@@ -311,7 +310,6 @@ describe("joining with an invite code", () => {
     await openJoin();
     await type(codeField(), "K7QXM4PD");
     await fill("Password", "staple battery horse");
-    await fill("Repeat password", "staple battery horse");
     await click("Join");
     const back = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Back"]',
@@ -362,7 +360,6 @@ describe("joining with an invite code", () => {
     await openJoin();
     await type(codeField(), "K7QXM4PD");
     await fill("Password", "staple battery horse");
-    await fill("Repeat password", "staple battery horse");
     await click("Join");
 
     expect(title()).toBe("Join Office");

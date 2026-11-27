@@ -17,13 +17,13 @@ import {
 import { CoreError } from "../core-fetch";
 
 // Changing your own password, from your own page on your own device: the
-// current one, then the new one twice. The current one is checked on this
-// device before anything changes, and the other devices signed in as you
-// stay signed in, which the dialog says, with where to sign one out. While
-// it saves it can't be closed. If the final reply is lost, it says the
-// change could not be confirmed.
+// current one, then the new one once, with a way to show it. The current
+// one is checked on this device before anything changes, and the other
+// devices signed in as you stay signed in, which the dialog says, with where
+// to sign one out. While it saves it can't be closed. If the final reply is
+// lost, it says the change could not be confirmed.
 
-type Field = "current" | "password" | "repeated";
+type Field = "current" | "password";
 type Problem = { field?: Field; text: string };
 
 function changeProblem(error: unknown): Problem {
@@ -66,7 +66,6 @@ export function ChangePassword(props: {
   const ids = useId();
   const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
-  const [repeated, setRepeated] = useState("");
   const [problem, setProblem] = useState<Problem>();
   const [working, setWorking] = useState(false);
   const currentInput = useRef<HTMLInputElement>(null);
@@ -80,7 +79,6 @@ export function ChangePassword(props: {
     if (!open) {
       setCurrent("");
       setPassword("");
-      setRepeated("");
       setProblem(undefined);
       setWorking(false);
     }
@@ -95,7 +93,7 @@ export function ChangePassword(props: {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (working) return;
-    const invalid = newPasswordProblem(password, repeated);
+    const invalid = newPasswordProblem(password);
     setProblem(invalid);
     if (invalid) return;
     setWorking(true);
@@ -131,7 +129,12 @@ export function ChangePassword(props: {
     text: string,
     value: string,
     onChange: (value: string) => void,
-    options: { hint?: string; autoComplete: string; autoFocus?: boolean },
+    options: {
+      hint?: string;
+      autoComplete: string;
+      autoFocus?: boolean;
+      revealable?: boolean;
+    },
   ) => {
     // A problem takes the hint's place, so the two never say the same twice.
     const hasProblem = problem?.field === name;
@@ -143,6 +146,7 @@ export function ChangePassword(props: {
         problemId={hasProblem ? problemId : undefined}
         ref={name === "current" ? currentInput : undefined}
         type="password"
+        revealable={options.revealable}
         value={value}
         autoComplete={options.autoComplete}
         autoFocus={options.autoFocus}
@@ -150,12 +154,7 @@ export function ChangePassword(props: {
         required
         onChange={(event) => {
           onChange(event.target.value);
-          if (
-            hasProblem ||
-            (name === "password" && problem?.field === "repeated")
-          ) {
-            setProblem(undefined);
-          }
+          if (hasProblem) setProblem(undefined);
         }}
       >
         {problemLine(name)}
@@ -208,9 +207,7 @@ export function ChangePassword(props: {
             {field("password", "New password", password, setPassword, {
               hint: "At least 8 characters.",
               autoComplete: "new-password",
-            })}
-            {field("repeated", "Repeat new password", repeated, setRepeated, {
-              autoComplete: "new-password",
+              revealable: true,
             })}
           </div>
           {problemLine(undefined)}

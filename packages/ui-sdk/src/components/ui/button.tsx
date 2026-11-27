@@ -108,6 +108,10 @@ const buttonVariants = cva(
         // The top bar's: 36 px with the sidebar's pins' 9 px corners and an
         // 18 px icon, pressable in the 44 px around it.
         bar: "relative size-9 rounded-sm before:absolute before:-inset-1 before:content-[''] [&_svg:not([class*='size-'])]:size-4.5",
+        // A button inside a sheet's 44 px field, such as Show password: 36
+        // px with a 20 px icon, pressable in the 44 px around it.
+        reveal:
+          "relative size-9 rounded-sm before:absolute before:-inset-1 before:content-[''] [&_svg:not([class*='size-'])]:size-5",
         // A place in the sidebar: its icon, its name and its status.
         item: "h-10 justify-start gap-2.5 rounded-md ps-2 pe-3 text-left text-sm",
         // A tile in a grid, as tall as its grid says (--tile-height).

@@ -163,10 +163,9 @@ async function submit() {
   await act(async () => found!.click());
 }
 
-async function fillAll(current: string, next: string, repeated = next) {
+async function fillAll(current: string, next: string) {
   await fill("Current password", current);
   await fill("New password", next);
-  await fill("Repeat new password", repeated);
 }
 
 const problemOf = (input: HTMLInputElement) =>
@@ -230,32 +229,42 @@ describe("Change password", () => {
     // The problem takes the hint's place.
     expect(dialog()?.textContent).not.toContain("At least 8 characters.");
 
-    await fillAll("old password", "staple battery horse", "staple battery");
-    await submit();
-    expect(problemOf(field("Repeat new password"))).toBe(
-      "Enter the same password twice.",
-    );
     await fill("New password", "staple battery");
-    expect(problemOf(field("Repeat new password"))).toBeUndefined();
-    expect(
-      field("Repeat new password").getAttribute("aria-invalid"),
-    ).toBeNull();
+    expect(problemOf(field("New password"))).toBeUndefined();
+    expect(field("New password").getAttribute("aria-invalid")).toBeNull();
     expect(changePassword).not.toHaveBeenCalled();
+  });
+
+  it("takes the new password once, and shows it on request", async () => {
+    await show();
+    await click("Change password");
+    expect(dialog()?.textContent).not.toContain("Repeat");
+    const next = field("New password");
+    const reveal = dialog()!.querySelector<HTMLButtonElement>(
+      'button[aria-label="Show password"]',
+    )!;
+    expect(reveal.getAttribute("aria-controls")).toBe(next.id);
+    expect(next.type).toBe("password");
+
+    await act(async () => reveal.click());
+
+    expect(next.type).toBe("text");
+    expect(reveal.getAttribute("aria-pressed")).toBe("true");
+    expect(field("Current password").type).toBe("password");
   });
 
   it("opens with empty fields and no error after cancelling an attempt", async () => {
     await show();
     await click("Change password");
-    await fillAll("old password", "staple battery horse", "staple battery");
+    await fillAll("old password", "short");
     await submit();
-    expect(problemOf(field("Repeat new password"))).toBeDefined();
+    expect(problemOf(field("New password"))).toBeDefined();
 
     await click("Cancel");
     expect(dialog()).toBeNull();
     await click("Change password");
     expect(field("Current password").value).toBe("");
     expect(field("New password").value).toBe("");
-    expect(field("Repeat new password").value).toBe("");
     expect(dialog()?.querySelector('[role="alert"]')).toBeNull();
   });
 
