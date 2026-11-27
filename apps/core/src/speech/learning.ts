@@ -87,7 +87,7 @@ export function createLearning(options: {
   let admissionProblem: HearingFailure | null = null;
   let managerFailed = false;
   let progress: LessonProgress | null = null;
-  let cachedLanguages = new Set<RequestLanguage>();
+  const cachedLanguages = new Set<RequestLanguage>();
   let shown: string | null = null;
   let changing: AbortController | null = null;
   let teaching: AbortController | null = null;
@@ -222,14 +222,9 @@ export function createLearning(options: {
         signal: controller.signal,
       }).catch(() => null);
       if (controller.signal.aborted || teachAgain) return;
-      if (models?.cached) {
-        cachedLanguages = new Set(models.cached);
-      } else {
-        // Older services only report the active model. Remember models
-        // observed in this process for switches back to a taught language.
-        for (const language of models?.active ?? [])
-          cachedLanguages.add(language);
-      }
+      // The service names only the model it has loaded; those it was taught
+      // in since the core started have theirs downloaded too.
+      for (const language of models ?? []) cachedLanguages.add(language);
       if (now.language === status.language) {
         status.phase = cachedLanguages.has(now.language)
           ? "learning"

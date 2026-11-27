@@ -240,14 +240,14 @@ export async function transcribe(options: {
 }
 
 /**
- * The languages whose models are available locally. Older services only
- * describe the active model.
+ * The languages of the models the service has loaded: the one it was last
+ * taught in, since it started.
  */
 export async function describeLanguages(options: {
   host: string;
   port: number;
   signal?: AbortSignal;
-}): Promise<{ cached: RequestLanguage[] | null; active: RequestLanguage[] }> {
+}): Promise<RequestLanguage[]> {
   const languagesIn = (value: unknown) =>
     Array.isArray(value)
       ? requestLanguages.filter((language) => value.includes(language))
@@ -261,18 +261,13 @@ export async function describeLanguages(options: {
     if (info?.type !== "info" || !Array.isArray(asr)) {
       throw new SpeechError("Speech recognition didn't describe its models");
     }
-    const active = asr.flatMap((program: { models?: unknown }) =>
+    return asr.flatMap((program: { models?: unknown }) =>
       Array.isArray(program?.models)
         ? program.models.flatMap((model: { languages?: unknown }) =>
             languagesIn(model?.languages),
           )
         : [],
     );
-    const cached = info.data.cached_languages;
-    return {
-      active,
-      cached: Array.isArray(cached) ? languagesIn(cached) : null,
-    };
   } finally {
     connection.close();
   }

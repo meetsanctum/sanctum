@@ -66,7 +66,6 @@ export async function fakeSpeechToPhrase(
   let hasLesson = true;
   // The language of the model it has loaded, once it has been taught.
   let loaded: string | null = null;
-  const cached = new Set<string>();
   const server = createServer((socket) => {
     socket.on("error", () => {});
     let buffered = Buffer.alloc(0);
@@ -120,7 +119,6 @@ export async function fakeSpeechToPhrase(
         heard.push({ type: head.type, data, bytes: payload });
         if (head.type === "describe") {
           send("info", {
-            cached_languages: [...cached],
             asr: [
               {
                 models: hasLesson
@@ -143,7 +141,6 @@ export async function fakeSpeechToPhrase(
               hasLesson = true;
               loaded =
                 typeof lesson.language === "string" ? lesson.language : null;
-              if (loaded) cached.add(loaded);
               send("trained", {
                 digest: `digest-${lessons.length}`,
                 changed: true,

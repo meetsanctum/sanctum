@@ -133,9 +133,7 @@ describe("what speech recognition learns", () => {
   });
 
   it("keeps the previous lesson when its templates lose their names", async () => {
-    const describe = vi
-      .spyOn(words, "describeLanguages")
-      .mockResolvedValue({ cached: [], active: [] });
+    const describe = vi.spyOn(words, "describeLanguages").mockResolvedValue([]);
     const teach = vi
       .spyOn(words, "train")
       .mockResolvedValue({ digest: "digest-1", changed: true });
@@ -163,9 +161,7 @@ describe("what speech recognition learns", () => {
   });
 
   it("retries teaching after a speaker finds the service unavailable", async () => {
-    const describe = vi
-      .spyOn(words, "describeLanguages")
-      .mockResolvedValue({ cached: [], active: [] });
+    const describe = vi.spyOn(words, "describeLanguages").mockResolvedValue([]);
     const teach = vi
       .spyOn(words, "train")
       .mockResolvedValue({ digest: "digest-1", changed: true });
@@ -464,9 +460,7 @@ describe("what speech recognition learns", () => {
   });
 
   it("keeps hearing with the old lesson when the new language has no sentences", async () => {
-    const models = vi
-      .spyOn(words, "describeLanguages")
-      .mockResolvedValue({ cached: [], active: [] });
+    const models = vi.spyOn(words, "describeLanguages").mockResolvedValue([]);
     const teach = vi
       .spyOn(words, "train")
       .mockResolvedValue({ digest: "en", changed: true });
@@ -502,7 +496,7 @@ describe("what speech recognition learns", () => {
     }>();
     const models = vi
       .spyOn(words, "describeLanguages")
-      .mockResolvedValue({ cached: ["en", "de"], active: ["en"] });
+      .mockResolvedValue(["en", "de"]);
     const teach = vi
       .spyOn(words, "train")
       .mockResolvedValueOnce({ digest: "en", changed: true })
@@ -568,9 +562,7 @@ describe("what speech recognition learns", () => {
   });
 
   it("reports a failed service until the manager recovers", async () => {
-    const models = vi
-      .spyOn(words, "describeLanguages")
-      .mockResolvedValue({ cached: [], active: [] });
+    const models = vi.spyOn(words, "describeLanguages").mockResolvedValue([]);
     const teach = vi
       .spyOn(words, "train")
       .mockResolvedValue({ digest: "en", changed: true });

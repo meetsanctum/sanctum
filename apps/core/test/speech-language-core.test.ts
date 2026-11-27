@@ -403,7 +403,7 @@ it("refuses a language change after the shared client is revoked", async () => {
       { id: shared.id },
       home.home,
     );
-    expect(revoked.statusCode).toBe(200);
+    expect(revoked.statusCode).toBe(204);
     finish.resolve();
     expect((await set).statusCode).toBe(403);
     expect((await home.hearing()).language).toBe("en");

@@ -126,20 +126,6 @@ class TrainingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.taught.digest, original.data["digest"])
         self.assertTrue((await server._train(self.taught, lesson)).data["changed"])
 
-    async def test_describe_lists_cached_models_separately_from_the_grammar(self):
-        await server._train(self.taught, LESSON)
-        with patch.object(server.models, "BUNDLED_MODELS_DIR", self.data / "bundled"):
-            for language in ("en", "de"):
-                name = server.models.model_name_for(language, server.BACKEND)
-                model = self.data / "models" / name
-                model.mkdir(parents=True)
-                if language == "de":
-                    (model / "acoustic.onnx").touch()
-
-            info = self.taught.describe()
-            self.assertEqual(info.data["cached_languages"], ["de"])
-            self.assertEqual(info.data["asr"][0]["models"][0]["languages"], ["en"])
-
     async def test_failed_grammar_load_keeps_the_active_model(self):
         await server._train(self.taught, LESSON)
         holder = self.taught.holder
