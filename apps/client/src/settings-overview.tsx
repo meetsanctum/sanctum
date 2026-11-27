@@ -184,7 +184,7 @@ export function SettingsOverview(props: {
         {row(
           "clients",
           MonitorSmartphone,
-          "Clients",
+          "Linked Devices",
           others === undefined
             ? (props.me?.client.name ?? "")
             : others === 0

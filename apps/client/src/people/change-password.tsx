@@ -190,7 +190,7 @@ export function ChangePassword(props: {
             <DialogTitle>Change your password</DialogTitle>
             <DialogDescription>
               Your password never leaves this device. Your other devices stay
-              signed in. To sign one out, use Sign out under Devices.
+              signed in. To sign one out, use Sign out under Linked Devices.
             </DialogDescription>
           </DialogHeader>
           <input

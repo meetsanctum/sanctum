@@ -243,7 +243,7 @@ describe("a stored home that does not answer", () => {
     await wait(notAnsweringAfterMs.connecting);
     await click("Choose another home");
     expect(dialog()?.textContent).toContain(
-      "Maya's home cannot be reached to sign this device out, so the device stays listed in that home's Settings → Clients",
+      "Maya's home cannot be reached to sign this device out, so the device stays listed in that home's Settings → Linked Devices",
     );
     await click("Cancel");
     expect(dialog()).toBeNull();

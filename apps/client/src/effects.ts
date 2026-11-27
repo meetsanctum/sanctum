@@ -5,7 +5,7 @@
 // what it shows or does, like Day and Evening.
 //
 // Each is on or off for this client, on its own, set on any client
-// (Settings → Clients), and off until it is turned on: nothing else turns
+// (Settings → Linked Devices), and off until it is turned on: nothing else turns
 // either on. Development and display benchmark builds can use `?effects=`
 // and `?motion=` in the page's address to see either look on any device.
 

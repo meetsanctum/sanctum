@@ -148,5 +148,5 @@ On another Mac, the app lists your home by its name. Choose it, and Sanctum
 asks **Who uses this device?** A person's own Mac chooses **Just me** and
 signs in with their username and password. A Mac the household shares
 chooses **Everyone at home**: it shows a code, and someone approves it from
-a device that is already in, under Settings → Clients → **Add a shared
+a device that is already in, under Settings → Linked Devices → **Add a shared
 device**.

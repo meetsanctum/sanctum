@@ -11,8 +11,8 @@ import { lastAtText } from "./system-status";
 import { everyWhileShown } from "./while-shown";
 
 // Connected now, System's last section: each screen with a live connection
-// open, drawn as Settings → Clients draws it, this device first and then the
-// longest connected. Renaming and removing stay in Clients.
+// open, drawn as Settings → Linked Devices draws it, this device first and
+// then the longest connected. Renaming and signing out stay in Linked Devices.
 
 export function connectedDetail(
   clock: HomeClock,
@@ -69,7 +69,7 @@ export function ConnectedSection() {
     <Section
       id="status-connected"
       title="Connected Now"
-      hint={`${connected.length} of ${clients.length} ${clients.length === 1 ? "client" : "clients"}`}
+      hint={`${connected.length} of ${clients.length} linked ${clients.length === 1 ? "device" : "devices"}`}
     >
       <ul className="m-0 flex list-none flex-col gap-3 p-0">
         {connected.map((client) => {

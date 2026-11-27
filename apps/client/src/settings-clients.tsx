@@ -5,7 +5,7 @@ import type {
   SetClientDrawing,
 } from "@meetsanctum/auth-protocol";
 import { Button, Input, useHomeClock } from "@meetsanctum/ui-sdk";
-import { EllipsisVertical, Gauge, House, Pencil, Trash2 } from "lucide-react";
+import { EllipsisVertical, Gauge, House, LogOut, Pencil } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -33,14 +33,16 @@ import {
   DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 import { coreJson } from "./core-fetch";
+import { firstName, usedText } from "./people/words";
 import { platformNames } from "./platforms";
 import { ClientDrawing, drawnText } from "./settings-client-drawing";
 import { everyWhileShown } from "./while-shown";
 
-// Settings → Clients: every client with its kind, person, platform and
-// last-seen time, or Connected now while it is. Every client sees and
-// manages every client and adds shared devices, shared ones too. Removing a
-// client signs it out at once.
+// Settings → Linked Devices: every device that shows the home, with its
+// person or Shared, its platform and when it was last used, in the words a
+// person's page uses: to the day, never a time, since shared screens show
+// this page too. Every device sees and manages every linked device and adds
+// shared ones. Signing one out ends it at once.
 
 const minute = 60_000;
 
@@ -78,11 +80,7 @@ export function clientDetail(
   return [
     client.kind === "shared" ? "Shared" : (person?.name ?? "Personal"),
     platformNames[client.platform],
-    client.current
-      ? "This device"
-      : client.connectedSince
-        ? "Connected now"
-        : seenText(clock, client.lastSeenAt, now),
+    usedText(clock, client, now),
     drawnText(client),
   ]
     .filter(Boolean)
@@ -96,7 +94,7 @@ type EditNameOrRemove = {
 type Editing = EditNameOrRemove | { action: "drawing"; client: ClientInfo };
 
 export function ClientsSection(props: {
-  // The way back of Settings' Clients page, which it is the whole of.
+  // The way back of Settings' Linked Devices page, which it is the whole of.
   page?: ReactNode;
 }) {
   const clock = useHomeClock();
@@ -120,7 +118,7 @@ export function ClientsSection(props: {
   }, []);
 
   // A saved switch shows at once, a read already on its way is let go,
-  // since it can hold the old value, and Clients read afresh, in case
+  // since it can hold the old value, and the list read afresh, in case
   // another client changed something meanwhile. Only the switch pressed is
   // taken from the save's answer: the other may have changed since.
   const drawingChanged = (saved: SetClientDrawing) => {
@@ -151,7 +149,7 @@ export function ClientsSection(props: {
   return (
     <Section
       id="settings-clients"
-      title="Clients"
+      title="Linked Devices"
       action={
         <Button onClick={() => setAdding(true)}>Add a shared device</Button>
       }
@@ -198,6 +196,7 @@ export function ClientsSection(props: {
       />
       <EditClient
         editing={editing?.action === "drawing" ? undefined : editing}
+        people={people}
         onClose={() => setEditing(undefined)}
         onDone={() => void refresh().catch(() => undefined)}
       />
@@ -241,8 +240,8 @@ function ClientMenu(props: {
             variant="destructive"
             onSelect={() => props.onEdit("remove")}
           >
-            <Trash2 />
-            Remove
+            <LogOut />
+            Sign out
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>
@@ -250,9 +249,10 @@ function ClientMenu(props: {
   );
 }
 
-// Renaming a client, or removing it after saying what that does.
+// Renaming a linked device, or signing it out after saying what that does.
 function EditClient(props: {
   editing?: EditNameOrRemove;
+  people: readonly PersonInfo[];
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -308,6 +308,7 @@ function EditClient(props: {
   };
 
   const shared = editing?.client.kind === "shared";
+  const person = props.people.find(({ id }) => id === editing?.client.personId);
   return (
     <Dialog
       open={!!props.editing}
@@ -320,15 +321,15 @@ function EditClient(props: {
           <DialogHeader>
             <DialogTitle>
               {editing?.action === "rename"
-                ? "Rename this client"
-                : `Remove ${editing?.client.name}?`}
+                ? "Rename this device"
+                : `Sign out ${editing?.client.name}?`}
             </DialogTitle>
             <DialogDescription>
               {editing?.action === "rename"
                 ? "The name shows here and in the activity log."
                 : shared
-                  ? "It is signed out at once. To add it again, choose your home on it, then “Everyone at home”, and approve its new code."
-                  : "It is signed out at once, and its person signs in again to use it."}
+                  ? "Any AI agents added from this device lose access and must be set up again. To use the device again, choose your home on it, then Everyone at home, and approve its new code."
+                  : `${person ? firstName(person.name) : "Its person"} signs in again to use it.`}
             </DialogDescription>
           </DialogHeader>
           {editing?.action === "rename" && (
@@ -357,7 +358,7 @@ function EditClient(props: {
                 working || (editing?.action === "rename" && !name.trim())
               }
             >
-              {editing?.action === "rename" ? "Save" : "Remove"}
+              {editing?.action === "rename" ? "Save" : "Sign out"}
             </Button>
           </DialogFooter>
         </form>

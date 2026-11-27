@@ -42,7 +42,7 @@ import { platformNames } from "./platforms";
 // and the core checks that device through an exchange only the device
 // showing the code can finish, on a connection to this host. Once it is
 // checked, this client sees what asked, names it and approves it. The device
-// then collects its token itself, and joins Settings → Clients.
+// then collects its token itself, and joins Settings → Linked Devices.
 
 type Step =
   | { name: "code" }

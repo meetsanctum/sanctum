@@ -320,7 +320,8 @@ export function PairDevice(props: {
         {[
           <>
             On a device that’s already connected to {host.name}, open{" "}
-            <strong className="font-semibold">Settings → Clients</strong>.
+            <strong className="font-semibold">Settings → Linked Devices</strong>
+            .
           </>,
           <>
             Choose{" "}
