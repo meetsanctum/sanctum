@@ -98,7 +98,7 @@ function runToolOf(types: readonly EntityTypeDefinition[]): Tool {
     name: runName,
     title: "Run",
     description: [
-      `Runs a ${kinds} by the app and key that entities gives for it, answering its type and what it did.`,
+      `Runs an entity of a supported type (${kinds}) by the app and key that the entities tool returns. Returns the entity's type and what it did.`,
       ...types.map((type) => type.run!.description),
       notInstructions,
     ].join(" "),

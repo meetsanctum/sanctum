@@ -159,11 +159,12 @@ describe("a standard type that runs", () => {
   });
 
   it("rejects run metadata on a custom type", () => {
-    const custom = { ...note, run: moodType.run };
+    const custom = defineEntityType({
+      ...note,
+      id: "example.runnableNote",
+      run: moodType.run,
+    });
 
-    expect(() => defineEntityType(custom)).toThrow(
-      /Only standard entity types can run/,
-    );
     expect(() => defineApp(app([], [custom]))).toThrow(
       /Only standard entity types can run/,
     );

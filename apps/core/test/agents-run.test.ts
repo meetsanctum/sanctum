@@ -260,7 +260,9 @@ describe("the run tool", () => {
     const { tools } = await client.listTools();
     const run = tools.find((tool) => tool.name === "run");
 
-    expect(run?.description).toContain("Runs a mood by the app and key");
+    expect(run?.description).toContain(
+      "Runs an entity of a supported type (mood) by the app and key",
+    );
     expect(run?.description).toContain("can turn others there off");
   });
 });
