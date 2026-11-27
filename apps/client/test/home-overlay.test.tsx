@@ -209,7 +209,7 @@ it("updates the name in an open device detail", async () => {
   expect(dialog()?.querySelector("h2")?.textContent).toBe("Office Lamp");
 });
 
-it("opens the app's settings after adding it from a hardware offer", async () => {
+it("opens the app after adding it from a hardware offer, as Apps does", async () => {
   const added: AppInfo = { ...moods, id: "sanctum.example", name: "Example" };
   const available: AvailableApp = {
     id: added.id,
@@ -249,7 +249,6 @@ it("opens the app's settings after adding it from a hardware offer", async () =>
       container.querySelector(".top-bar h1") ??
       container.querySelector("main h1")
     )?.textContent;
-  expect(title()).toBe("Example Settings");
-  await press("Done");
-  expect(title()).toBe("Home");
+  expect(title()).toBe("Example");
+  expect(container.textContent).not.toContain("Example Settings");
 });

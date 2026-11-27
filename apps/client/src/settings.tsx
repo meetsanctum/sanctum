@@ -82,7 +82,8 @@ export function SettingsPage(props: {
   onAppChanged?: (app: AppInfo) => void;
   // One was added here, as the core answered.
   onAppAdded?: (app: AppInfo) => void;
-  // Opens an app's own page, as AI models opens Ollama's.
+  // Opens an app as Apps does: its own page, or the shell's default one for
+  // an app without one. AI models opens Ollama's, and an add opens the app.
   onOpenApp?: (appId: string) => void;
   // Home's background, which an app's previews stand on; mocha unless said.
   homeBackground?: string;
@@ -256,7 +257,10 @@ export function SettingsPage(props: {
             apps={props.apps}
             onAdded={(app) => {
               props.onAppAdded?.(app);
-              props.open(appSettingsPage, { id: app.id });
+              // An added app opens as from Apps: its own page is where it
+              // gets going, and its settings stay a step away there.
+              if (props.onOpenApp) props.onOpenApp(app.id);
+              else props.open(appSettingsPage, { id: app.id });
             }}
           />
         </>

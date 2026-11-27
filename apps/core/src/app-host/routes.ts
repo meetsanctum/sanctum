@@ -160,7 +160,7 @@ export function registerAppRoutes(
   });
 
   // Adding one is the household's to choose, like its grants, on every
-  // client. Its sheet closes onto its settings, which say how its first
+  // client. Its sheet closes onto the app, whose page says how its first
   // start goes as it does.
   app.post("/api/apps/add", async (request): Promise<AppInfo> => {
     const parsed = toAdd.safeParse(request.body);

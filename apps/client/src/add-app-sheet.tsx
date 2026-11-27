@@ -32,7 +32,7 @@ import { permissionIconOf } from "./permission-icons";
 // says so in place of the lists, with what would help, and Add can't be
 // pressed. Its other optional permissions are asked where they're first
 // used, as for every app. Add grants what's listed and starts it, and the
-// sheet closes onto its settings.
+// sheet closes onto the app, as Apps opens it.
 
 const mebibyte = 1024 * 1024;
 
