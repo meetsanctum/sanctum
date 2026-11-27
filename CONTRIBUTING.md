@@ -167,6 +167,25 @@ assets/brand               the brand's files, under their own licence
 deploy/                    a host's installer and compose file; deploy/dev for development
 ```
 
+## Releasing the connector
+
+The Connector workflow stages `@meetsanctum/mcp` on npm from a tag
+`mcp-vX.Y.Z`. It checks that the tag names the package's version, runs the
+connector's checks, and packs it to hold only `dist/cli.js`, the README and
+the licence. A staged version installs for nobody until a maintainer of the
+`@meetsanctum` scope approves it, on npmjs.com under Staged Packages or with
+`npm stage approve`, with two-factor authentication.
+
+Settings' prompt pins the connector's version (`agentConnector` in
+`packages/auth-protocol/src/agent-setup.ts`), and the connector's tests hold it
+to `packages/mcp/package.json`. A new connector version bumps both together,
+is tagged and approved, and only then ships in a core.
+
+npm trusts the workflow as a trusted publisher, with no token stored, and
+attaches provenance. A trusted publisher can only be set on a package that
+exists, so the package's first version is staged with a short-lived token in the
+repository's `NPM_TOKEN` secret, removed once the trusted publisher is set.
+
 ## Running a host
 
 The Images workflow publishes multi-architecture images (`linux/amd64`,
