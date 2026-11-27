@@ -1,11 +1,6 @@
 import { z } from "zod";
 
-import type { AppDefinition } from "./app-definition.js";
-import {
-  assistantAppId,
-  requestLanguages,
-  type RequestLanguage,
-} from "./requests.js";
+import { requestLanguages, type RequestLanguage } from "./requests.js";
 
 // The sentences Sanctum's Assistant understands when someone speaks to a
 // smart speaker, per language: the core teaches them to speech recognition,
@@ -230,28 +225,4 @@ export function notUnderstoodIssues(
       (language) =>
         `It says what it didn't understand in ${language}, but has no ${language} sentences`,
     );
-}
-
-export function assertAssistantSpeech(
-  app: Pick<AppDefinition, "id" | "requests" | "sentences" | "notUnderstood">,
-) {
-  if (app.sentences !== undefined) {
-    if (app.id !== assistantAppId) {
-      throw new Error("Only Sanctum's Assistant brings sentences");
-    }
-    if (typeof app.requests !== "function") {
-      throw new Error("An Assistant with sentences needs a requests handler");
-    }
-    const issues = sentenceIssues(app.sentences);
-    if (issues.length > 0) throw new Error(issues.join("; "));
-  }
-  if (app.notUnderstood !== undefined) {
-    if (app.id !== assistantAppId || app.sentences === undefined) {
-      throw new Error(
-        "Only Sanctum's Assistant, with its sentences, says what it didn't understand",
-      );
-    }
-    const issues = notUnderstoodIssues(app.notUnderstood, app.sentences);
-    if (issues.length > 0) throw new Error(issues.join("; "));
-  }
 }

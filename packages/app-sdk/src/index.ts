@@ -39,7 +39,7 @@ import {
 } from "./room-sections.js";
 import { turnOnType } from "./lights.js";
 import { protocolVersion } from "./protocol-version.js";
-import { assertAssistantSpeech } from "./sentences.js";
+import { assertAssistantSpeech } from "./assistant-speech.js";
 import { settingsSchemaOf, type SettingsSchema } from "./settings.js";
 import { forecastType, sunType } from "./weather.js";
 import {
@@ -81,20 +81,7 @@ export * from "./live.js";
 export * from "./media.js";
 export * from "./models.js";
 export * from "./requests.js";
-export {
-  assistantSentencesSchema,
-  grammarSteps,
-  notUnderstoodIssues,
-  notUnderstoodMaxLength,
-  notUnderstoodSchema,
-  referenceHome,
-  sentenceBlanks,
-  sentenceIssues,
-  sentenceLimits,
-  type AssistantSentences,
-  type NotUnderstood,
-  type SentenceBlank,
-} from "./sentences.js";
+export * from "./sentences.js";
 export * from "./hearing.js";
 export * from "./action-errors.js";
 export * from "./host.js";
