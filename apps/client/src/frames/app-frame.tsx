@@ -4,7 +4,7 @@ import {
   type FrameContext,
   type PageParams,
 } from "@meetsanctum/ui-sdk";
-import type { AppInfo } from "@meetsanctum/app-sdk";
+import { appIconSchema, type AppInfo } from "@meetsanctum/app-sdk";
 import { cn } from "cn";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -171,21 +171,24 @@ function Opening(props: { name: string; isSlow: boolean }) {
       <Skeleton className="h-54 rounded-lg" />
       <Skeleton className="mt-5 h-3.5 w-21" />
       <Skeleton className="h-38 rounded-lg" />
-      {props.isSlow ? (
-        <div
-          role="status"
-          className="mt-8 flex items-center justify-center gap-3 text-center"
-        >
+      <div
+        role="status"
+        aria-atomic="true"
+        className={
+          props.isSlow
+            ? "mt-8 flex items-center justify-center gap-3 text-center"
+            : "sr-only"
+        }
+      >
+        {props.isSlow && (
           <KnotLoader className="size-7 shrink-0 text-(--secondary)" />
-          <p className="m-0 text-muted-foreground">
-            Opening {props.name} is taking longer than usual.
-          </p>
-        </div>
-      ) : (
-        <p role="status" className="sr-only">
-          Opening {props.name}…
+        )}
+        <p className="m-0 text-muted-foreground">
+          {props.isSlow
+            ? `Opening ${props.name} is taking longer than usual.`
+            : `Opening ${props.name}…`}
         </p>
-      )}
+      </div>
     </div>
   );
 }
@@ -200,15 +203,16 @@ function DidntOpen(props: {
   tryAgain: () => void;
 }) {
   const { name } = props.app;
+  const icon = appIconSchema.safeParse(props.app.icon);
   return (
     <Empty role="alert">
       <EmptyHeader>
         <EmptyMedia className="relative">
           <AppIcon
-            icon={props.app.icon ?? plainIcon}
+            icon={icon.success ? icon.data : plainIcon}
             className="opacity-40 grayscale-60"
           />
-          <span className="absolute -end-2 -bottom-2 grid size-7 place-items-center rounded-full bg-background">
+          <span className="absolute -end-2 -bottom-2 grid size-7 place-items-center rounded-lg bg-background">
             <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6">
               <circle cx="12" cy="12" r="11" className="fill-(--ruby)" />
               <path
