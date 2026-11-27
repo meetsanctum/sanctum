@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createCapacity } from "../src/apps/capacity.js";
 import type { AppContainers } from "../src/apps/containers.js";
@@ -139,22 +139,38 @@ describe("reserving what an add needs", () => {
     };
 
     await expect(
-      capacity.check("sanctum.weather", add, [], short),
+      capacity.check("sanctum.example", add, [], short),
     ).resolves.toMatchObject({
       dataNeedsMb: 256,
       dataFreeBytes: 0,
       dataShortBytes: (256 + 900) * mebibyte,
     });
     await expect(
-      capacity.check("sanctum.weather", add, [], plenty),
+      capacity.check("sanctum.example", add, [], plenty),
     ).resolves.toMatchObject({ dataShortBytes: 0 });
     await expect(
-      capacity.check("sanctum.weather", add, [], {
+      capacity.check("sanctum.example", add, [], {
         room: () => null,
         spare: () => null,
         sizeMb: noImage,
       }),
     ).resolves.toMatchObject({ dataFreeBytes: null, dataShortBytes: null });
+  });
+
+  it("counts disk reservations once for available space and the shortfall", async () => {
+    const { capacity } = await ledger();
+    const spare = vi.fn(() => 100 * mebibyte).mockReturnValueOnce(-mebibyte);
+    await expect(
+      capacity.check("sanctum.example", add, [], {
+        room: () => Math.max(0, spare()),
+        spare,
+        sizeMb: noImage,
+      }),
+    ).resolves.toMatchObject({
+      dataFreeBytes: 0,
+      dataShortBytes: 257 * mebibyte,
+    });
+    expect(spare).toHaveBeenCalledOnce();
   });
 
   it("asks no data of an image it kept, which its start uses as it is", async () => {
@@ -163,7 +179,7 @@ describe("reserving what an add needs", () => {
 
     await expect(
       capacity.check("sanctum.weather", { ...add, dataMb: 512 }, [], kept),
-    ).resolves.toMatchObject({ dataNeedsMb: 0 });
+    ).resolves.toMatchObject({ dataNeedsMb: 0, dataShortBytes: 0 });
     await expect(
       capacity.reserve("sanctum.weather", { ...add, dataMb: 512 }, [], kept),
     ).resolves.toMatchObject({ id: expect.any(String) });

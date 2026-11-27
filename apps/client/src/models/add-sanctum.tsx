@@ -65,8 +65,10 @@ export function AddSanctum(props: {
   const { busy, onBusy } = props;
   const offered = phase.kind === "add" ? phase.app : undefined;
   const [short] = offered?.shortfalls ?? [];
-  const blocked = short && offered && shortfallWords(short, offered.name);
-  const toFix = useShortfallFix(blocked?.fix, () => {
+  const blocked =
+    short && offered && shortfallWords(short, offered.name, props.apps);
+  const fix = blocked?.fix;
+  const toFix = useShortfallFix(fix, () => {
     props.onClose();
     return true;
   });
@@ -190,9 +192,10 @@ export function AddSanctum(props: {
     return (
       <div className="flex flex-col gap-5">
         <DialogHeader>
-          {title}
+          {blocked ? <DialogTitle>{blocked.title}</DialogTitle> : title}
           <DialogDescription>
-            Add the Ollama app, then download a model on its page.
+            {blocked?.line ??
+              "Add the Ollama app, then download a model on its page."}
           </DialogDescription>
         </DialogHeader>
         {app ? (
@@ -208,15 +211,11 @@ export function AddSanctum(props: {
                 )}
               </span>
             </div>
-            <Asks
-              requests={app.requests.filter((request) => request.needed)}
-              compact
-            />
-            {blocked && (
-              <div role="alert" className="flex flex-col gap-1 text-sm">
-                <p className="m-0 font-medium">{blocked.title}</p>
-                <p className="m-0">{blocked.line}</p>
-              </div>
+            {!blocked && (
+              <Asks
+                requests={app.requests.filter((request) => request.needed)}
+                compact
+              />
             )}
           </>
         ) : (
@@ -232,9 +231,9 @@ export function AddSanctum(props: {
         )}
         <DialogFooter>
           {back}
-          {blocked && toFix ? (
+          {fix && toFix ? (
             <Button type="button" disabled={busy} onClick={() => void toFix()}>
-              {blocked.fix.label}
+              {fix.label}
             </Button>
           ) : (
             <Button

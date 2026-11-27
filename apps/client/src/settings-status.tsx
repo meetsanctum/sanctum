@@ -360,17 +360,18 @@ function StorageLoading() {
   );
 }
 
-// Shows the card it was opened at once its cards are there, the first time
-// only, so the page stays where someone scrolls it after.
-function useOpenedAt(card: string | undefined, isLoading: boolean) {
-  const shown = useRef(false);
+type CardRequest = { card?: string };
+
+// Scroll once per request, after the card is available.
+function useOpenedAt(request: CardRequest | undefined, ready: boolean) {
+  const shown = useRef<CardRequest>(undefined);
   useEffect(() => {
-    if (!card || shown.current || isLoading) return;
-    const heading = document.getElementById(`status-${card}`);
+    if (!request?.card || shown.current === request || !ready) return;
+    const heading = document.getElementById(`status-${request.card}`);
     if (!heading) return;
-    shown.current = true;
     (heading.closest("section") ?? heading).scrollIntoView({ block: "start" });
-  }, [card, isLoading]);
+    shown.current = request;
+  }, [request, ready]);
 }
 
 /** The System page: the verdict, then Sanctum with Restart and Shut down, its updates, its storage with Free up space, memory, the last 24 hours, network and the clients connected now. */
@@ -378,7 +379,7 @@ export function SystemPage(props: {
   apps: readonly AppInfo[];
   // The card it opens at, by its id after "status-", as an Add sheet's Free
   // up space opens it at Storage.
-  card?: string;
+  openAt?: CardRequest;
   core: CoreStatus;
   // Whether an update is running, for the connection veil's words.
   onUpdating: (updating: boolean) => void;
@@ -397,7 +398,10 @@ export function SystemPage(props: {
   const host = failed ? null : status?.host;
   const isLoading = !status && !failed;
 
-  useOpenedAt(props.card, isLoading);
+  useOpenedAt(
+    props.openAt,
+    !isLoading && (props.openAt?.card !== "storage" || !!host?.storage),
+  );
 
   useEffect(() => onUpdating(update.running), [onUpdating, update.running]);
   useEffect(() => () => onUpdating(false), [onUpdating]);

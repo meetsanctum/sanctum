@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
+import type { AvailableApp, HardwareOffer } from "@meetsanctum/app-sdk";
 import { act } from "react";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import {
   backTo,
@@ -14,6 +15,7 @@ import {
   refresh,
 } from "./home-shell-harness";
 import { light, maya } from "./settings-devices-fixtures";
+import { piStatus } from "./system-status-fixtures";
 
 beforeAll(() => import("../src/settings"));
 
@@ -229,5 +231,129 @@ describe("Settings' pages", () => {
     await openArea("Devices");
 
     expect(container.querySelector("main")!.scrollTop).toBe(0);
+  });
+});
+
+describe("repairing a blocked app add", () => {
+  function offerApp(shortfall: AvailableApp["shortfalls"][number]) {
+    const app: AvailableApp = {
+      id: "sanctum.example",
+      name: "Example",
+      version: "1.0.0",
+      icon: null,
+      summary: null,
+      requests: [],
+      memory: 128,
+      data: 256,
+      adds: { devices: false },
+      shortfalls: [shortfall],
+    };
+    const answer = mockCoreJson.getMockImplementation()!;
+    mockCoreJson.mockImplementation(async (path, init) => {
+      if (path === "/api/apps/available") return [app];
+      if (path === "/api/system/status") return piStatus();
+      return answer(path, init);
+    });
+    return app;
+  }
+
+  const dialog = () => document.querySelector('[role="dialog"]');
+  const storage = () =>
+    container.querySelector('section[aria-labelledby="status-storage"]');
+  const spaceShortfall = {
+    kind: "space",
+    needs: 256_000_000,
+    free: 0,
+  } as const;
+
+  const pressRepair = async (name: string) =>
+    act(async () =>
+      [...dialog()!.querySelectorAll("button")]
+        .find((button) => button.textContent === name)!
+        .click(),
+    );
+
+  async function openAddSheet() {
+    await openFromOverview("Settings");
+    await openArea("Apps");
+    const main = container.querySelector("main")!;
+    main.scrollTop = 250;
+    await act(async () =>
+      main
+        .querySelector<HTMLButtonElement>('button[aria-label="Add Example"]')!
+        .click(),
+    );
+    return main;
+  }
+
+  function captureScrolls() {
+    const targets: Element[] = [];
+    const original = Object.getOwnPropertyDescriptor(
+      Element.prototype,
+      "scrollIntoView",
+    );
+    Element.prototype.scrollIntoView = function () {
+      targets.push(this);
+    };
+    onTestFinished(() => {
+      if (original)
+        Object.defineProperty(Element.prototype, "scrollIntoView", original);
+      else Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+    });
+    return targets;
+  }
+
+  it("opens System at Storage and goes back to Apps", async () => {
+    offerApp(spaceShortfall);
+    const targets = captureScrolls();
+    await openAddSheet();
+    await pressRepair("Free up space");
+
+    expect(dialog()).toBeNull();
+    expect(pageTitle()).toBe("System");
+    expect(storage()).not.toBeNull();
+    expect(targets).toEqual([storage()]);
+    await act(async () => backTo("Apps")!.click());
+    expect(pageTitle()).toBe("Apps");
+  });
+
+  it("returns to the installed apps and keeps one Back entry", async () => {
+    offerApp({ kind: "memory", needs: 128 * 1024 ** 2, free: 60 * 1024 ** 2 });
+    const main = await openAddSheet();
+    expect(main.scrollTop).toBe(250);
+    await pressRepair("Show apps");
+
+    expect(dialog()).toBeNull();
+    expect(pageTitle()).toBe("Apps");
+    expect(main.scrollTop).toBe(0);
+    await act(async () => backTo("Settings")!.click());
+    expect(pageTitle()).toBe("Settings");
+  });
+
+  it("opens Storage on the existing System page and preserves the hardware offer", async () => {
+    const app = offerApp(spaceShortfall);
+    const targets = captureScrolls();
+    await openFromOverview("Settings");
+    await openArea("System");
+    const offer: HardwareOffer = {
+      id: "offer-1",
+      app: app.id,
+      sticks: [{ path: "/dev/ttyACM0", label: "Zigbee stick" }],
+    };
+    await act(async () => pushLive({ type: "offer", offer }));
+    await pressRepair("Free up space");
+
+    expect(dialog()).toBeNull();
+    expect(storage()).not.toBeNull();
+    expect(targets).toEqual([storage()]);
+    expect(
+      mockCoreJson.mock.calls.some(
+        ([path]) => path === "/api/hardware/offer/dismiss",
+      ),
+    ).toBe(false);
+    await act(async () => pushLive({ type: "offer", offer: { ...offer } }));
+    expect(dialog()).toBeNull();
+    await act(async () => backTo("Settings")!.click());
+    expect(pageTitle()).toBe("Settings");
   });
 });

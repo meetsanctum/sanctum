@@ -278,7 +278,7 @@ describe("Add apps", () => {
         toFree: 1.14 * 1024 * mebibyte,
       },
       title: "Not enough storage for Example",
-      line: `To add Example, free up 1.2 GB. ${productName} keeps some storage free for updates and for your other apps.`,
+      line: `To add Example, free up 1.23 GB. ${productName} keeps some storage free for updates and for your other apps.`,
       fix: "Free up space",
       opens: ["system", { card: "storage" }],
     },
@@ -290,7 +290,18 @@ describe("Add apps", () => {
         free: 100 * mebibyte,
       },
       title: "Not enough storage for Example",
-      line: `To add Example, free up 156 MB. ${productName} keeps some storage free for updates and for your other apps.`,
+      line: `To add Example, free up 164 MB. ${productName} keeps some storage free for updates and for your other apps.`,
+      fix: "Free up space",
+      opens: ["system", { card: "storage" }],
+    },
+    {
+      shortfall: {
+        kind: "space" as const,
+        needs: 256 * mebibyte,
+        free: 0,
+      },
+      title: "Not enough storage for Example",
+      line: `To add Example, free up some storage. ${productName} keeps some storage free for updates and for your other apps.`,
       fix: "Free up space",
       opens: ["system", { card: "storage" }],
     },
@@ -301,7 +312,7 @@ describe("Add apps", () => {
         free: 60 * mebibyte,
       },
       title: "Not enough memory for Example",
-      line: "To add Example, turn off an app you don't use. Your other apps take the memory Example needs.",
+      line: "Example needs 128 MB of memory. 60 MB is available for it. Turning off an app you don't use may free enough memory.",
       fix: "Show apps",
       opens: ["apps", undefined],
     },
@@ -338,6 +349,26 @@ describe("Add apps", () => {
       expect(openSettings).toHaveBeenCalledWith(...opens);
     },
   );
+
+  it("shows the memory shortfall without a repair action when no app can be turned off", async () => {
+    available = [
+      {
+        ...example,
+        shortfalls: [
+          { kind: "memory", needs: 1152 * mebibyte, free: 1024 * mebibyte },
+        ],
+      },
+    ];
+    await render([]);
+    await press(container, "Add Example");
+
+    const sheet = dialog()!;
+    expect(sheet.textContent).toContain(
+      "Example needs 1.13 GB of memory. 1 GB is available for it.",
+    );
+    expect(buttonIn(sheet, "Show apps")).toBeUndefined();
+    expect(buttonIn(sheet, "Add")!.disabled).toBe(true);
+  });
 
   it("can't add one that doesn't fit where Settings can't be opened", async () => {
     openSettings = undefined;

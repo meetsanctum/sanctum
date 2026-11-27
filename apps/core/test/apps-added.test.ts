@@ -300,6 +300,14 @@ describe("what keeps an app from being added", () => {
     ).toEqual([
       { kind: "space", needs: 64 * mebibyte, free: 0, toFree: 1100 * mebibyte },
     ]);
+    // Zero on its own doesn't say how much of the reserve is missing.
+    expect(
+      shortfallsOf(app, {
+        pagesNeed: null,
+        host,
+        capacity: { ...counted, memoryFreeMb: 1024, dataFreeBytes: 0 },
+      }),
+    ).toEqual([{ kind: "space", needs: 64 * mebibyte, free: 0 }]);
     // A disk it can't say about holds nothing back.
     expect(
       shortfallsOf(app, {

@@ -173,11 +173,15 @@ export function createCapacity(options: {
       memoryFreeMb,
       servicesMemoryMb,
       dataNeedsMb,
-      dataFreeBytes: disk.room(app),
+      dataFreeBytes: spare === null ? null : Math.max(0, spare),
       // How much would have to be freed for its data to fit, which the room
       // left, never below zero, can't say once it's gone.
       dataShortBytes:
-        spare === null ? null : Math.max(0, dataNeedsMb * mebibyte - spare),
+        dataNeedsMb === 0
+          ? 0
+          : spare === null
+            ? null
+            : Math.max(0, dataNeedsMb * mebibyte - spare),
     };
   }
 

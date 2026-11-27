@@ -385,15 +385,16 @@ function HomeScreen(
     (app: string) =>
     (page: string, params: PageParams = {}) =>
       setRoutes((current) => [...current, { app, page, params }]);
-  // One of Settings' pages for a sheet's fix, over the page that opened it,
-  // unless that's the page already, as Settings → Apps under its Add sheet.
+  // Return to the top of the current page or open the requested card without
+  // adding the same page to the back stack.
   const openSettingsPage = useCallback(
     (page: string, params: PageParams = {}) =>
       setRoutes((current) => {
         const top = current.at(-1);
+        const next = { app: settingsApp.id, page, params: { ...params } };
         return top?.app === settingsApp.id && top.page === page
-          ? current
-          : [...current, { app: settingsApp.id, page, params }];
+          ? [...current.slice(0, -1), next]
+          : [...current, next];
       }),
     [],
   );
@@ -655,6 +656,7 @@ function HomeScreen(
             <StickOffer
               live={live}
               isOnline={!isVeiled && core.state === "online"}
+              apps={installed}
               onAdded={(app) => {
                 appAdded(app);
                 settingsOf(app.id)();

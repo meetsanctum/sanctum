@@ -87,11 +87,15 @@ export function shortfallsOf(
     const dataNeeds = capacity.dataNeedsMb * mebibyte;
     const dataFree = capacity.dataFreeBytes;
     if (dataFree !== null && dataNeeds > dataFree) {
+      // Older managers clamp available space to zero, hiding any reserve deficit.
+      const toFree =
+        capacity.dataShortBytes ??
+        (dataFree > 0 ? dataNeeds - dataFree : undefined);
       shortfalls.push({
         kind: "space",
         needs: dataNeeds,
         free: dataFree,
-        toFree: capacity.dataShortBytes ?? dataNeeds - dataFree,
+        ...(toFree !== undefined && { toFree }),
       });
     }
     return shortfalls;

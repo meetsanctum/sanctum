@@ -167,7 +167,7 @@ const online = { state: "online", version: "dev-ed4f70b" } as const;
 async function render(
   timeZone?: string,
   core: CoreStatus = offline,
-  card?: string,
+  openAt?: { card: string },
 ) {
   await act(async () => {
     root.render(
@@ -175,7 +175,7 @@ async function render(
         <TemperatureUnitProvider unit="celsius">
           <SystemPage
             apps={statusApps}
-            card={card}
+            openAt={openAt}
             core={core}
             onUpdating={() => {}}
             onDone={() => {}}
@@ -393,7 +393,8 @@ describe("free up space", () => {
     expect(buttonIn(storage, "Free up space").disabled).toBe(false);
   });
 
-  it("opens at its Storage card when an Add sheet's Free up space opens it", async () => {
+  it("opens at Storage after the card first becomes available", async () => {
+    vi.useFakeTimers();
     const shown: Element[] = [];
     Element.prototype.scrollIntoView = function (this: Element) {
       shown.push(this);
@@ -401,11 +402,22 @@ describe("free up space", () => {
     onTestFinished(() => {
       Reflect.deleteProperty(Element.prototype, "scrollIntoView");
     });
-    await render(undefined, offline, "storage");
-
+    answers["/api/system/status"] = async () => {
+      throw new CoreError(503, "manager_unavailable");
+    };
+    await render(undefined, offline, { card: "storage" });
+    expect(shown).toEqual([]);
+    answers["/api/system/status"] = async () => status;
+    await act(async () => vi.advanceTimersByTimeAsync(5_000));
     expect(shown).toEqual([section("status-storage")]);
-    // Only the once, so it stays where someone scrolls it.
-    await render(undefined, offline, "storage");
+
+    // Losing and regaining the card runs the jump effect again.
+    answers["/api/system/status"] = async () => ({ ...status, host: null });
+    await act(async () => vi.advanceTimersByTimeAsync(5_000));
+    expect(container.querySelector("#status-storage")).toBeNull();
+    answers["/api/system/status"] = async () => status;
+    await act(async () => vi.advanceTimersByTimeAsync(5_000));
+    expect(section("status-storage")).not.toBeNull();
     expect(shown).toHaveLength(1);
   });
 

@@ -143,7 +143,7 @@ export function SettingsPage(props: {
       return (
         <SystemPage
           apps={props.apps}
-          card={props.params.card}
+          openAt={props.params}
           core={props.core}
           onUpdating={props.onUpdating}
           onDone={props.back}

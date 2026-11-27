@@ -24,6 +24,7 @@ import { CoreError, coreJson } from "./core-fetch";
 import { permissionIconOf } from "./permission-icons";
 import { useSettingsOpener } from "./settings-opener";
 import { appsSettingsPage, systemSettingsPage } from "./system-apps";
+import { formatBytes, formatMemory } from "./system-status";
 
 // The sheet that adds an app the home could add, before any of its code
 // runs: what it needs to work, each in Sanctum's words with the app's
@@ -46,15 +47,6 @@ export function sizeWords(bytes: number) {
     return `${Math.round((megabytes / 1024) * 10) / 10} GB`;
   }
   return `${Math.max(0, Math.floor(megabytes))} MB`;
-}
-
-// "1.2 GB" for 1.14 GB: rounded up, so freeing that much is enough.
-function sizeUpWords(bytes: number) {
-  const megabytes = Math.max(1, Math.ceil(bytes / mebibyte));
-  if (megabytes >= 1024) {
-    return `${Math.ceil((megabytes / 1024) * 10) / 10} GB`;
-  }
-  return `${megabytes} MB`;
 }
 
 /**
@@ -142,7 +134,8 @@ const updateFix: ShortfallFix = {
 export function shortfallWords(
   shortfall: AppShortfall,
   name: string,
-): { title: string; line: string; fix: ShortfallFix } {
+  apps: readonly AppInfo[],
+): { title: string; line: string; fix?: ShortfallFix } {
   switch (shortfall.kind) {
     case "sanctum":
       return {
@@ -162,19 +155,32 @@ export function shortfallWords(
             line: `A newer ${name} comes with an update of ${productName}. Update ${productName}, then add ${name}.`,
             fix: updateFix,
           };
-    case "memory":
+    case "memory": {
+      const canTurnOff = apps.some(
+        (app) => !app.alwaysOn && app.state !== "off",
+      );
+      const amounts = `${name} needs ${formatMemory(shortfall.needs)} of memory. ${formatMemory(shortfall.free)} is available for it.`;
       return {
         title: `Not enough memory for ${name}`,
-        line: `To add ${name}, turn off an app you don't use. Your other apps take the memory ${name} needs.`,
-        fix: { label: "Show apps", page: appsSettingsPage },
+        line: canTurnOff
+          ? `${amounts} Turning off an app you don't use may free enough memory.`
+          : amounts,
+        fix: canTurnOff
+          ? { label: "Show apps", page: appsSettingsPage }
+          : undefined,
       };
+    }
     case "space": {
       // What's free may not cover what's kept for updates and the other
       // apps' data, so what to free can be more than it needs.
-      const toFree = shortfall.toFree ?? shortfall.needs - shortfall.free;
+      const toFree =
+        shortfall.toFree ??
+        (shortfall.free > 0 ? shortfall.needs - shortfall.free : undefined);
+      const amount =
+        toFree === undefined ? "some storage" : formatBytes(toFree, "up");
       return {
         title: `Not enough storage for ${name}`,
-        line: `To add ${name}, free up ${sizeUpWords(toFree)}. ${productName} keeps some storage free for updates and for your other apps.`,
+        line: `To add ${name}, free up ${amount}. ${productName} keeps some storage free for updates and for your other apps.`,
         fix: {
           label: "Free up space",
           page: systemSettingsPage,
@@ -186,8 +192,8 @@ export function shortfallWords(
 }
 
 /**
- * What the button to a shortfall's fix does: it closes the sheet, as Cancel
- * does, then opens the page where that's done. None where Settings can't be
+ * What the button to a shortfall's fix does: it closes the sheet,
+ * then opens the page where that's done. None where Settings can't be
  * opened from here.
  */
 export function useShortfallFix(
@@ -274,7 +280,9 @@ export function AddAppSheet(props: {
   /** Someone pressed Add, whose answer the sheet then shows. */
   onAdding?: () => void;
   onAdded: (app: AppInfo) => void;
+  apps: readonly AppInfo[];
   onClose: () => void | Promise<void>;
+  onCloseForFix?: () => void | Promise<void>;
   onCloseAutoFocus?: (event: Event) => void;
 }) {
   const { app } = props;
@@ -285,7 +293,8 @@ export function AddAppSheet(props: {
     app?.requests.filter((request) => !request.needed && request.startsOn) ??
     [];
   const [short] = app?.shortfalls ?? [];
-  const blocked = short && app && shortfallWords(short, app.name);
+  const blocked = short && app && shortfallWords(short, app.name, props.apps);
+  const fix = blocked?.fix;
 
   const add = async () => {
     if (!app) return;
@@ -306,12 +315,12 @@ export function AddAppSheet(props: {
   };
 
   // Whether it closed.
-  const close = async () => {
+  const close = async (onClose = props.onClose) => {
     if (pending) return false;
     setPending("close");
     setProblem(undefined);
     try {
-      await props.onClose();
+      await onClose();
       return true;
     } catch {
       setProblem("That did not work. Try again.");
@@ -320,7 +329,7 @@ export function AddAppSheet(props: {
       setPending(undefined);
     }
   };
-  const toFix = useShortfallFix(blocked?.fix, close);
+  const toFix = useShortfallFix(fix, () => close(props.onCloseForFix));
 
   return (
     <Dialog
@@ -394,13 +403,13 @@ export function AddAppSheet(props: {
             >
               Cancel
             </Button>
-            {blocked && toFix ? (
+            {fix && toFix ? (
               <Button
                 className="mt-2"
                 disabled={pending !== undefined}
                 onClick={() => void toFix()}
               >
-                {blocked.fix.label}
+                {fix.label}
               </Button>
             ) : (
               <Button
