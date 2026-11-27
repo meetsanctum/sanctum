@@ -67,7 +67,9 @@
   --sun-on-carbon: #ffd60a;
   --sun-on-white: #b25000;
   --ruby: #ff3b30;
-  --ruby-on-carbon: #ff453a;
+  /* Both of Ruby's text shades are Apple's increased-contrast reds, so
+     problem text keeps 4.5:1 on a card in either mode. */
+  --ruby-on-carbon: #ff6961;
   --ruby-on-white: #d70015;
   --leaf: #34c759;
   --leaf-on-carbon: #30d158;
