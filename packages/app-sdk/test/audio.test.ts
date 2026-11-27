@@ -70,9 +70,11 @@ describe("a smart speaker's microphones", () => {
     expect(deviceTypeOf(["audio"])).toBe("smart-speaker");
     expect(deviceCategoryOf("audio")?.id).toBe("media");
     expect(historyFields.audio).toEqual([]);
-    expect(permissionWords(readPermission("audio"))?.title).toBe(
-      "See your smart speakers' microphones",
-    );
+    expect(permissionWords(readPermission("audio"))).toMatchObject({
+      title: "See your smart speakers",
+      detail:
+        "See whether their microphones are muted and when they last heard their wake word",
+    });
     expect(permissionWords(controlPermission("audio"))).toMatchObject({
       title: "Mute and turn on your smart speakers' microphones",
       detail:

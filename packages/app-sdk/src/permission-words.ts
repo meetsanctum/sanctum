@@ -53,7 +53,7 @@ export type PermissionWords = {
   icon: PermissionIcon;
 };
 
-const reads: Record<CapabilityKind, [string, PermissionIcon]> = {
+const reads: Record<CapabilityKind, [string, PermissionIcon, string?]> = {
   light: ["See your lights", "lightbulb"],
   switch: ["See your switches", "toggle-right"],
   button: ["See your remotes' presses", "circle-dot"],
@@ -64,7 +64,11 @@ const reads: Record<CapabilityKind, [string, PermissionIcon]> = {
     "door-closed",
   ],
   media: ["See your media players", "tv"],
-  audio: ["See your smart speakers' microphones", "mic"],
+  audio: [
+    "See your smart speakers",
+    "mic",
+    "See whether their microphones are muted and when they last heard their wake word",
+  ],
 };
 
 const controls: Record<CapabilityKind, [string, PermissionIcon, string?]> = {
@@ -138,9 +142,8 @@ const fixed: Record<string, PermissionWords> = {
     icon: "sparkles",
   },
   [aiAssistantPermission]: {
-    title: "Act as your AI assistant",
-    detail:
-      "Lets this app run actions and read information in your home, but only what Settings and each app allow for AI agents",
+    title: "Do things in your home for you",
+    detail: "It can do what you allow AI agents to do in Settings",
     icon: "bot",
   },
 };

@@ -46,7 +46,7 @@ export const app = defineApp({
   permissions: [
     {
       id: aiAssistantPermission,
-      reason: "To do what you ask by voice or in writing.",
+      reason: "To turn on your lights or set a mood when you ask.",
       needed: true,
     },
     {
@@ -56,7 +56,7 @@ export const app = defineApp({
     },
     {
       id: placesReadPermission,
-      reason: "To say which room each smart speaker is in.",
+      reason: "To show which room each smart speaker is in.",
       needed: true,
     },
   ],

@@ -162,7 +162,7 @@ describe("Add apps", () => {
     // One it asks for where it's used isn't on the sheet.
     expect(sheet.textContent).not.toContain("To start when someone comes in.");
     expect(sheet.textContent).toContain(
-      "It adds devices, a page in a device's detail and two workflow pieces. It runs on its own with up to 128 MB of memory.",
+      "It adds devices, a page in a device's detail and two workflow pieces. It uses up to 128 MB of memory.",
     );
   });
 
