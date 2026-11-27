@@ -356,17 +356,29 @@ describe("failed commands", () => {
 describe("commands from here", () => {
   function showLight(
     id: string,
-    brightness: number,
+    brightness: number | null,
     sync: "synced" | "pending" | "conflict" = "synced",
+    color = false,
   ) {
-    const lamp = light(id, id, "room", true);
+    const lamp = light(id, id, "room", brightness !== null);
     const capability = lamp.capabilities[0]!;
     if (capability.kind !== "light") throw new Error("Expected a light");
-    const state = { on: true, brightness };
+    const state =
+      brightness === null ? { on: false } : { on: true, brightness };
     devices.apply({
       type: "device",
       id,
-      device: { ...lamp, capabilities: [{ ...capability, state, sync }] },
+      device: {
+        ...lamp,
+        capabilities: [
+          {
+            ...capability,
+            features: { ...capability.features, color },
+            state,
+            sync,
+          },
+        ],
+      },
     });
   }
 
@@ -406,12 +418,8 @@ describe("commands from here", () => {
   it("sends a room's colour to the lights that are off too, and fails one that could not take it", async () => {
     act(() => {
       devices.apply({ type: "places", places });
-      showLight("desk", 60);
-      devices.apply({
-        type: "device",
-        id: "shelf",
-        device: light("shelf", "shelf", "room", false),
-      });
+      showLight("desk", 60, "synced", true);
+      showLight("shelf", null, "synced", true);
     });
     const result = deferred<LightsResult>();
     client.lights.mockReturnValue(result.promise);
@@ -436,6 +444,32 @@ describe("commands from here", () => {
       ["desk", undefined],
       ["shelf", 1],
     ]);
+  });
+
+  it("still marks a dim-only light when it fails to turn off after a room colour is picked", async () => {
+    const place = { kind: "room", id: "room" } as const;
+    act(() => {
+      devices.apply({ type: "places", places });
+      showLight("desk", 60);
+      showLight("shelf", null, "synced", true);
+    });
+    client.lights.mockResolvedValueOnce({ on: false, switched: 1, failed: [] });
+    await act(async () => {
+      await devices.switchLights(place, devices.tiles, "off");
+      showLight("desk", null, "pending");
+    });
+
+    client.lights.mockResolvedValueOnce({ on: true, switched: 1, failed: [] });
+    await act(async () => {
+      await devices.setLights(place, devices.tiles, {
+        hue: 220,
+        saturation: 100,
+      });
+      showLight("desk", 60, "conflict");
+    });
+    expect(
+      devices.tiles.find((tile) => tile.deviceId === "desk")?.failures,
+    ).toBe(1);
   });
 
   it.each([true, false])(

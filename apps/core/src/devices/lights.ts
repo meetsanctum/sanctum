@@ -30,6 +30,7 @@ import type { Entities } from "../entities/entities.js";
 import { roomsOfPlace, type PlacesModule } from "../places/places.js";
 import type { CommandChange, Devices } from "./devices.js";
 import type { HoldDirection, Holds, Remote } from "./holds.js";
+import { prepare } from "./sync.js";
 import type { View } from "./views.js";
 
 // The lights of a room, a floor, a zone or the whole home together: a
@@ -466,11 +467,11 @@ export function createLights(options: {
   // of those that are on, on average, so the place is even; while none is,
   // the lights its rules bring on come at the rule's look and the others at
   // the level of those, or as with nothing to go by where the rules give
-  // none. A white brings on a light that only dims, whose light is white,
-  // while a colour leaves a light that can't show it as it is.
+  // none. A white brings on a fixed-white light and sets a colour-only light
+  // to zero saturation. A colour leaves a light that can't show it as it is.
   async function colourWith(
     lights: readonly Light[],
-    set: LightsSet,
+    set: Exclude<LightsSet, { brightness: number }>,
     send: (light: Light, command: LightCommand) => Promise<unknown>,
   ): Promise<LightsResult> {
     const lit = lights.filter(isOn);
@@ -482,8 +483,16 @@ export function createLights(options: {
     const levels = (
       lit.length
         ? lit.filter(canDim).map((light) => light.capability.state?.brightness)
-        : [...byRule.values()].map((command) => command.brightness)
-    ).filter((level) => level !== undefined);
+        : Array.from(byRule, ([{ capability }, command]) =>
+            capability.features.brightness
+              ? (command.brightness ??
+                prepare(capability, command).send?.brightness ??
+                capability.observed?.brightness)
+              : undefined,
+          )
+    ).filter(
+      (level): level is number => typeof level === "number" && level > 0,
+    );
     const level = levels.length
       ? Math.round(levels.reduce((sum, each) => sum + each, 0) / levels.length)
       : undefined;
@@ -495,7 +504,13 @@ export function createLights(options: {
           ? { on: true, brightness: level }
           : { on: true });
     const sending = lights.flatMap((light) => {
-      const fields = fieldsOf(light, set);
+      const { features } = light.capability;
+      const fields =
+        set.colorTemperature !== undefined &&
+        !features.colorTemperature &&
+        features.color
+          ? { hue: 0, saturation: 0 }
+          : fieldsOf(light, set);
       const takes = Object.keys(fields).length > 0;
       if (isOn(light)) return takes ? [{ light, command: fields }] : [];
       if (!takes && set.colorTemperature === undefined) return [];

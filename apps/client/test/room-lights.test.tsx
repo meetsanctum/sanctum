@@ -313,6 +313,19 @@ describe("a room's Lights tile", () => {
     ]);
   });
 
+  it("offers a white preset when only an off light can change its white", async () => {
+    devices = [
+      officeLight("desk", { on: true }, plainLight),
+      officeLight("shelf", null, { ...withColour, color: false }),
+    ];
+    await show();
+    await click(button("Lights in Office, 1 of 2 on"));
+    await click(button(`${new Intl.NumberFormat().format(2000)} K`, dialog()!));
+    expect(posted()).toEqual([
+      { place: { kind: "room", id: "office" }, set: { colorTemperature: 500 } },
+    ]);
+  });
+
   it("opens a light's controls for all the room's lights, with a power page where they only dim", async () => {
     await show();
     await click(button("Lights in Office, 2 on · 70%"));

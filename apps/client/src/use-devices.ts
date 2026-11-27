@@ -27,7 +27,12 @@ import { coreDevices } from "./core-devices";
 import { coreJson } from "./core-fetch";
 import { sameData } from "./same-data";
 import { useMinuteClock } from "./device-firmware";
-import { supportsBrightness, tileKey, tilesOf } from "./device-tiles";
+import {
+  supportsBrightness,
+  supportsColour,
+  tileKey,
+  tilesOf,
+} from "./device-tiles";
 import { playPauseCommand } from "./media";
 
 // The home's devices and places as the shell shows them, for the sidebar,
@@ -553,11 +558,11 @@ export function useDevices(live: LiveFeed) {
   // brightness changes only the lights that are on while any is, so it
   // shows on them as pending at once, as a light's own drag does; while
   // none is on the place comes on by its rooms' rules, which only the core
-  // knows. A colour or a white reaches every light, those that are off
-  // included, at a level only the core works out. Those wait for its live
-  // state. A brightness of 0 switches them off. It goes in turn with the
-  // room's other presses. The core names the lights it could not set; when
-  // the whole call fails, each that it would have set failed.
+  // knows. A colour or a white reaches lights that can show it, those that
+  // are off included, at a level only the core works out. Those wait for
+  // its live state. A brightness of 0 switches them off. Requests go in
+  // turn with the room's other presses. The core names the lights it could
+  // not set. When the whole call fails, each that it would have set failed.
   const setLights = useCallback(
     async (
       place: LightsPlace,
@@ -571,23 +576,22 @@ export function useDevices(live: LiveFeed) {
       const reachable = lights.filter((tile) => !tile.disabled);
       const lit = reachable.filter((tile) => tile.on);
       const setting =
-        set.brightness !== undefined && lit.length > 0 ? lit : reachable;
+        set.hue !== undefined
+          ? reachable.filter(supportsColour)
+          : set.brightness !== undefined && lit.length > 0
+            ? lit
+            : reachable;
+      const keys = setting.map((tile) => tile.key);
       const answered =
         set.brightness !== undefined && lit.length > 0
           ? ask(
               lit.filter(supportsBrightness).map((tile) => tile.key),
               { on: true, brightness: set.brightness },
             )
-          : ask(
-              setting.map((tile) => tile.key),
-              null,
-            );
+          : ask(keys, null);
       const request = async () => {
         const confirmation = followLights(failureKey);
-        const commands = send(
-          setting.map((tile) => tile.key),
-          confirmation?.onFailure,
-        );
+        const commands = send(keys, confirmation?.onFailure);
         try {
           const result = await coreJson<LightsResult>("/api/devices/lights", {
             method: "POST",
