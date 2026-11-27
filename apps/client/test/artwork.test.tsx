@@ -8,6 +8,13 @@ import { setCredential } from "../src/core-fetch";
 import { setCoreBaseUrl } from "../src/core-url";
 
 const host = "http://core.test";
+const credential = {
+  url: host,
+  token: "client_one",
+  pin: null,
+  hostId: "host",
+  homeId: "home",
+};
 const hashOf = (index: number) => index.toString(16).padStart(64, "0");
 const picture = () =>
   new Response(new Blob(["picture"], { type: "image/png" }));
@@ -40,7 +47,7 @@ beforeEach(() => {
     },
   );
   setCoreBaseUrl(host);
-  setCredential({ url: host, token: "client_one", pin: null });
+  setCredential(credential);
   root = createRoot(container);
 });
 
@@ -80,7 +87,7 @@ describe("player artwork", () => {
       act(async () => root.render(<Image hash={hashOf(0)} />));
     await render();
     expect(container.querySelector("img")).not.toBeNull();
-    setCredential({ url: host, token: "client_two", pin: null });
+    setCredential({ ...credential, token: "client_two" });
     fetch.mockResolvedValueOnce(new Response(null, { status: 404 }));
     await render();
     expect(container.querySelector("img")).toBeNull();

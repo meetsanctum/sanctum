@@ -189,12 +189,21 @@ export function SettingsPageBar(props: {
 }
 
 // A thing and a line about it.
-export function Row(props: { title: string; detail?: ReactNode }) {
+export function Row(props: {
+  title: string;
+  detail?: ReactNode;
+  wrapDetail?: boolean;
+}) {
   return (
     <span className="flex min-w-0 flex-col gap-px leading-tight">
       <span className="truncate text-sm font-medium">{props.title}</span>
       {props.detail !== undefined && (
-        <span className="truncate text-[13px] font-medium text-muted-foreground">
+        <span
+          className={cn(
+            "text-[13px] font-medium text-muted-foreground",
+            !props.wrapDetail && "truncate",
+          )}
+        >
           {props.detail}
         </span>
       )}

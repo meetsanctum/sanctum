@@ -1,9 +1,9 @@
-import { Button, Input } from "@meetsanctum/ui-sdk";
+import { Button } from "@meetsanctum/ui-sdk";
 import { useId, useRef, useState, type FormEvent, type RefObject } from "react";
 
 import { problemText, newPasswordProblem } from "../auth/messages";
 import { changePassword, PasswordChangeError } from "../auth/password";
-import { Busy, SheetProblem } from "../auth/sheet";
+import { Busy, SheetField, SheetProblem } from "../auth/sheet";
 import { useAuthAttempt } from "../auth/use-auth-attempt";
 import { productName } from "../brand";
 import {
@@ -20,12 +20,11 @@ import { CoreError } from "../core-fetch";
 // current one, then the new one twice. The current one is checked on this
 // device before anything changes, and the other devices signed in as you
 // stay signed in, which the dialog says, with where to sign one out. While
-// it saves it can't be closed, so a change is never left half-known.
+// it saves it can't be closed. If the final reply is lost, it says the
+// change could not be confirmed.
 
 type Field = "current" | "password" | "repeated";
 type Problem = { field?: Field; text: string };
-
-const label = "text-[13px] leading-[18px] font-medium text-muted-foreground";
 
 function changeProblem(error: unknown): Problem {
   if (
@@ -38,7 +37,20 @@ function changeProblem(error: unknown): Problem {
     };
   }
   if (error instanceof PasswordChangeError) {
+    if (error.code === "unconfirmed") {
+      return {
+        text: "Couldn’t confirm the password change. Check whether your new password works before trying again.",
+      };
+    }
+    if (error.code === "unchecked") {
+      return {
+        text: "Changing your password requires a secure connection to your home.",
+      };
+    }
     return { text: `${productName} ran into a problem. Try again.` };
+  }
+  if (error instanceof DOMException && error.name === "TimeoutError") {
+    return { text: "That took too long. Try again." };
   }
   return { text: problemText(error) };
 }
@@ -61,11 +73,11 @@ export function ChangePassword(props: {
   const attempt = useAuthAttempt();
   const { open } = props;
 
-  // Each time it opens, it starts afresh.
+  // Clear the attempt as soon as the dialog closes.
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
-    if (open) {
+    if (!open) {
       setCurrent("");
       setPassword("");
       setRepeated("");
@@ -110,8 +122,6 @@ export function ChangePassword(props: {
   };
 
   const problemId = `${ids}-problem`;
-  const about = (field: Field | undefined) =>
-    problem && problem.field === field ? problemId : undefined;
   const problemLine = (field: Field | undefined) =>
     problem && problem.field === field ? (
       <SheetProblem id={problemId}>{problem.text}</SheetProblem>
@@ -123,43 +133,33 @@ export function ChangePassword(props: {
     onChange: (value: string) => void,
     options: { hint?: string; autoComplete: string; autoFocus?: boolean },
   ) => {
-    const id = `${ids}-${name}`;
-    const hintId = `${id}-hint`;
     // A problem takes the hint's place, so the two never say the same twice.
-    const hint = about(name) ? undefined : options.hint;
+    const hasProblem = problem?.field === name;
     return (
-      <div className="flex flex-col gap-2">
-        <label htmlFor={id} className={label}>
-          {text}
-        </label>
-        <Input
-          ref={name === "current" ? currentInput : undefined}
-          id={id}
-          type="password"
-          value={value}
-          autoComplete={options.autoComplete}
-          autoFocus={options.autoFocus}
-          readOnly={working}
-          required
-          aria-invalid={about(name) ? true : undefined}
-          aria-describedby={
-            [hint && hintId, about(name)].filter(Boolean).join(" ") || undefined
+      <SheetField
+        compact
+        label={text}
+        hint={hasProblem ? undefined : options.hint}
+        problemId={hasProblem ? problemId : undefined}
+        ref={name === "current" ? currentInput : undefined}
+        type="password"
+        value={value}
+        autoComplete={options.autoComplete}
+        autoFocus={options.autoFocus}
+        readOnly={working}
+        required
+        onChange={(event) => {
+          onChange(event.target.value);
+          if (
+            hasProblem ||
+            (name === "password" && problem?.field === "repeated")
+          ) {
+            setProblem(undefined);
           }
-          onChange={(event) => {
-            onChange(event.target.value);
-            if (problem?.field === name) setProblem(undefined);
-          }}
-        />
-        {hint && (
-          <span
-            id={hintId}
-            className="text-[13px] leading-[18px] text-muted-foreground"
-          >
-            {hint}
-          </span>
-        )}
+        }}
+      >
         {problemLine(name)}
-      </div>
+      </SheetField>
     );
   };
 
@@ -171,6 +171,7 @@ export function ChangePassword(props: {
       }}
     >
       <DialogContent
+        className="max-h-[calc(100vh-2rem)] overflow-y-auto supports-[height:100dvh]:max-h-[calc(100dvh-2rem)]"
         showCloseButton={!working}
         onEscapeKeyDown={(event) => {
           if (working) event.preventDefault();

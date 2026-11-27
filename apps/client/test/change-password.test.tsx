@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type {
   ClientInfo,
+  InviteInfo,
   LoginInfo,
   Me,
   PersonInfo,
@@ -12,13 +13,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changePassword, PasswordChangeError } from "../src/auth/password";
 import { CoreError, coreJson } from "../src/core-fetch";
+import { makeInvite } from "../src/people/invites";
 import { PersonPage } from "../src/people/person-page";
 import { deferred } from "./deferred";
 
-// Changing your own password from your own page: Change password takes
-// Reset password's place there, the dialog checks the new password before
-// anything is sent, says what went wrong beside its cause, can't be closed
-// while it saves, and the page says the password changed.
+// Changing your own password from your own page: the dialog checks the new
+// password before anything is sent, says what went wrong beside its cause,
+// can't be closed while it saves, and the page says the password changed.
 
 vi.mock("../src/auth/password", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/auth/password")>()),
@@ -27,6 +28,10 @@ vi.mock("../src/auth/password", async (importOriginal) => ({
 vi.mock("../src/core-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/core-fetch")>()),
   coreJson: vi.fn(),
+}));
+vi.mock("../src/people/invites", () => ({
+  cancelInvite: vi.fn(),
+  makeInvite: vi.fn(),
 }));
 
 const alex: PersonInfo = {
@@ -68,9 +73,11 @@ const logins: LoginInfo[] = [
 
 let container: HTMLDivElement;
 let root: Root;
+let invites: InviteInfo[];
 const live = createLiveFeed();
 
 beforeEach(() => {
+  invites = [];
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal(
     "ResizeObserver",
@@ -83,9 +90,8 @@ beforeEach(() => {
     if (path === "/api/people") return [alex, maya] as never;
     if (path === "/api/auth/logins") return logins as never;
     if (path === "/api/auth/clients") return [laptop] as never;
-    if (path === "/api/auth/invites" || path === "/api/auth/agents") {
-      return [] as never;
-    }
+    if (path === "/api/auth/invites") return invites as never;
+    if (path === "/api/auth/agents") return [] as never;
     throw new Error(`unexpected ${path}`);
   });
   container = document.createElement("div");
@@ -170,18 +176,44 @@ const problemOf = (input: HTMLInputElement) =>
     .map((id) => document.getElementById(id))
     .find((each) => each?.getAttribute("role") === "alert")?.textContent;
 
+function resetCode(): InviteInfo {
+  return {
+    id: "reset",
+    personId: alex.id,
+    kind: "reset",
+    ended: null,
+    createdAt: new Date().toISOString(),
+    endsAt: new Date(Date.now() + 60_000).toISOString(),
+  };
+}
+
 describe("Change password", () => {
-  it("takes Reset password's place on your own page only", async () => {
+  it("offers password recovery alongside Change password on your own page", async () => {
     await show();
     expect(button("Change password")).toBeDefined();
-    expect(button("Reset password")).toBeUndefined();
     expect(container.textContent).toContain(
       "You stay in People but can’t sign in. Your devices sign out at once.",
     );
 
-    await show("maya");
-    expect(button("Change password")).toBeUndefined();
-    expect(button("Reset password")).toBeDefined();
+    vi.mocked(makeInvite).mockResolvedValue({
+      code: "K7QXM4PD",
+      info: resetCode(),
+    });
+    await click("Reset password");
+    expect(dialog()?.textContent).toContain(`Reset ${alex.name}’s password`);
+    expect(makeInvite).toHaveBeenCalledWith(
+      expect.objectContaining({ personId: alex.id, kind: "reset" }),
+      expect.any(AbortSignal),
+    );
+    expect(button("Copy code")).toBeDefined();
+  });
+
+  it("offers Change password and Cancel code on your own page with an active reset code", async () => {
+    invites = [resetCode()];
+    await show();
+    expect(button("Change password")).toBeDefined();
+    expect(button("Cancel code")).toBeDefined();
+    expect(button("Reset password")).toBeUndefined();
   });
 
   it("isn't offered on a shared device, which is no one's", async () => {
@@ -210,7 +242,45 @@ describe("Change password", () => {
     expect(problemOf(field("Repeat new password"))).toBe(
       "Enter the same password twice.",
     );
+    await fill("New password", "staple battery");
+    expect(problemOf(field("Repeat new password"))).toBeUndefined();
+    expect(
+      field("Repeat new password").getAttribute("aria-invalid"),
+    ).toBeNull();
     expect(changePassword).not.toHaveBeenCalled();
+  });
+
+  it("opens with empty fields and no error after cancelling an attempt", async () => {
+    await show();
+    await click("Change password");
+    await fillAll("old password", "staple battery horse", "staple battery");
+    await submit();
+    expect(problemOf(field("Repeat new password"))).toBeDefined();
+
+    await click("Cancel");
+    expect(dialog()).toBeNull();
+    await click("Change password");
+    expect(field("Current password").value).toBe("");
+    expect(field("New password").value).toBe("");
+    expect(field("Repeat new password").value).toBe("");
+    expect(dialog()?.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("aborts a pending password change when you leave the page", async () => {
+    const saving = deferred<void>();
+    vi.mocked(changePassword).mockReturnValue(saving.promise);
+    await show();
+    await click("Change password");
+    await fillAll("old password", "staple battery horse");
+    await submit();
+    const signal = vi.mocked(changePassword).mock.calls[0]![0].signal!;
+    expect(signal.aborted).toBe(false);
+
+    await show("maya");
+    expect(dialog()).toBeNull();
+    expect(signal.aborted).toBe(true);
+    await act(async () => saving.resolve());
+    expect(container.textContent).not.toContain("Changed just now");
   });
 
   it("keeps a wrong current password, selected, and says so beside it", async () => {
@@ -247,6 +317,21 @@ describe("Change password", () => {
     expect(dialog()?.querySelector('[role="alert"]')?.textContent).toBe(
       "Too many attempts from this device. Try again in 15 minutes.",
     );
+  });
+
+  it("restores the form and explains what to do if the change is unconfirmed", async () => {
+    vi.mocked(changePassword).mockRejectedValue(
+      new PasswordChangeError("unconfirmed"),
+    );
+    await show();
+    await click("Change password");
+    await fillAll("old password", "staple battery horse");
+    await submit();
+    expect(dialog()?.querySelector('[role="alert"]')?.textContent).toBe(
+      "Couldn’t confirm the password change. Check whether your new password works before trying again.",
+    );
+    expect(button("Cancel")?.disabled).toBe(false);
+    expect(button("Close")).toBeDefined();
   });
 
   it("can't be closed while it saves, then says the password changed", async () => {

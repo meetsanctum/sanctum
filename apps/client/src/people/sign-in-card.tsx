@@ -9,22 +9,27 @@ import { untilText } from "./words";
 
 // A person's Sign-In card: one thing per row, what it is on the left and
 // its value or its actions on the right, as each device's row is. Someone
-// who signs in has a Username row and a Password row; on your own page
-// Password offers Change password, on anyone else's Reset password. A code
-// waiting for a new password is a row of its own. Someone who doesn't sign
+// who signs in has a Username row and a Password row. Reset password is
+// available on every device, with Change password on your own device.
+// An active reset code has a row of its own. Someone who doesn't sign
 // in, or whose invite is waiting or ended, has one row about it. Removing a
 // sign-in is at the page's foot, with removing the person.
 
 function CardRow(props: {
   title: string;
   detail?: ReactNode;
+  wrapDetail?: boolean;
   children?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-9 items-center gap-3">
-      <Row title={props.title} detail={props.detail} />
+    <div className="flex min-h-9 flex-wrap items-center gap-x-3 gap-y-2">
+      <Row
+        title={props.title}
+        detail={props.detail}
+        wrapDetail={props.wrapDetail}
+      />
       {props.children && (
-        <div className="ms-auto flex shrink-0 flex-wrap justify-end gap-2">
+        <div className="ms-auto flex max-w-full flex-wrap justify-end gap-2">
           {props.children}
         </div>
       )}
@@ -85,19 +90,19 @@ export function SignInCard(props: {
               ) : undefined
             }
           >
-            {props.own
-              ? small(
-                  "Change password",
-                  () => props.onChangePassword(),
-                  props.changeTrigger,
-                )
-              : !reset &&
-                small("Reset password", () => props.onInvite("reset"))}
+            {props.own &&
+              small(
+                "Change password",
+                () => props.onChangePassword(),
+                props.changeTrigger,
+              )}
+            {!reset && small("Reset password", () => props.onInvite("reset"))}
           </CardRow>
           {reset && (
             <CardRow
               title="Password code"
               detail={`Works until ${untilText(clock, reset.endsAt)}`}
+              wrapDetail
             >
               {small("Cancel code", (trigger) =>
                 props.onCancelCode(reset, trigger),
@@ -113,6 +118,7 @@ export function SignInCard(props: {
         <CardRow
           title="Invite"
           detail={`Works until ${untilText(clock, signIn.invite.endsAt)}`}
+          wrapDetail
         >
           {small("New invite code", () => props.onInvite("invite"))}
           {small("Cancel invite", (trigger) =>

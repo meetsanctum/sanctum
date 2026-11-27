@@ -234,6 +234,8 @@ describe("a stored home that does not answer", () => {
       url: host.url,
       token: host.token,
       pin: null,
+      hostId: host.hostId,
+      homeId: host.homeId,
     });
   });
 
@@ -270,6 +272,8 @@ describe("a stored home that does not answer", () => {
       url: host.url,
       token: host.token,
       pin: null,
+      hostId: host.hostId,
+      homeId: host.homeId,
     });
 
     await click("Cancel");
@@ -279,6 +283,8 @@ describe("a stored home that does not answer", () => {
       url: host.url,
       token: host.token,
       pin: null,
+      hostId: host.hostId,
+      homeId: host.homeId,
     });
   });
 
@@ -364,6 +370,8 @@ describe("a stored home that does not answer", () => {
       url: movedUrl,
       token: host.token,
       pin: null,
+      hostId: host.hostId,
+      homeId: host.homeId,
     });
   });
 });
@@ -436,6 +444,8 @@ describe("a connected home that does not come back", () => {
       url: host.url,
       token: host.token,
       pin: null,
+      hostId: host.hostId,
+      homeId: host.homeId,
     });
   });
 

@@ -42,7 +42,7 @@ const fetchResponse = vi.fn<typeof fetch>();
 beforeEach(() => {
   vi.stubGlobal("fetch", fetchResponse);
   setCoreBaseUrl("https://saved.example");
-  setCredential({ url, token: "stored-token", pin: null });
+  setCredential({ ...host, url, token: "stored-token", pin: null });
 });
 
 afterEach(() => {

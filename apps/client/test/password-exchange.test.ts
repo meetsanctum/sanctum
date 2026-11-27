@@ -7,8 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changePassword, PasswordChangeError } from "../src/auth/password";
 import { selectHost } from "../src/auth/session";
-import { setCredential } from "../src/core-fetch";
+import { CoreError, forgetToken, setCredential } from "../src/core-fetch";
 import { setCoreBaseUrl } from "../src/core-url";
+import { getShell } from "../src/shell";
+import { deferred } from "./deferred";
 
 // Changing your own password on the device: the current password is proven
 // and the new one registered in two calls, the proof bound to the host this
@@ -48,19 +50,26 @@ const held = {
   pin: "home-pin",
 };
 const fetchResponse = vi.fn<typeof fetch>();
-
-const json = (body: unknown) =>
-  new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { "content-type": "application/json" },
+const started = () =>
+  Response.json({
+    changeId: "change",
+    loginResponse: "login-response",
+    registrationResponse: "registration-response",
   });
 
 beforeEach(() => {
   vi.stubGlobal("fetch", fetchResponse);
+  vi.spyOn(getShell(), "trust", "get").mockReturnValue({
+    check: vi.fn(),
+    resumed: vi.fn(),
+    candidate: vi.fn(),
+    failure: vi.fn(),
+  });
   selectHost(held);
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
   fetchResponse.mockReset();
@@ -71,25 +80,34 @@ afterEach(() => {
 const body = (call: number) =>
   JSON.parse(String(fetchResponse.mock.calls[call - 1]![1]?.body));
 
+const passwords = { current: "old password", next: "new password" };
+
 describe("changing your password on this device", () => {
   it("proves the current password and binds it to the held host and the new record", async () => {
     fetchResponse
-      .mockResolvedValueOnce(
-        json({
-          changeId: "change",
-          loginResponse: "login-response",
-          registrationResponse: "registration-response",
-        }),
-      )
+      .mockResolvedValueOnce(started())
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
 
-    await changePassword({ current: "old password", next: "new password" });
+    const attempt = new AbortController();
+    await changePassword({ ...passwords, signal: attempt.signal });
 
     expect(client.startLogin).toHaveBeenCalledWith({
       password: "old password",
     });
+    expect(client.finishLogin).toHaveBeenCalledWith({
+      clientLoginState: "login-state",
+      loginResponse: "login-response",
+      password: "old password",
+      keyStretching: keyStretching.profile,
+    });
     expect(client.startRegistration).toHaveBeenCalledWith({
       password: "new password",
+    });
+    expect(client.finishRegistration).toHaveBeenCalledWith({
+      clientRegistrationState: "registration-state",
+      registrationResponse: "registration-response",
+      password: "new password",
+      keyStretching: keyStretching.profile,
     });
     expect(String(fetchResponse.mock.calls[0]![0])).toBe(
       `${url}/api/auth/password/start`,
@@ -102,9 +120,10 @@ describe("changing your password on this device", () => {
       `${url}/api/auth/password/finish`,
     );
     const finish = body(2);
-    expect(finish).toMatchObject({
+    expect(finish).toEqual({
       changeId: "change",
       finishLoginRequest: "login-proof",
+      binding: expect.any(String),
       registrationRecord: "registration-record",
       keyStretching: keyStretching.version,
     });
@@ -121,22 +140,116 @@ describe("changing your password on this device", () => {
         "authorization",
       ),
     ).toBe("Bearer stored-token");
+
+    const signals = fetchResponse.mock.calls.map(([, init]) => init?.signal);
+    expect(signals.map((signal) => signal?.aborted)).toEqual([false, false]);
+    attempt.abort();
+    expect(signals.map((signal) => signal?.reason)).toEqual([
+      attempt.signal.reason,
+      attempt.signal.reason,
+    ]);
   });
 
   it("stops on the device when the current password is wrong", async () => {
     vi.mocked(client.finishLogin).mockReturnValueOnce(undefined);
-    fetchResponse.mockResolvedValueOnce(
-      json({
-        changeId: "change",
-        loginResponse: "login-response",
-        registrationResponse: "registration-response",
-      }),
-    );
+    fetchResponse.mockResolvedValueOnce(started());
 
     await expect(
       changePassword({ current: "wrong", next: "new password" }),
     ).rejects.toEqual(new PasswordChangeError("wrong_password"));
     expect(fetchResponse).toHaveBeenCalledOnce();
     expect(client.finishRegistration).not.toHaveBeenCalled();
+  });
+
+  it("waits for the finish response and reports a refusal", async () => {
+    const sending = deferred<void>();
+    const reply = deferred<Response>();
+    fetchResponse
+      .mockResolvedValueOnce(started())
+      .mockImplementationOnce(() => {
+        sending.resolve();
+        return reply.promise;
+      });
+    const changing = changePassword(passwords);
+    const settled = vi.fn();
+    void changing.then(settled, settled);
+    await sending.promise;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(settled).not.toHaveBeenCalled();
+
+    reply.resolve(Response.json({ error: "expired" }, { status: 400 }));
+    await expect(changing).rejects.toEqual(
+      new CoreError(400, "expired", {
+        error: "expired",
+      }),
+    );
+  });
+
+  it.each(["start", "finish"] as const)(
+    "sets a deadline on %s",
+    async (phase) => {
+      const deadline = new AbortController();
+      const expired = new DOMException("Deadline reached", "TimeoutError");
+      const timeout = vi
+        .spyOn(AbortSignal, "timeout")
+        .mockReturnValue(deadline.signal);
+      if (phase === "finish") fetchResponse.mockResolvedValueOnce(started());
+      fetchResponse.mockImplementationOnce(async (_url, init) => {
+        deadline.abort(expired);
+        init?.signal?.throwIfAborted();
+        return new Response(null, { status: 204 });
+      });
+
+      await expect(changePassword(passwords)).rejects.toEqual(
+        phase === "start" ? expired : new PasswordChangeError("unconfirmed"),
+      );
+      expect(timeout).toHaveBeenCalledTimes(phase === "start" ? 1 : 2);
+    },
+  );
+
+  it("reports that the change is unconfirmed when the finish reply is lost", async () => {
+    fetchResponse
+      .mockResolvedValueOnce(started())
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    await expect(changePassword(passwords)).rejects.toEqual(
+      new PasswordChangeError("unconfirmed"),
+    );
+  });
+
+  it.each([
+    ["plain HTTP", "http://home.example", held.pin],
+    ["an unpinned host", held.url, null],
+  ])("refuses to send a password change over %s", async (_name, url, pin) => {
+    selectHost({ ...held, url, pin });
+
+    await expect(changePassword(passwords)).rejects.toEqual(
+      new PasswordChangeError("unchecked"),
+    );
+    expect(fetchResponse).not.toHaveBeenCalled();
+  });
+
+  it("requires the shell to check the host's certificate", async () => {
+    vi.spyOn(getShell(), "trust", "get").mockReturnValue(null);
+
+    await expect(changePassword(passwords)).rejects.toEqual(
+      new PasswordChangeError("unchecked"),
+    );
+    expect(fetchResponse).not.toHaveBeenCalled();
+  });
+
+  it("stops when the active credential is forgotten during the exchange", async () => {
+    fetchResponse.mockImplementationOnce(async () => {
+      forgetToken(held.token);
+      return started();
+    });
+    await expect(changePassword(passwords)).rejects.toEqual(
+      new PasswordChangeError("no_host"),
+    );
+    expect(fetchResponse).toHaveBeenCalledOnce();
+    await expect(changePassword(passwords)).rejects.toEqual(
+      new PasswordChangeError("no_host"),
+    );
+    expect(fetchResponse).toHaveBeenCalledOnce();
   });
 });

@@ -7,9 +7,10 @@ import {
   type PasswordStarted,
 } from "@meetsanctum/auth-protocol";
 
-import { coreJson } from "../core-fetch";
+import { CoreError, coreJson, currentCredential } from "../core-fetch";
+import { coreBaseUrl } from "../core-url";
+import { getShell } from "../shell";
 import { loadOpaque } from "./device";
-import { selectedHost } from "./session";
 
 // Changing your own password on this device: it proves the current one
 // through OPAQUE and registers the new one in the same two calls, so neither
@@ -18,18 +19,34 @@ import { selectedHost } from "./session";
 // nothing more is sent.
 
 export class PasswordChangeError extends Error {
-  constructor(readonly code: "wrong_password" | "no_host") {
+  constructor(
+    readonly code: "wrong_password" | "no_host" | "unchecked" | "unconfirmed",
+  ) {
     super(code);
   }
 }
+
+const requestTimeoutMs = 10_000;
 
 export async function changePassword(input: {
   current: string;
   next: string;
   signal?: AbortSignal;
 }) {
-  const host = selectedHost();
+  const host = currentCredential();
   if (!host) throw new PasswordChangeError("no_host");
+  // The new registration response needs the shell's certificate check.
+  if (!host.pin || new URL(host.url).protocol !== "https:" || !getShell().trust)
+    throw new PasswordChangeError("unchecked");
+
+  const requestSignal = () => {
+    input.signal?.throwIfAborted();
+    if (currentCredential() !== host || coreBaseUrl() !== host.url)
+      throw new PasswordChangeError("no_host");
+    const deadline = AbortSignal.timeout(requestTimeoutMs);
+    return input.signal ? AbortSignal.any([input.signal, deadline]) : deadline;
+  };
+
   const opaque = await loadOpaque();
   input.signal?.throwIfAborted();
   const current = normalisePassword(input.current);
@@ -41,7 +58,7 @@ export async function changePassword(input: {
     opaque.client.startRegistration({ password: next });
   const started = await coreJson<PasswordStarted>("/api/auth/password/start", {
     method: "POST",
-    signal: input.signal,
+    signal: requestSignal(),
     json: { startLoginRequest, registrationRequest } satisfies PasswordStart,
   });
   const proof = opaque.client.finishLogin({
@@ -57,19 +74,26 @@ export async function changePassword(input: {
     password: next,
     keyStretching: keyStretching.profile,
   });
-  await coreJson("/api/auth/password/finish", {
-    method: "POST",
-    signal: input.signal,
-    json: {
-      changeId: started.changeId,
-      finishLoginRequest: proof.finishLoginRequest,
-      binding: await passwordChangeBinding(
-        proof.sessionKey,
-        { hostId: host.hostId, homeId: host.homeId, pin: host.pin },
+  const binding = await passwordChangeBinding(
+    proof.sessionKey,
+    host,
+    registrationRecord,
+  );
+  const signal = requestSignal();
+  try {
+    await coreJson("/api/auth/password/finish", {
+      method: "POST",
+      signal,
+      json: {
+        changeId: started.changeId,
+        finishLoginRequest: proof.finishLoginRequest,
+        binding,
         registrationRecord,
-      ),
-      registrationRecord,
-      keyStretching: keyStretching.version,
-    } satisfies PasswordFinish,
-  });
+        keyStretching: keyStretching.version,
+      } satisfies PasswordFinish,
+    });
+  } catch (error) {
+    if (error instanceof CoreError || input.signal?.aborted) throw error;
+    throw new PasswordChangeError("unconfirmed");
+  }
 }

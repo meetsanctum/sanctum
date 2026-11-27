@@ -12,6 +12,13 @@ import { setCoreBaseUrl } from "../src/core-url";
 
 const host = "http://192.168.1.20:4100";
 const token = "client_maya";
+const credential = {
+  url: host,
+  token,
+  pin: null,
+  hostId: "host",
+  homeId: "home",
+};
 
 function respond(body: unknown, status = 200) {
   return vi
@@ -26,7 +33,7 @@ function sent(fetch: ReturnType<typeof respond>, call = 0) {
 
 beforeEach(() => {
   setCoreBaseUrl(host);
-  setCredential({ url: host, token, pin: null });
+  setCredential(credential);
 });
 
 afterEach(() => {
@@ -137,7 +144,7 @@ describe("coreFetch", () => {
     await coreFetch("/api/auth/status", { omitToken: true });
 
     expect(removed).toEqual([]);
-    expect(currentCredential()).toEqual({ url: host, token, pin: null });
+    expect(currentCredential()).toEqual(credential);
     stop();
   });
 
@@ -151,7 +158,7 @@ describe("coreFetch", () => {
 
     const pending = coreFetch("/api/auth/me");
     // Signed in again meanwhile.
-    setCredential({ url: host, token: "client_new", pin: null });
+    setCredential({ ...credential, token: "client_new" });
     answer(Response.json({ error: "invalid_client_token" }, { status: 401 }));
     await pending;
 

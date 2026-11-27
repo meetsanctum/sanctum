@@ -1,6 +1,7 @@
 import type { AuthErrorBody } from "@meetsanctum/auth-protocol";
 
 import { coreBaseUrl, coreUrl } from "./core-url";
+import type { StoredHost } from "./shell";
 
 // The one fetch helper for the core. Components never attach tokens
 // themselves: this helper adds the client token only to core-relative paths
@@ -10,9 +11,12 @@ import { coreBaseUrl, coreUrl } from "./core-url";
 // only with its pinned CA, and while a first contact is checked, no request
 // carries a token. Over plain HTTP in development there is none.
 
-// The client token this client holds, the core that issued it, and the pin
-// of that core's CA; none over plain HTTP.
-export type Credential = { url: string; token: string; pin: string | null };
+// The client token and the identity of the host that issued it. Over plain
+// HTTP the host has no pin.
+export type Credential = Pick<
+  StoredHost,
+  "url" | "token" | "pin" | "hostId" | "homeId"
+>;
 
 let credential: Credential | null = null;
 const invalidListeners = new Set<(token: string) => void>();
