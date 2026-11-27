@@ -130,7 +130,13 @@ it("teaches the Assistant's sentences and hears a speaker's words with them", as
         expect(stp.lessons[0]).toEqual({
           language: "en",
           templates: ["turn (on|off) [the] {light}"],
-          lists: { light: ["Office Lamp"] },
+          // The name the core gave the lamp as it registered.
+          lists: {
+            light: core.devices
+              .list()
+              .filter((device) => device.type === "light")
+              .map((device) => device.name),
+          },
         }),
       { timeout: 5_000 },
     );
