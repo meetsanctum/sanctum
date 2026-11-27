@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { NewActivityEntry } from "../src/activity/activity.js";
 import { ActionCallError } from "../src/app-host/errors.js";
-import { createListening } from "../src/speech/listening.js";
+import { createListening, type HeardRun } from "../src/speech/listening.js";
 import {
   createSpokenRequests,
   oneMomentAfterMs,
@@ -103,10 +103,18 @@ function setup(
     record: (entry) => void recorded.push(entry),
     log: () => {},
   });
+  const runs = new Map<string, HeardRun>();
   const listening = createListening({
     idFor: (by, key) => (by === driver ? `device:${key}` : null),
     listens: () => true,
-    hearer: spoken.hearer,
+    hearer(device) {
+      const hear = spoken.hearer(device);
+      if (typeof hear !== "function") return hear;
+      return (run) => {
+        runs.set(run.id, run);
+        return hear(run);
+      };
+    },
     refused: spoken.refused,
     log: () => {},
   });
@@ -143,6 +151,7 @@ function setup(
     spokenLate,
     replied,
     forgotten,
+    runs,
     wake,
     steps,
     until: (check: () => boolean) =>
@@ -325,6 +334,18 @@ describe("a smart speaker's request", () => {
     );
     expect(unknown.replied).toEqual([{ text: notUnderstood }]);
     expect(unknown.asked).toEqual([]);
+    unknown.listening.close(driver, { run: opened.run, end: "played" });
+    await unknown.until(() => requestLines(unknown.recorded).length === 1);
+    expect(requestLines(unknown.recorded)).toMatchObject([
+      {
+        outcome: "failed",
+        reason: "not_understood",
+        detail: {
+          heardWordsMs: expect.any(Number),
+          finishedPlayingMs: expect.any(Number),
+        },
+      },
+    ]);
 
     const silent = setup({ heard: null, notUnderstood });
     const quiet = await silent.wake();
@@ -354,6 +375,26 @@ describe("a smart speaker's request", () => {
       outcome: "failed",
       reason: "unavailable",
     });
+  });
+
+  it("records no recognition time when transcription fails", async () => {
+    const transcript = deferredResult<string>();
+    const { wake, asked, until, recorded, steps } = setup({
+      transcript: transcript.promise,
+    });
+    const opened = await wake();
+    if (!opened.accepted) throw new Error(opened.refusal);
+    await until(() => kinds(steps(opened.run)).includes("stopped"));
+    transcript.reject(new Error("Speech recognition failed"));
+    await until(() => kinds(steps(opened.run)).includes("done"));
+    expect(steps(opened.run)).toContainEqual({
+      step: "error",
+      error: "failed",
+    });
+    expect(asked).toEqual([]);
+    expect(requestLines(recorded)).toMatchObject([
+      { outcome: "failed", reason: "failed", detail: { heardWordsMs: null } },
+    ]);
   });
 
   it("ends the first request when a second wake word comes, and says nothing of its answer", async () => {
@@ -389,14 +430,16 @@ describe("a smart speaker's request", () => {
     async (heard, error) => {
       vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
       const transcript = deferredResult<string | null>();
-      const { wake, asked, replied, steps } = setup({
+      const { wake, asked, replied, recorded, runs, steps } = setup({
         transcript: transcript.promise,
       });
       const opened = await wake();
       if (!opened.accepted) throw new Error(opened.refusal);
+      const { moments } = runs.get(opened.run)!;
       await vi.advanceTimersByTimeAsync(0);
       await vi.advanceTimersByTimeAsync(oneMomentAfterMs + 1);
       expect(kinds(steps(opened.run))).toEqual(["stopped"]);
+      expect(moments.heardWords).toBeNull();
 
       transcript.resolve(heard);
       await vi.advanceTimersByTimeAsync(0);
@@ -407,6 +450,18 @@ describe("a smart speaker's request", () => {
       ]);
       expect(asked).toEqual([]);
       expect(replied).toEqual([]);
+      expect(moments.heardWords).toBe(moments.heard + oneMomentAfterMs + 1);
+      expect(requestLines(recorded)).toMatchObject(
+        heard === null
+          ? []
+          : [
+              {
+                outcome: "failed",
+                reason: "not_understood",
+                detail: { heardWordsMs: oneMomentAfterMs + 1 },
+              },
+            ],
+      );
     },
   );
 
@@ -444,6 +499,7 @@ describe("a smart speaker's request", () => {
     expect(requestLines(recorded)[0]).toMatchObject({
       outcome: "ok",
       detail: {
+        heardWordsMs: 2_000,
         lateReplyMs: expect.any(Number),
         replyReadyMs: null,
         finishedPlayingMs: null,
