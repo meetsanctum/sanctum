@@ -83,7 +83,7 @@ const buttonVariants = cva(
         // 4.5 : 1 on a card. Under the pointer the hairline turns red and the
         // fill stays, so the words keep their contrast.
         destructive:
-          "border-border bg-background text-destructive shadow-xs reduce-effects:shadow-none hover:border-destructive hover:text-destructive aria-expanded:border-destructive dark:border-input dark:bg-transparent dark:hover:border-destructive",
+          "border-border bg-background text-destructive shadow-xs transition-transform reduce-effects:shadow-none hover:border-destructive hover:text-destructive aria-expanded:border-destructive dark:border-input dark:bg-transparent dark:hover:border-destructive motion-reduce:transition-none",
         // Text in the action colour, Light blue on Carbon.
         link: "text-(--action) underline-offset-4 hover:underline",
         // A card pressed whole, on glass: White at 12% fading to 6% with a
