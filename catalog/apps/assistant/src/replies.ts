@@ -21,7 +21,6 @@ type RestoreIssue = "changed" | "offline" | "uncertain" | "limited" | "failed";
 
 export type Replies = {
   changed(subject: Subject, state: LightsState): string;
-  someChanged(state: LightsState): string;
   already(subject: Subject, state: LightsState): string;
   /** Dimmer leaves lights that are off alone. */
   allOff(subject: Subject): string;
@@ -31,11 +30,6 @@ export type Replies = {
     summary: string,
     names: readonly string[],
     allOffline: boolean,
-  ): string;
-  keptOffLights(
-    summary: string,
-    names: readonly string[],
-    hasOtherMisses: boolean,
   ): string;
   nothingChanged: string;
   putBack: string;
@@ -77,9 +71,8 @@ function withNames(
   and: string,
   more: (count: number) => string,
   ending: string,
-  maxLength = replyTextMaxLength,
 ) {
-  const limit = maxLength - summary.length - 1 - ending.length;
+  const limit = replyTextMaxLength - summary.length - 1 - ending.length;
   const full = list(names, and);
   if (full.length <= limit) return `${summary} ${full}${ending}`;
 
@@ -108,7 +101,6 @@ const enSubject = (subject: Subject) =>
 
 const en: Replies = {
   changed: (subject, state) => `${enSubject(subject)} ${enState(state)}.`,
-  someChanged: (state) => `Some lights ${enState(state)}.`,
   already: (subject, state) =>
     `${enSubject(subject)} already ${enState(state)}.`,
   allOff: (subject) =>
@@ -125,15 +117,6 @@ const en: Replies = {
       "and",
       (count) => `${count} more`,
       allOffline ? " didn't answer." : " couldn't be changed.",
-    ),
-  keptOffLights: (summary, names, hasOtherMisses) =>
-    withNames(
-      summary,
-      names,
-      "and",
-      (count) => `${count} more`,
-      " stayed off under the room rules.",
-      hasOtherMisses ? replyTextMaxLength / 2 : replyTextMaxLength,
     ),
   nothingChanged: "Nothing changed.",
   putBack: "Put back.",
@@ -188,7 +171,6 @@ const deSaid = (subject: Subject, words: string) =>
 
 const de: Replies = {
   changed: (subject, state) => deSaid(subject, deState(state)),
-  someChanged: (state) => `Einige Lichter ${deState(state)}.`,
   already: (subject, state) => deSaid(subject, `schon ${deState(state)}`),
   allOff: (subject) =>
     deSaid(subject, subject.kind === "home" ? "sind aus" : "ist aus"),
@@ -214,17 +196,6 @@ const de: Replies = {
         : names.length > 1
           ? " konnten nicht geändert werden."
           : " konnte nicht geändert werden.",
-    ),
-  keptOffLights: (summary, names, hasOtherMisses) =>
-    withNames(
-      summary,
-      names,
-      "und",
-      (count) => `${count} weitere`,
-      names.length > 1
-        ? " bleiben nach den Raumregeln aus."
-        : " bleibt nach der Raumregel aus.",
-      hasOtherMisses ? replyTextMaxLength / 2 : replyTextMaxLength,
     ),
   nothingChanged: "Nichts geändert.",
   putBack: "Zurückgestellt.",

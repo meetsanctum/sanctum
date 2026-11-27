@@ -299,37 +299,40 @@ describe("the Assistant's requests", () => {
   it.each([
     [
       "turn on all lights",
-      [lit("Desk Lamp", "skipped", "already")],
-      "Nothing changed. Ceiling Light stayed off under the room rules.",
-    ],
-    [
-      "set all lights to 40%",
-      [lit("Desk Lamp")],
-      "Some lights at 40%. Ceiling Light stayed off under the room rules.",
+      [lit("Desk Lamp"), lit("Ceiling Light", "skipped", "kept_off")],
+      { text: "All lights on.", confirmation: true },
     ],
     [
       "turn on all lights",
-      [lit("Desk Lamp"), lit("Shelf", "offline")],
-      "Some lights on. Ceiling Light stayed off under the room rules. Shelf didn't answer.",
+      [
+        lit("Desk Lamp", "skipped", "already"),
+        lit("Ceiling Light", "skipped", "kept_off"),
+      ],
+      { text: "All lights already on." },
     ],
-  ])("names lights kept off when asked to %s", async (text, lights, reply) => {
-    expect(
-      (
-        await ask(text, {
-          tools: {
-            lights: () =>
-              json({
-                change: "c1",
-                lights: [
-                  ...lights,
-                  lit("Ceiling Light", "skipped", "kept_off"),
-                ],
-              }),
-          },
-        })
-      ).replies,
-    ).toEqual([{ text: reply }]);
-  });
+    [
+      "set all lights to 40%",
+      [lit("Desk Lamp"), lit("Ceiling Light", "skipped", "kept_off")],
+      { text: "All lights at 40%.", confirmation: true },
+    ],
+    [
+      "turn on all lights",
+      [
+        lit("Desk Lamp"),
+        lit("Ceiling Light", "skipped", "kept_off"),
+        lit("Shelf", "offline"),
+      ],
+      { text: "All lights on. Shelf didn't answer." },
+    ],
+  ])(
+    "leaves the lights rooms' rules keep off unsaid when asked to %s",
+    async (text, lights, reply) => {
+      const { replies } = await ask(text, {
+        tools: { lights: () => json({ change: "c1", lights }) },
+      });
+      expect(replies).toEqual([reply]);
+    },
+  );
 
   it("says which lights couldn't take a brightness change", async () => {
     const { replies } = await ask("set all lights to 40%", {
