@@ -74,7 +74,11 @@ jobs:
         with:
           name: connector
           path: ${{ runner.temp }}/connector
+      # npm stages the directory it runs in, so the tarball pnpm packed is
+      # unpacked first.
+      - run: tar -xzf "$RUNNER_TEMP/connector/connector.tgz" -C "$RUNNER_TEMP/connector"
       - name: Stage it on npm
-        run: npm stage publish "$RUNNER_TEMP/connector/connector.tgz" --access public --provenance --ignore-scripts
+        working-directory: ${{ runner.temp }}/connector/package
+        run: npm stage publish --access public --provenance --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
