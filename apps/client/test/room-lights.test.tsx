@@ -276,7 +276,7 @@ describe("a room's Lights tile", () => {
     ).not.toBeNull();
   });
 
-  it("offers only power while the only lit light cannot dim or change colour", async () => {
+  it("offers the colour of a light that is off, but no level, while the only lit light cannot dim", async () => {
     devices = [
       officeLight("desk", { on: true }, plainLight),
       officeLight("shelf", null, withColour),
@@ -287,6 +287,24 @@ describe("a room's Lights tile", () => {
         'input[aria-label="Lights in Office brightness"]',
       ),
     ).toBeNull();
+    await click(button("Lights in Office, 1 of 2 on"));
+    expect(tabs()).toEqual([]);
+    await click(button("Colour", dialog()!));
+    await click(button("Blue", dialog()!));
+    expect(posted()).toEqual([
+      {
+        place: { kind: "room", id: "office" },
+        set: { hue: 220, saturation: 100 },
+      },
+    ]);
+  });
+
+  it("offers only power while every light can do no more than switch", async () => {
+    devices = [
+      officeLight("desk", { on: true }, plainLight),
+      officeLight("shelf", null, plainLight),
+    ];
+    await show();
     await click(button("Lights in Office, 1 of 2 on"));
     expect(tabs()).toEqual([]);
     await click(button("Lights in Office", dialog()!));

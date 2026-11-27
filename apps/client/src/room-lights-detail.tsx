@@ -25,16 +25,17 @@ import type { Devices } from "./use-devices";
 // A room's Lights tile's detail: a light's detail for all the room's lights
 // at once, opened from the tile as a light's is from its own. Its header
 // says "Lights" and the room with how many are on, beside Done. Its pages
-// are a light's controls where any of the lights being set has them: its
-// colour and white, with the button that turns them all on or off, and its
-// brightness; a room whose lights only dim has the power button as a page
-// of its own after its brightness. It shows the lights that are on, their
+// are a light's controls where any of the lights they reach has them: its
+// colour and white where any light in the room has them, with the button
+// that turns them all on or off, and its brightness where any light that is
+// on dims; a room whose lights only dim has the power button as a page of
+// its own after its brightness. It shows the lights that are on, their
 // level on average and the first reported colour and white, and sets them
-// together through the room's Lights tile's calls (room-lights.tsx): every
-// light that is on takes what it can of a colour, a white or a level, and while
-// none is on the room comes on at it. It has no history or activity of its
-// own, which each light's detail keeps. A room removed meanwhile, or left
-// without lights, closes it.
+// together through the room's Lights tile's calls (room-lights.tsx): a
+// colour or a white reaches every light, those that are off too, and a
+// level those that are on, while none is on the room coming on at it. It
+// has no history or activity of its own, which each light's detail keeps.
+// A room removed meanwhile, or left without lights, closes it.
 
 type Light = Extract<CapabilityInfo, { kind: "light" }>;
 
@@ -115,25 +116,34 @@ export function RoomLightsDetail(props: {
     roomId,
     devices.failures.get(roomLightsKey(roomId)),
   );
-  // Only the lights that can receive a group setting. If all are
-  // offline, keep their controls visible but disabled.
-  const targets = new Set(
+  // The lights a colour or a white reaches: every one a command can, or,
+  // while all are offline, every one, so their controls show disabled. A
+  // level reaches those that are on while any is.
+  const reachable = new Set(
     tiles
-      .filter(
-        (each) => tile?.disabled || (!each.disabled && (!tile?.on || each.on)),
-      )
+      .filter((each) => tile?.disabled || !each.disabled)
       .map((each) => each.key),
   );
-  const lights = devices.devices
-    .filter((device) => device.roomId === roomId)
-    .flatMap((device) =>
-      device.capabilities.filter(
-        (capability): capability is Light =>
-          capability.kind === "light" &&
-          targets.has(tileKey(device.id, capability.id)),
-      ),
-    );
-  const features = featuresOf(lights);
+  const lit = new Set(
+    tiles
+      .filter((each) => reachable.has(each.key) && (!tile?.on || each.on))
+      .map((each) => each.key),
+  );
+  const lightsOf = (keys: ReadonlySet<string>) =>
+    devices.devices
+      .filter((device) => device.roomId === roomId)
+      .flatMap((device) =>
+        device.capabilities.filter(
+          (capability): capability is Light =>
+            capability.kind === "light" &&
+            keys.has(tileKey(device.id, capability.id)),
+        ),
+      );
+  const lights = lightsOf(lit);
+  const features = {
+    ...featuresOf(lightsOf(reachable)),
+    brightness: featuresOf(lights).brightness,
+  };
   const state = stateOf(lights, tile);
   // A room removed meanwhile, or without lights now, closes its detail.
   const gone = props.open && devices.places !== undefined && (!room || !tile);

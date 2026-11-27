@@ -403,6 +403,41 @@ describe("commands from here", () => {
     ]);
   });
 
+  it("sends a room's colour to the lights that are off too, and fails one that could not take it", async () => {
+    act(() => {
+      devices.apply({ type: "places", places });
+      showLight("desk", 60);
+      devices.apply({
+        type: "device",
+        id: "shelf",
+        device: light("shelf", "shelf", "room", false),
+      });
+    });
+    const result = deferred<LightsResult>();
+    client.lights.mockReturnValue(result.promise);
+    let setting!: Promise<LightsResult>;
+    act(() => {
+      setting = devices.setLights({ kind: "room", id: "room" }, devices.tiles, {
+        hue: 220,
+        saturation: 100,
+      });
+    });
+    await act(async () => {
+      result.resolve({
+        on: true,
+        switched: 1,
+        failed: [{ device: "shelf", capability: "light" }],
+      });
+      await setting;
+    });
+    expect(
+      devices.tiles.map(({ deviceId, failures }) => [deviceId, failures]),
+    ).toEqual([
+      ["desk", undefined],
+      ["shelf", 1],
+    ]);
+  });
+
   it.each([true, false])(
     "reports a late room failure once only if all deliveries fail to confirm (%s)",
     async (allFail) => {

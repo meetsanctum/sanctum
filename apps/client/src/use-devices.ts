@@ -549,14 +549,15 @@ export function useDevices(live: LiveFeed) {
   );
 
   // Every light in a room or another place set together, as a room's Lights
-  // tile and its detail set them: a brightness, a white or a colour. While
-  // any is on the core changes only those, so a brightness shows on them
-  // as pending at once, as a light's own drag does; while none is on the
-  // place comes on by its rooms' rules, which only the core knows, so they
-  // wait for its live state. A brightness of 0 switches them off. It goes
-  // in turn with the room's other presses. The core names the lights it
-  // could not set; when the whole call fails, each that it would have set
-  // failed.
+  // tile and its detail set them: a brightness, a white or a colour. A
+  // brightness changes only the lights that are on while any is, so it
+  // shows on them as pending at once, as a light's own drag does; while
+  // none is on the place comes on by its rooms' rules, which only the core
+  // knows. A colour or a white reaches every light, those that are off
+  // included, at a level only the core works out. Those wait for its live
+  // state. A brightness of 0 switches them off. It goes in turn with the
+  // room's other presses. The core names the lights it could not set; when
+  // the whole call fails, each that it would have set failed.
   const setLights = useCallback(
     async (
       place: LightsPlace,
@@ -569,7 +570,8 @@ export function useDevices(live: LiveFeed) {
       }
       const reachable = lights.filter((tile) => !tile.disabled);
       const lit = reachable.filter((tile) => tile.on);
-      const setting = lit.length > 0 ? lit : reachable;
+      const setting =
+        set.brightness !== undefined && lit.length > 0 ? lit : reachable;
       const answered =
         set.brightness !== undefined && lit.length > 0
           ? ask(

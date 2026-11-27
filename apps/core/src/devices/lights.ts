@@ -428,12 +428,11 @@ export function createLights(options: {
   }
 
   // Sets a place's lights together, as a room's Lights tile and its detail
-  // do. While any is on, only those that are on change, each to what was
-  // asked as far as it can take it, so a mood's colour stays when only its
-  // brightness was asked. While none is on, the place comes on as its rooms'
-  // rules say, with what was asked; a light that can't dim comes on with a
-  // brightness asked of it too, but stays off for a colour it can't show. A
-  // brightness of 0 turns them off.
+  // do. A brightness adjusts the look the place has: while any light is on,
+  // only those that are on change, so dimming a mood leaves the lights it
+  // keeps off alone; while none is, the place comes on as its rooms' rules
+  // say, at that level, and 0 turns them off. A colour or a white is the
+  // look the place is to have, so every light takes it (colourWith).
   async function setWith(
     place: LightsPlace,
     set: LightsSet,
@@ -444,19 +443,64 @@ export function createLights(options: {
       return switchWith(place, "off", view, send);
     }
     const lights = lightsIn(place, view);
+    if (set.brightness === undefined) {
+      return colourWith(lights, set, send);
+    }
     const lit = lights.filter(isOn);
     const sending = lit.length
       ? lit.flatMap((light) => {
           const command = fieldsOf(light, set);
           return Object.keys(command).length ? [{ light, command }] : [];
         })
-      : turningOn(lights).flatMap(({ light, command }) => {
+      : turningOn(lights).map(({ light, command }) => {
           const fields = fieldsOf(light, set);
-          if (Object.keys(fields).length === 0) {
-            return set.brightness !== undefined ? [{ light, command }] : [];
-          }
-          return [{ light, command: withSettings(command, fields) }];
+          return { light, command: withSettings(command, fields) };
         });
+    const result = await sendAll(sending, send);
+    return { on: lit.length > 0 || result.switched > 0, ...result };
+  }
+
+  // A colour or a white for every light in a place, those that are off
+  // included, even where a room's rule keeps them off: choosing the look
+  // means the whole place in it. A light that is off comes on at the level
+  // of those that are on, on average, so the place is even; while none is,
+  // the lights its rules bring on come at the rule's look and the others at
+  // the level of those, or as with nothing to go by where the rules give
+  // none. A white brings on a light that only dims, whose light is white,
+  // while a colour leaves a light that can't show it as it is.
+  async function colourWith(
+    lights: readonly Light[],
+    set: LightsSet,
+    send: (light: Light, command: LightCommand) => Promise<unknown>,
+  ): Promise<LightsResult> {
+    const lit = lights.filter(isOn);
+    const byRule = new Map(
+      lit.length
+        ? []
+        : turningOn(lights).map(({ light, command }) => [light, command]),
+    );
+    const levels = (
+      lit.length
+        ? lit.filter(canDim).map((light) => light.capability.state?.brightness)
+        : [...byRule.values()].map((command) => command.brightness)
+    ).filter((level) => level !== undefined);
+    const level = levels.length
+      ? Math.round(levels.reduce((sum, each) => sum + each, 0) / levels.length)
+      : undefined;
+    const comingOn = (light: Light): LightCommand =>
+      byRule.get(light) ??
+      (level === undefined
+        ? withNothingToGoBy(light)
+        : canDim(light)
+          ? { on: true, brightness: level }
+          : { on: true });
+    const sending = lights.flatMap((light) => {
+      const fields = fieldsOf(light, set);
+      const takes = Object.keys(fields).length > 0;
+      if (isOn(light)) return takes ? [{ light, command: fields }] : [];
+      if (!takes && set.colorTemperature === undefined) return [];
+      return [{ light, command: withSettings(comingOn(light), fields) }];
+    });
     const result = await sendAll(sending, send);
     return { on: lit.length > 0 || result.switched > 0, ...result };
   }

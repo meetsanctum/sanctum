@@ -157,7 +157,7 @@ describe("POST /api/devices/lights with a set", () => {
     expect(asked()).toEqual({ "counter-1": { on: true, brightness: 30 } });
   });
 
-  it("brings up only the lights allowed by the room's rule and replaces its white with the requested colour", async () => {
+  it("brings every light to a colour, those the room's rule keeps off too, at the level of the rule's", async () => {
     const { core, token, living, ids } = await darkRoom();
     const place = { kind: "room", id: living };
     await publishRule(core, token, "living", {
@@ -177,10 +177,31 @@ describe("POST /api/devices/lights with a set", () => {
       place,
       set: { hue: 200, saturation: 80 },
     });
-    expect(response.json()).toEqual({ on: true, switched: 1, failed: [] });
+    expect(response.json()).toEqual({ on: true, switched: 2, failed: [] });
     expect(asked()).toEqual({
       "ceiling-1": { on: true, brightness: 40, hue: 200, saturation: 80 },
+      "lamp-1": { on: true, brightness: 40, hue: 200, saturation: 80 },
     });
+  });
+
+  it("leaves the lights that are off alone for a brightness, even where the room's rule would bring them on", async () => {
+    const { core, token, living, ids } = await home();
+    await publishRule(core, token, "living", {
+      placeId: living,
+      lights: [
+        {
+          device: ids.ceiling,
+          capability: "light",
+          state: { on: true, brightness: 40 },
+        },
+      ],
+      until: null,
+    });
+    await lights(core, token, {
+      place: { kind: "room", id: living },
+      set: { brightness: 70 },
+    });
+    expect(asked()).toEqual({ "lamp-1": { on: true, brightness: 70 } });
   });
 
   it("turns them off at a brightness of 0", async () => {
@@ -193,20 +214,63 @@ describe("POST /api/devices/lights with a set", () => {
     expect(switched()).toEqual([["lamp-1", { on: false }]]);
   });
 
-  it("keeps a colour temperature within each light's range, and sets a colour", async () => {
+  it("brings the lights that are off to a white at the level of those that are on, within each light's range", async () => {
     const { core, token, living } = await home();
-    await lights(core, token, {
+    await radio.press("lamp-1", { on: true, brightness: 60 });
+    await settled();
+    radio.received.length = 0;
+    const response = await lights(core, token, {
       place: { kind: "room", id: living },
       set: { colorTemperature: 600 },
     });
-    expect(asked()).toEqual({ "lamp-1": { colorTemperature: 500 } });
+    expect(response.json()).toEqual({ on: true, switched: 2, failed: [] });
+    expect(asked()).toEqual({
+      "lamp-1": { colorTemperature: 500 },
+      "ceiling-1": { on: true, brightness: 60, colorTemperature: 500 },
+    });
+  });
 
-    radio.received.length = 0;
+  it("brings the lights that are off up at full where those that are on give no level", async () => {
+    const { core, token, living } = await home();
     await lights(core, token, {
       place: { kind: "room", id: living },
       set: { hue: 200, saturation: 80 },
     });
-    expect(asked()).toEqual({ "lamp-1": { hue: 200, saturation: 80 } });
+    expect(asked()).toEqual({
+      "lamp-1": { hue: 200, saturation: 80 },
+      "ceiling-1": { on: true, brightness: 100, hue: 200, saturation: 80 },
+    });
+  });
+
+  it("brings a light that only dims on for a white, and leaves it off for a colour", async () => {
+    const { core, token, living } = await home();
+    await radio.add("plain-1", "light", "Plain light", undefined, {
+      brightness: true,
+      colorTemperature: null,
+      color: false,
+    });
+    const plain = (await get(core, "/api/devices", { token }))
+      .json()
+      .find(
+        (device: { driverName: string }) => device.driverName === "Plain light",
+      );
+    await post(
+      core,
+      "/api/devices/update",
+      { id: plain.id, roomId: living },
+      { token },
+    );
+    await radio.press("lamp-1", { on: true, brightness: 50 });
+    await settled();
+    radio.received.length = 0;
+    const place = { kind: "room", id: living };
+
+    await lights(core, token, { place, set: { hue: 200, saturation: 80 } });
+    expect(asked()["plain-1"]).toBeUndefined();
+
+    radio.received.length = 0;
+    await lights(core, token, { place, set: { colorTemperature: 300 } });
+    expect(asked()["plain-1"]).toEqual({ on: true, brightness: 50 });
   });
 
   it("refuses a set it cannot read", async () => {
