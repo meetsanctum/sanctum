@@ -15,7 +15,6 @@ import { connect, names } from "./agents-support.js";
 import { lampsCore, radio, settled } from "./devices-support.js";
 import type { AppPackage } from "./runner-apps.js";
 import { post } from "./support.js";
-import { steps, trigger } from "./workflows-support.js";
 
 // `run`: an AI agent runs one of the home's moods by the app and key
 // `entities` gives it, through the action the app says runs its moods, so it
@@ -253,38 +252,6 @@ describe("the run tool", () => {
       isError: false,
       content: { type: "mood", result: { switched: 3, failed: [] } },
     });
-  });
-
-  it("requires the Moods workflow step to name one of its own moods", async () => {
-    const { core, client, token } = await household({
-      app: example,
-      origin: "official",
-    });
-    const seen = await moodsSeen(client);
-    const relax = seen.find(({ app }) => app === moods.id)!;
-    const save = (id: string) =>
-      post(
-        core,
-        "/api/workflows/add",
-        {
-          name: "Run a mood",
-          graph: steps(trigger("manual", "manual"), {
-            id: "run",
-            kind: "step",
-            app: moods.id,
-            piece: "moods.runMood",
-            config: { id },
-          }),
-        },
-        { token },
-      );
-
-    const other = await save("reading");
-    expect(other.statusCode).toBe(400);
-    expect(other.json().problems).toEqual([
-      expect.objectContaining({ node: "run", field: "id" }),
-    ]);
-    expect((await save(relax.key)).statusCode).toBe(200);
   });
 
   it("describes what running a mood does", async () => {

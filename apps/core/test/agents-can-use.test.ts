@@ -2,7 +2,6 @@ import {
   defineAction,
   defineApp,
   defineEntityType,
-  moodType,
   registerPermission,
   toStaticManifest,
   type AiCanUse,
@@ -489,7 +488,7 @@ describe("answers kept for an app's offers", () => {
       ) as StaticManifest,
     ).offers;
 
-  async function store(app = "sanctum.example") {
+  async function store() {
     const core = await testCore();
     let apps: AppOffers[] = [];
     const store = createAgentsCanUse(core.db, {
@@ -497,7 +496,7 @@ describe("answers kept for an app's offers", () => {
       apps: () => apps,
     });
     const install = (offered: AppOffers["offers"], asUpdate: boolean) => {
-      apps = [{ app, offers: offered }];
+      apps = [{ app: "sanctum.example", offers: offered }];
       store.adopt(apps[0]!, { asUpdate });
     };
     const isOn = () =>
@@ -565,33 +564,6 @@ describe("answers kept for an app's offers", () => {
     install(offers("write"), true);
     expect(isOn()).toBe(false);
   });
-
-  it.each([true, false])(
-    "carries Moods' saved %s answer to the standard type once",
-    async (on) => {
-      const app = "sanctum.moods";
-      const { store: canUse, install } = await store(app);
-      const offered = {
-        ...offers("read").get("example.look")!,
-        kind: "entity" as const,
-        starts: on ? ("on" as const) : ("off" as const),
-      };
-      install(
-        new Map([["moods.mood", { ...offered, id: "moods.mood" }]]),
-        false,
-      );
-      const standard = new Map([
-        [moodType.id, { ...offered, id: moodType.id }],
-      ]);
-      install(standard, true);
-
-      expect(canUse.canUse(app, moodType.id, "entity")).toBe(on);
-
-      canUse.setOffer(app, moodType.id, !on, { clientId: "settings-client" });
-      install(standard, true);
-      expect(canUse.canUse(app, moodType.id, "entity")).toBe(!on);
-    },
-  );
 });
 
 describe("an app's calls on an AI agent's behalf", () => {

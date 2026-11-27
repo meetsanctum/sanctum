@@ -151,13 +151,8 @@ export function namesOf(
         }
       );
     },
-    entity: (type, key, app) =>
-      entities.find(
-        (each) =>
-          each.type === type &&
-          each.key === key &&
-          (app === undefined || each.app === app),
-      )?.name,
+    entity: (type, key) =>
+      entities.find((each) => each.type === type && each.key === key)?.name,
     app: (id) => apps.find((app) => app.id === id)?.name,
     time,
   };

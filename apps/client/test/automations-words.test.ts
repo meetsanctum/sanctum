@@ -9,7 +9,6 @@ import {
   needsValue,
 } from "../src/automations/graph";
 import { deviceKindsFor, withDevice } from "../src/automations/chooser";
-import { namesOf } from "../src/automations/data";
 import { lightLevelIn } from "../src/automations/fields";
 import {
   dayWords,
@@ -205,32 +204,6 @@ describe("Automations' words", () => {
     expect(plain(nodeParts(runMood, { config: { id: "focus" } }, names))).toBe(
       "Run Focus",
     );
-  });
-
-  it("reads a provider-specific mood by its own name when another provider shares the key", () => {
-    const entity = { type: "mood", key: "focus", state: {}, updatedAt: "" };
-    const fromHome = namesOf(
-      places,
-      devices,
-      [],
-      [
-        { ...entity, app: "sanctum.example", name: "Reading" },
-        { ...entity, app: "sanctum.moods", name: "Focus" },
-      ],
-      (wall) => wall,
-    );
-    const scoped = {
-      ...runMood,
-      config: {
-        properties: {
-          id: { type: "string", entityOf: "mood", entityApp: "sanctum.moods" },
-        },
-      },
-    };
-
-    expect(
-      plain(nodeParts(scoped, { config: { id: "focus" } }, fromHome)),
-    ).toBe("Run Focus");
   });
 
   it("group triggers by their type: the core's groups, a device's category, an app", () => {

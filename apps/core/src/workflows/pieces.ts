@@ -30,7 +30,6 @@ import {
   type EntityTriggerConfig,
   type PressTriggerConfig,
 } from "./core-pieces.js";
-import { matchesEntityType } from "./entity-selectors.js";
 import { hasTriggerToStepPath } from "./graph.js";
 import { namedIn, namedInSchema, type Named } from "./named.js";
 
@@ -209,9 +208,6 @@ export function createPieces(options: {
       case "zone":
         return options.places.hasZone(named.id);
       case "entity":
-        if (named.app !== undefined) {
-          return options.entities.get(named.app, named.id)?.type === named.type;
-        }
         return options.entities
           .list({ type: named.type })
           .some(({ key }) => key === named.id);
@@ -238,21 +234,11 @@ export function createPieces(options: {
   ): WorkflowProblem[] {
     const gone = new Map<string, Named>();
     for (const each of namedBy(piece, node.config)) {
-      // An app may save a workflow before it publishes its entities. A
-      // household workflow with a provider-specific field checks it on save.
-      if (
-        each.kind === "entity" &&
-        saving &&
-        (each.app === undefined || view)
-      ) {
-        continue;
-      }
+      // An app may keep a workflow in its start before it has published what it
+      // names, so only one that's gone counts for an entity.
+      if (each.kind === "entity" && saving) continue;
       if (!exists(each, view)) {
-        const app = each.kind === "entity" ? (each.app ?? "") : "";
-        gone.set(
-          `${each.field}\u0000${each.kind}\u0000${app}\u0000${each.id}`,
-          each,
-        );
+        gone.set(`${each.field}\u0000${each.kind}\u0000${each.id}`, each);
       }
     }
     return [...gone.values()].map((each) => ({
@@ -348,17 +334,10 @@ export function createPieces(options: {
   }
 
   // Whether an installed app brings entities of a type now.
-  function brought(type: string, appId: string | undefined) {
+  function brought(type: string) {
     return host
       .list()
-      .some((app) =>
-        app.provides.entities.some(
-          (each) =>
-            each.id === type ||
-            ((appId === undefined || appId === app.id) &&
-              matchesEntityType(type, { type: each.id, app: app.id })),
-        ),
-      );
+      .some((app) => app.provides.entities.some((each) => each.id === type));
   }
 
   // An entity piece's type, which must be a standard one or one an
@@ -366,10 +345,9 @@ export function createPieces(options: {
   // that goes later, or a standard one no app brings, waits for one.
   function entityTypeCheck(
     type: string | undefined,
-    app: string | undefined,
     saving: boolean,
   ): { problem?: string; warning?: string } {
-    if (type === undefined || brought(type, app)) {
+    if (type === undefined || brought(type)) {
       return {};
     }
     return saving && !standardEntityTypes.some((each) => each.id === type)
@@ -548,13 +526,16 @@ export function createPieces(options: {
         }
         if (piece.app === null && piece.id === "entity") {
           const { type, app, key } = config.data as EntityTriggerConfig;
-          const { problem, warning } = entityTypeCheck(type, app, saving);
+          const { problem, warning } = entityTypeCheck(type, saving);
           if (problem) {
             problems.push({ node: node.id, field: "type", message: problem });
           }
           if (!saving && app !== undefined && key !== undefined) {
             const entity = options.entities.get(app, key);
-            if (entity === null || !matchesEntityType(type, entity)) {
+            if (
+              entity === null ||
+              (type !== undefined && entity.type !== type)
+            ) {
               problems.push({
                 node: node.id,
                 field: "key",

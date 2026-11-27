@@ -983,8 +983,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 128,
-            "entityOf": "mood",
-            "entityApp": "sanctum.moods"
+            "entityOf": "mood"
           }
         },
         "required": [
