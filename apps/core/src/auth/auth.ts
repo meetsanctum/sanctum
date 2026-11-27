@@ -14,6 +14,7 @@ import {
   isClaimed,
   loadServerSetup,
 } from "./logins.js";
+import { createInvites } from "./invites.js";
 import { createPairing } from "./pairing.js";
 
 // Auth: the module of the core that turns each request's credential into a
@@ -75,6 +76,16 @@ export async function createAuth(
     homeId: options.homeId,
     pin: options.pin ?? (() => null),
     onClaimed: () => options.onClaimed?.(),
+    now,
+  });
+  const invites = createInvites(db, {
+    serverSetup: loadServerSetup(db, now),
+    people: options.people,
+    clients,
+    limiter,
+    limits: options.limits,
+    record,
+    host: logins.host,
     now,
   });
   const pairing = createPairing(db, {
@@ -148,6 +159,7 @@ export async function createAuth(
     authenticate: clients.authenticate,
     clients,
     logins,
+    invites,
     pairing,
     agentSetups,
     connections,

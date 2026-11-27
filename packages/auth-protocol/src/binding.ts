@@ -35,12 +35,19 @@ function toBase64url(bytes: Uint8Array) {
 }
 
 type Purpose =
-  "client" | "server" | "password" | "pairing device" | "pairing host";
+  | "client"
+  | "server"
+  | "password"
+  | "pairing device"
+  | "pairing host"
+  | "invite device"
+  | "invite host";
 
-// Sign-in's labels keep their version; pairing's keys have labels of their
-// own, so a MAC made for one exchange never checks for another.
+// Sign-in's labels keep their version; pairing's and invites' keys have
+// labels of their own, so a MAC made for one exchange never checks for
+// another.
 function label(purpose: Purpose) {
-  return purpose.startsWith("pairing")
+  return purpose.startsWith("pairing") || purpose.startsWith("invite")
     ? `sanctum ${purpose} binding v1`
     : // v2: v1 bound the host id and pin alone, before home ids.
       `sanctum sign-in binding v2 ${purpose}`;
@@ -92,8 +99,8 @@ async function softwareMac(
   return hmac(sha256, key, data);
 }
 
-// Every field is a UUID, a number or base64url, so a newline cannot appear
-// inside one.
+// Every field is a UUID, a number, base64url or a username, so a newline
+// cannot appear inside one.
 function message(fields: string[]) {
   return text.encode(fields.join("\n"));
 }
@@ -260,4 +267,70 @@ export function verifyPairingConfirmation(
     [...exchangeFields(ids), token],
     confirmation,
   );
+}
+
+// Redeeming an invite: the device proves its code with OPAQUE, as signing
+// in proves a password, and MACs the host it sees twice, once when the code
+// is checked and once over the username and password it chose, so the host
+// saves them only for a device that reached it directly.
+
+/** The device's MAC when its invite code is checked. */
+export function inviteCheckBinding(sessionKey: string, host: HostView) {
+  return sign(sessionKey, "invite device", host, ["check"]);
+}
+
+export function verifyInviteCheckBinding(
+  sessionKey: string,
+  host: HostView,
+  binding: string,
+) {
+  return verify(sessionKey, "invite device", host, ["check"], binding);
+}
+
+/** The device's MAC over the username and the new password's record. */
+export function inviteFinishBinding(
+  sessionKey: string,
+  host: HostView,
+  username: string,
+  registrationRecord: string,
+) {
+  return sign(sessionKey, "invite device", host, [
+    "finish",
+    username,
+    registrationRecord,
+  ]);
+}
+
+export function verifyInviteFinishBinding(
+  sessionKey: string,
+  host: HostView,
+  username: string,
+  registrationRecord: string,
+  binding: string,
+) {
+  return verify(
+    sessionKey,
+    "invite device",
+    host,
+    ["finish", username, registrationRecord],
+    binding,
+  );
+}
+
+/** The host's MAC over itself and the token it issued for a redeemed invite. */
+export function inviteConfirmation(
+  sessionKey: string,
+  host: HostView,
+  token: string,
+) {
+  return sign(sessionKey, "invite host", host, [token]);
+}
+
+export function verifyInviteConfirmation(
+  sessionKey: string,
+  host: HostView,
+  token: string,
+  confirmation: string,
+) {
+  return verify(sessionKey, "invite host", host, [token], confirmation);
 }

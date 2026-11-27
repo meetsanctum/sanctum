@@ -31,6 +31,7 @@ import { personalCaller } from "./callers.js";
 import { clientInfo, type Clients, type Principal } from "./clients.js";
 import { AuthError } from "./errors.js";
 import { createPendingStore, type Limiter, type Limits } from "./limits.js";
+import { createOpaqueServer } from "./opaque-server.js";
 import { authLogins, authServer } from "./schema.js";
 
 // Claiming the host, logins and signing in, all through OPAQUE: devices
@@ -106,15 +107,6 @@ export function loadServerSetup(db: CoreDatabase, now: () => Date) {
     .get()!.serverSetup;
 }
 
-// OPAQUE's server functions throw on malformed messages.
-function protocol<T>(step: () => T) {
-  try {
-    return step();
-  } catch {
-    throw new AuthError("invalid_request");
-  }
-}
-
 export function createLogins(
   db: CoreDatabase,
   options: {
@@ -135,6 +127,7 @@ export function createLogins(
   },
 ) {
   const { serverSetup, people, clients, limiter, record, now } = options;
+  const server = createOpaqueServer(serverSetup, limiter);
   const pending = createPendingStore<Pending>({
     limits: options.limits,
     now: () => now().getTime(),
@@ -174,43 +167,9 @@ export function createLogins(
 
   const personal = personalCaller;
 
-  function registrationResponse(name: string, registrationRequest: string) {
-    limiter.work();
-    return protocol(() =>
-      opaque.server.createRegistrationResponse({
-        serverSetup,
-        userIdentifier: name,
-        registrationRequest,
-      }),
-    ).registrationResponse;
-  }
-
-  function startLogin(
-    name: string,
-    record: string | null,
-    startLoginRequest: string,
-  ) {
-    limiter.work();
-    return protocol(() =>
-      opaque.server.startLogin({
-        serverSetup,
-        registrationRecord: record,
-        startLoginRequest,
-        userIdentifier: name,
-      }),
-    );
-  }
-
-  // The session key, or none when the device's last message does not check.
-  function finishLogin(serverLoginState: string, finishLoginRequest: string) {
-    limiter.work();
-    try {
-      return opaque.server.finishLogin({ serverLoginState, finishLoginRequest })
-        .sessionKey;
-    } catch {
-      return undefined;
-    }
-  }
+  const registrationResponse = server.registrationResponse;
+  const startLogin = server.startLogin;
+  const finishLogin = server.finishLogin;
 
   function take<K extends Pending["kind"]>(
     kind: K,
