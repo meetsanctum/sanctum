@@ -305,6 +305,8 @@ describe("moving a host", () => {
       url: otherUrl,
       token: host.token,
       pin: null,
+      hostId: host.hostId,
+      homeId: host.homeId,
     });
   });
 
@@ -364,6 +366,8 @@ describe("forgetting a host", () => {
       url: otherUrl,
       token: "client_new",
       pin: null,
+      hostId: host.hostId,
+      homeId: host.homeId,
     });
   });
 

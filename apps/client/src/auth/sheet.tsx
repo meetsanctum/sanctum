@@ -1,7 +1,12 @@
 import { Button, Input } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { ChevronRight, CircleAlert, type LucideIcon } from "lucide-react";
-import { useId, type InputHTMLAttributes, type ReactNode } from "react";
+import {
+  useId,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type Ref,
+} from "react";
 
 import { BackButton, Logo, WindowDragArea } from "../components";
 import { Skeleton } from "../components/ui/skeleton";
@@ -73,24 +78,27 @@ export function Sheet(props: {
   );
 }
 
-// A labelled field, 44 px tall so a finger finds it on a wall display, with
-// its rule under it and the problem that names it.
+// A labelled field with its rule underneath and a link to its problem.
+// The sheet uses a 44 px input so a finger finds it on a wall display.
 export function SheetField(
   props: {
     label: string;
     hint?: string;
-    // Whether the sheet's problem is about this field, which it then names.
+    // The id of the problem about this field.
     problemId?: string;
+    compact?: boolean;
+    ref?: Ref<HTMLInputElement>;
+    children?: ReactNode;
   } & Omit<
     InputHTMLAttributes<HTMLInputElement>,
     "id" | "aria-invalid" | "aria-describedby"
   >,
 ) {
-  const { label, hint, problemId, ...input } = props;
+  const { label, hint, problemId, compact, children, ...input } = props;
   const id = useId();
   const hintId = `${id}-hint`;
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className={cn("flex flex-col", compact ? "gap-2" : "gap-1.5")}>
       <label
         htmlFor={id}
         className="text-[13px] leading-[18px] font-medium text-muted-foreground"
@@ -98,7 +106,11 @@ export function SheetField(
         {label}
       </label>
       <Input
-        className="h-11 rounded-md px-3.5 text-[15px] md:text-[15px]"
+        className={
+          compact
+            ? undefined
+            : "h-11 rounded-md px-3.5 text-[15px] md:text-[15px]"
+        }
         {...input}
         id={id}
         aria-invalid={problemId ? true : undefined}
@@ -114,6 +126,7 @@ export function SheetField(
           {hint}
         </span>
       )}
+      {children}
     </div>
   );
 }

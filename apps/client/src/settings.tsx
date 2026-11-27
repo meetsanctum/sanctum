@@ -187,6 +187,7 @@ export function SettingsPage(props: {
           key={props.params.id}
           live={props.live}
           personId={props.params.id}
+          me={props.me}
           ask={props.params.added === "yes"}
           back={props.back}
           backTo={backTo}

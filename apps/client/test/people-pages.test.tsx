@@ -283,7 +283,11 @@ describe("a person's page", () => {
       },
     ];
     await show("maya");
-    expect(container.textContent).toContain("Signs in as maya");
+    expect(container.textContent).toContain("Usernamemaya");
+    expect(container.textContent).toContain("Password codeWorks until");
+    expect(container.textContent).toContain(
+      "Maya stays in People but can’t sign in. Maya’s devices sign out at once.",
+    );
 
     await act(async () => button("Remove sign-in")!.click());
     const alert = document.querySelector('[role="dialog"]')!;
@@ -420,7 +424,8 @@ describe("a person's page", () => {
     ];
     const back = vi.fn();
     await show("sam", back);
-    expect(container.textContent).toContain("Invite works until");
+    expect(container.textContent).toContain("InviteWorks until");
+    expect(container.textContent).toContain("Sam leaves People.");
     expect(container.textContent).not.toContain("Devices");
 
     await act(async () => button("Remove Sam")!.click());

@@ -2,6 +2,7 @@ import type {
   ChangePerson,
   ClientInfo,
   InviteInfo,
+  Me,
   PersonInfo,
   RemoveLogin,
   RemovePerson,
@@ -13,41 +14,27 @@ import {
   useHomeClock,
   type LiveFeed,
 } from "@meetsanctum/ui-sdk";
-import {
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
 import { ColourPicker } from "../colour-picker";
 import { Avatar, BackButton, Row, Section } from "../components";
 import { CoreError, coreJson } from "../core-fetch";
+import { platformNames } from "../platforms";
+import { ChangePassword } from "./change-password";
 import { Confirm, type Asking } from "./confirm";
 import { InviteDialog, type Inviting } from "./invite-dialog";
 import { cancelInvite } from "./invites";
-import {
-  devicesOf,
-  holdsLastSignIn,
-  signInOf,
-  usePeople,
-  type SignIn,
-} from "./data";
-import {
-  agentsGoText,
-  firstName,
-  signsOutText,
-  untilText,
-  usedText,
-} from "./words";
+import { SignInCard } from "./sign-in-card";
+import { devicesOf, holdsLastSignIn, signInOf, usePeople } from "./data";
+import { agentsGoText, firstName, signsOutText, usedText } from "./words";
 
 // A person's page in Settings → People: their name and colour, how they
-// sign in, the devices signed in as them, and at its foot removing them.
-// Removing a sign-in or a person signs their devices out at once, so each
-// asks first, naming what ends. The core keeps someone who signs in, and
-// the page says so before anyone presses.
+// sign in, the devices signed in as them, and at its foot removing their
+// sign-in or them, each with a line on what it does. Removing either signs
+// their devices out at once, so each asks first, naming what ends. The core
+// keeps the home's last sign-in, and the page says so before anyone
+// presses. On your own page, on a device signed in as you, Change password
+// takes Reset password's place.
 
 const label = "text-[13px] leading-[18px] font-medium text-muted-foreground";
 
@@ -56,6 +43,8 @@ const tryAgain = "That didn't work. Try again.";
 export function PersonPage(props: {
   live: LiveFeed;
   personId: string;
+  // Who this device is signed in as, if anyone.
+  me?: Me;
   // Just added: asks whether they will sign in, once.
   ask?: boolean;
   back: () => void;
@@ -65,6 +54,10 @@ export function PersonPage(props: {
   const [asking, setAsking] = useState<Asking>();
   const [inviting, setInviting] = useState<Inviting>();
   const [saving, setSaving] = useState(false);
+  const [changing, setChanging] = useState(false);
+  // Shown beside Password until the page is left.
+  const [changed, setChanged] = useState(false);
+  const changeTrigger = useRef<HTMLButtonElement>(null);
   const person = data?.people.find((each) => each.id === props.personId);
   const { back } = props;
 
@@ -111,6 +104,8 @@ export function PersonPage(props: {
   const signIn = signInOf(data, person.id);
   const devices = devicesOf(data.clients, person.id);
   const isLast = holdsLastSignIn(data, person.id);
+  const own =
+    props.me?.client.kind === "personal" && props.me.person?.id === person.id;
   const done = async () => {
     await refresh();
   };
@@ -202,9 +197,11 @@ export function PersonPage(props: {
       <SignInCard
         person={person}
         signIn={signIn}
-        isLast={isLast}
+        own={own}
+        changed={changed}
         stale={failed}
-        onRemove={(trigger) => askRemoval(data, person, "sign-in", trigger)}
+        changeTrigger={changeTrigger}
+        onChangePassword={() => setChanging(true)}
         onInvite={(kind) =>
           setInviting({
             person,
@@ -240,19 +237,25 @@ export function PersonPage(props: {
           }
         />
       )}
-      <div className="flex shrink-0 flex-col items-start gap-2">
-        <Button
-          variant="destructive"
-          disabled={isLast || failed}
-          aria-describedby={isLast ? `${person.id}-last` : undefined}
-          onClick={(event) =>
-            askRemoval(data, person, "person", event.currentTarget)
-          }
-        >
-          Remove {person.name}
-        </Button>
-      </div>
+      <Removals
+        person={person}
+        own={own}
+        signsIn={signIn.state === "signs-in"}
+        hasDevices={devices.length > 0}
+        isLast={isLast}
+        stale={failed}
+        onRemove={(kind, trigger) => askRemoval(data, person, kind, trigger)}
+      />
       <Confirm asking={asking} onClose={() => setAsking(undefined)} />
+      {own && signIn.state === "signs-in" && (
+        <ChangePassword
+          open={changing}
+          onOpenChange={setChanging}
+          username={signIn.username}
+          trigger={changeTrigger}
+          onChanged={() => setChanged(true)}
+        />
+      )}
       <InviteDialog
         inviting={inviting}
         onClose={() => setInviting(undefined)}
@@ -358,126 +361,74 @@ function NameAndColour(props: {
   );
 }
 
-function SignInCard(props: {
+// At the page's foot, what removes: the sign-in, while there is one, and
+// the person. Each says what it does under it; the home's last sign-in
+// keeps both dimmed in place, with why.
+function Removals(props: {
   person: PersonInfo;
-  signIn: SignIn;
+  own: boolean;
+  signsIn: boolean;
+  hasDevices: boolean;
   isLast: boolean;
   stale: boolean;
-  onRemove: (trigger: HTMLButtonElement) => void;
-  onInvite: (kind: "invite" | "reset") => void;
-  onCancelCode: (code: InviteInfo, trigger: HTMLButtonElement) => void;
+  onRemove: (kind: "sign-in" | "person", trigger: HTMLButtonElement) => void;
 }) {
-  const clock = useHomeClock();
-  const { signIn, person } = props;
-  const reset = signIn.state === "signs-in" ? signIn.reset : null;
+  const { person, own, isLast } = props;
+  const name = firstName(person.name);
   const noteId = `${person.id}-last`;
-  const actions = (children: ReactNode) => (
-    <div className="flex flex-wrap gap-2">{children}</div>
+  const signOut = own
+    ? "Your devices sign out at once."
+    : `${name}’s devices sign out at once.`;
+  const removal = (
+    kind: "sign-in" | "person",
+    action: string,
+    description: string,
+  ) => (
+    <div className="flex flex-col items-start gap-2">
+      <Button
+        variant="destructive"
+        disabled={isLast || props.stale}
+        aria-describedby={isLast ? noteId : `${person.id}-remove-${kind}`}
+        onClick={(event) => props.onRemove(kind, event.currentTarget)}
+      >
+        {action}
+      </Button>
+      {!isLast && (
+        <p id={`${person.id}-remove-${kind}`} className={`m-0 ${label}`}>
+          {description}
+        </p>
+      )}
+    </div>
   );
   return (
-    <Section id={`${person.id}-sign-in`} title="Sign-In">
-      {signIn.state === "signs-in" ? (
-        <div className="flex flex-col gap-3">
-          {reset ? (
-            <Row
-              title={`Signs in as ${signIn.username}`}
-              detail={`Password code works until ${untilText(clock, reset.endsAt)}`}
-            />
-          ) : (
-            <p className="m-0 text-sm">Signs in as {signIn.username}</p>
-          )}
-          {actions(
-            <>
-              {reset ? (
-                <Button
-                  variant="outline"
-                  disabled={props.stale}
-                  onClick={(event) =>
-                    props.onCancelCode(reset, event.currentTarget)
-                  }
-                >
-                  Cancel code
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  disabled={props.stale}
-                  onClick={() => props.onInvite("reset")}
-                >
-                  Reset password
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                disabled={props.isLast || props.stale}
-                aria-describedby={props.isLast ? noteId : undefined}
-                onClick={(event) => props.onRemove(event.currentTarget)}
-              >
-                Remove sign-in
-              </Button>
-            </>,
-          )}
-          {props.isLast && (
-            <p id={noteId} className={`m-0 ${label}`}>
-              {person.name} is the only person who signs in, so this sign-in
-              stays.
-            </p>
-          )}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          <p className="m-0 text-sm">{signInText(clock, signIn)}</p>
-          {actions(
-            signIn.state === "invited" ? (
-              <>
-                <Button
-                  variant="outline"
-                  disabled={props.stale}
-                  onClick={() => props.onInvite("invite")}
-                >
-                  New invite code
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={props.stale}
-                  onClick={(event) =>
-                    props.onCancelCode(signIn.invite, event.currentTarget)
-                  }
-                >
-                  Cancel invite
-                </Button>
-              </>
-            ) : (
-              <Button
-                disabled={props.stale}
-                onClick={() => props.onInvite("invite")}
-              >
-                {signIn.state === "invite-ended"
-                  ? "New invite code"
-                  : "Invite to sign in"}
-              </Button>
-            ),
-          )}
-        </div>
+    <div className="flex shrink-0 flex-col items-start gap-6">
+      {props.signsIn &&
+        removal(
+          "sign-in",
+          "Remove sign-in",
+          [
+            own
+              ? "You stay in People but can’t sign in."
+              : `${name} stays in People but can’t sign in.`,
+            props.hasDevices && signOut,
+          ]
+            .filter(Boolean)
+            .join(" "),
+        )}
+      {removal(
+        "person",
+        `Remove ${person.name}`,
+        props.hasDevices
+          ? `${own ? "You leave" : `${name} leaves`} People, and ${own ? "your" : `${name}’s`} devices sign out at once.`
+          : `${own ? "You leave" : `${name} leaves`} People.`,
       )}
-    </Section>
+      {isLast && (
+        <p id={noteId} className={`m-0 ${label}`}>
+          {person.name} is the only person who signs in, so this sign-in stays.
+        </p>
+      )}
+    </div>
   );
-}
-
-function signInText(
-  clock: ReturnType<typeof useHomeClock>,
-  signIn: Exclude<SignIn, { state: "signs-in" }>,
-) {
-  switch (signIn.state) {
-    case "invited":
-      return `Invite works until ${untilText(clock, signIn.invite.endsAt)}`;
-    case "invite-ended":
-      return signIn.ended === "cancelled"
-        ? "The code was cancelled."
-        : "The code ran out.";
-    case "none":
-      return "Doesn't sign in";
-  }
 }
 
 function Devices(props: {
@@ -497,7 +448,10 @@ function Devices(props: {
         <ul className="m-0 flex list-none flex-col gap-3 p-0">
           {props.devices.map((client) => (
             <li key={client.id} className="flex items-center gap-3">
-              <Row title={client.name} detail={usedText(clock, client)} />
+              <Row
+                title={client.name}
+                detail={`${platformNames[client.platform]} · ${usedText(clock, client)}`}
+              />
               {/* Signing out of this device is in the account menu. */}
               {!client.current && (
                 <Button

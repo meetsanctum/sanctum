@@ -16,8 +16,9 @@ import { everyWhileShown } from "../while-shown";
 
 // Points every core request at the host, and its token at that host only.
 export function selectHost(host: StoredHost) {
-  setCoreBaseUrl(host.url);
-  setCredential({ url: host.url, token: host.token, pin: host.pin });
+  const { url, token, pin, hostId, homeId } = host;
+  setCoreBaseUrl(url);
+  setCredential({ url, token, pin, hostId, homeId });
 }
 
 // Stores the client a claim, sign-in or pairing created, with the home and

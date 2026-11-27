@@ -62,6 +62,14 @@ export function credentialProblem(
       text: "Use 3 to 30 letters, digits, dots or underscores.",
     };
   }
+  return newPasswordProblem(password, repeated);
+}
+
+// A new password and its repeat, as Welcome and Change password take them.
+export function newPasswordProblem(
+  password: string,
+  repeated: string,
+): (CredentialProblem & { field: "password" | "repeated" }) | undefined {
   const tooWeak = passwordProblem(password);
   if (tooWeak) {
     return {
