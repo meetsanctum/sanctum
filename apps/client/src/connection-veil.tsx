@@ -155,8 +155,8 @@ export function ConnectionVeil(props: {
 
 // Choosing another home forgets this one on the device alone, after a
 // confirmation: the host cannot be reached to sign the device out, so its
-// client stays in that host's Settings → Linked Devices until someone signs it out
-// there. Shared devices get the same way out, since they have no account
+// client stays in that host's Settings → Linked Devices until someone signs
+// it out there. Shared devices get the same way out, since they have no account
 // menu; forgetting leaves their client shared, and the device pairs again
 // from the start.
 export function ChooseAnotherHome(props: {
