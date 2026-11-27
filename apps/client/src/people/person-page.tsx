@@ -93,7 +93,6 @@ export function PersonPage(props: {
     target: PersonInfo,
     kind: "sign-in" | "person",
     trigger: HTMLButtonElement,
-    notice?: string,
   ) {
     const signIn = signInOf(snapshot, target.id);
     const devices = devicesOf(snapshot.clients, target.id);
@@ -122,52 +121,21 @@ export function PersonPage(props: {
         .join(" "),
       confirm: removePerson ? "Remove" : "Remove sign-in",
       trigger,
-      notice,
       run: async () => {
-        const expectedClientIds = devices.map(({ id }) => id);
-        try {
-          if (removePerson) {
-            await coreJson("/api/people/remove", {
-              method: "POST",
-              json: { id: target.id, expectedClientIds } satisfies RemovePerson,
-            });
-          } else {
-            await coreJson("/api/auth/logins/remove", {
-              method: "POST",
-              json: {
-                personId: target.id,
-                expectedClientIds,
-              } satisfies RemoveLogin,
-            });
-          }
-        } catch (error) {
-          if (!(error instanceof CoreError) || error.code !== "devices_changed")
-            throw error;
-          const latest = await refresh();
-          if (!latest) throw error;
-          const updated = latest.people.find(({ id }) => id === target.id);
-          if (
-            !updated ||
-            (!removePerson && signInOf(latest, target.id).state !== "signs-in")
-          )
-            return;
-          askRemoval(
-            latest,
-            updated,
-            kind,
-            trigger,
-            "The signed-in devices changed. Check the list and confirm again.",
-          );
-          return false;
+        if (removePerson) {
+          await coreJson("/api/people/remove", {
+            method: "POST",
+            json: { id: target.id } satisfies RemovePerson,
+          });
+        } else {
+          await coreJson("/api/auth/logins/remove", {
+            method: "POST",
+            json: { personId: target.id } satisfies RemoveLogin,
+          });
         }
         await done();
       },
-      problem: (error) => {
-        if (error instanceof CoreError && error.code === "devices_changed") {
-          return "The signed-in devices changed. Cancel and reload the page to see the current list.";
-        }
-        return lastSignInProblem(target, error);
-      },
+      problem: (error) => lastSignInProblem(target, error),
     });
   }
 

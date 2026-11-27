@@ -76,38 +76,6 @@ describe("people's routes", () => {
     expect(listed.json()).toEqual([expect.objectContaining({ name: "Maya" })]);
   });
 
-  it("asks for confirmation again if removing a person would sign out more devices", async () => {
-    const { core, maya } = await household();
-    const ben = personWithClient(core);
-    const refused = await post(
-      core,
-      "/api/people/remove",
-      {
-        id: ben.person.id,
-        expectedClientIds: [],
-      },
-      maya,
-    );
-
-    expect(refused.statusCode).toBe(409);
-    expect(refused.json()).toEqual({ error: "devices_changed" });
-    expect(core.people.get(ben.person.id)).toBeDefined();
-    expect((await get(core, "/api/auth/me", ben)).statusCode).toBe(200);
-
-    const removed = await post(
-      core,
-      "/api/people/remove",
-      {
-        id: ben.person.id,
-        expectedClientIds: [ben.client.id],
-      },
-      maya,
-    );
-    expect(removed.statusCode).toBe(204);
-    expect(core.people.get(ben.person.id)).toBeUndefined();
-    expect((await get(core, "/api/auth/me", ben)).statusCode).toBe(401);
-  });
-
   it("let every client change the household, shared ones too", async () => {
     const { core } = await household();
     const ben = personWithClient(core);

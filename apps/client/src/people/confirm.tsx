@@ -18,10 +18,10 @@ export type Asking = {
   title: string;
   description: string;
   confirm: string;
+  // Where focus goes back to once it closes.
   trigger: HTMLButtonElement;
-  notice?: string;
-  // A fresh confirmation or a refusal keeps the alert open.
-  run: () => Promise<void | false>;
+  // Does it; a throw keeps the alert open with what went wrong.
+  run: () => Promise<void>;
   problem: (error: unknown) => string;
 };
 
@@ -47,8 +47,8 @@ export function Confirm(props: {
     setWorking(true);
     setProblem(undefined);
     try {
-      if ((await asking.run()) === false) setWorking(false);
-      else props.onClose();
+      await asking.run();
+      props.onClose();
     } catch (error) {
       setProblem(asking.problem(error));
       setWorking(false);
@@ -76,9 +76,9 @@ export function Confirm(props: {
             <DialogTitle>{asking?.title}</DialogTitle>
             <DialogDescription>{asking?.description}</DialogDescription>
           </DialogHeader>
-          {(problem || asking?.notice) && (
+          {problem && (
             <p role="alert" className="m-0 text-sm text-destructive">
-              {problem ?? asking?.notice}
+              {problem}
             </p>
           )}
         </div>

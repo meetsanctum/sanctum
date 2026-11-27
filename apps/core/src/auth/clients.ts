@@ -92,28 +92,6 @@ function activePersonalClients(personId: string) {
   )!;
 }
 
-// A confirmation only covers the devices it showed. Check in the same
-// transaction as the removal, before any of those devices are signed out.
-export function assertPersonalClients(
-  db: Pick<CoreDatabase, "select">,
-  personId: string,
-  expectedClientIds: readonly string[] | undefined,
-) {
-  if (!expectedClientIds) return;
-  const expected = new Set(expectedClientIds);
-  const current = db
-    .select({ id: authClients.id })
-    .from(authClients)
-    .where(activePersonalClients(personId))
-    .all();
-  if (
-    expected.size !== current.length ||
-    current.some(({ id }) => !expected.has(id))
-  ) {
-    throw new AuthError("devices_changed");
-  }
-}
-
 export function createClients(
   db: CoreDatabase,
   options: {
@@ -539,12 +517,7 @@ export function createClients(
 
     // Sign out a person's own devices in the caller's transaction. The
     // caller closes their live connections once it commits.
-    revokePersonal(
-      personId: string,
-      at: Date,
-      expectedClientIds?: readonly string[],
-    ): string[] {
-      assertPersonalClients(db, personId, expectedClientIds);
+    revokePersonal(personId: string, at: Date): string[] {
       return revokeMatchingClients(activePersonalClients(personId), at).map(
         ({ id }) => id,
       );

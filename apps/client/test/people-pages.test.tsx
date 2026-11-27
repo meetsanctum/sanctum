@@ -216,7 +216,7 @@ describe("the People page", () => {
     expect(container.textContent).not.toContain("You");
   });
 
-  it("updates from sign-in activity without reading the device list", async () => {
+  it("reads again with the shell's refresh, without the device list", async () => {
     clientsUnavailable = true;
     vi.mocked(coreJson).mockClear();
     await act(async () =>
@@ -225,12 +225,7 @@ describe("the People page", () => {
     expect(button("Maya Keller: Signs in")).toBeDefined();
 
     logins = logins.filter(({ personId }) => personId !== "maya");
-    await act(async () =>
-      live.publish({
-        type: "activity",
-        entry: entry({ source: "auth", action: "login.remove" }),
-      }),
-    );
+    await act(async () => live.refresh());
 
     expect(button("Maya Keller: Doesn't sign in")).toBeDefined();
     expect(vi.mocked(coreJson).mock.calls.map(([path]) => path)).not.toContain(
@@ -281,12 +276,7 @@ describe("a person's page", () => {
     expect(document.activeElement?.textContent).toBe("Cancel");
 
     await confirm("Remove sign-in");
-    expect(posted).toEqual([
-      [
-        "/api/auth/logins/remove",
-        { personId: "maya", expectedClientIds: ["phone"] },
-      ],
-    ]);
+    expect(posted).toEqual([["/api/auth/logins/remove", { personId: "maya" }]]);
   });
 
   it("returns focus to Remove sign-in after cancelling", async () => {
@@ -307,29 +297,6 @@ describe("a person's page", () => {
     expect(dialog().querySelector('[role="alert"]')?.textContent).toBe(
       "Maya Keller is the only person who signs in, so this sign-in stays.",
     );
-  });
-
-  it("asks again with the updated devices when the signed-in devices changed", async () => {
-    await show("maya");
-    await act(async () => button("Remove sign-in")!.click());
-    expect(dialog().textContent).not.toContain("Maya's iPad");
-
-    clients.push(client({ id: "ipad", name: "Maya's iPad" }));
-    removeLoginError = new CoreError(409, "devices_changed");
-    await confirm("Remove sign-in");
-    expect(dialog().textContent).toContain(
-      "Maya's iPhone and Maya's iPad sign out now.",
-    );
-    expect(dialog().textContent).toContain("Check the list and confirm again.");
-    expect(posted).toHaveLength(1);
-
-    removeLoginError = undefined;
-    await confirm("Remove sign-in");
-    expect(posted[1]).toEqual([
-      "/api/auth/logins/remove",
-      { personId: "maya", expectedClientIds: ["phone", "ipad"] },
-    ]);
-    expect(dialog()).toBeNull();
   });
 
   it("offers to retry the read when removing a sign-in succeeds but refreshing fails", async () => {
@@ -446,9 +413,7 @@ describe("a person's page", () => {
     expect(alert.textContent).not.toContain("sign-in ends");
     await confirm("Remove");
 
-    expect(posted).toEqual([
-      ["/api/people/remove", { id: "sam", expectedClientIds: [] }],
-    ]);
+    expect(posted).toEqual([["/api/people/remove", { id: "sam" }]]);
     expect(back).toHaveBeenCalledOnce();
     expect(container.textContent).not.toContain("Sam");
   });

@@ -203,7 +203,6 @@ export async function createModules(
   });
   const auth = await createAuth(db, {
     people,
-    record: activity.for("auth"),
     hostId: options.hostId,
     homeId: options.homeId,
     pin: options.pin,

@@ -10,20 +10,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { coreJson } from "../core-fetch";
 
+// What Settings → People reads: the household, who signs in and their
+// invites, and on a person's page the clients, for their devices. It reads
+// again when the shell refreshes, when the activity log says a person
+// changed, and after a change made here; nothing runs while it is still.
+
 export type PeopleData = {
   people: PersonInfo[];
   logins: LoginInfo[];
   invites: InviteInfo[];
 };
-
-const signInChanges = new Set([
-  "invite.cancel",
-  "invite.create",
-  "invite.redeem",
-  "login.remove",
-  "login.set",
-]);
-const deviceChanges = new Set(["sign-in", "client.rename", "client.revoke"]);
 
 export function usePeople(live: LiveFeed, includeClients = false) {
   const [data, setData] = useState<PeopleData & { clients: ClientInfo[] }>();
@@ -63,15 +59,7 @@ export function usePeople(live: LiveFeed, includeClients = false) {
       message(message) {
         if (message.type !== "activity" || message.entry.outcome !== "ok")
           return;
-        const { source, action } = message.entry;
-        if (
-          source === "people" ||
-          (source === "auth" &&
-            (signInChanges.has(action) ||
-              (includeClients && deviceChanges.has(action))))
-        ) {
-          update();
-        }
+        if (message.entry.source === "people") update();
       },
     });
     update();
