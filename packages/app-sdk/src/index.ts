@@ -342,13 +342,17 @@ export type AppInfo = {
  * What keeps an app from being added now: the app API it targets, which
  * this Sanctum doesn't serve; its pages, built for a kit this Sanctum can't
  * serve, as `needs` says which is older; the memory it gets, or the image
- * its data lives on, beside what is free (in bytes).
+ * its data lives on, beside what is free (in bytes). Storage also says how
+ * much would have to be freed for it to fit, which is more than it needs
+ * where what's free doesn't cover what Sanctum keeps for updates and for
+ * the other apps' data; it's left out where that isn't known, as from an
+ * older core or manager.
  */
 export type AppShortfall =
   | { kind: "sanctum"; range: string }
   | { kind: "pages"; needs: "sanctum" | "pages" }
   | { kind: "memory"; needs: number; free: number }
-  | { kind: "space"; needs: number; free: number };
+  | { kind: "space"; needs: number; free: number; toFree?: number };
 
 /**
  * A Zigbee stick someone plugged in while the home has no app for it: the

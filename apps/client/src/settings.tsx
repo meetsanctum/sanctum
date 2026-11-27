@@ -144,6 +144,7 @@ export function SettingsPage(props: {
       return (
         <SystemPage
           apps={props.apps}
+          openAt={props.params}
           core={props.core}
           onUpdating={props.onUpdating}
           onDone={props.back}

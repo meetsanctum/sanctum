@@ -8,7 +8,13 @@ import { Button } from "@meetsanctum/ui-sdk";
 import { Check } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import { addProblemOf, AppSize, Asks, shortfallWords } from "../add-app-sheet";
+import {
+  addProblemOf,
+  AppSize,
+  Asks,
+  shortfallWords,
+  useShortfallFix,
+} from "../add-app-sheet";
 import { AppIcon } from "../app-icon";
 import { productName } from "../brand";
 import {
@@ -46,6 +52,8 @@ export function AddSanctum(props: {
   onAppAdded: (app: AppInfo) => void;
   // Closes the sheet and opens Ollama's page.
   onOpenOllama?: () => void;
+  // Closes the sheet, as on the way to what keeps Ollama from being added.
+  onClose: () => void;
   // A request under way, which closing the sheet waits for.
   busy: boolean;
   onBusy: (busy: boolean) => void;
@@ -55,6 +63,15 @@ export function AddSanctum(props: {
   const [model, setModel] = useState("");
   const [problem, setProblem] = useState<string>();
   const { busy, onBusy } = props;
+  const offered = phase.kind === "add" ? phase.app : undefined;
+  const [short] = offered?.shortfalls ?? [];
+  const blocked =
+    short && offered && shortfallWords(short, offered.name, props.apps);
+  const fix = blocked?.fix;
+  const toFix = useShortfallFix(fix, () => {
+    props.onClose();
+    return true;
+  });
   // Ollama added here has no model yet, and may not answer while its image
   // downloads: the sheet stays on the step to download one.
   const isAddedHere = useRef(false);
@@ -172,14 +189,13 @@ export function AddSanctum(props: {
 
   if (phase.kind === "add") {
     const { app } = phase;
-    const [short] = app?.shortfalls ?? [];
-    const blocked = short && app && shortfallWords(short, app.name);
     return (
       <div className="flex flex-col gap-5">
         <DialogHeader>
-          {title}
+          {blocked ? <DialogTitle>{blocked.title}</DialogTitle> : title}
           <DialogDescription>
-            Add the Ollama app, then download a model on its page.
+            {blocked?.line ??
+              "Add the Ollama app, then download a model on its page."}
           </DialogDescription>
         </DialogHeader>
         {app ? (
@@ -197,15 +213,11 @@ export function AddSanctum(props: {
                 )}
               </span>
             </div>
-            <Asks
-              requests={app.requests.filter((request) => request.needed)}
-              compact
-            />
-            {blocked && (
-              <p role="alert" className="m-0 text-sm">
-                <span className="font-medium">{blocked.title}</span>{" "}
-                {blocked.line}
-              </p>
+            {!blocked && (
+              <Asks
+                requests={app.requests.filter((request) => request.needed)}
+                compact
+              />
             )}
           </>
         ) : (
@@ -221,13 +233,19 @@ export function AddSanctum(props: {
         )}
         <DialogFooter>
           {back}
-          <Button
-            type="button"
-            disabled={!app || !!blocked || busy}
-            onClick={() => void addOllama()}
-          >
-            Add Ollama
-          </Button>
+          {fix && toFix ? (
+            <Button type="button" disabled={busy} onClick={() => void toFix()}>
+              {fix.label}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              disabled={!app || !!blocked || busy}
+              onClick={() => void addOllama()}
+            >
+              Add Ollama
+            </Button>
+          )}
         </DialogFooter>
       </div>
     );
