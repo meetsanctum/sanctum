@@ -165,33 +165,40 @@ export const authAgentSetups = sqliteTable(
   (table) => [uniqueIndex("auth_agent_setups_client_id").on(table.clientId)],
 );
 
-export const inviteKinds = ["invite", "reset"] as const;
+export const inviteKinds = ["invite", "reset", "recovery"] as const;
 export const inviteEndings = ["cancelled"] as const;
 
-// Invites to sign in, and password resets: one per person at most. The
-// inviting device draws the code's secret and registers it through OPAQUE,
-// so the core holds a record, as for a password, never the code. Its lookup
-// finds it. A reset leaves the person's login as it is until the code is
-// used. An invite stays after it ends unused, with its lookup, so a right
-// code typed late is told it ended and the invite list can give the reason.
-// Using it or making the person a new one removes it.
-export const authInvites = sqliteTable("auth_invites", {
-  id: text("id").primaryKey(),
-  personId: text("person_id")
-    .notNull()
-    .unique()
-    .references(() => people.id, { onDelete: "cascade" }),
-  kind: text("kind", { enum: inviteKinds }).notNull(),
-  lookup: text("lookup").notNull().unique(),
-  registrationRecord: text("registration_record").notNull(),
-  keyStretching: integer("key_stretching").notNull(),
-  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
-  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
-  // Challenges issued since the code last checked or the cooldown elapsed.
-  // One extra count marks the first refusal during the cooldown.
-  tries: integer("tries").notNull().default(0),
-  lastTriedAt: integer("last_tried_at", { mode: "timestamp_ms" }),
-  // Why it ended before it ran out, and when.
-  endedReason: text("ended_reason", { enum: inviteEndings }),
-  endedAt: integer("ended_at", { mode: "timestamp_ms" }),
-});
+// Invites to sign in, password resets and recovery codes. The inviting
+// device draws the code's secret and registers it through OPAQUE, so the
+// core holds a record, as for a password, never the code. Its lookup finds
+// it. A reset leaves the person's login as it is until the code is used. An
+// invite stays after it ends unused, with its lookup, so a right code typed
+// late is told it ended and the invite list can give the reason. Using it
+// or making the person a new one removes it. A person has one invite or
+// reset at most, and beside it one recovery code: a reset with no end that
+// they made for themselves, so a reset someone else makes leaves it.
+export const authInvites = sqliteTable(
+  "auth_invites",
+  {
+    id: text("id").primaryKey(),
+    personId: text("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: inviteKinds }).notNull(),
+    lookup: text("lookup").notNull().unique(),
+    registrationRecord: text("registration_record").notNull(),
+    keyStretching: integer("key_stretching").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    // Challenges issued since the code last checked or the cooldown elapsed.
+    // One extra count marks the first refusal during the cooldown.
+    tries: integer("tries").notNull().default(0),
+    lastTriedAt: integer("last_tried_at", { mode: "timestamp_ms" }),
+    // Why it ended before it ran out, and when.
+    endedReason: text("ended_reason", { enum: inviteEndings }),
+    endedAt: integer("ended_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [
+    uniqueIndex("auth_invites_person_id_kind").on(table.personId, table.kind),
+  ],
+);

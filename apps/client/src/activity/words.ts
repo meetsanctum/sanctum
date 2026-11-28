@@ -616,18 +616,22 @@ function setupEntry(clock: HomeClock, entry: ActivityInfo): Words | null {
       return said("Chose a new password without the old one");
     case "invite.create":
       return said(
-        entry.reason === "reset"
-          ? `Made ${name ?? "someone"} a code for a new password`
-          : `Invited ${name ?? "someone"} to sign in`,
+        entry.reason === "recovery"
+          ? "Made a recovery code"
+          : entry.reason === "reset"
+            ? `Made ${name ?? "someone"} a code for a new password`
+            : `Invited ${name ?? "someone"} to sign in`,
       );
     case "invite.cancel":
       return said(`Cancelled ${name ? `${name}'s` : "an"} invite`);
     case "invite.redeem":
       if (entry.outcome === "ok") {
         return said(
-          entry.reason === "reset"
-            ? "Chose a new password with a code"
-            : "Joined with an invite code",
+          entry.reason === "recovery"
+            ? "Chose a new password with a recovery code"
+            : entry.reason === "reset"
+              ? "Chose a new password with a code"
+              : "Joined with an invite code",
         );
       }
       // A right code from a device that wasn't connected directly, one

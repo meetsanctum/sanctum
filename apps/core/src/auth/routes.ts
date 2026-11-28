@@ -123,7 +123,8 @@ const schemas = {
   removeLogin: z.object({ personId: id }) satisfies z.ZodType<RemoveLogin>,
   inviteStart: z.object({
     personId: id,
-    kind: z.enum(["invite", "reset"]),
+    kind: z.enum(["invite", "reset", "recovery"]),
+    recoveryVersion: z.number().int().optional(),
     replacesInviteId: id.optional(),
     registrationRequest: message,
   }) satisfies z.ZodType<InviteStart>,
@@ -426,8 +427,7 @@ export async function registerAuth(
   // no token, as signing in doesn't.
   const invites = auth.invites;
   app.get("/api/auth/invites", async (request): Promise<InviteInfo[]> => {
-    principal(request);
-    return invites.list();
+    return invites.list(principal(request));
   });
   app.post("/api/auth/invites/start", async (request) =>
     invites.start(

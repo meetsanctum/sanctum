@@ -126,7 +126,10 @@ allow it. That is how the app finds your home.
    set up. Choose it.
 2. Enter your name, a colour, a username and a password, and choose **Set
    up**. You are the first person in the home.
-3. The dashboard opens on **Set up your home**, three steps in any order:
+3. Save the recovery code Sanctum shows: copy it into a password manager,
+   or choose **Print** and keep the page with your important papers. If you
+   forget your password, it lets you choose a new one. Choose **Continue**.
+4. The dashboard opens on **Set up your home**, three steps in any order:
    - **Set where the home is**, for the weather and for lights that follow
      daylight.
    - **Add your rooms**, so each device is named after the room it is in.

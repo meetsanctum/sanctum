@@ -10,7 +10,8 @@ import {
   problemText,
   type CredentialProblem,
 } from "./messages";
-import { rememberSignIn } from "./session";
+import { SaveRecovery } from "./SaveRecovery";
+import { rememberSignIn, selectHost } from "./session";
 import { Busy, Sheet, SheetActions, SheetField, SheetProblem } from "./sheet";
 import { StorageNotice, useSecureStorage } from "./SignIn";
 import { useAuthAttempt } from "./use-auth-attempt";
@@ -19,7 +20,8 @@ import { useAuthAttempt } from "./use-auth-attempt";
 // steps. The first takes how they sign in, the second their name and
 // colour; the home is set up once both are given, and going back to the
 // first keeps what the second holds. The password is registered on this
-// device and never sent.
+// device and never sent. Then they save a recovery code, for if they forget
+// it.
 export function ClaimHost(props: {
   host: FoundHost;
   onBack: () => void;
@@ -34,6 +36,10 @@ export function ClaimHost(props: {
   const [pending, setPending] = useState<"claim" | "save">();
   const working = pending !== undefined;
   const saving = useRef(false);
+  const [claimed, setClaimed] = useState<{
+    stored: StoredHost;
+    personId: string;
+  }>();
   const secure = useSecureStorage();
   const attempt = useAuthAttempt();
   const problemId = useId();
@@ -77,7 +83,9 @@ export function ClaimHost(props: {
         signal,
       );
       signal.throwIfAborted();
-      props.onClaimed(stored);
+      // The recovery code is made as this device, signed in now.
+      selectHost(stored);
+      setClaimed({ stored, personId: signedIn.person.id });
     } catch (error) {
       if (signal.aborted) return;
       saving.current = false;
@@ -85,6 +93,17 @@ export function ClaimHost(props: {
       setPending(undefined);
     }
   };
+
+  if (claimed) {
+    return (
+      <SaveRecovery
+        personId={claimed.personId}
+        person={name.trim()}
+        username={username}
+        onContinue={() => props.onClaimed(claimed.stored)}
+      />
+    );
+  }
 
   const problemLine = (field: CredentialProblem["field"]) =>
     problem && problem.field === field ? (
