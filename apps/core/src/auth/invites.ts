@@ -342,11 +342,6 @@ export function createInvites(
       });
       const replaced = current?.id;
       const made = db.transaction(() => {
-        // A code made from a client while the secret was registered would
-        // otherwise be replaced without the consent asked for above.
-        if (inviteOf(person.id)?.id !== replaced) {
-          throw new AuthError("invite_changed");
-        }
         const lookup = freeLookup();
         const at = now();
         if (replaced) {

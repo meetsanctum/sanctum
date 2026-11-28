@@ -488,7 +488,10 @@ export function createCore(
             },
             log,
           );
-          await local.listen();
+          // Only a last way back in: the home is served without it.
+          await local.listen().catch((error: unknown) => {
+            log(`local socket: ${String(error)}`);
+          });
         },
       ],
     ],

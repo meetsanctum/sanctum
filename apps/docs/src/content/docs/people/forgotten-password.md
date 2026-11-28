@@ -72,8 +72,9 @@ need to run commands there, as you did to install it.
    sudo docker exec sanctum-core node dist/cli.js reset-code YOUR_USERNAME
    ```
 
-   If a password code is already active, add `--replace` after your username
-   to make a new one. This ends the previous code.
+   If a password code is already active, Sanctum asks before making a new
+   one, which ends the previous code. With your username in the command, add
+   `--replace` after it instead.
 
 3. On your Mac, open Sanctum and choose your home, then **Just me** and
    **Forgot your password?**, and enter the code. Choose a new password.

@@ -1,6 +1,6 @@
 import { formatInviteCode } from "@meetsanctum/auth-protocol";
 import { request } from "node:http";
-import { createInterface } from "node:readline";
+import { createInterface, type Interface } from "node:readline";
 
 import { localSocketPath } from "./local-access.js";
 
@@ -71,6 +71,35 @@ function terminalText(value: string) {
   );
 }
 
+// One reader for the whole run, which keeps lines typed ahead or piped in
+// until a question takes them.
+let lines: Interface | undefined;
+const waiting: string[] = [];
+let answer: ((line: string | undefined) => void) | undefined;
+let closed = false;
+
+// One line typed in answer, or nothing once the input closes.
+function ask(question: string) {
+  lines ??= createInterface({ input: process.stdin })
+    .on("line", (line) => {
+      if (answer) answer(line);
+      else waiting.push(line);
+    })
+    .once("close", () => {
+      closed = true;
+      answer?.(undefined);
+    });
+  process.stdout.write(question);
+  const next = waiting.shift();
+  if (next !== undefined || closed) return Promise.resolve(next);
+  return new Promise<string | undefined>((resolve) => {
+    answer = (line) => {
+      answer = undefined;
+      resolve(line);
+    };
+  });
+}
+
 async function choose(people: { name: string; username: string }[]) {
   console.log("Who is the code for?");
   people.forEach((person, index) =>
@@ -78,20 +107,9 @@ async function choose(people: { name: string; username: string }[]) {
       `  ${index + 1}  ${terminalText(person.name)} (${person.username})`,
     ),
   );
-  const lines = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-  try {
-    const answer = await new Promise<string | undefined>((resolve) => {
-      lines.once("close", () => resolve(undefined));
-      lines.question("Choose a number: ", resolve);
-    });
-    if (answer === undefined) return undefined;
-    return people[Number(answer.trim()) - 1]?.username;
-  } finally {
-    lines.close();
-  }
+  const answer = await ask("Choose a number: ");
+  if (answer === undefined) return undefined;
+  return people[Number(answer.trim()) - 1]?.username;
 }
 
 async function resetCode(given: string | undefined, replace: boolean) {
@@ -116,11 +134,27 @@ async function resetCode(given: string | undefined, replace: boolean) {
       return false;
     }
   }
-  const result = await call<{ code: string; name: string }>(
+  let result = await call<{ code: string; name: string }>(
     "POST",
     "/reset-code",
     { username, replace },
   );
+  // Chosen from the list, the question replaces the --replace flag.
+  if (!result.ok && result.body.error === "invite_changed" && !given) {
+    const answer = await ask(
+      "A password code is already active for this account. Make a new one? The previous code will stop working. (y/N) ",
+    );
+    if (answer?.trim().toLowerCase() === "y") {
+      result = await call<{ code: string; name: string }>(
+        "POST",
+        "/reset-code",
+        { username, replace: true },
+      );
+    } else {
+      console.error("No code was made. The previous code still works.");
+      return false;
+    }
+  }
   if (!result.ok) {
     if (result.body.error === "invite_changed") {
       console.error(
@@ -128,7 +162,7 @@ async function resetCode(given: string | undefined, replace: boolean) {
       );
     } else if (result.body.error === "update_pending") {
       console.error("Sanctum is updating. Try again when the update finishes.");
-    } else if (result.status === 404) {
+    } else if (result.status === 404 || result.status === 400) {
       console.error(`No one signs in as ${terminalText(username)}.`);
     } else {
       console.error("The code couldn't be made. Try again.");
@@ -162,12 +196,14 @@ async function main([command, username, flag, ...extra]: string[]) {
   return false;
 }
 
-void main(process.argv.slice(2)).then(
-  (ok) => {
-    process.exitCode = ok ? 0 : 1;
-  },
-  (error: unknown) => {
-    console.error(error instanceof Error ? error.message : error);
-    process.exitCode = 1;
-  },
-);
+void main(process.argv.slice(2))
+  .finally(() => lines?.close())
+  .then(
+    (ok) => {
+      process.exitCode = ok ? 0 : 1;
+    },
+    (error: unknown) => {
+      console.error(error instanceof Error ? error.message : error);
+      process.exitCode = 1;
+    },
+  );
