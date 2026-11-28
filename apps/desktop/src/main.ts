@@ -176,8 +176,8 @@ app.on("web-contents-created", (_event, contents) => {
       (url) => desktop.openExternal(url),
       () =>
         dialog.showErrorBox(
-          "Couldn't open the password guide",
-          "Open docs.meetsanctum.com in your browser and look for Forgotten password.",
+          "Couldn't open the link",
+          "Open docs.meetsanctum.com in your browser.",
         ),
     ),
   );

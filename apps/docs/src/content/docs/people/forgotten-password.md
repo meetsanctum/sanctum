@@ -79,4 +79,4 @@ need to run commands there, as you did to install it.
    **Forgot your password?**, and enter the code. Choose a new password.
 
 The code works once, for an hour, and Activity shows that Sanctum made it.
-Your password stays on your Mac.
+You choose your password on your Mac, and the host never sees it.
