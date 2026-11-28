@@ -3,7 +3,7 @@ import {
   type AiAreaInfo,
   type AppInfo,
 } from "@meetsanctum/app-sdk";
-import { Button, type LiveFeed } from "@meetsanctum/ui-sdk";
+import { Button, Problem, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -19,7 +19,13 @@ import {
 } from "../components/ui/dialog";
 import { permissionIconOf } from "../permission-icons";
 import { switchArea, useAiCanUse } from "./data";
-import { CanUseNote, CanUseRow, CanUseRows, switchProblem } from "./rows";
+import {
+  CanUseNote,
+  CanUseRow,
+  CanUseRows,
+  switchProblem,
+  useSwitchProblem,
+} from "./rows";
 import {
   areaDetail,
   canUseTitle,
@@ -44,10 +50,17 @@ export function CanUsePage(props: {
   onDone: () => void;
   backTo?: string;
 }) {
-  const { canUse, acceptChange, hasFailed, refresh } = useAiCanUse(props.live);
+  const {
+    canUse,
+    acceptChange,
+    hasFailed,
+    problem: loadProblem,
+    refresh,
+  } = useAiCanUse(props.live);
   const [pending, setPending] = useState<{ id: string; on: boolean }>();
   const [asking, setAsking] = useState<string>();
-  const [problem, setProblem] = useState<string>();
+  const areas = canUse?.areas ?? [];
+  const [problem, setProblem] = useSwitchProblem(areas);
   const focusAfterConfirm = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -62,8 +75,8 @@ export function CanUsePage(props: {
     setProblem(undefined);
     try {
       acceptChange(await switchArea(id, on));
-    } catch {
-      setProblem(switchProblem);
+    } catch (error) {
+      setProblem(switchProblem(id, permissionWords(id).title, on, error));
       void refresh();
     } finally {
       setPending(undefined);
@@ -91,7 +104,6 @@ export function CanUsePage(props: {
     );
   };
 
-  const areas = canUse?.areas ?? [];
   const offering = props.apps.filter(
     (app) => offersOf(canUse, app.id).length > 0,
   );
@@ -104,9 +116,14 @@ export function CanUsePage(props: {
         onBack={props.onDone}
       />
       {hasFailed && !canUse && (
-        <p role="alert" className="m-0 text-sm text-destructive">
-          This didn't load. Go back and open it again.
-        </p>
+        <div className="flex flex-col items-start gap-2">
+          <Problem title="What AI agents can use didn't load">
+            {loadProblem}
+          </Problem>
+          <Button variant="outline" onClick={() => void refresh()}>
+            Try again
+          </Button>
+        </div>
       )}
       {canUse && (
         <>
@@ -118,6 +135,9 @@ export function CanUsePage(props: {
             <CanUseRows>
               {areas.filter((area) => !tellsWhosHome(area.id)).map(row)}
             </CanUseRows>
+            {problem && !tellsWhosHome(problem.id) && (
+              <Problem title={problem.title}>{problem.reason}</Problem>
+            )}
           </Section>
           <Section
             id="settings-ai-whos-home"
@@ -127,7 +147,13 @@ export function CanUsePage(props: {
             <CanUseRows>
               {areas.filter((area) => tellsWhosHome(area.id)).map(row)}
             </CanUseRows>
-            <CanUseNote problem={problem}>{toldWhatsOff}</CanUseNote>
+            <CanUseNote
+              problem={
+                problem && tellsWhosHome(problem.id) ? problem : undefined
+              }
+            >
+              {toldWhatsOff}
+            </CanUseNote>
           </Section>
           {offering.length > 0 && (
             <Section id="settings-ai-apps" title="In Your Apps">

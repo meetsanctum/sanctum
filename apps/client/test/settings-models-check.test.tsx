@@ -9,6 +9,7 @@ import { coreJson } from "../src/core-fetch";
 import { ModelPicker } from "../src/models/model-picker";
 import { SourceCheck } from "../src/models/source-check";
 import { mac, router } from "./settings-models-fixtures";
+import { problemLines } from "./problem-lines";
 
 vi.mock("../src/core-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/core-fetch")>()),
@@ -331,12 +332,8 @@ describe("A source's check in the dialog", () => {
   });
 
   it.each([
-    [
-      "Check again",
-      { ...added, check: undefined },
-      "Couldn't start the check.",
-    ],
-    ["Switch to GPT-5 Mini", added, "Couldn't switch to it."],
+    ["Check again", { ...added, check: undefined }, "The check didn't start"],
+    ["Switch to GPT-5 Mini", added, "Your home didn't switch to GPT-5 Mini"],
   ] as const)(
     "shows an error and allows another try after %s fails",
     async (label, source, message) => {
@@ -344,9 +341,10 @@ describe("A source's check in the dialog", () => {
       vi.mocked(coreJson).mockResolvedValueOnce({ sources: [], apps: [] });
       const { onChanged } = await showCheck(source);
       await click(button(label));
-      expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+      expect(problemLines(document.querySelector('[role="alert"]'))).toEqual([
         message,
-      );
+        "Sanctum didn't answer. Check that it's on, then try again.",
+      ]);
       expect((button(label) as HTMLButtonElement).disabled).toBe(false);
       await click(button(label));
       expect(document.querySelector('[role="alert"]')).toBeNull();

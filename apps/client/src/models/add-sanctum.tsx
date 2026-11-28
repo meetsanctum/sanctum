@@ -4,7 +4,7 @@ import type {
   ModelChoice,
   ModelSourceLook,
 } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, Problem } from "@meetsanctum/ui-sdk";
 import { Check } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { coreJson } from "../core-fetch";
+import { problemReason } from "../device-parts";
 import type { AddSourceResponse } from "./data";
 import { problemText, sizeText } from "./words";
 
@@ -61,7 +62,7 @@ export function AddSanctum(props: {
   const hasOllama = props.apps.some((app) => app.id === ollamaAppId);
   const [phase, setPhase] = useState<Phase>({ kind: "looking" });
   const [model, setModel] = useState("");
-  const [problem, setProblem] = useState<string>();
+  const [problem, setProblem] = useState<{ title: string; reason: string }>();
   const { busy, onBusy } = props;
   const offered = phase.kind === "add" ? phase.app : undefined;
   const [short] = offered?.shortfalls ?? [];
@@ -134,7 +135,10 @@ export function AddSanctum(props: {
       props.onAppAdded(added);
       setPhase({ kind: "noModel" });
     } catch (error) {
-      setProblem(addProblemOf(error, app));
+      setProblem({
+        title: `Couldn't add ${app.name}`,
+        reason: addProblemOf(error, app),
+      });
     } finally {
       onBusy(false);
     }
@@ -152,17 +156,20 @@ export function AddSanctum(props: {
           json: { kind: "sanctum", model },
         }),
       );
-    } catch {
-      setProblem("That did not work. Try again.");
+    } catch (error) {
+      setProblem({
+        title: `Couldn't add ${
+          phase.models.find((each) => each.id === model)?.name ?? model
+        }`,
+        reason: problemReason(error),
+      });
       onBusy(false);
     }
   };
 
   const title = <DialogTitle>On {productName}</DialogTitle>;
   const problemLine = problem && (
-    <p role="alert" className="m-0 text-sm text-destructive">
-      {problem}
-    </p>
+    <Problem title={problem.title}>{problem.reason}</Problem>
   );
   const back = (
     <Button
@@ -264,9 +271,7 @@ export function AddSanctum(props: {
           </DialogDescription>
         </DialogHeader>
         {isUnavailable ? (
-          <p role="alert" className="m-0 text-sm text-destructive">
-            {phase.problem}
-          </p>
+          <Problem title="Ollama's models didn't load">{phase.problem}</Problem>
         ) : (
           <p
             role="status"

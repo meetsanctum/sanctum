@@ -9,7 +9,7 @@ import {
   type AgentSetupStarted,
   type AgentSetupStatus,
 } from "@meetsanctum/auth-protocol";
-import { Button, Input, useHomeClock } from "@meetsanctum/ui-sdk";
+import { Button, Input, Problem, useHomeClock } from "@meetsanctum/ui-sdk";
 import { Copy, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { CoreError, coreJson } from "../core-fetch";
+import { problemReason } from "../device-parts";
 import { canUseTitle, missingWords, offersByGroup, offersOf } from "./words";
 
 // Adding an AI agent: a name, with everything AI agents can use named under
@@ -40,6 +41,7 @@ const watchEvery = 1_500;
 const watchTimeoutMs = 10_000;
 const setupMinutes = agentSetupMs / 60_000;
 const canUseListLabel = "What AI agents can use";
+type SetupProblem = { title: string; reason: string };
 
 type Step =
   | { kind: "name" }
@@ -77,9 +79,9 @@ const endedWords = {
 
 function startProblem(error: unknown) {
   if (error instanceof CoreError && error.code === "busy") {
-    return "Several agents are being added already. Wait a few minutes and try again.";
+    return "Several agents are being added already. Wait a few minutes, then try again.";
   }
-  return "That did not work. Try again.";
+  return problemReason(error);
 }
 
 export function AddAgent(props: {
@@ -96,7 +98,7 @@ export function AddAgent(props: {
   const [step, setStep] = useState<Step>({ kind: "name" });
   const [name, setName] = useState("");
   const [working, setWorking] = useState(false);
-  const [problem, setProblem] = useState<string>();
+  const [problem, setProblem] = useState<SetupProblem>();
   const setupAttempt = useAuthAttempt();
   // The latest, so watching doesn't start again each time the list renders.
   const onConnected = useRef(props.onConnected);
@@ -130,7 +132,14 @@ export function AddAgent(props: {
         byHand: false,
       });
     } catch (error) {
-      if (!signal.aborted) setProblem(startProblem(error));
+      if (!signal.aborted)
+        setProblem({
+          title:
+            step.kind === "ended"
+              ? "Couldn't make a new prompt"
+              : `Couldn't add ${agentName}`,
+          reason: startProblem(error),
+        });
     } finally {
       if (!signal.aborted) setWorking(false);
     }
@@ -257,9 +266,7 @@ export function AddAgent(props: {
               </DialogDescription>
             </DialogHeader>
             {problem && (
-              <p role="alert" className="m-0 text-sm text-destructive">
-                {problem}
-              </p>
+              <Problem title={problem.title}>{problem.reason}</Problem>
             )}
             <DialogFooter>
               <Button variant="outline" onClick={close}>
@@ -288,7 +295,7 @@ function NameStep(props: {
   canUse: AiCanUse | undefined;
   hasPermissionsFailed: boolean;
   working: boolean;
-  problem?: string;
+  problem?: SetupProblem;
   onCancel: () => void;
   onContinue: () => void;
 }) {
@@ -326,18 +333,16 @@ function NameStep(props: {
           </span>
         </div>
       ) : props.hasPermissionsFailed ? (
-        <p role="alert" className="m-0 text-sm text-destructive">
-          {canUseListLabel} didn&apos;t load. Close this and open it again.
-        </p>
+        <Problem title={`${canUseListLabel} didn't load`}>
+          Close this and open it again.
+        </Problem>
       ) : (
         <p role="status" className="m-0 text-[13px] text-muted-foreground">
           Loading what AI agents can use…
         </p>
       )}
       {props.problem && (
-        <p role="alert" className="m-0 text-sm text-destructive">
-          {props.problem}
-        </p>
+        <Problem title={props.problem.title}>{props.problem.reason}</Problem>
       )}
       <DialogFooter>
         <Button type="button" variant="outline" onClick={props.onCancel}>
@@ -486,9 +491,15 @@ function PromptStep(props: {
             : `The prompt works once and expires ${setupMinutes} minutes after you make it.`}
         </span>
         {copyFailed && (
-          <p role="alert" className="m-0 text-sm text-destructive">
-            It couldn't be copied. It's selected: copy it with your keyboard.
-          </p>
+          <Problem
+            title={
+              step.byHand
+                ? "The command wasn't copied"
+                : "The prompt wasn't copied"
+            }
+          >
+            It's selected: copy it with your keyboard.
+          </Problem>
         )}
       </div>
       <p

@@ -21,6 +21,7 @@ import {
   places,
   workflow,
 } from "./automations-fixtures";
+import { problemLines } from "./problem-lines";
 
 vi.mock("../src/core-fetch", async (original) => ({
   ...(await original()),
@@ -770,16 +771,27 @@ describe("an automation's history", () => {
     expect(vi.mocked(coreJson).mock.calls).toHaveLength(requests);
   });
 
-  it("keeps a failed action visible when history refreshes", async () => {
+  it("keeps an unconfirmed Run visible when history refreshes", async () => {
     vi.useFakeTimers();
-    runs = [run({ status: "running", endedAt: null })];
     await show("automation", { id: "movie" });
+    runs = [run({ status: "running", endedAt: null })];
     vi.mocked(coreJson).mockRejectedValueOnce(new Error("Disconnected"));
     await press("Run");
-    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    const history = container.querySelector(
+      '[aria-labelledby="automation-history"]',
+    );
+    const alert = () => problemLines(container.querySelector('[role="alert"]'));
+    const lines = [
+      "Couldn't confirm that Movie night ran",
+      "Check History before running it again.",
+    ];
+    expect(alert()).toEqual(lines);
+    expect(history?.textContent).toContain("Running");
+    runs = [run()];
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });
-    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect(history?.textContent).toContain("Run on Kitchen tablet");
+    expect(alert()).toEqual(lines);
   });
 });

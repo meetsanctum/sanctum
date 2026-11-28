@@ -5,13 +5,14 @@ import {
   PageBar,
   PageBarButton,
   PageSection,
+  Problem,
   useHomeClock,
 } from "@meetsanctum/ui-sdk";
 import { ChevronRight, CircleAlert, Play, Plus } from "lucide-react";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import { blockedBy, blockedLine } from "./blocked";
-import { pieceOf, problemOf, type Automations } from "./data";
+import { pieceOf, runProblemOf, type Automations } from "./data";
 import { PieceIcon, Status, TriggerCard } from "./parts";
 import { listStatus, nextOf } from "./when";
 import {
@@ -106,7 +107,12 @@ export function AutomationsList(props: {
   const clock = useHomeClock();
   const { workflows, pieces, problem, load } = props.automations;
   const [running, setRunning] = useState<string>();
-  const [runProblem, setRunProblem] = useState<string>();
+  // The automation whose run couldn't be started or confirmed.
+  const [runProblem, setRunProblem] = useState<{
+    id: string;
+    title: string;
+    reason: string;
+  }>();
   const now = props.now ?? new Date();
 
   const run = async (workflow: WorkflowInfo) => {
@@ -115,7 +121,10 @@ export function AutomationsList(props: {
     try {
       await props.automations.run(workflow.id);
     } catch (error) {
-      setRunProblem(problemOf(error));
+      setRunProblem({
+        id: workflow.id,
+        ...runProblemOf(workflow.name, error),
+      });
     } finally {
       setRunning(undefined);
     }
@@ -138,9 +147,7 @@ export function AutomationsList(props: {
         {bar}
         {problem ? (
           <Card className="max-w-160 gap-3 px-5 py-4">
-            <p role="alert" className="m-0 text-[15px] leading-[22px]">
-              {problem}
-            </p>
+            <Problem title="Automations didn't load">{problem}</Problem>
             <Button
               variant="outline"
               className="self-start"
@@ -166,10 +173,16 @@ export function AutomationsList(props: {
     );
   }
 
+  const detachedRunProblem = runProblem &&
+    !workflows.some((workflow) => workflow.id === runProblem.id) && (
+      <Problem title={runProblem.title}>{runProblem.reason}</Problem>
+    );
+
   if (workflows.length === 0) {
     return (
       <>
         {bar}
+        {detachedRunProblem}
         <Card className="max-w-160 gap-2.5 px-5.5 pt-5 pb-5.5">
           <p className="m-0 text-[15px] leading-[22px] font-medium">
             No automations yet
@@ -198,31 +211,32 @@ export function AutomationsList(props: {
   return (
     <>
       {bar}
-      {runProblem && (
-        <p
-          role="alert"
-          className="m-0 text-[13px] leading-[18px] font-medium text-(--danger)"
-        >
-          {runProblem}
-        </p>
-      )}
+      {detachedRunProblem}
       <div className="flex flex-col gap-6">
         {[...groups].map(([group, rows], index) => (
           <PageSection key={group} id={`automations-${index}`} title={group}>
             <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
               {rows.map(({ workflow }) => (
-                <AutomationRow
-                  key={workflow.id}
-                  workflow={workflow}
-                  pieces={pieces}
-                  apps={props.apps}
-                  names={props.names}
-                  now={now}
-                  nextId={next?.id}
-                  running={running === workflow.id}
-                  onOpen={() => props.open("automation", { id: workflow.id })}
-                  onRun={() => void run(workflow)}
-                />
+                <Fragment key={workflow.id}>
+                  <AutomationRow
+                    workflow={workflow}
+                    pieces={pieces}
+                    apps={props.apps}
+                    names={props.names}
+                    now={now}
+                    nextId={next?.id}
+                    running={running === workflow.id}
+                    onOpen={() => props.open("automation", { id: workflow.id })}
+                    onRun={() => void run(workflow)}
+                  />
+                  {runProblem?.id === workflow.id && (
+                    <li className="pb-1.5">
+                      <Problem title={runProblem.title}>
+                        {runProblem.reason}
+                      </Problem>
+                    </li>
+                  )}
+                </Fragment>
               ))}
             </ul>
           </PageSection>

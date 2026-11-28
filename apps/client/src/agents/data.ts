@@ -4,6 +4,7 @@ import type { LiveFeed } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { coreJson } from "../core-fetch";
+import { problemReason } from "../device-parts";
 import { everyWhileShown } from "../while-shown";
 
 // What Settings reads of AI agents: the agents themselves, and what they can
@@ -52,13 +53,14 @@ export function useAgents(live?: LiveFeed) {
 /** What AI agents can use, once the core has said, and the answer to a change. */
 export function useAiCanUse(live: LiveFeed) {
   const [canUse, setCanUse] = useState<AiCanUse>();
-  const [hasFailed, setHasFailed] = useState(false);
+  // Why the last read failed, until one succeeds.
+  const [problem, setProblem] = useState<string>();
   const request = useRef(0);
   const refresh = useCallback(async ({ clear = false } = {}) => {
     const current = ++request.current;
     if (clear) {
       setCanUse(undefined);
-      setHasFailed(false);
+      setProblem(undefined);
     }
     try {
       const next = await coreJson<AiCanUse>("/api/agents/can-use", {
@@ -66,16 +68,16 @@ export function useAiCanUse(live: LiveFeed) {
       });
       if (current !== request.current) return;
       setCanUse(next);
-      setHasFailed(false);
-    } catch {
-      if (current === request.current) setHasFailed(true);
+      setProblem(undefined);
+    } catch (error) {
+      if (current === request.current) setProblem(problemReason(error));
     }
   }, []);
   const acceptChange = (next: AiCanUse) => {
     // An earlier read can still be in flight when a change comes back.
     request.current++;
     setCanUse(next);
-    setHasFailed(false);
+    setProblem(undefined);
   };
   useEffect(() => {
     void refresh();
@@ -85,7 +87,13 @@ export function useAiCanUse(live: LiveFeed) {
       stop();
     };
   }, [live, refresh]);
-  return { canUse, acceptChange, hasFailed, refresh };
+  return {
+    canUse,
+    acceptChange,
+    hasFailed: problem !== undefined,
+    problem,
+    refresh,
+  };
 }
 
 /** Switches one of the core's areas, answered with what AI agents can use now. */

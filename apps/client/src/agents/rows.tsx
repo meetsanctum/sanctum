@@ -1,6 +1,9 @@
-import { Switch } from "@meetsanctum/ui-sdk";
+import { Problem, Switch } from "@meetsanctum/ui-sdk";
 import type { LucideIcon } from "lucide-react";
-import { useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+
+import { CoreError } from "../core-fetch";
+import { problemReason } from "../device-parts";
 
 // A line of what AI agents can use: what it is, a line under it, and its
 // switch, or the words that say it has none. The line under it wraps rather
@@ -64,14 +67,15 @@ export function CanUseRows(props: { children: ReactNode }) {
   );
 }
 
-/** The words under a list, or what went wrong with the last change. */
-export function CanUseNote(props: { problem?: string; children: ReactNode }) {
+/** The words under a list, after what went wrong with its last change. */
+export function CanUseNote(props: {
+  problem?: SwitchProblem;
+  children: ReactNode;
+}) {
   return (
     <>
       {props.problem && (
-        <p role="alert" className="m-0 text-sm text-destructive">
-          {props.problem}
-        </p>
+        <Problem title={props.problem.title}>{props.problem.reason}</Problem>
       )}
       <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
         {props.children}
@@ -80,4 +84,36 @@ export function CanUseNote(props: { problem?: string; children: ReactNode }) {
   );
 }
 
-export const switchProblem = "That did not work. Try again.";
+type SwitchProblem = { id: string; on: boolean; title: string; reason: string };
+
+/** Keep the alert until the saved value confirms the requested setting. */
+export function useSwitchProblem(
+  items: readonly { id: string; on: boolean }[],
+) {
+  const [problem, setProblem] = useState<SwitchProblem>();
+  const confirmed =
+    problem && items.find((item) => item.id === problem.id)?.on === problem.on;
+  useEffect(() => {
+    if (confirmed) setProblem(undefined);
+  }, [confirmed]);
+  return [confirmed ? undefined : problem, setProblem] as const;
+}
+
+export function switchProblem(
+  id: string,
+  title: string,
+  on: boolean,
+  error: unknown,
+): SwitchProblem {
+  const setting = on ? "on" : "off";
+  const refused =
+    error instanceof CoreError && error.status < 500 && error.status !== 408;
+  return {
+    id,
+    on,
+    title: refused
+      ? `“${title}” wasn't turned ${setting}`
+      : `Couldn't confirm that “${title}” was turned ${setting}`,
+    reason: problemReason(error),
+  };
+}
