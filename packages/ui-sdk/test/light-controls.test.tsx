@@ -409,7 +409,7 @@ describe.each(["brightness", "hue", "white"] as const)(
             x: 100,
             y: 0,
             command: { on: true, colorTemperature: 153 },
-            shown: `${(6500).toLocaleString()} K`,
+            shown: "6,500 K",
           },
         }[control];
         await act(async () => pointer(slider, "pointerdown", 100, 100));

@@ -21,6 +21,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import { list } from "@meetsanctum/app-sdk/words";
 
 import { productName } from "./brand";
 import { Row, Section } from "./components";
@@ -88,9 +89,6 @@ export function counted(count: number, title: string): string {
   return `${count} ${plural}`;
 }
 
-const and = (items: readonly string[]) =>
-  new Intl.ListFormat("en", { type: "conjunction" }).format(items);
-
 /** What removing a room takes with it, a sentence each; none when nothing does. */
 export function removalWarning(removal: RoomRemoval): string[] {
   const lines: string[] = [];
@@ -105,11 +103,17 @@ export function removalWarning(removal: RoomRemoval): string[] {
   if (removal.entities.length > 0) {
     const total = removal.entities.reduce((sum, each) => sum + each.count, 0);
     lines.push(
-      `${and(removal.entities.map((each) => counted(each.count, each.title)))} ${total === 1 ? "goes" : "go"} with it.`,
+      `${list(
+        "en",
+        removal.entities.map((each) => counted(each.count, each.title)),
+      )} ${total === 1 ? "goes" : "go"} with it.`,
     );
   }
   if (removal.workflows.length > 0) {
-    const names = and(removal.workflows.map((each) => `“${each.name}”`));
+    const names = list(
+      "en",
+      removal.workflows.map((each) => `“${each.name}”`),
+    );
     lines.push(
       removal.workflows.length === 1
         ? `The workflow ${names} uses it and will need changing.`

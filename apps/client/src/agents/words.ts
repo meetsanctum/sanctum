@@ -16,6 +16,7 @@ import {
 } from "@meetsanctum/app-sdk";
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
 import type { AgentInfo } from "@meetsanctum/auth-protocol";
+import { list } from "@meetsanctum/app-sdk/words";
 
 import { isGivenUp } from "../app-state";
 import { productName } from "../brand";
@@ -125,12 +126,8 @@ export function missingWords(
     };
   });
   const titles = needs.map((need) => need.title);
-  const list =
-    titles.length === 1
-      ? titles[0]
-      : `${titles.slice(0, -1).join(", ")} and ${titles.at(-1)}`;
   return {
-    text: `Needs ${list}, which ${titles.length === 1 ? "is" : "are"} ${needs.every((need) => need.isOff) ? "off for AI agents" : "unavailable to AI agents"}`,
+    text: `Needs ${list("en", titles)}, which ${titles.length === 1 ? "is" : "are"} ${needs.every((need) => need.isOff) ? "off for AI agents" : "unavailable to AI agents"}`,
     area: needs.some((need) => need.isArea),
   };
 }

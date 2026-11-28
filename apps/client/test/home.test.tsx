@@ -1,8 +1,14 @@
 // @vitest-environment jsdom
-import type { AppInfo, EntityInfo, WidgetContent } from "@meetsanctum/app-sdk";
+import type {
+  AppInfo,
+  AvailableApp,
+  EntityInfo,
+  WidgetContent,
+} from "@meetsanctum/app-sdk";
 import { act } from "react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { deferred } from "./deferred";
 import {
   homeDashboard,
   moods,
@@ -131,6 +137,87 @@ describe("navigation", () => {
     await openKitchen();
     homeData.installed = [];
     await refresh();
+    expect(pageTitle()).toBe("Kitchen");
+  });
+});
+
+describe("adding an app from Settings → Apps", () => {
+  const example: AppInfo = {
+    ...moods,
+    id: "sanctum.example",
+    name: "Example",
+    pages: [],
+  };
+  const available: AvailableApp = {
+    id: example.id,
+    name: example.name,
+    version: example.version,
+    icon: example.icon,
+    summary: null,
+    requests: [],
+    memory: 128,
+    data: 256,
+    adds: { devices: true },
+    shortfalls: [],
+  };
+  const sheet = () => document.querySelector('[role="dialog"]');
+
+  async function add(response: AppInfo | Promise<AppInfo>) {
+    homeData.manifests.set(example.id, { driver: { hooks: [] } });
+    const read = mockCoreJson.getMockImplementation()!;
+    mockCoreJson.mockImplementation(async (path, init) => {
+      if (path === "/api/apps/available") return [available];
+      if (path === "/api/apps/add") return response;
+      return read(path, init);
+    });
+    await openFromOverview("Settings");
+    await openArea("Apps");
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="Add Example"]')!
+        .click(),
+    );
+    expect(sheet()?.textContent).toContain("Add Example?");
+    await act(async () =>
+      [...sheet()!.querySelectorAll("button")]
+        .find((button) => button.textContent === "Add")!
+        .click(),
+    );
+  }
+
+  it("opens the driver's default page from the Add response and follows its first start", async () => {
+    await add({
+      ...example,
+      state: "starting",
+      run: {
+        since: "2026-01-01T00:00:00.000Z",
+        isFirstStart: true,
+        isAdding: true,
+      },
+    });
+
+    const main = container.querySelector("main");
+    expect(main?.querySelector("h1")?.textContent).toBe(example.name);
+    expect(main?.textContent).toContain(`Version ${example.version}`);
+    expect(main?.textContent).toContain("Show devices");
+    expect(main?.querySelector('[role="status"]')?.textContent).toContain(
+      "Adding Example",
+    );
+
+    await act(async () => pushLive({ type: "app", app: example }));
+    expect(main?.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it("keeps the room opened after a live update closes the Add sheet", async () => {
+    const response = deferred<AppInfo>();
+    await add(response.promise);
+    expect(sheet()?.textContent).toContain("Adding…");
+
+    await act(async () => pushLive({ type: "app", app: example }));
+    expect(sheet()).toBeNull();
+    await openKitchen();
+
+    await act(async () => response.resolve(example));
     expect(pageTitle()).toBe("Kitchen");
   });
 });

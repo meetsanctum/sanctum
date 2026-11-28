@@ -12,7 +12,9 @@ import {
 } from "@meetsanctum/app-sdk";
 import { pressLabel } from "@meetsanctum/ui-sdk";
 
-import { plural } from "../plural";
+import { compare, list, number, plural } from "@meetsanctum/app-sdk/words";
+
+const compareNames = compare("en");
 
 /**
  * Whether a capability fits a device field: the state it compares, and the
@@ -214,17 +216,15 @@ export function formatOffset(minutes: number, style: Style) {
 /** How long something has lasted, as "10 minutes", or "10 min" on a card. */
 export function formatMinutes(minutes: number, style: Style) {
   if (style === "card") return `${minutes} min`;
-  return plural(minutes, "minute");
+  return plural("en", minutes, { one: "# minute", other: "# minutes" });
 }
-
-const lux = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 1 });
 
 /**
  * A light level someone chose, in lux, as they chose it: "30 lx", "1,500
  * lx". What a sensor reads is ui-sdk's formatLightLevel.
  */
 export function formatLux(value: number) {
-  return `${lux.format(value)} lx`;
+  return `${number("en", value, { maximumFractionDigits: 1 })} lx`;
 }
 
 /** A level in percent, as a player's volume: "30%". */
@@ -310,12 +310,13 @@ export function formatValue(
             ? names.device(light.device)?.name
             : undefined,
         );
-        if (named.length === 0 || named.some((name) => !name)) {
+        if (
+          named.length === 0 ||
+          !named.every((name): name is string => Boolean(name))
+        ) {
           return undefined;
         }
-        return named.length === 1
-          ? named[0]
-          : `${named.slice(0, -1).join(", ")} and ${named.at(-1)}`;
+        return list("en", named);
       }
       return undefined;
     }
@@ -547,5 +548,5 @@ export function compareGroups(a: string, b: string) {
       ? firstGroups.length
       : firstGroups.length + 1;
   };
-  return rank(a) - rank(b) || a.localeCompare(b);
+  return rank(a) - rank(b) || compareNames(a, b);
 }

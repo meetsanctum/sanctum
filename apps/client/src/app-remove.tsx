@@ -1,6 +1,7 @@
 import type { AppInfo, AppRemoval } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
 import { useState } from "react";
+import { list } from "@meetsanctum/app-sdk/words";
 
 import {
   Dialog,
@@ -18,11 +19,6 @@ import { CoreError, coreJson } from "./core-fetch";
 // use it, which turn off, and its widgets and room sections. Cancel is
 // focused. Its own data is kept for 30 days, so adding it back meanwhile
 // brings back what it had. System apps have no Remove.
-
-function list(words: readonly string[]) {
-  if (words.length <= 1) return words.join("");
-  return `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`;
-}
 
 /** What goes with it, in a sentence or two, for its dialog. */
 export function removalWords(app: AppInfo, removal: AppRemoval) {
@@ -43,7 +39,7 @@ export function removalWords(app: AppInfo, removal: AppRemoval) {
       ? null
       : {
           title: `${names.length} ${one ? "automation uses" : "automations use"} it:`,
-          line: `${list(names)}. ${one ? "It turns" : "They turn"} off and ${one ? "says" : "say"} ${app.name} is missing.`,
+          line: `${list("en", names)}. ${one ? "It turns" : "They turn"} off and ${one ? "says" : "say"} ${app.name} is missing.`,
         };
   const back =
     removal.devices > 0

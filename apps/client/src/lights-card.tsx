@@ -1,7 +1,7 @@
 import { icons, type Tile } from "@meetsanctum/ui-sdk";
 import { useEffect, useRef, useState } from "react";
 
-import { plural } from "./plural";
+import { plural } from "@meetsanctum/app-sdk/words";
 import { statusTileFrame, StatusTileWords } from "./status-tile";
 import type { Devices } from "./use-devices";
 
@@ -71,7 +71,10 @@ export function LightsCard(props: {
     return () => window.clearTimeout(timer);
   }, [did]);
   const { on, value } = lightsStatus(tiles);
-  const label = on > 0 ? `Turn off ${plural(on, "light")}` : "Turn off lights";
+  const label =
+    on > 0
+      ? `Turn off ${plural("en", on, { one: "# light", other: "# lights" })}`
+      : "Turn off lights";
   const turnOff = () => {
     const press = ++latestPress.current;
     setDid(undefined);
@@ -84,7 +87,7 @@ export function LightsCard(props: {
         say(
           failed.length === 0
             ? "Lights turned off"
-            : `${plural(failed.length, "light")} did not turn off`,
+            : `${plural("en", failed.length, { one: "# light", other: "# lights" })} did not turn off`,
         ),
       () => say("The lights could not be turned off"),
     );

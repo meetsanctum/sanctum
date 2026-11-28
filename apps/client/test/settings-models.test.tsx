@@ -106,6 +106,13 @@ describe("Settings → AI models", () => {
     expect(labelled("Address")).toBeDefined();
   });
 
+  it("keeps the usage chart visible when a day is invalid", async () => {
+    page.usage!.days[0] = "invalid";
+    await show();
+    const chart = page.container.querySelector('[aria-label^="Tokens used"]');
+    expect(chart?.parentElement?.textContent).toContain("Invalid Date");
+  });
+
   it("reads one day's tokens with the arrow keys", async () => {
     vi.stubEnv("TZ", "America/Los_Angeles");
     page.usage!.sources[0]!.tokens[28] = 175;
@@ -126,10 +133,7 @@ describe("Settings → AI models", () => {
       "Today: Qwen3 8B on Office Mac 100, OpenAI: GPT-5 Mini with OpenRouter 50",
     );
     await key("ArrowLeft");
-    const previousDay = new Date("2026-11-22T12:00:00Z").toLocaleDateString(
-      undefined,
-      { day: "numeric", month: "short", timeZone: "America/Los_Angeles" },
-    );
+    const previousDay = "22 Nov";
     expect(status()).toBe(
       `${previousDay}: Qwen3 8B on Office Mac 175, OpenAI: GPT-5 Mini with OpenRouter 50`,
     );

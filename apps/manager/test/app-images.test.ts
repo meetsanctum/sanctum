@@ -547,6 +547,16 @@ describe("growing one", () => {
     await expect(images.grow(app, 512)).rejects.toThrow("can be spared");
   });
 
+  it("says how far below nothing the room is, where room itself stops at none", async () => {
+    // Less is free than updates keep.
+    const { images } = await setup({ free: 1000 * mebibyte });
+
+    const { room, spare } = await images.available();
+
+    expect(room()).toBe(0);
+    expect(spare()).toBe((1000 - 1536) * mebibyte);
+  });
+
   it("refuses an app with no image", async () => {
     const { images } = await setup();
 

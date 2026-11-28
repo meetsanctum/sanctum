@@ -13,11 +13,14 @@ import {
   type LiveFeed,
 } from "@meetsanctum/ui-sdk";
 import { useCallback, useMemo, useState } from "react";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import { entityKey, shownType, useAppEntities } from "./app-entities";
 import { isShown, looksRunning, stateShort } from "./app-state";
 import { coreJson } from "./core-fetch";
 import { tileKey } from "./device-tiles";
+
+const compareNames = compare("en");
 
 // Apps' room sections: the shell draws each from the app's entities of the
 // section's type in the room, in the room's row (RoomRow): buttons as chips
@@ -124,7 +127,7 @@ export function useSectionEntities(
         .sort(
           (a, b) =>
             a.tile.order - b.tile.order ||
-            a.tile.name.localeCompare(b.tile.name),
+            compareNames(a.tile.name, b.tile.name),
         ),
     [entities],
   );

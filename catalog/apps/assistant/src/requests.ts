@@ -147,22 +147,23 @@ function lightsReply(
     followsRoomRules
       ? words.roomRules(state, false)
       : words.changed(subject, state);
+  // Lights left off, or kept off by their room's rule, were what was asked.
   const missed = lights.filter(
-    (light) => !done(light) && !already(light) && !keptOff(light),
+    (light) =>
+      !done(light) && !already(light) && !off(light) && !keptOff(light),
   );
   if (missed.length === 0) {
-    if (changed) {
-      return { text: changedText(), confirmation: true };
-    }
-    if (!lights.some(already)) return { text: words.nothingChanged };
+    if (changed) return { text: changedText(), confirmation: true };
+    // Already as asked, where their rooms' rules let them be.
+    const isAlready =
+      lights.some(already) &&
+      lights.every((light) => already(light) || keptOff(light));
+    if (!isAlready) return { text: words.nothingChanged };
     return {
       text: followsRoomRules
         ? words.roomRules(state, true)
         : words.already(subject, state),
     };
-  }
-  if (!changed && missed.every(off)) {
-    return { text: words.nothingChanged };
   }
   return {
     text: words.missedLights(

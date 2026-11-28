@@ -1,6 +1,7 @@
 import type {
   AddModelSource,
   AppInfo,
+  AvailableApp,
   ModelChoice,
   ModelSourceInfo,
   ModelsInfo,
@@ -13,6 +14,10 @@ import { afterEach, beforeEach, vi } from "vitest";
 import { coreJson } from "../src/core-fetch";
 import { ModelsPage } from "../src/models/models-page";
 import { sourceName } from "../src/models/words";
+import {
+  SettingsOpenerProvider,
+  type SettingsOpener,
+} from "../src/settings-opener";
 import { mac, now, router } from "./settings-models-fixtures";
 
 export const anthropic: ModelSourceInfo = {
@@ -61,7 +66,7 @@ export const ollamaApp = {
   state: "running",
   settings: null,
 } as unknown as AppInfo;
-const ollamaOffer = {
+const ollamaOffer: AvailableApp = {
   id: "sanctum.ollama",
   name: "Ollama",
   version: "0.1.0",
@@ -93,6 +98,7 @@ export const page = {
   sanctumModels: [] as ModelChoice[],
   offeredModels: [] as ModelChoice[],
   isOllamaAvailable: true,
+  ollamaShortfalls: [] as AvailableApp["shortfalls"],
   includeAddedSourceId: true,
 };
 export const live = createLiveFeed();
@@ -120,6 +126,7 @@ beforeEach(() => {
     { id: "llama3.2:3b", name: "Llama3.2 3B", size: 2_000_000_000 },
   ];
   page.isOllamaAvailable = true;
+  page.ollamaShortfalls = [];
   page.includeAddedSourceId = true;
   openApp.mockClear();
   vi.mocked(coreJson).mockReset();
@@ -132,7 +139,9 @@ beforeEach(() => {
       ...(page.usage && { usage: page.usage }),
     });
     if (path === "/api/models") return info() as never;
-    if (path === "/api/apps/available") return [ollamaOffer] as never;
+    if (path === "/api/apps/available") {
+      return [{ ...ollamaOffer, shortfalls: page.ollamaShortfalls }] as never;
+    }
     if (path === "/api/apps/add") {
       page.installed = [...page.installed, ollamaApp];
       return ollamaApp as never;
@@ -244,23 +253,25 @@ afterEach(async () => {
 
 export const openApp = vi.fn();
 
-export async function show() {
+export async function show(openSettings?: SettingsOpener) {
   // As the shell does, an app added in the sheet comes back in the list.
   const render = () =>
     root.render(
-      <ModelsPage
-        live={live}
-        page={null}
-        apps={page.installed}
-        onOpenApp={openApp}
-        onAppAdded={(app) => {
-          page.installed = [
-            ...page.installed.filter((each) => each.id !== app.id),
-            app,
-          ];
-          render();
-        }}
-      />,
+      <SettingsOpenerProvider value={openSettings}>
+        <ModelsPage
+          live={live}
+          page={null}
+          apps={page.installed}
+          onOpenApp={openApp}
+          onAppAdded={(app) => {
+            page.installed = [
+              ...page.installed.filter((each) => each.id !== app.id),
+              app,
+            ];
+            render();
+          }}
+        />
+      </SettingsOpenerProvider>,
     );
   await act(async () => render());
 }

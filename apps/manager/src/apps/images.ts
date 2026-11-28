@@ -215,18 +215,22 @@ export function createAppImages(options: {
       promised += Math.max(0, capacity - allocated);
     }
     const sizeMb = (app: string) => sizes.get(app) ?? 0;
+    // What's left beside the images' growth, updates and others' adds,
+    // below zero by as much as that is short.
+    const spare = (app?: string) =>
+      availableBytes === null
+        ? null
+        : availableBytes -
+          promised -
+          keptForUpdates -
+          (options.reserved?.(sizeMb, app) ?? 0);
     return {
       sizeMb,
-      room: (app?: string) =>
-        availableBytes === null
-          ? null
-          : Math.max(
-              0,
-              availableBytes -
-                promised -
-                keptForUpdates -
-                (options.reserved?.(sizeMb, app) ?? 0),
-            ),
+      spare,
+      room: (app?: string) => {
+        const left = spare(app);
+        return left === null ? null : Math.max(0, left);
+      },
     };
   }
 

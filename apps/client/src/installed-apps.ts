@@ -1,8 +1,11 @@
 import type { AppInfo } from "@meetsanctum/app-sdk";
 import type { LiveFeed } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import { CoreError, coreJson } from "./core-fetch";
+
+const compareNames = compare("en");
 
 // The apps the home has installed, as the core lists them (GET /api/apps).
 // After an update the core serves before it has installed its apps, and
@@ -56,7 +59,7 @@ export function useInstalledApps(live: LiveFeed) {
     );
     for (const [appId, app] of changedApps.current) byId.set(appId, app);
     const list = [...byId.values()].sort((a, b) =>
-      a.name.localeCompare(b.name),
+      compareNames(a.name, b.name),
     );
     setInstalled((current) =>
       JSON.stringify(current) === JSON.stringify(list) ? current : list,
@@ -81,7 +84,7 @@ export function useInstalledApps(live: LiveFeed) {
     setInstalled((current) =>
       current.some((each) => each.id === changed.id) || !hasRead.current
         ? current.map((each) => (each.id === changed.id ? changed : each))
-        : [...current, changed].sort((a, b) => a.name.localeCompare(b.name)),
+        : [...current, changed].sort((a, b) => compareNames(a.name, b.name)),
     );
   }, []);
   // An app as the core answered adding it. A live message may have brought
@@ -95,7 +98,7 @@ export function useInstalledApps(live: LiveFeed) {
     setInstalled((current) =>
       current.some((each) => each.id === added.id)
         ? current
-        : [...current, added].sort((a, b) => a.name.localeCompare(b.name)),
+        : [...current, added].sort((a, b) => compareNames(a.name, b.name)),
     );
   }, []);
   // Someone removed an app, here or on another client: it leaves the list

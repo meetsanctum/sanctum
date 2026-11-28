@@ -1,7 +1,7 @@
 {
   "id": "sanctum.assistant",
   "name": "Assistant",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "core": "^2.0.0",
   "protocol": 29,
   "summary": "Controls lights by voice or typed request.",
