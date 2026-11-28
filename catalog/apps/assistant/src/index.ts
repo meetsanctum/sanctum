@@ -40,7 +40,8 @@ export const app = defineApp({
   // 0.2.1: optional choices in sentences as speech recognition reads them.
   // 0.3.0: a room's mood, by its name.
   // 0.3.1: lights a brightness leaves off are not said to be missed.
-  version: "0.3.1",
+  // 0.3.2: lights a room's rule keeps off are not said to be missed.
+  version: "0.3.2",
   core: "^2.0.0",
   summary: "Controls lights by voice or typed request.",
   icon: { glyph: "message-circle-more", color: "iris" },

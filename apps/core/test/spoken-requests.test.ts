@@ -3,13 +3,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { NewActivityEntry } from "../src/activity/activity.js";
 import { ActionCallError } from "../src/app-host/errors.js";
+import { createAnnouncements } from "../src/speech/announcements.js";
 import { createListening } from "../src/speech/listening.js";
+import { createSpeech, type Speech } from "../src/speech/speech.js";
 import {
   createSpokenRequests,
   oneMomentAfterMs,
   type Speaker,
   type Transcriber,
 } from "../src/speech/spoken.js";
+import * as wyoming from "../src/speech/wyoming.js";
 import { deferredResult } from "./support.js";
 
 // A smart speaker someone asks: the core hears its words, asks the
@@ -30,6 +33,7 @@ function setup(
     transcript?: Promise<string | null>;
     turnFinished?: Promise<void>;
     prepare?: (text: string, signal?: AbortSignal) => Promise<void>;
+    speech?: Pick<Speech, "reply" | "speak">;
     beforeDispatch?: () => Promise<void>;
     speakers?: Record<string, Speaker>;
     notUnderstood?: string;
@@ -87,19 +91,20 @@ function setup(
       },
       forget: (key) => void forgotten.push(key),
     },
-    speech: () => ({
-      reply: async ({ text, confirmation, signal }) => {
-        replied.push({ text, ...(confirmation ? { confirmation } : {}) });
-        await options.prepare?.(text, signal);
-        signal?.throwIfAborted();
-        return `http://192.168.1.2:4180/a/${encodeURIComponent(text)}.flac`;
+    speech: () =>
+      options.speech ?? {
+        reply: async ({ text, confirmation, signal }) => {
+          replied.push({ text, ...(confirmation ? { confirmation } : {}) });
+          await options.prepare?.(text, signal);
+          signal?.throwIfAborted();
+          return `http://192.168.1.2:4180/a/${encodeURIComponent(text)}.flac`;
+        },
+        speak: async (input) => {
+          await options.beforeDispatch?.();
+          input.beforeTelling();
+          spokenLate.push(input);
+        },
       },
-      speak: async (input) => {
-        await options.beforeDispatch?.();
-        input.beforeTelling();
-        spokenLate.push(input);
-      },
-    }),
     record: (entry) => void recorded.push(entry),
     log: () => {},
   });
@@ -468,6 +473,70 @@ describe("a smart speaker's request", () => {
     listening.close(driver, { run: opened.run, end: "done" });
     await vi.advanceTimersByTimeAsync(0);
     expect(spokenLate[0]).toMatchObject({ text: "Done" });
+  });
+
+  it("hands off buffered reply audio on time after a slow speech service lookup", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    const rest = deferredResult<void>();
+    const synthesize = vi
+      .spyOn(wyoming, "synthesize")
+      .mockImplementation(async function* () {
+        yield { rate: 22_050, samples: new Int16Array(4_096) };
+        await rest.promise;
+        yield { rate: 22_050, samples: new Int16Array(4_096) };
+      });
+    const announcements = createAnnouncements({
+      host: "127.0.0.1",
+      port: 0,
+      log: () => {},
+    });
+    announcements.port = () => 4180;
+    const speech = createSpeech({
+      announcements,
+      manager: {
+        async serviceUrl() {
+          await new Promise<void>((resolve) => setTimeout(resolve, 400));
+          return "tcp://127.0.0.1:1";
+        },
+        hostStatus: async () => ({
+          network: { address: "127.0.0.1", cidr: "127.0.0.1/32" },
+        }),
+        wantServiceForCore: async () => {},
+        releaseServiceForCore: async () => {},
+      },
+      devices: { list: () => [], announce: async () => {} },
+      areaOn: () => false,
+      publishedPort: 4180,
+      log: () => {},
+    });
+    speech.start();
+    const { wake, asked, listening, steps } = setup({
+      speech: { reply: speech.reply, speak: speech.speak },
+    });
+    try {
+      const opened = await wake();
+      if (!opened.accepted) throw new Error(opened.refusal);
+      await vi.advanceTimersByTimeAsync(4_200);
+      expect(kinds(steps(opened.run))).toEqual(["stopped", "heard"]);
+      asked[0]!.answer.resolve({ text: "The Office lights are off." });
+      await vi.advanceTimersByTimeAsync(549);
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({ text: "The Office lights are off." }),
+      );
+      expect(kinds(steps(opened.run))).toEqual(["stopped", "heard"]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(steps(opened.run).at(-1)).toMatchObject({
+        step: "reply",
+        text: "The Office lights are off.",
+      });
+    } finally {
+      listening.stop();
+      listening.clearFinished();
+      speech.stop();
+      rest.resolve();
+      await announcements.stop();
+      synthesize.mockRestore();
+    }
   });
 
   it.each([false, true])(
