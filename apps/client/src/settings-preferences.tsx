@@ -345,12 +345,7 @@ function TypedField(props: {
         onKeyDown={(event) => {
           if (event.key === "Enter") commit();
         }}
-        className={cn(
-          field,
-          isNumber && "max-w-32 tabular-nums",
-          // The refusal is shown below the field, which has its saved value back.
-          "aria-invalid:not-focus-visible:border-input aria-invalid:not-focus-visible:ring-0 aria-invalid:focus-visible:border-ring aria-invalid:focus-visible:ring-ring/50",
-        )}
+        className={cn(field, isNumber && "max-w-32 tabular-nums")}
       />
       <Hint setting={setting} id={hintId} />
     </div>
