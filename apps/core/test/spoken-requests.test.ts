@@ -3,7 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { NewActivityEntry } from "../src/activity/activity.js";
 import { ActionCallError } from "../src/app-host/errors.js";
-import { createListening, type HeardRun } from "../src/speech/listening.js";
+import {
+  createListening,
+  listeningRunMs,
+  type HeardRun,
+} from "../src/speech/listening.js";
 import {
   createSpokenRequests,
   oneMomentAfterMs,
@@ -43,6 +47,7 @@ function setup(
   }[] = [];
   const spokenLate: unknown[] = [];
   const replied: { text: string; confirmation?: boolean }[] = [];
+  const playback: ((finished: boolean) => void)[] = [];
   const forgotten: string[] = [];
   let answers = options.answers ?? true;
   let room = true;
@@ -88,10 +93,11 @@ function setup(
       forget: (key) => void forgotten.push(key),
     },
     speech: () => ({
-      reply: async ({ text, confirmation, signal }) => {
+      reply: async ({ text, confirmation, signal, onPlayback }) => {
         replied.push({ text, ...(confirmation ? { confirmation } : {}) });
         await options.prepare?.(text, signal);
         signal?.throwIfAborted();
+        if (onPlayback) playback.push(onPlayback);
         return `http://192.168.1.2:4180/a/${encodeURIComponent(text)}.flac`;
       },
       speak: async (input) => {
@@ -153,6 +159,7 @@ function setup(
     asked,
     spokenLate,
     replied,
+    playback,
     forgotten,
     runs,
     handled,
@@ -376,27 +383,43 @@ describe("a smart speaker's request", () => {
     expect(silent.replied).toEqual([]);
   });
 
-  it.each(["preparation", "playback"] as const)(
-    "keeps recognition timing when a speaker disconnects during fallback %s",
-    async (during) => {
+  it.each([
+    ["preparation", "disconnect"],
+    ["playback", "disconnect"],
+    ["preparation", "timeout"],
+    ["playback", "failure"],
+  ] as const)(
+    "keeps recognition timing when fallback %s ends with %s",
+    async (during, end) => {
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
       const ready = deferredResult<void>();
-      const { wake, listening, replied, until, steps, handled, recorded } =
+      const prepare = vi.fn(
+        (_text: string, _signal?: AbortSignal) => ready.promise,
+      );
+      const { wake, listening, replied, playback, steps, handled, recorded } =
         setup({
           heard: "",
           notUnderstood: "I can only help with lights",
-          ...(during === "preparation" && { prepare: () => ready.promise }),
+          ...(during === "preparation" && { prepare }),
         });
       const opened = await wake();
       if (!opened.accepted) throw new Error(opened.refusal);
-      await until(() =>
-        during === "preparation"
-          ? replied.length === 1
-          : kinds(steps(opened.run)).includes("reply"),
+      await vi.advanceTimersByTimeAsync(0);
+      expect(replied).toHaveLength(1);
+      expect(kinds(steps(opened.run)).includes("reply")).toBe(
+        during === "playback",
       );
 
-      listening.close(driver, { run: opened.run, end: "disconnected" });
-      ready.resolve();
+      if (end === "timeout") {
+        await vi.advanceTimersByTimeAsync(listeningRunMs);
+        expect(prepare.mock.calls[0]?.[1]?.aborted).toBe(true);
+      } else if (end === "failure") {
+        playback[0]!(false);
+      } else {
+        listening.close(driver, { run: opened.run, end: "disconnected" });
+      }
       await handled.get(opened.run);
+      ready.resolve();
 
       expect(requestLines(recorded)).toMatchObject([
         {

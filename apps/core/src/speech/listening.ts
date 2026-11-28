@@ -66,9 +66,8 @@ export type HeardRun = {
   sound: AsyncIterable<Buffer>;
   /** Stops listening: the speaker stops sending, and `sound` ends. */
   stopListening(): void;
-  /** Notes when speech recognition answered, with words or none it knows. */
-  recognised(): void;
-  heard(text: string): void;
+  /** Notes when recognition answered and tells the driver any words it heard. */
+  recognised(text?: string): void;
   /** A reply to play from an address the core serves. */
   reply(url: string, text: string): void;
   /** Ends the run in an error. */
@@ -80,14 +79,17 @@ export type HeardRun = {
   readonly moments: Readonly<RunMoments>;
   /** How the driver ended it, once it did. */
   readonly ended: ListenEnd | null;
+  /** Whether the run reached its time limit. */
+  readonly timedOut: boolean;
 };
 
 /** What hears the home's runs; without one, every run is refused `off`. */
 export type Hearer = (run: HeardRun) => void | Promise<void>;
 
-type Run = Omit<HeardRun, "moments" | "ended"> & {
+type Run = Omit<HeardRun, "moments" | "ended" | "timedOut"> & {
   moments: RunMoments;
   ended: ListenEnd | null;
+  timedOut: boolean;
   steps: ListenStep[];
   finished: boolean;
   readers: Set<() => void>;
@@ -243,6 +245,7 @@ export function createListening(options: {
         controller,
         signal: controller.signal,
         ended: null,
+        timedOut: false,
         moments: {
           heard: now(),
           firstSound: null,
@@ -254,10 +257,11 @@ export function createListening(options: {
         push: (chunk) => sound.push(chunk),
         endSound: sound.end,
         stopListening: () => stopListening(run),
-        recognised() {
+        recognised(text) {
+          if (run.finished) return;
           run.moments.heardWords ??= now();
+          if (text) tell(run, { step: "heard", text });
         },
-        heard: (text) => tell(run, { step: "heard", text }),
         reply(url, text) {
           if (run.finished) return;
           run.moments.replyReady ??= now();
@@ -270,7 +274,10 @@ export function createListening(options: {
           stopListening(run);
           tell(run, { step: "done" });
         },
-        limit: setTimeout(() => fail(run, "failed"), listeningRunMs),
+        limit: setTimeout(() => {
+          run.timedOut = true;
+          fail(run, "failed");
+        }, listeningRunMs),
       };
       run.limit.unref();
       runs.set(id, run);
