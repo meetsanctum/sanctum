@@ -52,7 +52,6 @@ it("says what to change in a field, with a red sign and words that can wrap", ()
   const line = holder.firstElementChild!;
 
   expect(line.getAttribute("role")).toBe("alert");
-  expect(line.getAttribute("data-slot")).toBe("field-error");
   expect(line.id).toBe("days-problem");
   expect(line.textContent).toBe("Use a number from 1 to 14.");
   expect(line.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");

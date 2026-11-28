@@ -1,5 +1,5 @@
 {
-  "version": "0.1.48",
+  "version": "0.1.49",
   "react": "19.3.1",
   "exports": {
     "@meetsanctum/ui-sdk": [
@@ -2641,10 +2641,6 @@
       "    asChild?: boolean;",
       "}): React.JSX.Element;",
       "export { Button, buttonVariants };"
-    ],
-    "components/ui/field.d.ts": [
-      "import type { ComponentProps } from \"react\";",
-      "export declare function FieldError({ className, ...props }: ComponentProps<\"p\">): import(\"react\").JSX.Element;"
     ],
     "components/ui/input-otp.d.ts": [
       "import * as React from \"react\";",
