@@ -243,6 +243,33 @@ describe("actions on a device's Add devices card", () => {
   const calls = (path: string) =>
     vi.mocked(coreJson).mock.calls.filter(([called]) => called === path);
 
+  it("names the room that couldn't be added and lets the user try again", async () => {
+    await join();
+    const field = await newRoom();
+    await typeName(field, hall.name);
+    vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(504, "timeout"));
+    await click("Add room");
+
+    const form = field.closest("form")!;
+    expect(field.value).toBe("Hall");
+    const alert = form.querySelector("[role=alert]")!;
+    expect(
+      [
+        ...alert.querySelectorAll(
+          "[data-slot=alert-title], [data-slot=alert-description]",
+        ),
+      ].map((line) => line.textContent),
+    ).toEqual([
+      "Couldn't add Hall",
+      "Sanctum ran into a problem. Try again in a moment.",
+    ]);
+    expect(calls("/api/devices/update")).toHaveLength(0);
+
+    await click("Add room");
+    expect(form.isConnected).toBe(false);
+    expect(changed).toHaveBeenCalledWith({ ...device, roomId: hall.id });
+  });
+
   it("keeps naming open when the move fails, and moves into the made room on retry", async () => {
     const answer = vi.mocked(coreJson).getMockImplementation()!;
     let failing = true;

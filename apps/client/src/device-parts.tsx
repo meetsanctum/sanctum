@@ -124,6 +124,21 @@ export function deviceProblem(error: unknown) {
 }
 
 /**
+ * A problem's second line: why an action failed, where that is known, and
+ * what to do about it.
+ */
+export function problemReason(error: unknown) {
+  if (error instanceof CoreError) {
+    switch (error.code) {
+      case "not_found":
+        return "It isn't there any more.";
+    }
+    return `${productName} ran into a problem. Try again in a moment.`;
+  }
+  return `${productName} didn't answer. Check that it's on, then try again.`;
+}
+
+/**
  * What the household may show a device as, by its types' titles with its
  * own first, and which is in effect; nothing for a device that can only be
  * shown as what it is.
