@@ -1,7 +1,8 @@
 import { Problem, Switch } from "@meetsanctum/ui-sdk";
 import type { LucideIcon } from "lucide-react";
-import { useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
+import { CoreError } from "../core-fetch";
 import { problemReason } from "../device-parts";
 
 // A line of what AI agents can use: what it is, a line under it, and its
@@ -83,8 +84,20 @@ export function CanUseNote(props: {
   );
 }
 
-/** A switch that didn't change: which, and why. */
-export type SwitchProblem = { id: string; title: string; reason: string };
+type SwitchProblem = { id: string; on: boolean; title: string; reason: string };
+
+/** Keep the alert until the saved value confirms the requested setting. */
+export function useSwitchProblem(
+  items: readonly { id: string; on: boolean }[],
+) {
+  const [problem, setProblem] = useState<SwitchProblem>();
+  const confirmed =
+    problem && items.find((item) => item.id === problem.id)?.on === problem.on;
+  useEffect(() => {
+    if (confirmed) setProblem(undefined);
+  }, [confirmed]);
+  return [confirmed ? undefined : problem, setProblem] as const;
+}
 
 export function switchProblem(
   id: string,
@@ -92,9 +105,15 @@ export function switchProblem(
   on: boolean,
   error: unknown,
 ): SwitchProblem {
+  const setting = on ? "on" : "off";
+  const refused =
+    error instanceof CoreError && error.status < 500 && error.status !== 408;
   return {
     id,
-    title: `“${title}” wasn't turned ${on ? "on" : "off"}`,
+    on,
+    title: refused
+      ? `“${title}” wasn't turned ${setting}`
+      : `Couldn't confirm that “${title}” was turned ${setting}`,
     reason: problemReason(error),
   };
 }

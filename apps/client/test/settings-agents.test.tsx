@@ -565,10 +565,11 @@ describe("Settings → AI agents", () => {
       expect(dialog()!.textContent).toContain("Waiting for Codex to connect");
     });
 
-    it("says when too many agents are being added at once", async () => {
+    it("reports a busy setup for the submitted name", async () => {
       refuseSetup = new CoreError(409, "busy");
       await add("Codex");
       await act(async () => button("Continue").click());
+      await type(dialog()!.querySelector("input")!, "Office agent");
       expect(problemLines(dialog()!.querySelector("[role=alert]"))).toEqual([
         "Couldn't add Codex",
         "Several agents are being added already. Wait a few minutes, then try again.",
@@ -622,9 +623,21 @@ describe("What AI agents can use", () => {
     );
   });
 
+  it("loads the permissions when Try again is pressed", async () => {
+    vi.mocked(coreJson).mockRejectedValueOnce(new Error("Disconnected"));
+    await show();
+    expect(problemLines(container.querySelector("[role=alert]"))[0]).toBe(
+      "What AI agents can use didn't load",
+    );
+    expect(switchFor("Control your lights")).toBeNull();
+    await act(async () => button("Try again").click());
+    expect(switchFor("Control your lights")).not.toBeNull();
+    expect(container.querySelector("[role=alert]")).toBeNull();
+  });
+
   it("says in its card when a switch didn't change", async () => {
     await show();
-    vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(500, "unknown"));
+    vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(403, "forbidden"));
     await act(async () => switchFor("Control your lights").click());
 
     const home = document.querySelector(
@@ -634,6 +647,24 @@ describe("What AI agents can use", () => {
       "“Control your lights” wasn't turned off",
       "Sanctum ran into a problem. Try again in a moment.",
     ]);
+  });
+
+  it("clears an unconfirmed change when the saved area is read", async () => {
+    await show();
+    const read = deferred<AiCanUse>();
+    permissionsRead = read.promise;
+    vi.mocked(coreJson).mockRejectedValueOnce(new Error("Disconnected"));
+    const lights = switchFor("Control your lights");
+    await act(async () => lights.click());
+    expect(problemLines(container.querySelector("[role=alert]"))[0]).toBe(
+      "Couldn't confirm that “Control your lights” was turned off",
+    );
+    expect(lights.getAttribute("aria-checked")).toBe("true");
+    await act(async () =>
+      read.resolve(canUseWith({ "devices.control:light": false })),
+    );
+    expect(lights.getAttribute("aria-checked")).toBe("false");
+    expect(container.querySelector("[role=alert]")).toBeNull();
   });
 
   it("says what AI agents can see about smart speakers", async () => {
@@ -753,5 +784,15 @@ describe("an app's part of what AI agents can use", () => {
       ],
     ]);
     expect(switchFor("Run a scene").getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("clears an unconfirmed change when the saved app permission is read", async () => {
+    await show();
+    canUse = canUseWith({ "example.run": false });
+    vi.mocked(coreJson).mockRejectedValueOnce(new Error("Disconnected"));
+    const scene = switchFor("Run a scene");
+    await act(async () => scene.click());
+    expect(scene.getAttribute("aria-checked")).toBe("false");
+    expect(container.querySelector("[role=alert]")).toBeNull();
   });
 });

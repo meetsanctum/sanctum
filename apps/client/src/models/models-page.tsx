@@ -415,13 +415,10 @@ function EditSource(props: {
   const [text, setText] = useState("");
   const [model, setModel] = useState("");
   const [models, setModels] = useState<ModelChoice[]>();
-  // What didn't happen and why; `refused` for a key the provider didn't
-  // take, said under its field.
-  const [problem, setProblem] = useState<{
-    title?: string;
-    reason: string;
-    refused?: boolean;
-  }>();
+  const [problem, setProblem] = useState<
+    | { kind: "key-refusal"; reason: string }
+    | { kind: "failure"; title: string; reason: string }
+  >();
   // A source that lists no models has nothing to choose from.
   const [noModels, setNoModels] = useState(false);
   const [working, setWorking] = useState(false);
@@ -471,6 +468,7 @@ function EditSource(props: {
           if (controller.signal.aborted) return;
           setWorking(false);
           setProblem({
+            kind: "failure",
             title: "The check didn't start",
             reason: problemReason(error),
           });
@@ -490,6 +488,7 @@ function EditSource(props: {
         if (signal.aborted) return;
         if (!look.found) {
           setProblem({
+            kind: "failure",
             title: "Models didn't load",
             reason: problemText(look.problem, opened.source),
           });
@@ -502,6 +501,7 @@ function EditSource(props: {
       .catch((error: unknown) => {
         if (!signal.aborted)
           setProblem({
+            kind: "failure",
             title: "Models didn't load",
             reason: problemReason(error),
           });
@@ -556,8 +556,9 @@ function EditSource(props: {
       const status = (error as { status?: number }).status;
       setProblem(
         action === "key" && status === 403
-          ? { reason: problemText("key", source), refused: true }
+          ? { kind: "key-refusal", reason: problemText("key", source) }
           : {
+              kind: "failure",
               title:
                 action === "rename"
                   ? `${source.computer ?? name} wasn't renamed`
@@ -618,7 +619,7 @@ function EditSource(props: {
             <DialogHeader>
               <DialogTitle>Check again</DialogTitle>
             </DialogHeader>
-            {problem?.title && (
+            {problem?.kind === "failure" && (
               <Problem title={problem.title}>{problem.reason}</Problem>
             )}
             <DialogFooter>
@@ -669,14 +670,16 @@ function EditSource(props: {
                 disabled={working}
                 onChange={(event) => {
                   setText(event.target.value);
-                  if (problem?.refused) setProblem(undefined);
+                  if (problem?.kind === "key-refusal") setProblem(undefined);
                 }}
                 required
                 autoFocus
-                aria-invalid={!!problem?.refused}
+                aria-invalid={problem?.kind === "key-refusal"}
               />
             )}
-            {problem?.refused && <SheetProblem>{problem.reason}</SheetProblem>}
+            {problem?.kind === "key-refusal" && (
+              <SheetProblem>{problem.reason}</SheetProblem>
+            )}
             {action === "model" && models && (
               <ModelPicker
                 aria-label="Model"
@@ -691,7 +694,7 @@ function EditSource(props: {
                 This source has no models to choose from.
               </p>
             )}
-            {problem?.title && (
+            {problem?.kind === "failure" && (
               <Problem title={problem.title}>{problem.reason}</Problem>
             )}
             <DialogFooter>

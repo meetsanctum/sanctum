@@ -12,7 +12,7 @@ import { ChevronRight, CircleAlert, Play, Plus } from "lucide-react";
 import { Fragment, useState } from "react";
 
 import { blockedBy, blockedLine } from "./blocked";
-import { pieceOf, problemOf, type Automations } from "./data";
+import { pieceOf, runProblemOf, type Automations } from "./data";
 import { PieceIcon, Status, TriggerCard } from "./parts";
 import { listStatus, nextOf } from "./when";
 import {
@@ -107,7 +107,7 @@ export function AutomationsList(props: {
   const clock = useHomeClock();
   const { workflows, pieces, problem, load } = props.automations;
   const [running, setRunning] = useState<string>();
-  // The automation that didn't run, and why.
+  // The automation whose run couldn't be started or confirmed.
   const [runProblem, setRunProblem] = useState<{
     id: string;
     title: string;
@@ -123,8 +123,7 @@ export function AutomationsList(props: {
     } catch (error) {
       setRunProblem({
         id: workflow.id,
-        title: `${workflow.name} didn't run`,
-        reason: problemOf(error),
+        ...runProblemOf(workflow.name, error),
       });
     } finally {
       setRunning(undefined);
@@ -174,10 +173,16 @@ export function AutomationsList(props: {
     );
   }
 
+  const detachedRunProblem = runProblem &&
+    !workflows.some((workflow) => workflow.id === runProblem.id) && (
+      <Problem title={runProblem.title}>{runProblem.reason}</Problem>
+    );
+
   if (workflows.length === 0) {
     return (
       <>
         {bar}
+        {detachedRunProblem}
         <Card className="max-w-160 gap-2.5 px-5.5 pt-5 pb-5.5">
           <p className="m-0 text-[15px] leading-[22px] font-medium">
             No automations yet
@@ -206,6 +211,7 @@ export function AutomationsList(props: {
   return (
     <>
       {bar}
+      {detachedRunProblem}
       <div className="flex flex-col gap-6">
         {[...groups].map(([group, rows], index) => (
           <PageSection key={group} id={`automations-${index}`} title={group}>

@@ -3,6 +3,7 @@ import { act } from "react";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 
 import { CoreError, coreJson } from "../src/core-fetch";
+import { problemLines } from "./problem-lines";
 import { mac, now, router } from "./settings-models-fixtures";
 import {
   anthropic,
@@ -19,7 +20,6 @@ import {
   selectMenuItem,
   show,
 } from "./settings-models-support";
-import { problemLines } from "./problem-lines";
 
 vi.mock("../src/core-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/core-fetch")>()),
@@ -159,6 +159,17 @@ describe("AI model source dialogs", () => {
     );
   });
 
+  it("explains when a saved source lists no models to choose from", async () => {
+    await show();
+    vi.mocked(coreJson).mockResolvedValueOnce({ found: true, models: [] });
+    await selectMenuItem("Change model");
+    expect(dialog()?.textContent).toContain(
+      "This source has no models to choose from.",
+    );
+    expect(dialog()?.querySelector('[role="alert"]')).toBeNull();
+    expect(button("Save").disabled).toBe(true);
+  });
+
   it("replaces the key for a saved Anthropic source", async () => {
     pacedSteps();
     page.sources.push(anthropic);
@@ -185,6 +196,43 @@ describe("AI model source dialogs", () => {
     );
     await click(button("Done"));
     expect(dialog()).toBeNull();
+  });
+
+  it("marks a refused replacement key until the field is edited", async () => {
+    page.sources.push(anthropic);
+    await show();
+    await selectMenuItem("Replace key", anthropic);
+    const key = document.querySelector<HTMLInputElement>(
+      'input[aria-label="API key"]',
+    )!;
+    await enterText(key, "sk-ant-api03-refused-test-key");
+    vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(403, "forbidden"));
+    await click(button("Save"));
+    const alert = () => dialog()?.querySelector('[role="alert"]');
+    expect(alert()?.textContent).toContain(
+      "Anthropic didn't take that key. Check it in your account there.",
+    );
+    expect(alert()?.querySelector("[data-slot=alert-title]")).toBeNull();
+    expect(key.getAttribute("aria-invalid")).toBe("true");
+    await enterText(key, "sk-ant-api03-another-test-key");
+    expect(key.getAttribute("aria-invalid")).toBe("false");
+    expect(alert()).toBeNull();
+  });
+
+  it("reports a lost address check without repeating credentials or marking the field invalid", async () => {
+    page.sources = [];
+    await show();
+    await click(place("On a computer in your home"));
+    const address = labelled("Address");
+    await enterText(address, "http://user:example-password@studio.local");
+    vi.mocked(coreJson).mockRejectedValueOnce(new Error("Disconnected"));
+    await click(button("Check"));
+    expect(problemLines(dialog()?.querySelector('[role="alert"]'))).toEqual([
+      "Couldn't check the address",
+      "Sanctum didn't answer. Check that it's on, then try again.",
+    ]);
+    expect(address.getAttribute("aria-invalid")).toBe("false");
+    expect(button("Check again").disabled).toBe(false);
   });
 
   it("adds a computer once Sanctum has found Ollama there", async () => {

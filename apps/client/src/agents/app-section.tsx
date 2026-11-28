@@ -13,7 +13,7 @@ import {
   CanUseRow,
   CanUseRows,
   switchProblem,
-  type SwitchProblem,
+  useSwitchProblem,
 } from "./rows";
 import {
   canUseTitle,
@@ -39,8 +39,8 @@ export function AppCanUseSection(props: {
   const { agents } = useAgents(props.live);
   const { canUse, acceptChange, refresh } = useAiCanUse(props.live);
   const [pending, setPending] = useState<{ id: string; on: boolean }>();
-  const [problem, setProblem] = useState<SwitchProblem>();
   const offers = offersOf(canUse, props.app.id);
+  const [problem, setProblem] = useSwitchProblem(offers);
   const hasAgent =
     (agents?.length ?? 0) > 0 ||
     // An assistant app never uses its own offers.
