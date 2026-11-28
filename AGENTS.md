@@ -246,11 +246,11 @@ What is under which licence, and what neither covers, is in
 Several worktrees' agents usually share one computer, and each full run
 fills it: Vitest starts a worker per core in every package Turbo runs. So the
 full set runs under one lock for the whole computer, from the repository
-root. Use the same lock for equivalent full runs, including direct
-`pnpm turbo run` invocations. The command waits for another worktree's run
-to finish and holds the lock to its last step (on Linux, `flock` takes the
-place of `lockf -k`). Use a background session or allow enough time for both
-the wait and the checks.
+root, and so does any other full run of these tasks, such as one
+`pnpm turbo run`. The command waits for another worktree's run to finish and
+holds the lock to its last step, so start it in the background or with a
+timeout long enough for both (on Linux, `flock` takes the place of
+`lockf -k`):
 
 ```sh
 lockf -k /tmp/sanctum-verification.lock sh -ec '
@@ -278,7 +278,7 @@ CI found, when CI can't run, and before merging a change to app packaging
 that the workflow skips, such as a change to the page builder in
 `packages/ui-sdk/tools/`.
 
-Run local container tests under the same lock.
+Local container test runs take the same lock:
 
 ```sh
 lockf -k /tmp/sanctum-verification.lock pnpm test:containers
