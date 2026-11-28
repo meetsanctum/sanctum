@@ -9,13 +9,7 @@ import {
   type RequestReply,
 } from "@meetsanctum/app-sdk";
 
-import {
-  match,
-  matchesRoomMood,
-  normalized,
-  type HomeNames,
-  type Matched,
-} from "./matching.js";
+import { match, normalized, type HomeNames, type Matched } from "./matching.js";
 import {
   replies,
   type LightsState,
@@ -58,6 +52,10 @@ function namesOf(overview: Overview): HomeNames {
 }
 
 type Target = { place: Place; subject: Subject } | { reply: string };
+
+// No names at all, for what needs none: one object, so its expressions are
+// made once.
+const none: HomeNames = { room: [], floor: [], light: [], mood: [] };
 
 function targetOf(
   matched: Matched,
@@ -241,7 +239,7 @@ function lightsReply(
         words,
         warning.minimumLength,
       );
-      return { text: warning.appendTo(reply.text) };
+      return { ...reply, text: warning.appendTo(reply.text) };
     }
   }
   // A white leaves only lights that are as white as they get.
@@ -401,7 +399,6 @@ export async function answerRequest(
   try {
     // Undo and timer requests don't need the home's names. Lighting phrases
     // can name a device even when they also match a room or whole-home phrase.
-    const none: HomeNames = { room: [], floor: [], light: [], mood: [] };
     const unnamed = match(request.text, language, none);
     if (unnamed?.intent.do === "timer") return { text: words.noTimers };
     if (unnamed?.intent.do === "restore") return await putBack(ctx, words);
@@ -411,31 +408,11 @@ export async function answerRequest(
     const overview = read.value as Overview;
     const names = namesOf(overview);
     const matched = match(request.text, language, names);
-    if (matched) {
-      if (
-        matched.intent.do === "look" &&
-        matchesRoomMood(request.text, language, names.room)
-      ) {
-        const lookedUp = await readMoods(ctx);
-        if (!lookedUp.ok) {
-          return { text: words.failed(lookedUp.words, lookedUp.error) };
-        }
-        for (const room of overview.rooms) {
-          const moodNames = lookedUp.moods
-            .filter((mood) => mood.state.placeId === room.id)
-            .map((mood) => mood.name);
-          if (
-            moodNames.length > 0 &&
-            matchesRoomMood(request.text, language, [room.name], moodNames)
-          ) {
-            return { text: words.lightOrMood };
-          }
-        }
-      }
+    if (matched)
       return await changeLights(ctx, matched, overview, request, words);
-    }
 
-    // Other lighting requests don't need to wait for the list of moods.
+    // A mood's name only after nothing else matched: its list is a read of
+    // its own, which lights don't wait for.
     const lookedUp = await readMoods(ctx);
     if (!lookedUp.ok) {
       return { text: words.failed(lookedUp.words, lookedUp.error) };

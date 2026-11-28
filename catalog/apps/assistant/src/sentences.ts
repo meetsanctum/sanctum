@@ -280,8 +280,7 @@ const en: LanguageSentences = {
       template: "(set|change|turn) [the] (light|lights) to <look>",
       intent: lookOf("here"),
     },
-    // A room's mood, by its name. A look that also matches a mood asks
-    // which was meant before changing the lights.
+    // A room's mood, by its name: after the lights, so a light's name wins.
     {
       template: "(set|switch|change) [the] {room} to {mood}",
       intent: { do: "mood" },

@@ -172,6 +172,7 @@ describe("the Assistant's whites and colours", () => {
     ).toEqual([
       {
         text: "Office lights blue. Shelf and Strip can't show colours.",
+        confirmation: true,
       },
     ]);
     expect(
@@ -245,6 +246,7 @@ describe("the Assistant's whites and colours", () => {
     ).toEqual([
       {
         text: "Office: Licht magenta. Shelf kann keine Farben zeigen.",
+        confirmation: true,
       },
     ]);
     expect(

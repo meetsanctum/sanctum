@@ -65,7 +65,6 @@ export type Replies = {
   duplicateMood(mood: string, room: string | null): string;
   /** Several rooms have a mood of that name, and none was said. */
   whichMoodRoom(mood: string): string;
-  lightOrMood: string;
   noTimers: string;
   notInARoom: string;
   whichRoom: string;
@@ -196,8 +195,6 @@ const en: Replies = {
       : `More than one mood in the same room is called ${mood}.`,
   whichMoodRoom: (mood) =>
     `Which room? Several have a mood called ${mood}. Say the room too.`,
-  lightOrMood:
-    "Did you mean to change the lights or start a mood? Say ‘make’ for lights or ‘start’ for a mood.",
   noTimers: "I can't set timers yet.",
   notInARoom: "I'm not in a room yet. Choose my room in Settings, Devices.",
   whichRoom: "Which room's lights? Say the room too.",
@@ -307,8 +304,6 @@ const de: Replies = {
       : `Mehrere Stimmungen im selben Raum heißen „${mood}“.`,
   whichMoodRoom: (mood) =>
     `Welcher Raum? Mehrere haben die Stimmung „${mood}“. Sag den Raum mit dazu.`,
-  lightOrMood:
-    "Möchtest du das Licht ändern oder eine Stimmung starten? Sag „mach“ für das Licht oder „starte“ für die Stimmung.",
   noTimers: "Ich kann noch keine Timer stellen.",
   notInARoom:
     "Ich bin noch in keinem Raum. Wähle meinen Raum unter Settings, Devices.",

@@ -65,7 +65,6 @@ export function compile(
   template: string,
   choices: Choices,
   names: HomeNames,
-  openMood = false,
 ): RegExp | null {
   let pattern = "";
   const tokens =
@@ -80,8 +79,7 @@ export function compile(
     else if (/^\s+$/u.test(token)) pattern += "\\s*";
     else if (token.startsWith("{")) {
       const blank = token.slice(1, -1) as SentenceBlank;
-      const alternatives =
-        openMood && blank === "mood" ? ".+" : wordsPattern(names[blank] ?? []);
+      const alternatives = wordsPattern(names[blank] ?? []);
       if (!alternatives) return null;
       pattern += `${notLetter}(?<${blank}>${alternatives})${notLetterAfter}`;
     } else if (token.startsWith("<percent>") && token !== "<percent>") {
@@ -99,28 +97,36 @@ export function compile(
   return new RegExp(`^\\s*${pattern}\\s*$`, "u");
 }
 
-/** Whether the words name a room's mood, even before its names are read. */
-export function matchesRoomMood(
-  text: string,
-  language: LanguageSentences,
-  room: readonly string[],
-  mood?: readonly string[],
-) {
-  const words = normalized(text);
-  const names: HomeNames = { room, mood: mood ?? [], floor: [], light: [] };
-  return language.sentences.some(
-    ({ template, intent }) =>
-      intent.do === "mood" &&
-      template.includes("{room}") &&
-      compile(template, language.choices, names, mood === undefined)?.test(
-        words,
-      ),
-  );
-}
-
 // The name as the home writes it, for the words that matched it.
 function nameOf(names: readonly string[], matched: string) {
   return names.find((name) => normalized(name) === normalized(matched));
+}
+
+// Each template's expression for one language and one set of names, made
+// when first needed and kept while the names are: a request matches the
+// same names more than once, and a light's name makes a long expression.
+const expressions = new WeakMap<
+  LanguageSentences,
+  WeakMap<HomeNames, (RegExp | null)[]>
+>();
+
+function expressionOf(
+  language: LanguageSentences,
+  names: HomeNames,
+  index: number,
+) {
+  let byNames = expressions.get(language);
+  if (!byNames) expressions.set(language, (byNames = new WeakMap()));
+  let made = byNames.get(names);
+  if (!made) byNames.set(names, (made = []));
+  if (made[index] === undefined) {
+    made[index] = compile(
+      language.sentences[index]!.template,
+      language.choices,
+      names,
+    );
+  }
+  return made[index];
 }
 
 /** The first sentence that matches the words, or null for none. */
@@ -130,8 +136,8 @@ export function match(
   names: HomeNames,
 ): Matched | null {
   const words = normalized(text);
-  for (const { template, intent } of language.sentences) {
-    const found = compile(template, language.choices, names)?.exec(words);
+  for (const [index, { intent }] of language.sentences.entries()) {
+    const found = expressionOf(language, names, index)?.exec(words);
     if (!found) continue;
     const groups = found.groups ?? {};
     const matched: Matched = { intent, names: {}, choices: {} };
