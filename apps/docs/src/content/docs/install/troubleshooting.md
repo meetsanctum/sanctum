@@ -46,6 +46,12 @@ appears later is listed by itself.
   Smart speakers fetch what Sanctum says on TCP port 4180, over plain HTTP
   from your home's network only.
 
+## Nobody can sign in
+
+If you forget your password and no one else at home can sign in, see
+[If you forget your password](/people/forgotten-password/): a code made on
+Sanctum itself is the last way back in.
+
 ## Zigbee does not start
 
 Settings → System says what is missing: no stick plugged in, or

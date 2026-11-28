@@ -397,6 +397,13 @@ describe("Forgot your password?", () => {
       "No code? Someone at home can make you one on your page in Settings → People.",
     );
     expect(document.activeElement).toBe(forgotField());
+    const docs = [...container.querySelectorAll("a")].find(
+      (each) => each.textContent === "How to make a password code",
+    );
+    expect(docs?.getAttribute("href")).toBe(
+      "https://docs.meetsanctum.com/people/forgotten-password/#on-sanctum-itself",
+    );
+    expect(docs?.getAttribute("target")).toBe("_blank");
     await click("Back");
     expect(title()).toBe("Sign in to Office");
   });

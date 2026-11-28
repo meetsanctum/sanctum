@@ -7,6 +7,7 @@ import { createCoreCertificates } from "./certificate.js";
 import type { CoreConfig } from "./config.js";
 import { openCoreDatabase, type CoreDatabase } from "./database.js";
 import { createCoreLifecycle, type CoreSteps } from "./lifecycle.js";
+import { createLocalAccess, localSocketPath } from "./local-access.js";
 import { createManagerClient, type ManagerClient } from "./manager.js";
 import { createModules, type Modules } from "./modules.js";
 import { loadHomeId } from "./places/places.js";
@@ -115,6 +116,7 @@ export function createCore(
   let reportAgain: NodeJS.Timeout | undefined;
   let askAgain: NodeJS.Timeout | undefined;
   let server: ReturnType<typeof createServer> | undefined;
+  let local: ReturnType<typeof createLocalAccess> | undefined;
   let shipped: string[] = [];
   const started = new Set<string>();
   const onTrial = () => lifecycle.readiness() === "healthOnly";
@@ -469,6 +471,29 @@ export function createCore(
           );
         },
       ],
+      // Commands run on the host, inside this container, reach the core
+      // through a private socket outside its data volume.
+      [
+        "listen on the local socket",
+        async () => {
+          if (replaced.listens === false) return;
+          const invites = modules!.auth.invites;
+          local = createLocalAccess(
+            localSocketPath(config.dataDir),
+            {
+              signIns: () => invites.signIns(),
+              updatePending: onTrial,
+              makeCode: (username, replace) =>
+                invites.makeOnHost(username, replace),
+            },
+            log,
+          );
+          // Only a last way back in: the home is served without it.
+          await local.listen().catch((error: unknown) => {
+            log(`local socket: ${String(error)}`);
+          });
+        },
+      ],
     ],
 
     // The modules' own, once they're built.
@@ -490,6 +515,7 @@ export function createCore(
         ["stop the certificate's watch", () => certificates?.close()],
         ["stop the manager link", () => manager?.close()],
         ["stop the update's watch", () => updatePending?.close()],
+        ["close the local socket", () => local?.close()],
         ["close the server", () => server?.close()],
         [
           "stop the activity log",
