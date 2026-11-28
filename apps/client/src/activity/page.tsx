@@ -154,6 +154,7 @@ export function ActivityPage(props: {
         <Section id="activity-problem" title="Activity">
           <ActivityProblem
             what="Activity didn't load"
+            reason={activity.problem}
             onRetry={activity.retry}
           />
         </Section>
@@ -185,6 +186,7 @@ export function ActivityPage(props: {
           <ActivityEnd
             more={activity.more}
             older={activity.older}
+            problem={activity.problem}
             end={endWords(kind)}
             onOlder={activity.loadOlder}
           />

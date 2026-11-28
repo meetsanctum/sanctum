@@ -25,7 +25,7 @@ import {
 import { memo, useId, useState } from "react";
 
 import { AppIcon } from "../app-icon";
-import { productName } from "../brand";
+import { problemReason } from "../device-parts";
 import { Avatar } from "../components";
 import { Skeleton } from "../components/ui/skeleton";
 import type { ActivityState, Folded } from "./data";
@@ -210,11 +210,16 @@ export function ActivitySkeleton() {
 }
 
 /** Why the log is not shown, and how to try again. */
-export function ActivityProblem(props: { what: string; onRetry: () => void }) {
+export function ActivityProblem(props: {
+  what: string;
+  // Why it didn't load.
+  reason?: string;
+  onRetry: () => void;
+}) {
   return (
     <div className="flex flex-col items-start gap-2">
       <Problem title={props.what}>
-        {`${productName} didn't answer in time. Try again in a moment.`}
+        {props.reason ?? problemReason(undefined)}
       </Problem>
       <Button variant="outline" size="sm" onClick={props.onRetry}>
         Try again
@@ -227,6 +232,8 @@ export function ActivityProblem(props: { what: string; onRetry: () => void }) {
 export function ActivityEnd(props: {
   more: boolean;
   older: ActivityState;
+  // Why older activity didn't load.
+  problem?: string;
   end: string;
   onOlder: () => void;
 }) {
@@ -234,6 +241,7 @@ export function ActivityEnd(props: {
     return (
       <ActivityProblem
         what="Older activity didn't load"
+        reason={props.problem}
         onRetry={props.onOlder}
       />
     );

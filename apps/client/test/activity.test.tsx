@@ -15,11 +15,15 @@ import {
 import { ActivityPage } from "../src/activity/page";
 import { coreJson } from "../src/core-fetch";
 import { entry } from "./activity-fixtures";
+import { problemLines } from "./problem-lines";
 
 // The device's own zone, which the expectations here are worked out in.
 const clock = homeClock();
 
-vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
+vi.mock("../src/core-fetch", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/core-fetch")>()),
+  coreJson: vi.fn(),
+}));
 
 // The activity log in the client: the lists that follow it live, and the
 // home's Activity. How each entry reads is in activity-words.test.ts.
@@ -482,7 +486,10 @@ describe("the home's Activity", () => {
         <ActivityPage apps={[]} live={live} onDone={() => undefined} />,
       );
     });
-    expect(container.textContent).toContain("Activity didn't load");
+    expect(problemLines(container.querySelector('[role="alert"]'))).toEqual([
+      "Activity didn't load",
+      "Sanctum didn't answer. Check that it's on, then try again.",
+    ]);
     await click("Try again");
     expect(container.textContent).toContain("Ran Evening");
   });

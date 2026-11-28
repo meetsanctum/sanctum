@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { date } from "@meetsanctum/app-sdk/words";
 
 import { coreJson } from "../core-fetch";
+import { problemReason } from "../device-parts";
 
 // What the activity lists show: pages of entries from GET /api/activity,
 // newest first, and each entry the live socket brings that belongs, in its
@@ -175,6 +176,8 @@ export function useActivity(
   });
   const [state, setState] = useState<ActivityState>("loading");
   const [older, setOlder] = useState<ActivityState>("ready");
+  // Why the last read that failed did, for its notice.
+  const [problem, setProblem] = useState<string>();
   const [attempt, setAttempt] = useState(0);
   const { device, kind } = filter;
   const current = useRef(0);
@@ -256,8 +259,11 @@ export function useActivity(
         });
         setState("ready");
       })
-      .catch(() => {
-        if (load === current.current && !isRefresh) setState("failed");
+      .catch((error: unknown) => {
+        if (load === current.current && !isRefresh) {
+          setProblem(problemReason(error));
+          setState("failed");
+        }
       });
     return () => {
       current.current++;
@@ -287,9 +293,10 @@ export function useActivity(
         isLoadingOlder.current = false;
         setOlder("ready");
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (load === current.current) {
           isLoadingOlder.current = false;
+          setProblem(problemReason(error));
           setOlder("failed");
         }
       });
@@ -300,6 +307,7 @@ export function useActivity(
     state,
     more,
     older,
+    problem,
     loadOlder,
     retry: () => setAttempt((count) => count + 1),
   };
