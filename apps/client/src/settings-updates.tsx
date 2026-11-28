@@ -189,11 +189,8 @@ function Updates(props: {
   const [selected, setSelected] = useState<string>();
   const [confirming, setConfirming] = useState<string>();
   const [starting, setStarting] = useState(false);
-  // What failed: reading the versions, or starting an update.
-  const [problem, setProblem] = useState<{
-    of: "versions" | "update";
-    reason: string;
-  }>();
+  const [versionsProblem, setVersionsProblem] = useState<string>();
+  const [updateProblem, setUpdateProblem] = useState<string>();
 
   // What the host can update to. Cleanup can remove builds from the registry.
   useEffect(() => {
@@ -210,16 +207,15 @@ function Updates(props: {
             ? current
             : undefined,
         );
-        setProblem(undefined);
+        setVersionsProblem(undefined);
       } catch (error) {
         if (!isCurrent) return;
         const away = isAway(error);
-        setProblem({
-          of: "versions",
-          reason: away
+        setVersionsProblem(
+          away
             ? `${productName} didn't answer. It asks again every few seconds.`
             : problemText(error),
-        });
+        );
         if (away) timer = setTimeout(load, 2_000);
       }
     };
@@ -257,13 +253,13 @@ function Updates(props: {
   const start = async () => {
     if (!canUpdate || !confirming || confirming !== choice) return;
     setStarting(true);
-    setProblem(undefined);
+    setUpdateProblem(undefined);
     try {
       const { update: started } = await systemUpdate.start(confirming);
       followStart(started);
       setSelected(undefined);
     } catch (error) {
-      setProblem({ of: "update", reason: problemText(error) });
+      setUpdateProblem(problemText(error));
     } finally {
       setStarting(false);
       setConfirming(undefined);
@@ -335,16 +331,13 @@ function Updates(props: {
           </Button>
         </>
       )}
-      {problem && (problem.of === "update" || isDev) && (
-        <Problem
-          title={
-            problem.of === "update"
-              ? "The update didn't start"
-              : "Versions didn't load"
-          }
-        >
-          {problem.reason}
-        </Problem>
+      {updateProblem ? (
+        <Problem title="The update didn't start">{updateProblem}</Problem>
+      ) : (
+        isDev &&
+        versionsProblem && (
+          <Problem title="Versions didn't load">{versionsProblem}</Problem>
+        )
       )}
       <Dialog
         open={confirming !== undefined}

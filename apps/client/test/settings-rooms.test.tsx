@@ -461,7 +461,7 @@ describe("Settings → Rooms", () => {
     expect(button("Remove").disabled).toBe(true);
   });
 
-  it("checks again what goes with the room with Try again", async () => {
+  it("requires a separate confirmation after retrying the room preview", async () => {
     const original = vi.mocked(coreJson).getMockImplementation()!;
     let unanswered = true;
     vi.mocked(coreJson).mockImplementation(async (path, init) => {
@@ -477,18 +477,33 @@ describe("Settings → Rooms", () => {
       "Couldn't check what goes with Office",
       "Sanctum didn't answer. Check that it's on, then try again.",
     ]);
+    const retry = button("Try again");
+    const remove = button("Remove");
+    expect(remove.disabled).toBe(true);
+    expect(retry.type).toBe("button");
     unanswered = false;
-    await act(async () => button("Try again").click());
+    await act(async () => retry.click());
 
     expect(dialog()!.querySelector("[role=alert]")).toBeNull();
-    expect(button("Remove").disabled).toBe(false);
+    expect(retry.isConnected).toBe(false);
+    expect(remove.disabled).toBe(false);
     expect(requests).toContainEqual({
       path: "/api/places/rooms/removal?id=office",
       json: undefined,
     });
+    await act(async () => {
+      remove.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true, detail: 2 }),
+      );
+    });
     expect(requests.map((request) => request.path)).not.toContain(
       "/api/places/rooms/remove",
     );
+    await act(async () => remove.click());
+    expect(requests).toContainEqual({
+      path: "/api/places/rooms/remove",
+      json: { id: "office" },
+    });
   });
 
   it("leaves a later dialog open when an earlier answer comes late", async () => {
