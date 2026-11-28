@@ -112,13 +112,14 @@ describe("a smart speaker's run", () => {
     expect(kinds(await read(run))).toEqual(["stopped"]);
   });
 
-  it("tells the driver the hearer's steps, the reply's moment kept", async () => {
+  it("tells the driver the hearer's steps and keeps recognition and reply times", async () => {
     const { heard, open, read, tick } = setup();
     const run = open();
     const hearing = heard[0]!;
     hearing.stopListening();
-    hearing.heard("turn off the office lights");
-    tick(500);
+    tick(200);
+    hearing.recognised("turn off the office lights");
+    tick(300);
     hearing.reply("http://192.168.1.2:4180/r/abc.flac", "Done");
     hearing.done();
     expect(await read(run)).toEqual([
@@ -134,6 +135,7 @@ describe("a smart speaker's run", () => {
     expect(hearing.moments).toMatchObject({
       heard: 1_000,
       stoppedListening: 1_000,
+      heardWords: 1_200,
       replyReady: 1_500,
     });
     expect(hearing.signal.aborted).toBe(true);
@@ -143,7 +145,7 @@ describe("a smart speaker's run", () => {
     const { heard, open, read } = setup();
     const run = open();
     const reading = read(run, 0);
-    heard[0]!.heard("lights off");
+    heard[0]!.recognised("lights off");
     expect(kinds(await reading)).toEqual(["heard"]);
   });
 
