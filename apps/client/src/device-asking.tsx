@@ -4,8 +4,8 @@ import type {
   DeviceAsking,
   DeviceQuestion,
 } from "@meetsanctum/app-sdk";
-import { useEffect, useState } from "react";
 import { FieldProblem } from "@meetsanctum/ui-sdk";
+import { useEffect, useState } from "react";
 
 import { coreFetch } from "./core-fetch";
 import { QuestionField, refusalWords } from "./device-questions";

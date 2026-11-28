@@ -27,10 +27,10 @@ export function Problem(props: {
 }
 
 /**
- * What to change in a field, under it: a red sign with red
- * words, such as "Use a number from 1 to 14." It is not a notice, since the
- * field is where it's fixed. Give the field `aria-invalid` and point its
- * `aria-describedby` at this line's `id`.
+ * What to change in a field, under it: a red sign with red words, such as
+ * "Use a number from 1 to 14." It is not a notice, since the field is where
+ * it's fixed. Give the field `aria-invalid` and point its `aria-describedby`
+ * at this line's `id`.
  */
 export function FieldProblem(props: {
   /** For the field's aria-describedby. */
