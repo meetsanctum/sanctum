@@ -2,14 +2,16 @@ import type { DeviceInfo, Places } from "@meetsanctum/app-sdk";
 import {
   Button,
   icons,
-  tileIconOf,
   type LucideIcon,
+  Problem,
+  tileIconOf,
 } from "@meetsanctum/ui-sdk";
 import type { ReactNode } from "react";
 
 import type { PressChoice, PressPlace } from "../presses/presses.js";
 import type { Mood } from "./mood-draft";
 import { placeLabel, pressVerbs, verbsFor, verbsNote } from "./press-words";
+import type { PressProblem } from "./presses";
 
 // A press's own page in a remote's detail: what it does, from lists with one
 // checkmark, each applying at once: nothing, something to lights, or a mood.
@@ -112,7 +114,7 @@ export function ChoicePage(props: {
   places: Places | undefined;
   devices: readonly DeviceInfo[];
   moods: readonly Mood[];
-  problem: string | null;
+  problem: PressProblem | null;
   isSaving: boolean;
   onBack: () => void;
   onChoose: (choice: PressChoice) => void;
@@ -222,9 +224,7 @@ export function ChoicePage(props: {
         </section>
       )}
       {props.problem && (
-        <p className="m-0 px-1 text-[13px] font-medium text-(--danger)">
-          {props.problem}
-        </p>
+        <Problem title={props.problem.title}>{props.problem.reason}</Problem>
       )}
     </section>
   );

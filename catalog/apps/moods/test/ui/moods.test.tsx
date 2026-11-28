@@ -506,9 +506,16 @@ describe("the mood editor", () => {
     await show(MoodPage, { room: "office", id: "relax" });
     await press("Delete mood");
     await press("Delete");
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      "The mood could not be deleted.",
-    );
+    expect(
+      [
+        ...container.querySelectorAll(
+          '[role="alert"] [data-slot=alert-title], [role="alert"] [data-slot=alert-description]',
+        ),
+      ].map((line) => line.textContent),
+    ).toEqual([
+      "Relax wasn't deleted",
+      "It's still there. Try again in a moment.",
+    ]);
     expect(back).not.toHaveBeenCalled();
   });
 });

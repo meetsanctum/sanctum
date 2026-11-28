@@ -1,4 +1,9 @@
-import { Card, useAppClient, type DevicePageProps } from "@meetsanctum/ui-sdk";
+import {
+  Card,
+  type DevicePageProps,
+  Problem,
+  useAppClient,
+} from "@meetsanctum/ui-sdk";
 import { useEffect, useState } from "react";
 
 import type { DeviceFacts } from "../facts";
@@ -64,12 +69,9 @@ export function DevicePage(props: DevicePageProps) {
 
   if (problem && !facts) {
     return (
-      <p
-        role="alert"
-        className="m-0 px-1 text-[15px] leading-5 text-muted-foreground"
-      >
-        Couldn't load how it's connected. Open its detail again to try again.
-      </p>
+      <Problem title="How it's connected didn't load">
+        Close its detail and open it again.
+      </Problem>
     );
   }
   if (!facts) return null;

@@ -1,16 +1,17 @@
 import type { DeviceInfo, Hearing, SpeechLanguage } from "@meetsanctum/app-sdk";
 import {
   Button,
-  NativeSelect,
-  NativeSelectOption,
-  PageBar,
-  PageSection,
   defineAppUi,
   icons,
   languages,
+  NativeSelect,
+  NativeSelectOption,
+  PageBar,
+  type PageProps,
+  PageSection,
+  Problem,
   speechLanguages,
   useReducedMotion,
-  type PageProps,
 } from "@meetsanctum/ui-sdk";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
@@ -302,8 +303,10 @@ const firstRoom = (
 
 function LoadFailed(props: { onRetry: () => void }) {
   return (
-    <section className={card} role="alert">
-      <p className="m-0 text-sm font-medium">The Assistant didn't answer.</p>
+    <section className={card}>
+      <Problem title="The Assistant's settings didn't load">
+        The Assistant didn't answer. Try again in a moment.
+      </Problem>
       <div className="flex">
         <Button variant="outline" onClick={props.onRetry}>
           Try again
@@ -315,9 +318,9 @@ function LoadFailed(props: { onRetry: () => void }) {
 
 function LanguageChangeError() {
   return (
-    <p className={help} role="alert">
-      The language didn't change. Try again.
-    </p>
+    <Problem title="The language didn't change">
+      The Assistant couldn't save it. Choose it again in a moment.
+    </Problem>
   );
 }
 

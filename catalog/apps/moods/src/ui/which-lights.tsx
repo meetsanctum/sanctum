@@ -11,7 +11,8 @@ import {
   lightsOf,
   type ChosenLight,
 } from "./press-lights";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, Problem } from "@meetsanctum/ui-sdk";
+import type { PressProblem } from "./presses";
 
 // Which lights a press is for: the remote's room, its floor, a zone with
 // it, all lights, or some lights, chosen from a list of the home's lights by room.
@@ -29,7 +30,7 @@ export function WhichLightsPage(props: {
   doing: string;
   dims: boolean;
   isSaving: boolean;
-  problem: string | null;
+  problem: PressProblem | null;
   onBack: () => void;
   onPlace: (place: PressPlace) => Promise<boolean>;
 }) {
@@ -236,9 +237,7 @@ export function WhichLightsPage(props: {
           : ""}
       </Note>
       {props.problem && (
-        <p className="m-0 px-1 text-[13px] font-medium text-(--danger)">
-          {props.problem}
-        </p>
+        <Problem title={props.problem.title}>{props.problem.reason}</Problem>
       )}
     </section>
   );

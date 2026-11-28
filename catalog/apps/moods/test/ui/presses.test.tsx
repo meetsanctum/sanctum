@@ -382,7 +382,9 @@ describe("a remote's presses", () => {
         for (const [listener] of client.subscribe.mock.calls)
           listener.refresh?.();
       });
-      expect(text()).toContain("Couldn't read the presses.");
+      expect(text()).toContain(
+        "Its presses didn't loadClose its detail and open it again.",
+      );
       isFailing = false;
       if (recovery === "refresh") {
         await act(async () => {
@@ -393,7 +395,9 @@ describe("a remote's presses", () => {
         await click(button("Double press"));
         await click(button("Evening"));
       }
-      expect(text()).not.toContain("Couldn't read the presses.");
+      expect(text()).not.toContain(
+        "Its presses didn't loadClose its detail and open it again.",
+      );
     },
   );
 
@@ -456,7 +460,7 @@ describe("a remote's presses", () => {
     await click(button("Find a press"));
     stop.mockRejectedValueOnce(new Error("offline"));
     await click(button("Double press"));
-    expect(text()).toContain("Couldn't stop listening. Try Stop again.");
+    expect(text()).toContain("Listening didn't stopPress Stop again.");
     expect(container.querySelector("h2")?.textContent).toBe(
       "When it's pressed",
     );
@@ -472,7 +476,9 @@ describe("a remote's presses", () => {
     await click(button("Find a press"));
     await act(async () => listener!.ended?.("failed"));
 
-    expect(text()).toContain("Couldn't listen for the remote. Try again.");
+    expect(text()).toContain(
+      "Couldn't listen for the remoteMoods didn't start listening. Try again in a moment.",
+    );
   });
 });
 
@@ -715,7 +721,9 @@ describe("a dimmer's presses", () => {
     await click(button("Some lights"));
     client.call.mockRejectedValueOnce(new Error("save failed"));
     await click(button("Shelf"));
-    expect(text()).toContain("Couldn't change that press");
+    expect(text()).toContain(
+      "That press didn't changeNothing was changed. Try again in a moment.",
+    );
     expect(button("Shelf").getAttribute("aria-checked")).toBe("true");
   });
 

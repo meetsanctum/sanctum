@@ -478,7 +478,9 @@ describe("the Assistant's page", () => {
       select.value = "de";
       select.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    expect(text()).toContain("The language didn't change.");
+    expect(text()).toContain(
+      "The language didn't changeThe Assistant couldn't save it. Choose it again in a moment.",
+    );
   });
 
   it("opens Setup", async () => {
@@ -579,9 +581,16 @@ describe("Setup", () => {
 
     expect(call).toHaveBeenCalledWith("assistant.language", { language: "de" });
     expect(text()).toContain("Step 1 of 2");
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      "The language didn't change. Try again.",
-    );
+    expect(
+      [
+        ...container.querySelectorAll(
+          '[role="alert"] [data-slot=alert-title], [role="alert"] [data-slot=alert-description]',
+        ),
+      ].map((line) => line.textContent),
+    ).toEqual([
+      "The language didn't change",
+      "The Assistant couldn't save it. Choose it again in a moment.",
+    ]);
     expect(button("Continue").disabled).toBe(false);
   });
 

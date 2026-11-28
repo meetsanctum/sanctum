@@ -1,4 +1,4 @@
-import { Button, PageBar, type Tile } from "@meetsanctum/ui-sdk";
+import { Button, PageBar, Problem, type Tile } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -32,7 +32,8 @@ export function useMoodEditing(options: {
   const [previewing, setPreviewing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState<string>();
+  // What didn't happen, and what to do.
+  const [error, setError] = useState<{ title: string; reason: string }>();
   const [failures, setFailures] = useState<ReadonlyMap<string, number>>(
     () => new Map(),
   );
@@ -66,7 +67,10 @@ export function useMoodEditing(options: {
               return counted;
             });
           } catch {
-            setError("The lights could not show the mood.");
+            setError({
+              title: "The lights didn't show the mood",
+              reason: "Moods couldn't send it to them. Try again in a moment.",
+            });
           }
         }
         queue.done = undefined;
@@ -127,7 +131,10 @@ export function useMoodEditing(options: {
       restore.current = null;
       leave();
     } catch {
-      setError("The mood could not be saved.");
+      setError({
+        title: mood ? `${mood.name} wasn't saved` : "The mood wasn't saved",
+        reason: "Nothing was changed. Try again in a moment.",
+      });
       setBusy(false);
     }
   };
@@ -152,7 +159,10 @@ export function useMoodEditing(options: {
       void schedules.load().catch(() => undefined);
       leave();
     } catch (failure) {
-      setError("The mood could not be deleted.");
+      setError({
+        title: mood ? `${mood.name} wasn't deleted` : "The mood wasn't deleted",
+        reason: "It's still there. Try again in a moment.",
+      });
       setConfirming(false);
       setBusy(false);
     }
@@ -259,9 +269,7 @@ export function EditorFooter(props: { editing: MoodEditing; mood?: Mood }) {
   return (
     <>
       {editing.error && (
-        <p role="alert" className="m-0 text-[13px] font-medium text-(--danger)">
-          {editing.error}
-        </p>
+        <Problem title={editing.error.title}>{editing.error.reason}</Problem>
       )}
       {mood && (
         <div className="flex flex-wrap items-center gap-2">
