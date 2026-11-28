@@ -238,6 +238,7 @@ export function createAppContexts(options: {
             run: entry.runId,
             canAdd: entry.manifest.driver?.hooks.includes("add") === true,
             questionsOf: (ids) => shownQuestions(entry.manifest.driver, ids),
+            later: entry.manifest.driver?.addLater ?? [],
             refusals: shownRefusals(entry.manifest.driver),
           }),
       },

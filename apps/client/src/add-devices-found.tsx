@@ -1,12 +1,7 @@
-import type {
-  AddResult,
-  DeviceInfo,
-  DeviceQuestion,
-  FoundDevice,
-} from "@meetsanctum/app-sdk";
+import type { DeviceInfo, FoundDevice } from "@meetsanctum/app-sdk";
 import { Button, Problem } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, type FormEvent } from "react";
 
 import {
   CardFoot,
@@ -17,24 +12,9 @@ import {
   TypeIcon,
   type CardWork,
 } from "./add-devices-cards";
-import { CoreError, coreJson } from "./core-fetch";
-import {
-  answersFor,
-  askingOf,
-  AskingFields,
-  cancelQuietly,
-  endedWords,
-  isAsking,
-  isComplete,
-  isEnded,
-  isLastsUp,
-  lastingOf,
-  newAttemptId,
-  useNow,
-  type Asking,
-} from "./device-asking";
-import { problemReason } from "./device-parts";
-import { QuestionField, refusalWords, type Refused } from "./device-questions";
+import { AskingFields, isComplete } from "./device-asking";
+import { QuestionField } from "./device-questions";
+import { useFoundAdding } from "./found-adding";
 
 // Add devices' page of what drivers found, as on the home's network: a card
 // for each, with Add, which asks in place what its driver needs, such as its
@@ -44,22 +24,6 @@ import { QuestionField, refusalWords, type Refused } from "./device-questions";
 
 export const foundKey = (found: { driver: string; key: string }) =>
   `${found.driver}\u0000${found.key}`;
-
-function addProblem(error: unknown, appName: string | null) {
-  if (error instanceof CoreError) {
-    switch (error.code) {
-      case "unavailable":
-        return `${appName ?? "Its app"} isn't running, so it can't add it now.`;
-      case "timeout":
-        return `${appName ?? "Its app"} didn't answer in time. Try again in a moment.`;
-      case "not_found":
-        return "It's no longer on your network.";
-      case "app_failed":
-        return `${appName ?? "Its app"} ran into a problem. Try again in a moment.`;
-    }
-  }
-  return problemReason(error);
-}
 
 export function FoundPage(props: {
   shown: readonly FoundDevice[];
@@ -139,37 +103,23 @@ function FoundCard(props: {
 }) {
   const ids = useId();
   const { found } = props;
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [refused, setRefused] = useState<Refused>();
-  const [failure, setFailure] = useState<{ reason: string; stopping?: true }>();
-  // What the press under way does: start, answer, ask again or stop.
-  const [doing, setDoing] = useState<
-    "adding" | "checking" | "asking" | "stopping" | null
-  >(null);
-  const request = useRef<{ what: NonNullable<typeof doing> } | null>(null);
-  const [asking, setAsking] = useState<Asking | null>(null);
-  // The attempt open from the first press until it ends.
-  const attempt = useRef<string | null>(null);
-  // An answer that arrives once the card is gone goes nowhere, and an
-  // attempt still open ends with it.
-  const isShown = useRef(true);
-  const device = { driver: found.driver, key: found.key };
-  const deviceRef = useRef(device);
-  deviceRef.current = device;
-  useEffect(() => {
-    isShown.current = true;
-    return () => {
-      isShown.current = false;
-      if (attempt.current) {
-        cancelQuietly("/api/devices/add/cancel", {
-          ...deviceRef.current,
-          attempt: attempt.current,
-        });
-        attempt.current = null;
-      }
-    };
-  }, []);
-  const isWorking = doing !== null || asking !== null;
+  const {
+    answers,
+    answerTo,
+    setAnswer,
+    refused,
+    failure,
+    doing,
+    asking,
+    now,
+    lastsUp,
+    lasting,
+    complete,
+    isWorking,
+    add,
+    submit: send,
+    cancel,
+  } = useFoundAdding(found, props.appName, props.onAdded);
   const onWorkingChange = useRef(props.onWorkingChange);
   onWorkingChange.current = props.onWorkingChange;
   useEffect(() => {
@@ -180,156 +130,10 @@ function FoundCard(props: {
     };
   }, [isWorking]);
 
-  const now = useNow(asking !== null);
-  // The attempt's time ran out: the core ended it.
-  useEffect(() => {
-    if (asking && doing !== "stopping" && now >= asking.until) {
-      attempt.current = null;
-      setAsking(null);
-      setAnswers({});
-      const reason = endedWords("adding", "time", props.appName);
-      setFailure(reason ? { reason } : undefined);
-    }
-  }, [asking, doing, now, props.appName]);
-
-  const answerTo = (id: string) =>
-    Object.hasOwn(answers, id) ? answers[id]! : "";
   const asks = found.asks.length > 0;
-  const complete = isComplete(found.asks, answers);
-  const lastsUp = asking !== null && isLastsUp(asking, now);
-
-  // Takes where adding got to.
-  const took = (result: AddResult, answered: readonly DeviceQuestion[]) => {
-    if (isAsking(result)) {
-      setAsking(askingOf(result, answered));
-      setAnswers({});
-      return;
-    }
-    attempt.current = null;
-    setAsking(null);
-    // Only the initial fields stay on the card for someone to correct.
-    if (asking || !("refused" in result)) setAnswers({});
-    if ("added" in result) {
-      props.onAdded(result.added);
-    } else if ("refused" in result) {
-      // A refusal of adding it at all is said under its card, in its words.
-      const refusal = result.refused;
-      if ("question" in refusal && !asking) {
-        setRefused(refusal);
-      } else {
-        const reason =
-          "question" in refusal
-            ? refusalWords(answered, refusal)
-            : found.refusals[refusal.refusal];
-        setFailure(reason ? { reason } : undefined);
-      }
-    } else if (isEnded(result)) {
-      const reason = endedWords("adding", result.ended, props.appName);
-      setFailure(reason ? { reason } : undefined);
-    }
-  };
-
-  const send = async (
-    what: NonNullable<typeof doing>,
-    path: "/api/devices/add" | "/api/devices/add/cancel",
-    json: Record<string, unknown>,
-    answered: readonly DeviceQuestion[],
-  ) => {
-    if (
-      request.current &&
-      (what !== "stopping" || request.current.what === "stopping")
-    )
-      return;
-    // Cancel can overtake a step's reply. Only the latest request changes the card.
-    const current = { what };
-    request.current = current;
-    const stillCurrent = () => isShown.current && request.current === current;
-    setDoing(what);
-    setRefused(undefined);
-    setFailure(undefined);
-    try {
-      const result = await coreJson<AddResult>(path, {
-        method: "POST",
-        json: { ...device, ...json },
-      });
-      if (!stillCurrent()) return;
-      took(result, answered);
-    } catch (error) {
-      if (!stillCurrent()) return;
-      if (attempt.current) {
-        cancelQuietly("/api/devices/add/cancel", {
-          ...device,
-          attempt: attempt.current,
-        });
-      }
-      attempt.current = null;
-      setAsking(null);
-      setFailure(
-        what === "stopping"
-          ? { reason: problemReason(error), stopping: true }
-          : { reason: addProblem(error, props.appName) },
-      );
-    } finally {
-      if (stillCurrent()) {
-        request.current = null;
-        setDoing(null);
-      }
-    }
-  };
-
-  const add = () => {
-    if (request.current) return;
-    const id = newAttemptId();
-    attempt.current = id;
-    void send(
-      "adding",
-      "/api/devices/add",
-      {
-        answers: Object.fromEntries(
-          found.asks.map((question) => [question.id, answerTo(question.id)]),
-        ),
-        attempt: id,
-      },
-      found.asks,
-    );
-  };
-
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (asking) {
-      const lasting = lastingOf(asking);
-      if (lastsUp && lasting) {
-        void send(
-          "asking",
-          "/api/devices/add",
-          { attempt: asking.attempt, step: asking.step, again: lasting.id },
-          asking.asks,
-        );
-      } else if (isComplete(asking.asks, answers)) {
-        void send(
-          "checking",
-          "/api/devices/add",
-          {
-            attempt: asking.attempt,
-            step: asking.step,
-            answers: answersFor(asking.asks, answers),
-          },
-          asking.asks,
-        );
-      }
-      return;
-    }
-    if (complete) add();
-  };
-
-  const cancel = () => {
-    if (!asking) return;
-    void send(
-      "stopping",
-      "/api/devices/add/cancel",
-      { attempt: asking.attempt },
-      asking.asks,
-    );
+    send();
   };
 
   const label = `Add ${found.name}`;
@@ -344,7 +148,6 @@ function FoundCard(props: {
       {doing === "adding" ? "Adding…" : "Add"}
     </Button>
   );
-  const lasting = asking ? lastingOf(asking) : null;
   return (
     <DeviceCard index={props.index}>
       <CardRound>
@@ -363,10 +166,8 @@ function FoundCard(props: {
             answers={answers}
             now={now}
             narrow
-            disabled={doing !== null}
-            onChange={(question, value) =>
-              setAnswers((before) => ({ ...before, [question]: value }))
-            }
+            disabled={doing !== null || failure?.stopping}
+            onChange={setAnswer}
           />
           {/* Stacked where the card is narrow, the primary action on top. */}
           <div className="mt-1 flex flex-wrap-reverse gap-1.5">
@@ -384,6 +185,7 @@ function FoundCard(props: {
               className="flex-1"
               disabled={
                 doing !== null ||
+                failure?.stopping ||
                 (!lastsUp && !isComplete(asking.asks, answers))
               }
             >
@@ -410,9 +212,7 @@ function FoundCard(props: {
               value={answerTo(question.id)}
               refused={refused}
               narrow
-              onChange={(value) =>
-                setAnswers((before) => ({ ...before, [question.id]: value }))
-              }
+              onChange={(value) => setAnswer(question.id, value)}
               beside={index === found.asks.length - 1 && start}
             />
           ))}

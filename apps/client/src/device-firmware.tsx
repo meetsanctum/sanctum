@@ -198,18 +198,6 @@ export function firmwareStatus(
   return update ?? null;
 }
 
-/** The number of devices with an update to start, for the section's heading. */
-export function updatesHint(devices: readonly DeviceInfo[]) {
-  const count = devices.filter(
-    (device) =>
-      device.firmware?.state === "available" ||
-      device.firmware?.state === "failed",
-  ).length;
-  return count
-    ? plural("en", count, { one: "# update", other: "# updates" })
-    : undefined;
-}
-
 /** What the row's own button does, if it has one: start an update or try again. */
 export function updateButton(
   device: DeviceInfo,

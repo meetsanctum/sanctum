@@ -437,6 +437,7 @@ export function createDriverCore(
           description: each.description,
           type: each.type,
           asks,
+          later: [...(app.driver?.addLater ?? [])],
           refusals: shownRefusals(app.driver),
         };
       });

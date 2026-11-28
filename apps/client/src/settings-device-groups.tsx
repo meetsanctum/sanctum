@@ -1,4 +1,4 @@
-import type { DeviceInfo } from "@meetsanctum/app-sdk";
+import type { DeviceInfo, FoundDevice } from "@meetsanctum/app-sdk";
 import { useHomeClock } from "@meetsanctum/ui-sdk";
 import { CircleAlert, Radio } from "lucide-react";
 import { useEffect, useRef, type RefObject } from "react";
@@ -11,8 +11,10 @@ import { deviceStatus } from "./device-line";
 
 // Settings → Devices' first page: a row for each category the home has
 // devices in, with the sidebar's icon and colour, saying how many devices
-// it has and, before that, how many need attention or have an update, so
-// nothing that needs someone is hidden a level down. A row opens the
+// it has and, before that, how many need attention, have an update or were
+// found on the network to add, so nothing that waits for someone is hidden a
+// level down. A category with nothing added yet shows while something of its
+// kind was found. A row opens the
 // category's page. Back from there puts the keyboard's focus on the row it
 // came from, which is the only time this page moves focus.
 
@@ -25,6 +27,7 @@ export function returnToGroup(id: string) {
 
 export function DeviceGroupList(props: {
   devices: readonly DeviceInfo[];
+  found: readonly FoundDevice[];
   now: number;
   onOpen: (group: string) => void;
   focusFallback: RefObject<HTMLButtonElement | null>;
@@ -32,7 +35,7 @@ export function DeviceGroupList(props: {
   const clock = useHomeClock();
   const { now, focusFallback } = props;
   const rows = useRef(new Map<string, HTMLButtonElement>());
-  const groups = deviceGroups(props.devices);
+  const groups = deviceGroups(props.devices, props.found);
 
   useEffect(() => {
     const id = returningFrom;
@@ -56,8 +59,12 @@ export function DeviceGroupList(props: {
   return (
     <AreaGroup>
       {groups.map((group) => {
-        const counts = groupCounts(group.devices, needsAttention);
-        const plain = [counts.updates, counts.count]
+        const counts = groupCounts(
+          group.devices,
+          needsAttention,
+          group.found.length,
+        );
+        const plain = [counts.updates, counts.found, counts.count]
           .filter(Boolean)
           .join(" · ");
         const look =
@@ -81,14 +88,19 @@ export function DeviceGroupList(props: {
                   />
                   <span className="truncate">
                     <span className="text-destructive">{counts.attention}</span>
-                    {` · ${plain}`}
+                    {plain && ` · ${plain}`}
                   </span>
                 </span>
               ) : (
                 plain
               )
             }
-            spoken={[counts.attention, counts.updates, counts.count]
+            spoken={[
+              counts.attention,
+              counts.updates,
+              counts.found,
+              counts.count,
+            ]
               .filter(Boolean)
               .join(", ")}
             onOpen={() => props.onOpen(group.id)}

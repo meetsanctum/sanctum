@@ -3,6 +3,8 @@ import {
   deviceCategoryOfType,
   type DeviceCategory,
   type DeviceInfo,
+  type DeviceType,
+  type FoundDevice,
 } from "@meetsanctum/app-sdk";
 
 import { categoryOrder } from "./category-looks";
@@ -10,7 +12,9 @@ import { categoryOrder } from "./category-looks";
 // Settings → Devices lists the home's devices by category, each in the one
 // category of its type, so a motion sensor that measures is under Presence
 // alone, and a device no category holds under Unknown Devices, last. Each
-// group opens a page of its own with only its devices.
+// group opens a page of its own with only its devices, and those found on
+// the home's network that its app says are of that kind; one whose app
+// doesn't say is under Unknown Devices until it's added.
 
 /** The group of the devices no category holds. */
 export const unknownGroup = "unknown";
@@ -41,9 +45,19 @@ export function groupNoun(id: string | undefined) {
 export const upperFirst = (text: string) =>
   text.charAt(0).toUpperCase() + text.slice(1);
 
+/** The group a device of a type is listed in. */
+function groupOfType(type: string | null): DeviceGroup {
+  return (type && deviceCategoryOfType(type as DeviceType)?.id) || unknownGroup;
+}
+
 /** The group a device is listed in. */
 export function deviceGroupOf(device: DeviceInfo): DeviceGroup {
-  return deviceCategoryOfType(device.type)?.id ?? unknownGroup;
+  return groupOfType(device.type);
+}
+
+/** The group a device found on the network is listed in, by what its app says it is. */
+export function foundGroupOf(found: Pick<FoundDevice, "type">): DeviceGroup {
+  return groupOfType(found.type);
 }
 
 /** A group's title, the category's own, or none for an id it isn't. */
@@ -53,33 +67,44 @@ export function deviceGroupTitle(id: string | undefined): string | undefined {
 }
 
 /**
- * The groups that have devices, in the sidebar's order with Unknown
- * Devices last, each with its devices in the order given.
+ * The groups that have devices or devices found, in the sidebar's order
+ * with Unknown Devices last, each with its devices and what was found in
+ * the order given.
  */
-export function deviceGroups(devices: readonly DeviceInfo[]) {
-  const byGroup = new Map<DeviceGroup, DeviceInfo[]>();
-  for (const device of devices) {
-    const group = deviceGroupOf(device);
-    const listed = byGroup.get(group);
-    if (listed) listed.push(device);
-    else byGroup.set(group, [device]);
-  }
+export function deviceGroups(
+  devices: readonly DeviceInfo[],
+  found: readonly FoundDevice[] = [],
+) {
+  const byGroup = new Map<
+    DeviceGroup,
+    { devices: DeviceInfo[]; found: FoundDevice[] }
+  >();
+  const of = (group: DeviceGroup) => {
+    let listed = byGroup.get(group);
+    if (!listed) {
+      listed = { devices: [], found: [] };
+      byGroup.set(group, listed);
+    }
+    return listed;
+  };
+  for (const device of devices) of(deviceGroupOf(device)).devices.push(device);
+  for (const each of found) of(foundGroupOf(each)).found.push(each);
   const order = [...categoryOrder, unknownGroup] as const;
   return order.flatMap((id) => {
     const listed = byGroup.get(id);
-    return listed
-      ? [{ id, title: deviceGroupTitle(id)!, devices: listed }]
-      : [];
+    return listed ? [{ id, title: deviceGroupTitle(id)!, ...listed }] : [];
   });
 }
 
 /**
  * What a group's row says of it: how many of its devices need attention,
- * then how many others have an update, then how many it has.
+ * then how many others have an update, then how many were found to add,
+ * then how many it has, where it has any.
  */
 export function groupCounts(
   devices: readonly DeviceInfo[],
   needsAttention: (device: DeviceInfo) => boolean,
+  found = 0,
 ) {
   let attention = 0;
   let updates = 0;
@@ -98,6 +123,9 @@ export function groupCounts(
     updates: updates
       ? `${updates} ${updates === 1 ? "update" : "updates"}`
       : null,
-    count: `${devices.length} ${devices.length === 1 ? "device" : "devices"}`,
+    found: found ? `${found} found` : null,
+    count: devices.length
+      ? `${devices.length} ${devices.length === 1 ? "device" : "devices"}`
+      : null,
   };
 }

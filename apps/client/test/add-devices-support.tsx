@@ -40,6 +40,7 @@ const sensor: FoundDevice = {
   description: "temperature, humidity, motion",
   type: "sensor",
   asks: [],
+  later: [],
   refusals: {
     notWaiting:
       "It stopped waiting for a key. Turn it off and on again, then add it.",
@@ -52,6 +53,7 @@ export const plug: FoundDevice = {
   description: "needs its encryption key",
   type: null,
   asks: [key],
+  later: [],
   refusals: {},
 };
 export const joiningDevice: Omit<JoinedDevice, "stage"> = {

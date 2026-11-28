@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { coreJson } from "../src/core-fetch";
-import { foundHint, useAdding } from "../src/found-devices";
+import { useAdding } from "../src/found-devices";
 
 vi.mock("../src/core-fetch", () => ({ coreJson: vi.fn() }));
 
@@ -28,6 +28,7 @@ const found: PairingInfo = {
       description: null,
       type: null,
       asks: [],
+      later: [],
       refusals: {},
     },
   ],
@@ -53,7 +54,7 @@ async function show() {
   const container = document.createElement("div");
   root = createRoot(container);
   function Hint() {
-    return <span>{foundHint(useAdding(live))}</span>;
+    return <span>{useAdding(live)?.found.length ?? 0}</span>;
   }
   await act(async () => root!.render(<Hint />));
   return container;
@@ -67,7 +68,7 @@ describe("found devices refreshes", () => {
     await act(async () => live.publish({ type: "pairing", pairing: found }));
     await act(async () => reply.resolve(empty));
 
-    expect(container.textContent).toBe("1 found on your network");
+    expect(container.textContent).toBe("1");
   });
 
   it("keeps the latest refresh when reads finish out of order", async () => {
@@ -81,16 +82,6 @@ describe("found devices refreshes", () => {
     await act(async () => next.resolve(found));
     await act(async () => first.resolve(empty));
 
-    expect(container.textContent).toBe("1 found on your network");
-  });
-
-  it("counts the devices an app the home could add found", async () => {
-    vi.mocked(coreJson).mockResolvedValueOnce({
-      ...found,
-      offers: [{ app: "sanctum.example", name: "Example", found: 2 }],
-    });
-    const container = await show();
-
-    expect(container.textContent).toBe("3 found on your network");
+    expect(container.textContent).toBe("1");
   });
 });
