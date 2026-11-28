@@ -6,7 +6,7 @@ import {
   type StaticManifest,
   type WorkflowInfo,
 } from "@meetsanctum/app-sdk";
-import { Button, type LiveFeed } from "@meetsanctum/ui-sdk";
+import { Button, Problem, type LiveFeed } from "@meetsanctum/ui-sdk";
 import { LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
@@ -37,6 +37,7 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import { coreJson } from "./core-fetch";
+import { problemReason } from "./device-parts";
 import { PreferencesSection } from "./settings-preferences";
 import { appSettingsTitle } from "./system-apps";
 
@@ -104,9 +105,7 @@ function TurnOff(props: { app: AppInfo; deviceCount: number }) {
     coreJson<AppInfo>(`/api/apps/${encodeURIComponent(app.id)}/off`, {
       method: "POST",
       json: { off: true },
-    }).catch(() =>
-      setProblem(`${app.name} couldn't be turned off. Try again.`),
-    );
+    }).catch((error: unknown) => setProblem(problemReason(error)));
   };
   return (
     <div className="flex shrink-0 flex-col items-start gap-2">
@@ -114,9 +113,7 @@ function TurnOff(props: { app: AppInfo; deviceCount: number }) {
         Turn off {app.name}
       </Button>
       {problem && (
-        <p role="alert" className="m-0 text-sm text-destructive">
-          {problem}
-        </p>
+        <Problem title={`${app.name} wasn't turned off`}>{problem}</Problem>
       )}
       <Dialog open={isAsking} onOpenChange={setIsAsking}>
         <DialogContent showCloseButton={false}>

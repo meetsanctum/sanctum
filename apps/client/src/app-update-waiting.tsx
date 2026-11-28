@@ -3,7 +3,7 @@ import {
   type AppInfo,
   type AppWaitingUpdate,
 } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, Problem } from "@meetsanctum/ui-sdk";
 import { CircleAlert, Info } from "lucide-react";
 import { useState } from "react";
 import { list } from "@meetsanctum/app-sdk/words";
@@ -21,6 +21,8 @@ import {
   DialogTrigger,
 } from "./components/ui/dialog";
 import { CoreError, coreJson } from "./core-fetch";
+import { possessive } from "./frames/use-frame";
+import { problemReason } from "./device-parts";
 
 // A newer version of an app that needs a permission the household hasn't
 // granted waits for someone to allow it, the app on the version it has. Its
@@ -110,8 +112,8 @@ export function ReviewUpdate(props: {
     } catch (error) {
       setProblem(
         error instanceof CoreError && error.code === "conflict"
-          ? `${app.name} changed meanwhile, as when it was allowed on another device. Close this and look again.`
-          : "That did not work. Try again.",
+          ? "It changed meanwhile, as when it was allowed on another device. Close this and look again."
+          : problemReason(error),
       );
     } finally {
       setPending(false);
@@ -158,9 +160,9 @@ export function ReviewUpdate(props: {
           Turning {many ? "these" : "this"} off later pauses {app.name}.
         </p>
         {problem && (
-          <p role="alert" className="m-0 text-sm text-destructive">
+          <Problem title={`${possessive(app.name)} update wasn't allowed`}>
             {problem}
-          </p>
+          </Problem>
         )}
         <DialogFooter>
           <Button

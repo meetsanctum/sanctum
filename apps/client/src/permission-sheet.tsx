@@ -1,5 +1,5 @@
 import { permissionWords, type AppInfo } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, Problem } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { list } from "@meetsanctum/app-sdk/words";
 
@@ -93,7 +93,7 @@ function PermissionSheet(props: {
 }) {
   const { app, onDone } = props;
   const [pending, setPending] = useState(false);
-  const [problem, setProblem] = useState<string>();
+  const [problem, setProblem] = useState<ReturnType<typeof problemOf>>();
   // What is still off: one granted meanwhile, or by an Allow that failed
   // part way, isn't asked again.
   const off = app
@@ -191,11 +191,7 @@ function PermissionSheet(props: {
               {app.name} settings.
             </p>
           </DialogHeader>
-          {problem && (
-            <p role="alert" className="m-0 text-sm text-destructive">
-              {problem}
-            </p>
-          )}
+          {problem && <Problem title={problem.title}>{problem.reason}</Problem>}
           <DialogFooter>
             <Button
               variant="outline"

@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CoreError, coreJson } from "../src/core-fetch";
 import { StickOffer } from "../src/stick-offer";
+import { problemLines } from "./problem-lines";
 
 // A Zigbee stick plugged in brings up its app's add sheet on this client, and
 // an answer anywhere ends it.
@@ -139,9 +140,10 @@ describe("a stick plugged in", () => {
     vi.mocked(coreJson).mockRejectedValueOnce(new Error("Disconnected"));
 
     await act(async () => button("Cancel")!.click());
-    expect(dialog()?.querySelector('[role="alert"]')?.textContent).toBe(
-      "That did not work. Try again.",
-    );
+    expect(problemLines(dialog()?.querySelector('[role="alert"]'))).toEqual([
+      "This didn't close",
+      "Sanctum didn't answer. Check that it's on, then try again.",
+    ]);
 
     await act(async () => button("Cancel")!.click());
     expect(dialog()).toBeNull();

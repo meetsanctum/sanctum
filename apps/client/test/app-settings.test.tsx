@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppPage } from "../src/app-settings";
 import { CoreError, coreJson } from "../src/core-fetch";
 import { light, remote, zigbee } from "./settings-devices-fixtures";
+import { problemLines } from "./problem-lines";
 
 // An app's settings page: its state, its permissions in Sanctum's words with
 // a switch each, and what it adds, drawn from its manifest's samples with live
@@ -502,9 +503,10 @@ describe("an app's settings page", () => {
 
     await act(async () => switchFor("See your remotes' presses").click());
 
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      "Moods still has “See your remotes' presses”: Sanctum couldn't take it back in time. Try again.",
-    );
+    expect(problemLines(container.querySelector('[role="alert"]'))).toEqual([
+      "“See your remotes' presses” wasn't turned off",
+      "Sanctum couldn't take it back in time, so Moods still has it.",
+    ]);
     expect(
       switchFor("See your remotes' presses").getAttribute("aria-checked"),
     ).toBe("true");

@@ -20,6 +20,7 @@ import { ChevronRight, CircleAlert, Pencil, Play } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { blockedBy, blockedWords } from "./blocked";
+import { possessive } from "../frames/use-frame";
 import { pieceOf, problemOf, type Automations } from "./data";
 import { byHand } from "./list";
 import { MiniAvatar, PieceIcon, Sentence, Status } from "./parts";
@@ -241,7 +242,7 @@ export function AutomationPage(props: {
         <Problem title={problem.title}>{problem.reason}</Problem>
       ) : (
         runsProblem && (
-          <Problem title={`${workflow.name}'s runs didn't load`}>
+          <Problem title={`${possessive(workflow.name)} runs didn't load`}>
             {runsProblem}
           </Problem>
         )

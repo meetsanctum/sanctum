@@ -11,6 +11,7 @@ import { AppNotice, wentBackWords } from "../src/app-state";
 import { appsNotRunning } from "../src/attention";
 import { CoreError, coreJson } from "../src/core-fetch";
 import { entry } from "./activity-fixtures";
+import { problemLines } from "./problem-lines";
 
 // The device's own zone, which the expectations here are worked out in.
 const clock = homeClock();
@@ -200,9 +201,10 @@ describe("what it asks", () => {
 
     await press("Go back");
 
-    expect(host.querySelector('[role="alert"]')?.textContent).toBe(
-      "Moods couldn't go back. Try again.",
-    );
+    expect(problemLines(host.querySelector('[role="alert"]'))).toEqual([
+      "Moods didn't go back to 0.8.0",
+      "Sanctum ran into a problem. Try again in a moment.",
+    ]);
   });
 });
 

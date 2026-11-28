@@ -1,5 +1,5 @@
 import type { AvailableApp } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, Problem } from "@meetsanctum/ui-sdk";
 import { useState } from "react";
 
 import { productName } from "./brand";
@@ -13,6 +13,8 @@ import {
   DialogTrigger,
 } from "./components/ui/dialog";
 import { CoreError, coreJson } from "./core-fetch";
+import { possessive } from "./frames/use-frame";
+import { problemReason } from "./device-parts";
 
 // Deleting a removed app's data at once, rather than once its 30 days are
 // over, from its row under Add apps. Nothing brings it back, so it asks first,
@@ -54,6 +56,7 @@ export function DeleteAppData(props: {
   const [isAsking, setIsAsking] = useState(false);
   const [pending, setPending] = useState(false);
   const [problem, setProblem] = useState<string>();
+  const failed = `${possessive(app.name)} data wasn't all deleted`;
 
   const remove = async () => {
     setPending(true);
@@ -70,8 +73,8 @@ export function DeleteAppData(props: {
       const code = error instanceof CoreError ? error.code : null;
       setProblem(
         code === "unavailable"
-          ? `${productName} can't delete all of ${app.name}'s data right now, and some may already be gone. Try again or check for an update.`
-          : `Not all of ${app.name}'s data could be deleted, and some may already be gone. Try again.`,
+          ? `Some may already be gone. ${productName} can't delete the rest right now: check for an update, then try again.`
+          : `Some may already be gone. ${problemReason(error)}`,
       );
     } finally {
       setPending(false);
@@ -120,11 +123,7 @@ export function DeleteAppData(props: {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {problem && (
-        <p role="alert" className="m-0 text-sm text-destructive">
-          {problem}
-        </p>
-      )}
+      {problem && <Problem title={failed}>{problem}</Problem>}
     </div>
   );
 }

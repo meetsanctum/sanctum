@@ -10,6 +10,7 @@ import { DeleteAppData, deletingWords } from "../src/app-delete-data";
 import { productName } from "../src/brand";
 import { CoreError, coreJson } from "../src/core-fetch";
 import { entry } from "./activity-fixtures";
+import { problemLines } from "./problem-lines";
 
 // The device's own zone, which the expectations here are worked out in.
 const clock = homeClock();
@@ -145,9 +146,10 @@ describe("deleting a removed app's data", () => {
     await press(container, "Delete Example's data now");
     await press(dialog()!, "Delete");
 
-    expect(container.querySelector('[role="alert"]')!.textContent).toBe(
-      `${productName} can't delete all of Example's data right now, and some may already be gone. Try again or check for an update.`,
-    );
+    expect(problemLines(container.querySelector('[role="alert"]'))).toEqual([
+      "Example's data wasn't all deleted",
+      `Some may already be gone. ${productName} can't delete the rest right now: check for an update, then try again.`,
+    ]);
     expect(onDeleted).not.toHaveBeenCalled();
   });
 
@@ -156,9 +158,10 @@ describe("deleting a removed app's data", () => {
     await press(container, "Delete Example's data now");
     await press(dialog()!, "Delete");
 
-    expect(container.querySelector('[role="alert"]')!.textContent).toBe(
-      "Not all of Example's data could be deleted, and some may already be gone. Try again.",
-    );
+    expect(problemLines(container.querySelector('[role="alert"]'))).toEqual([
+      "Example's data wasn't all deleted",
+      "Some may already be gone. Sanctum ran into a problem. Try again in a moment.",
+    ]);
   });
 
   it("gives focus back to the button once Cancel closes it", async () => {

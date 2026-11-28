@@ -29,6 +29,7 @@ import { CoreError, coreJson } from "../src/core-fetch";
 import { entry } from "./activity-fixtures";
 import { moods } from "./place-pages-fixtures";
 import { remote } from "./settings-devices-fixtures";
+import { problemLines } from "./problem-lines";
 
 // The device's own zone, which the expectations here are worked out in.
 const clock = homeClock();
@@ -398,9 +399,10 @@ describe("turning it off in its settings", () => {
 
     await press("Turn off");
 
-    expect(document.querySelector('[role="alert"]')?.textContent).toBe(
-      "Zigbee couldn't be turned off. Try again.",
-    );
+    expect(problemLines(document.querySelector('[role="alert"]'))).toEqual([
+      "Zigbee wasn't turned off",
+      "Sanctum ran into a problem. Try again in a moment.",
+    ]);
   });
 
   it("brings its notice into view once it's off, which starts the page", async () => {
