@@ -29,9 +29,10 @@ import {
 // The run's own limits hold whatever the hearer does: one run per speaker
 // (a newer one ends the older), a few at once in the home, `listenMaxMs` of
 // sound, `listenQuietMs` without any, and a run that never finishes ends
-// after `listeningRunMs`. Each run keeps its moments: when its wake word was heard,
-// its first sound, when listening stopped, when its reply was ready and
-// when that finished playing, which only its driver can say.
+// after `listeningRunMs`. Each run keeps its moments: when its wake word was
+// heard, its first sound, when listening stopped, when recognition finished,
+// when its reply was ready and when that finished playing, which only its
+// driver can say.
 
 /** The most runs at once in the home. */
 export const runsAtOnce = 4;
