@@ -10,6 +10,7 @@ import type { LiveFeed } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { coreJson } from "../core-fetch";
+import { problemReason } from "../device-parts";
 
 // What Settings → People reads: the household, who signs in and their
 // invites, and on a person's page the clients and AI agents, for their
@@ -27,7 +28,8 @@ export function usePeople(live: LiveFeed, includeClients = false) {
   const [data, setData] = useState<
     PeopleData & { clients: ClientInfo[]; agents: AgentInfo[] }
   >();
-  const [failed, setFailed] = useState(false);
+  // Why the last read failed, until one succeeds.
+  const [problem, setProblem] = useState<string>();
   const refreshId = useRef(0);
   const lastApplied = useRef(0);
 
@@ -46,13 +48,13 @@ export function usePeople(live: LiveFeed, includeClients = false) {
       if (id >= lastApplied.current) {
         lastApplied.current = id;
         setData(loaded);
-        setFailed(false);
+        setProblem(undefined);
       }
       return loaded;
-    } catch {
+    } catch (error) {
       if (id >= lastApplied.current) {
         lastApplied.current = id;
-        setFailed(true);
+        setProblem(problemReason(error));
       }
     }
   }, [includeClients]);
@@ -88,7 +90,7 @@ export function usePeople(live: LiveFeed, includeClients = false) {
     return () => clearTimeout(timer);
   }, [data?.invites, refresh]);
 
-  return { data, failed, refresh };
+  return { data, failed: problem !== undefined, problem, refresh };
 }
 
 /** How a person stands with signing in. */

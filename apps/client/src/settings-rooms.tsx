@@ -5,7 +5,7 @@ import type {
   Room,
   RoomRemoval,
 } from "@meetsanctum/app-sdk";
-import { Button, Input, type LiveFeed } from "@meetsanctum/ui-sdk";
+import { Button, Input, Problem, type LiveFeed } from "@meetsanctum/ui-sdk";
 import {
   DoorOpen,
   EllipsisVertical,
@@ -23,7 +23,6 @@ import {
 } from "react";
 import { list } from "@meetsanctum/app-sdk/words";
 
-import { productName } from "./brand";
 import { Row, Section } from "./components";
 import {
   Dialog,
@@ -46,6 +45,7 @@ import {
 } from "./components/ui/dropdown-menu";
 import { coreDevices } from "./core-devices";
 import { CoreError, coreJson } from "./core-fetch";
+import { problemReason } from "./device-parts";
 import {
   EditFloor,
   FloorsSection,
@@ -121,17 +121,6 @@ export function removalWarning(removal: RoomRemoval): string[] {
     );
   }
   return lines;
-}
-
-function roomProblem(error: unknown) {
-  if (error instanceof CoreError) {
-    switch (error.code) {
-      case "not_found":
-        return "That room is not there any more.";
-    }
-    return `${productName} ran into a problem. Try again.`;
-  }
-  return `Can't reach ${productName}. Try again.`;
 }
 
 type Editing = { action: "add" } | { action: "rename" | "remove"; room: Room };
@@ -414,16 +403,17 @@ function EditRoom(props: {
   }, [props.editing]);
   const [name, setName] = useState("");
   const [removal, setRemoval] = useState<RoomRemoval>();
-  const [problem, setProblem] = useState<string>();
+  // What failed, said in the dialog; `retry` when what goes with a room
+  // couldn't be worked out and can be asked again.
+  const [problem, setProblem] = useState<{
+    title: string;
+    reason: string;
+    retry?: boolean;
+  }>();
   const [working, setWorking] = useState(false);
 
-  useEffect(() => {
-    const opened = props.editing;
-    setName(opened?.action === "rename" ? opened.room.name : "");
-    setRemoval(undefined);
+  const check = (opened: Extract<Editing, { room: Room }>) => {
     setProblem(undefined);
-    setWorking(false);
-    if (opened?.action !== "remove") return;
     coreJson<RoomRemoval>(
       `/api/places/rooms/removal?id=${encodeURIComponent(opened.room.id)}`,
     ).then(
@@ -431,14 +421,31 @@ function EditRoom(props: {
         if (current.current === opened) setRemoval(answer);
       },
       (error: unknown) => {
-        if (current.current === opened) setProblem(roomProblem(error));
+        if (current.current === opened)
+          setProblem({
+            title: `Couldn't check what goes with ${opened.room.name}`,
+            reason: problemReason(error),
+            // Gone already: there is nothing to check again.
+            retry: !(error instanceof CoreError && error.code === "not_found"),
+          });
       },
     );
+  };
+
+  useEffect(() => {
+    const opened = props.editing;
+    setName(opened?.action === "rename" ? opened.room.name : "");
+    setRemoval(undefined);
+    setProblem(undefined);
+    setWorking(false);
+    if (opened?.action === "remove") check(opened);
+    // Only when it opens: check is new on every render.
   }, [props.editing]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!editing) return;
+    if (!editing || working || current.current !== editing) return;
+    if (editing.action === "remove" && !removal) return;
     setWorking(true);
     setProblem(undefined);
     try {
@@ -465,7 +472,15 @@ function EditRoom(props: {
     } catch (error) {
       if (current.current !== editing) return;
       setWorking(false);
-      setProblem(roomProblem(error));
+      setProblem({
+        title:
+          editing.action === "add"
+            ? `Couldn't add ${name.trim()}`
+            : editing.action === "rename"
+              ? `${editing.room.name} wasn't renamed`
+              : `${editing.room.name} wasn't removed`,
+        reason: problemReason(error),
+      });
     }
   };
 
@@ -481,10 +496,8 @@ function EditRoom(props: {
       ? "Then put devices in it from their menu in Devices."
       : editing?.action === "rename"
         ? "Devices named after it follow the new name."
-        : !removal
-          ? problem
-            ? `${productName} could not say what goes with it.`
-            : "Looking at what goes with it…"
+        : !removal && !problem
+          ? "Looking at what goes with it…"
           : "Apps remove any content they keep for this room.";
 
   return (
@@ -518,10 +531,19 @@ function EditRoom(props: {
                   autoFocus
                 />
               )}
-          {problem && (
-            <p role="alert" className="m-0 text-sm text-destructive">
-              {problem}
-            </p>
+          {problem && <Problem title={problem.title}>{problem.reason}</Problem>}
+          {/* Asks again what goes with it, apart from Remove. */}
+          {editing?.action === "remove" && problem?.retry && (
+            <Button
+              type="button"
+              variant="outline"
+              className="-mt-2 self-start"
+              onClick={() => {
+                if (current.current === editing) check(editing);
+              }}
+            >
+              Try again
+            </Button>
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={props.onClose}>
@@ -536,6 +558,13 @@ function EditRoom(props: {
                   ? !removal
                   : name.trim().length === 0)
               }
+              onClick={(event) => {
+                // A double click's second click never removes: once Try
+                // again is answered the dialog shrinks, and Remove can move
+                // under the pointer.
+                if (editing?.action === "remove" && event.detail > 1)
+                  event.preventDefault();
+              }}
             >
               {editing?.action === "add"
                 ? "Add"

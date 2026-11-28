@@ -1,4 +1,4 @@
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, Problem } from "@meetsanctum/ui-sdk";
 import { useRef, useState } from "react";
 
 import {
@@ -12,7 +12,8 @@ import {
 
 // An alert before something on a person's page that can't be taken back:
 // it names what ends, focus starts on Cancel, and Return never presses the
-// red button. A refusal shows in it, in the core's words made plain.
+// red button. A refusal shows in it, what didn't happen and why, with the
+// red button to try again.
 
 export type Asking = {
   title: string;
@@ -22,6 +23,9 @@ export type Asking = {
   trigger: HTMLButtonElement;
   // Does it; a throw keeps the alert open with what went wrong.
   run: () => Promise<void>;
+  // What didn't happen when it throws: "Mia wasn't removed".
+  failed: string;
+  // Why, in the core's words made plain.
   problem: (error: unknown) => string;
 };
 
@@ -76,11 +80,7 @@ export function Confirm(props: {
             <DialogTitle>{asking?.title}</DialogTitle>
             <DialogDescription>{asking?.description}</DialogDescription>
           </DialogHeader>
-          {problem && (
-            <p role="alert" className="m-0 text-sm text-destructive">
-              {problem}
-            </p>
-          )}
+          {problem && <Problem title={asking!.failed}>{problem}</Problem>}
         </div>
         <DialogFooter>
           <Button

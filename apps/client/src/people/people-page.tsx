@@ -1,5 +1,10 @@
 import type { Me, PersonInfo } from "@meetsanctum/auth-protocol";
-import { Button, useHomeClock, type LiveFeed } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  Problem,
+  useHomeClock,
+  type LiveFeed,
+} from "@meetsanctum/ui-sdk";
 import { ChevronRight } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 
@@ -23,7 +28,7 @@ export function PeoplePage(props: {
   onOpen: (personId: string, added?: boolean) => void;
 }) {
   const clock = useHomeClock();
-  const { data, failed } = usePeople(props.live);
+  const { data, failed, problem, refresh } = usePeople(props.live);
   const [adding, setAdding] = useState(false);
   const addButton = useRef<HTMLButtonElement>(null);
   const you = props.me?.client.kind === "personal" ? props.me.person?.id : null;
@@ -55,9 +60,12 @@ export function PeoplePage(props: {
             ))}
           </ul>
         ) : (
-          <p role="alert" className="m-0 text-sm text-destructive">
-            People can't be shown now. Try again in a moment.
-          </p>
+          <div className="flex flex-col items-start gap-2">
+            <Problem title="People didn't load">{problem}</Problem>
+            <Button variant="outline" onClick={() => void refresh()}>
+              Try again
+            </Button>
+          </div>
         )}
       </Section>
       {data && (

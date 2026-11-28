@@ -28,6 +28,7 @@ import type { SystemStatus } from "../src/system-status";
 import type { HostPoint } from "../src/system-status-day";
 import type { UpdateStatus } from "../src/system-update";
 import { piStatus, statusApps } from "./system-status-fixtures";
+import { problemLines } from "./problem-lines";
 
 // The device's own zone, which the expectations here are worked out in.
 const clock = homeClock();
@@ -268,9 +269,10 @@ describe("restart and shut down", () => {
       "To start it, unplug its power and plug it back in.",
     );
     await press(buttonIn(dialog()!, "Shut down"));
-    expect(sanctum.querySelector('[role="alert"]')?.textContent).toBe(
-      "Couldn't shut downSanctum's updater isn't answering. Try again in a minute",
-    );
+    expect(problemLines(sanctum.querySelector('[role="alert"]'))).toEqual([
+      "Sanctum didn't shut down",
+      "Sanctum's updater isn't answering. Try again in a minute.",
+    ]);
     expect(buttonIn(sanctum, "Restart").disabled).toBe(false);
   });
 

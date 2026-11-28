@@ -6,7 +6,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { coreJson } from "../src/core-fetch";
+import { CoreError, coreJson } from "../src/core-fetch";
 import { SettingsPage } from "../src/settings";
 import {
   floorDetail,
@@ -14,6 +14,7 @@ import {
   inOrder,
 } from "../src/settings-floors";
 import { unknownHome } from "./home-fixtures";
+import { problemLines } from "./problem-lines";
 
 // Settings → Rooms' floors: their lines and order, the sheet that adds and
 // edits one with the rooms on it, a room's Floor menu, and what removing
@@ -362,8 +363,12 @@ describe("Settings → Rooms' floors", () => {
     await check("office");
     await act(async () => button("Add").click());
 
-    expect(dialog()!.querySelector("[role=alert]")?.textContent).toContain(
-      "Try again.",
+    expect(problemLines(dialog()!.querySelector("[role=alert]"))).toEqual([
+      "The floor for Office wasn't changed",
+      "Sanctum didn't answer. Check that it's on, then try again.",
+    ]);
+    expect(places.rooms.find((room) => room.id === "hall")?.floorId).toBe(
+      "new-floor",
     );
     await type(dialog()!.querySelector("input")!, "Garden");
     await check("hall");
@@ -575,5 +580,58 @@ describe("Settings → Rooms' floors", () => {
       "[aria-labelledby=settings-rooms]",
     )!;
     expect(rooms.textContent).toContain("KitchenNo devices");
+  });
+
+  it("stops checking when the floor is gone", async () => {
+    const original = vi.mocked(coreJson).getMockImplementation()!;
+    vi.mocked(coreJson).mockImplementation(async (path, init) => {
+      if (path.startsWith("/api/places/floors/removal?")) {
+        throw new CoreError(404, "not_found");
+      }
+      return original(path, init);
+    });
+    await show();
+    await open("Ground floor: more");
+    await act(async () => item("Remove").click());
+
+    expect(problemLines(dialog()!.querySelector("[role=alert]"))).toEqual([
+      "Couldn't check what goes with Ground floor",
+      "It isn't there any more.",
+    ]);
+    expect(dialog()!.textContent).not.toContain("Looking at what goes with it");
+    expect(button("Remove floor").disabled).toBe(true);
+    expect(button("Try again")).toBeUndefined();
+  });
+
+  it("requires a separate confirmation after retrying the floor preview", async () => {
+    const original = vi.mocked(coreJson).getMockImplementation()!;
+    let unanswered = true;
+    vi.mocked(coreJson).mockImplementation(async (path, init) => {
+      if (path.startsWith("/api/places/floors/removal?") && unanswered) {
+        throw new Error("Connection lost");
+      }
+      return original(path, init);
+    });
+    await show();
+    await open("Ground floor: more");
+    await act(async () => item("Remove").click());
+
+    const retry = button("Try again");
+    const remove = button("Remove floor");
+    expect(remove.disabled).toBe(true);
+    expect(retry.type).toBe("button");
+    unanswered = false;
+    await act(async () => retry.click());
+
+    expect(retry.isConnected).toBe(false);
+    expect(remove.disabled).toBe(false);
+    await act(async () => {
+      remove.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true, detail: 2 }),
+      );
+    });
+    expect(sent("/api/places/floors/remove")).toEqual([]);
+    await act(async () => remove.click());
+    expect(sent("/api/places/floors/remove")).toEqual([{ id: "ground" }]);
   });
 });

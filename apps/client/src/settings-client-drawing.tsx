@@ -1,5 +1,5 @@
 import type { ClientInfo, SetClientDrawing } from "@meetsanctum/auth-protocol";
-import { Button, Switch } from "@meetsanctum/ui-sdk";
+import { Button, Problem, Switch } from "@meetsanctum/ui-sdk";
 import { useId, useLayoutEffect, useRef, useState } from "react";
 
 import { productName } from "./brand";
@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import { coreJson } from "./core-fetch";
+import { problemReason } from "./device-parts";
 import { isDrawingChoices } from "./effects";
 
 // Settings → Linked Devices → a client's Effects and motion: Reduce effects and
@@ -51,7 +52,7 @@ export function ClientDrawing(props: {
     opening: object;
     change: DrawingChange;
   }>();
-  const [problem, setProblem] = useState<string>();
+  const [problem, setProblem] = useState<{ title: string; reason: string }>();
   const id = useId();
 
   useLayoutEffect(() => {
@@ -89,9 +90,14 @@ export function ClientDrawing(props: {
         }),
         ...("reduceMotion" in change && { reduceMotion: saved.reduceMotion }),
       });
-    } catch {
+    } catch (error) {
       if (opening.current === opened) {
-        setProblem("That did not work. Try again.");
+        const effectsChange = "reduceEffects" in change;
+        const on = effectsChange ? change.reduceEffects : change.reduceMotion;
+        setProblem({
+          title: `${effectsChange ? "Reduce effects" : "Reduce motion"} wasn't turned ${on ? "on" : "off"}`,
+          reason: problemReason(error),
+        });
       }
     } finally {
       saving.current = false;
@@ -138,11 +144,7 @@ export function ClientDrawing(props: {
             />
           </div>
         )}
-        {problem && (
-          <p role="alert" className="m-0 text-sm text-destructive">
-            {problem}
-          </p>
-        )}
+        {problem && <Problem title={problem.title}>{problem.reason}</Problem>}
         <DialogFooter>
           <Button type="button" onClick={props.onClose}>
             Done

@@ -1,5 +1,4 @@
-import { Button } from "@meetsanctum/ui-sdk";
-import { CircleAlert } from "lucide-react";
+import { Button, Problem } from "@meetsanctum/ui-sdk";
 import { useEffect, useState } from "react";
 
 import { productName } from "./brand";
@@ -32,13 +31,13 @@ const asked: Record<
     title: `Restart ${productName}?`,
     text: "It's away for about 2 minutes, then comes back by itself. Lights stay as they are, but remotes, motion and schedules wait until it's back.",
     button: "Restart",
-    failed: "Couldn't restart",
+    failed: `${productName} didn't restart`,
   },
   shutdown: {
     title: `Shut down ${productName}?`,
     text: "Remotes, motion and schedules stop, and no screen can reach your home until it's on again. To start it, unplug its power and plug it back in.",
     button: "Shut down",
-    failed: "Couldn't shut down",
+    failed: `${productName} didn't shut down`,
   },
 };
 
@@ -46,11 +45,11 @@ const asked: Record<
 function reasonOf(error: unknown) {
   const code = error instanceof CoreError ? error.code : undefined;
   if (code === "busy")
-    return "An update or another change is under way. Try again once it has finished";
+    return "An update or another change is under way. Try again once it has finished.";
   if (code === "manager_unavailable") {
-    return `${productName}'s updater isn't answering. Try again in a minute`;
+    return `${productName}'s updater isn't answering. Try again in a minute.`;
   }
-  return `${productName} didn't answer. Try again in a moment`;
+  return `${productName} didn't answer. Check that it's on, then try again.`;
 }
 
 export function PowerButtons(props: {
@@ -106,22 +105,7 @@ export function PowerButtons(props: {
         </p>
       )}
       {problem && !updating && (
-        <div role="alert" className="flex items-start gap-3">
-          <span className="flex size-6 shrink-0 items-center justify-center">
-            <CircleAlert
-              aria-hidden="true"
-              className="size-5 text-destructive"
-            />
-          </span>
-          <span className="flex min-w-0 flex-col gap-px">
-            <span className="text-sm leading-6 font-medium text-destructive">
-              {asked[problem.action].failed}
-            </span>
-            <span className="text-[13px] font-medium text-muted-foreground">
-              {problem.reason}
-            </span>
-          </span>
-        </div>
+        <Problem title={asked[problem.action].failed}>{problem.reason}</Problem>
       )}
       <div className="flex flex-wrap gap-2">
         {(["restart", "shutdown"] as const).map((action) => (

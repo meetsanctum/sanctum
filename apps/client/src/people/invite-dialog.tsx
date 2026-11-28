@@ -3,7 +3,7 @@ import {
   type InviteInfo,
   type PersonInfo,
 } from "@meetsanctum/auth-protocol";
-import { Button, useHomeClock } from "@meetsanctum/ui-sdk";
+import { Button, Problem, useHomeClock } from "@meetsanctum/ui-sdk";
 import { useEffect, useRef, useState } from "react";
 
 import { PairingCode } from "../auth/pairing-code";
@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { CoreError } from "../core-fetch";
+import { problemReason } from "../device-parts";
 import { makeInvite } from "./invites";
 import { firstName, untilText } from "./words";
 
@@ -105,7 +106,7 @@ export function InviteDialog(props: {
           problem:
             code === "not_found"
               ? `${target.person.name} is no longer in People.`
-              : "The code couldn't be made. Try again.",
+              : problemReason(error),
           retry: code !== "not_found",
         });
       }
@@ -238,9 +239,15 @@ export function InviteDialog(props: {
               </p>
             )}
             {stage.name === "failed" && (
-              <p role="alert" className="m-0 text-sm text-destructive">
+              <Problem
+                title={
+                  reset
+                    ? "Couldn't make a password code"
+                    : "Couldn't make an invite code"
+                }
+              >
                 {stage.problem}
-              </p>
+              </Problem>
             )}
             {stage.name === "shown" && (
               <>

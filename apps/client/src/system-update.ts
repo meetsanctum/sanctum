@@ -67,9 +67,9 @@ export function problemText(error: unknown) {
     case "busy":
       return "Another update is already running.";
     case "invalid_version":
-      return `${productName} cannot update to this version.`;
+      return `${productName} can't update to this version.`;
     default:
-      return `${productName} did not answer. Try again in a moment.`;
+      return `${productName} didn't answer. Check that it's on, then try again.`;
   }
 }
 
