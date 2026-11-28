@@ -1,5 +1,5 @@
 {
-  "version": "0.1.46",
+  "version": "0.1.49",
   "react": "19.3.1",
   "exports": {
     "@meetsanctum/ui-sdk": [
@@ -17,6 +17,7 @@
       "DevicePageProps",
       "DeviceSections",
       "DeviceTile",
+      "FieldProblem",
       "FrameBarAction",
       "FrameContext",
       "FrameHello",
@@ -3073,6 +3074,10 @@
       "    title: string;",
       "    children?: string;",
       "    className?: string;",
+      "}): import(\"react\").JSX.Element;",
+      "export declare function FieldProblem(props: {",
+      "    id?: string;",
+      "    children: string;",
       "}): import(\"react\").JSX.Element;"
     ],
     "reduce-effects.d.ts": [

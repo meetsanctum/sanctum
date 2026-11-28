@@ -1,12 +1,6 @@
 import { Button, Input } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
-import {
-  ChevronRight,
-  CircleAlert,
-  Eye,
-  EyeOff,
-  type LucideIcon,
-} from "lucide-react";
+import { ChevronRight, Eye, EyeOff, type LucideIcon } from "lucide-react";
 import {
   useEffect,
   useEffectEvent,
@@ -246,21 +240,6 @@ export function SheetField(
       )}
       {children}
     </div>
-  );
-}
-
-// What went wrong, beside what it is about: a symbol and the words, never
-// the colour alone.
-export function SheetProblem(props: { id?: string; children: ReactNode }) {
-  return (
-    <p
-      id={props.id}
-      role="alert"
-      className="m-0 flex items-start gap-2 text-sm leading-5 text-destructive"
-    >
-      <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-      <span>{props.children}</span>
-    </p>
   );
 }
 

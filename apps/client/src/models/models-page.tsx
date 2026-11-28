@@ -6,6 +6,7 @@ import type {
 } from "@meetsanctum/app-sdk";
 import {
   Button,
+  FieldProblem,
   Input,
   Problem,
   type LiveFeed,
@@ -29,7 +30,6 @@ import {
   type ReactNode,
 } from "react";
 
-import { SheetProblem } from "../auth/sheet";
 import { useAuthAttempt } from "../auth/use-auth-attempt";
 import { productName } from "../brand";
 import { Section } from "../components";
@@ -678,7 +678,7 @@ function EditSource(props: {
               />
             )}
             {problem?.kind === "key-refusal" && (
-              <SheetProblem>{problem.reason}</SheetProblem>
+              <FieldProblem>{problem.reason}</FieldProblem>
             )}
             {action === "model" && models && (
               <ModelPicker
