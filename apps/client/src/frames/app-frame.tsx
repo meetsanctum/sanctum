@@ -73,7 +73,6 @@ export function AppFrame(props: {
     setup: () => ({
       page: latest.current.page,
       params: latest.current.params,
-      openHousehold: true,
     }),
     on(event) {
       switch (event.type) {

@@ -145,15 +145,6 @@ describe("Settings → Household", () => {
     expect(button("Save").disabled).toBe(true);
   });
 
-  it("saves existing settings with a core that does not return a language", async () => {
-    delete storedHome.language;
-    await act(async () => root.render(<HouseholdSection />));
-    expect(container.querySelector('select[id$="-language"]')).toBeNull();
-    await type(input("Name"), "Hill house");
-    await act(async () => button("Save").click());
-    expect(saved).toEqual([{ name: "Hill house" }]);
-  });
-
   it("lets anyone fill the location from the suggestion and save it", async () => {
     await act(async () => root.render(<HouseholdSection />));
     expect(input("Name").value).toBe("Lake house");

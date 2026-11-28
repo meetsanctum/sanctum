@@ -309,13 +309,11 @@ function LanguageCard(props: {
           ? `${languages[props.language].name} isn’t available for speech, so smart speakers speak English.`
           : "It listens and replies in the home’s language. Switching takes a few minutes."}
       </p>
-      {props.page.openHousehold && (
-        <div className="flex">
-          <Button variant="link" onClick={props.page.openHousehold}>
-            Change in Household
-          </Button>
-        </div>
-      )}
+      <div className="flex">
+        <Button variant="link" onClick={props.page.openHousehold}>
+          Change in Household
+        </Button>
+      </div>
     </div>
   );
 }

@@ -533,21 +533,6 @@ describe("the Assistant's page", () => {
     ).toContain("Turn off the Office lights");
   });
 
-  it("omits the Household link when the shell cannot open it", async () => {
-    const { client } = fakeClient({
-      hearing: {
-        state: "ready",
-        language: "en",
-        speechLanguage: "en",
-        activeLanguage: "en",
-      },
-      devices: [office],
-    });
-    await show(client, "main", { ...pageProps(), openHousehold: undefined });
-    expect(text()).toContain("Ready in English");
-    expect(button("Change in Household")).toBeUndefined();
-  });
-
   it("shows the active language when opened mid-switch", async () => {
     const { client } = fakeClient({
       hearing: {

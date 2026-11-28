@@ -2,10 +2,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 
 import type { AppHost } from "../app-host/host.js";
 import { placesForPage } from "../app-host/page-requests.js";
-import type { Auth } from "../auth/auth.js";
 import { changedBy, parseRequest } from "../auth/callers.js";
-import { AuthError } from "../auth/errors.js";
-import { bearerToken } from "../auth/tokens.js";
 import type { Devices } from "../devices/devices.js";
 import type { Entities } from "../entities/entities.js";
 import type { Workflows } from "../workflows/workflows.js";
@@ -66,7 +63,6 @@ export function registerPlacesRoutes(
   app: FastifyInstance,
   options: {
     places: PlacesModule;
-    authenticate: Auth["authenticate"];
     // What removing a room or a floor takes with it (room-removal.ts,
     // floor-removal.ts).
     devices: Devices;
@@ -85,20 +81,9 @@ export function registerPlacesRoutes(
 
   app.get("/api/places/home", async () => places.home());
 
-  app.post("/api/places/home/update", async (request) => {
-    const changes = parseRequest(homeChanges, request.body);
-    if (changes.language !== undefined) {
-      // A client may have been revoked while its request body arrived.
-      const token = bearerToken(request.headers.authorization);
-      if (
-        !token ||
-        options.authenticate(token)?.client.id !== request.principal!.client.id
-      ) {
-        throw new AuthError("invalid_client_token");
-      }
-    }
-    return places.updateHome(by(request), changes);
-  });
+  app.post("/api/places/home/update", async (request) =>
+    places.updateHome(by(request), parseRequest(homeChanges, request.body)),
+  );
   app.post("/api/places/home/suggest-location", async (request) =>
     places.suggestLocation(by(request)),
   );

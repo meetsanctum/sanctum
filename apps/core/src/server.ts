@@ -187,7 +187,6 @@ export function createServer(
       registerSystemRoutes(core, { ...options.system, gate });
       registerPlacesRoutes(core, {
         places,
-        authenticate: auth.authenticate,
         devices,
         entities: options.entities,
         apps: options.apps,

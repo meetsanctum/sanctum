@@ -2,7 +2,6 @@ import { ActionError } from "@meetsanctum/app-sdk";
 import {
   maxCallsUnderWay,
   maxMessageBytes,
-  protocolVersion,
   type CoreMessage,
 } from "@meetsanctum/app-sdk/protocol";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -26,34 +25,6 @@ useLink();
 
 describe("calls over an app's socket", () => {
   describe("calling an app", () => {
-    it.each([28, 29, protocolVersion])(
-      "accepts the language call only from the protocols that define it (%s)",
-      async (protocol) => {
-        await listening();
-        const app = await readyApp(protocol);
-        const setSpeechLanguage = vi.fn(async () => undefined);
-        const call = link.call(
-          { ...calls({}), setSpeechLanguage },
-          person,
-          action,
-          5_000,
-        );
-        const { id } = await app.hearing("call");
-        const update = { language: "de" };
-        const { outcome } = await app.ask(1, id, "setSpeechLanguage", [update]);
-        app.say({ type: "answer", call: id, outcome: { ok: true } });
-        await call;
-
-        if (protocol < protocolVersion) {
-          expect(outcome.ok).toBe(true);
-          expect(setSpeechLanguage).toHaveBeenCalledExactlyOnceWith(update);
-        } else {
-          expect(outcome.ok).toBe(false);
-          expect(setSpeechLanguage).not.toHaveBeenCalled();
-        }
-      },
-    );
-
     it("names the actor the core says, and what it may do is the call's", async () => {
       await listening();
       const app = await readyApp();

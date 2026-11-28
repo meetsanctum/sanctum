@@ -194,7 +194,6 @@ it("opens Add devices and restores Setup's Try it parameters on return", async (
 
 it("opens Household from Setup and returns to Setup", async () => {
   const { port, said } = await connect();
-  expect(said[0]).toMatchObject({ type: "setup", openHousehold: true });
   await send(port, { type: "open", page: "setup", params: {} });
   await waitFor(() =>
     expect(said).toContainEqual({ type: "show", page: "setup", params: {} }),
