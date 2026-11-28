@@ -17,9 +17,9 @@ Home Assistant's add-on. That runs upstream's Wyoming server only, on port
   lists for the lesson's language. A lesson that omits them gets that same
   model. List names must be lowercase identifiers in Unicode NFC form, such
   as `room`. Set `SANCTUM_TRAIN_TOKEN` in the container and send its value
-  as `token`. With the variable unset,
-  training is disabled. Use a private network or a secure transport when
-  sending the token, since Wyoming over TCP sends it in clear text.
+  as `token`. With the variable unset, training is disabled. Use a private
+  network or a secure transport when sending the token, since Wyoming over
+  TCP sends it in clear text.
   The server answers `trained` with a digest once the new grammar is loaded
   and saved in `/data`. The previous grammar stays active during training.
   A repeated lesson returns the same digest immediately. What `/data` keeps
