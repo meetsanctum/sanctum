@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { describe, expect, it, onTestFinished } from "vitest";
 
 import { createClients } from "../src/auth/clients.js";
+import { authInvites } from "../src/auth/schema.js";
 import { hashToken } from "../src/auth/tokens.js";
 import { migrationsFolder, openCoreDatabase } from "../src/database.js";
 import { people } from "../src/people/schema.js";
@@ -79,17 +80,8 @@ describe("the core's database", () => {
 
   it("keeps existing personal and shared clients signed in when adding agents", async () => {
     const dataDir = await tempDir();
-    const previousMigrations = join(await tempDir(), "migrations");
-    await cp(migrationsFolder, previousMigrations, { recursive: true });
-    const journalPath = join(previousMigrations, "meta", "_journal.json");
-    const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
-      entries: { idx: number }[];
-    };
-    journal.entries = journal.entries.filter((entry) => entry.idx < 45);
-    await writeFile(journalPath, JSON.stringify(journal));
-
     const before = openCoreDatabase(dataDir, {
-      migrationsFolder: previousMigrations,
+      migrationsFolder: await migrationsThrough(44),
     });
     // Seed the earlier schema through SQLite since it has no agent columns.
     before.db.$client.exec(`
@@ -118,6 +110,54 @@ describe("the core's database", () => {
       tokens.map((token) => clients.authenticate(token)?.client.kind),
     ).toEqual(["personal", "shared"]);
     expect(after.db.$client.pragma("foreign_keys", { simple: true })).toBe(1);
+  });
+
+  it("keeps existing invite and reset codes when adding recovery codes", async () => {
+    const dataDir = await tempDir();
+    const before = openCoreDatabase(dataDir, {
+      migrationsFolder: await migrationsThrough(60),
+    });
+    before.db.$client.exec(`
+      INSERT INTO people (id, name, colour, created_at, updated_at)
+        VALUES ('maya', 'Maya', '#c5cdac', 0, 0),
+               ('jonas', 'Jonas', '#c5cdac', 0, 0);
+      INSERT INTO auth_invites
+        (id, person_id, kind, lookup, registration_record, key_stretching, created_at, expires_at, tries)
+        VALUES ('invite', 'jonas', 'invite', 'CD', 'invite-record', 1, 0, 30000, 1),
+               ('reset', 'maya', 'reset', 'BC', 'reset-record', 1, 0, 60000, 2);
+    `);
+    const original = before.db.select().from(authInvites).all();
+    before.close();
+
+    const after = openCoreDatabase(dataDir);
+    onTestFinished(after.close);
+    expect(after.db.select().from(authInvites).all()).toEqual(original);
+
+    const reset = original.find((code) => code.kind === "reset")!;
+    const recovery = {
+      ...reset,
+      id: "recovery",
+      kind: "recovery" as const,
+      lookup: "a".repeat(64),
+      expiresAt: null,
+    };
+    after.db.insert(authInvites).values(recovery).run();
+    expect(after.db.select().from(authInvites).all()).toEqual([
+      ...original,
+      recovery,
+    ]);
+    expect(() =>
+      after.db
+        .insert(authInvites)
+        .values({ ...recovery, id: "second", lookup: "b".repeat(64) })
+        .run(),
+    ).toThrow(/UNIQUE constraint failed/);
+    expect(() =>
+      after.db
+        .insert(authInvites)
+        .values({ ...reset, id: "other", kind: "invite", lookup: "DE" })
+        .run(),
+    ).toThrow(/UNIQUE constraint failed/);
   });
 
   it("refuses a database a newer build has migrated", async () => {
@@ -183,3 +223,15 @@ describe("the core's database", () => {
     ).toThrow(NewerDatabaseError);
   });
 });
+
+async function migrationsThrough(last: number) {
+  const folder = join(await tempDir(), "migrations");
+  await cp(migrationsFolder, folder, { recursive: true });
+  const journalPath = join(folder, "meta", "_journal.json");
+  const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
+    entries: { idx: number }[];
+  };
+  journal.entries = journal.entries.filter((entry) => entry.idx <= last);
+  await writeFile(journalPath, JSON.stringify(journal));
+  return folder;
+}

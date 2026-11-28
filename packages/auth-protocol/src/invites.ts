@@ -10,6 +10,8 @@ import {
   formatPairingCode,
   newPairingSecret,
   normalisePairingCode,
+  pairingCodeAlphabet,
+  randomCode,
   splitPairingCode,
 } from "./pairing.js";
 
@@ -42,6 +44,50 @@ export const splitInviteCode = splitPairingCode;
 
 /** The code as people read it: `K7QX-M4PD`. */
 export const formatInviteCode = formatPairingCode;
+
+// A recovery code stands on its own and has more than 77 bits of entropy.
+export const recoveryCodeLength = 16;
+export const recoveryLookupLength = 64;
+
+export function newRecoveryCode() {
+  return randomCode(recoveryCodeLength);
+}
+
+export function normaliseRecoveryCode(value: string): string | null {
+  const code = value.toUpperCase().replace(/[\s-]/g, "");
+  return code.length === recoveryCodeLength &&
+    [...code].every((char) => pairingCodeAlphabet.includes(char))
+    ? code
+    : null;
+}
+
+export function formatRecoveryCode(code: string) {
+  return code.match(/.{1,4}/g)?.join("-") ?? "";
+}
+
+export async function recoveryLookup(code: string) {
+  const data = new TextEncoder().encode(`sanctum recovery code:${code}`);
+  const subtle = globalThis.crypto?.subtle;
+  const digest = subtle
+    ? new Uint8Array(await subtle.digest("SHA-256", data))
+    : (await import("@noble/hashes/sha256")).sha256(data);
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
+}
+
+export function isRecoveryLookup(lookup: string) {
+  return lookup.length === recoveryLookupLength && !/[^a-f0-9]/.test(lookup);
+}
+
+export async function inviteCodeProof(value: string) {
+  const recovery = normaliseRecoveryCode(value);
+  if (recovery) {
+    return { lookup: await recoveryLookup(recovery), secret: recovery };
+  }
+  const code = normaliseInviteCode(value);
+  return code ? splitInviteCode(code) : null;
+}
 
 /**
  * The name an invite's code is registered under, which OPAQUE's key for it

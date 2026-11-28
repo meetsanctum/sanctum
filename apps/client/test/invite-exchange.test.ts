@@ -4,6 +4,7 @@ import {
   inviteFinishBinding,
   keyStretching,
   pairingCodeAlphabet,
+  recoveryLookup,
 } from "@meetsanctum/auth-protocol";
 import { client } from "@serenity-kit/opaque";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -70,7 +71,7 @@ function expectRequest(
 
 describe("the client invite exchange", () => {
   it.each(["invite", "recovery"] as const)(
-    "combines the issued lookup with the registered %s secret",
+    "registers a %s code with the correct lookup and secret",
     async (kind) => {
       setCoreBaseUrl(url);
       const signal = new AbortController().signal;
@@ -79,30 +80,34 @@ describe("the client invite exchange", () => {
         personId: person.id,
         kind,
         createdAt: "2026-11-26T10:00:00Z",
-        endsAt: "2026-11-27T10:00:00Z",
+        endsAt: kind === "recovery" ? null : "2026-11-27T10:00:00Z",
         ended: null,
       };
       fetchResponse
-        .mockResolvedValueOnce(
-          Response.json({
+        .mockImplementationOnce(async (_url, init) => {
+          const body = JSON.parse(String(init?.body));
+          return Response.json({
             registrationId: "issued-id",
             registrationResponse: "registration-response",
-            lookup: "K7",
-          }),
-        )
+            lookup: body.lookup ?? "K7",
+          });
+        })
         .mockResolvedValueOnce(Response.json(info));
 
       const made = await makeInvite({ personId: person.id, kind }, signal);
       const secret = vi.mocked(client.startRegistration).mock.calls[0]![0]
         .password;
-      expect(secret).toMatch(new RegExp(`^[${pairingCodeAlphabet}]{6}$`));
+      const recovery = kind === "recovery";
+      expect(secret).toMatch(
+        new RegExp(`^[${pairingCodeAlphabet}]{${recovery ? 16 : 6}}$`),
+      );
       expect(client.finishRegistration).toHaveBeenCalledWith({
         clientRegistrationState: "registration-state",
         registrationResponse: "registration-response",
         password: secret,
         keyStretching: keyStretching.profile,
       });
-      expect(made).toEqual({ code: `K7${secret}`, info });
+      expect(made).toEqual({ code: recovery ? secret : `K7${secret}`, info });
       expect(fetchResponse).toHaveBeenCalledTimes(2);
       expectRequest(
         1,
@@ -110,6 +115,7 @@ describe("the client invite exchange", () => {
         {
           personId: person.id,
           kind,
+          ...(recovery ? { lookup: await recoveryLookup(secret) } : {}),
           registrationRequest: "registration-request",
         },
         signal,
@@ -129,9 +135,13 @@ describe("the client invite exchange", () => {
     },
   );
 
-  it.each([true, false])(
-    "redeems at the chosen home and verifies its confirmation (%s)",
-    async (valid) => {
+  it.each([
+    { typed: "k7qx-m4pd", secret: "QXM4PD", valid: true },
+    { typed: "k7qx-m4pd", secret: "QXM4PD", valid: false },
+    { typed: "k7qx-m4pd-w8rt-v2zn", secret: "K7QXM4PDW8RTV2ZN", valid: true },
+  ])(
+    "redeems $typed at the chosen home and verifies its confirmation ($valid)",
+    async ({ typed, secret, valid }) => {
       const signal = new AbortController().signal;
       const token = "issued-token";
       const joined = {
@@ -166,7 +176,7 @@ describe("the client invite exchange", () => {
       const code = await checkInviteCode({
         url,
         signal,
-        code: "k7qx-m4pd",
+        code: typed,
         host,
       });
       const device = { name: "Sam’s Mac", platform: "macos" } as const;
@@ -183,13 +193,13 @@ describe("the client invite exchange", () => {
       } else {
         await expect(result).rejects.toMatchObject({ code: "unconfirmed" });
       }
-      expect(client.startLogin).toHaveBeenCalledWith({ password: "QXM4PD" });
+      expect(client.startLogin).toHaveBeenCalledWith({ password: secret });
       expect(fetchResponse).toHaveBeenCalledTimes(4);
       expectRequest(
         1,
         "redeem/start",
         {
-          lookup: "K7",
+          lookup: secret.length === 6 ? "K7" : await recoveryLookup(secret),
           startLoginRequest: "login-request",
         },
         signal,

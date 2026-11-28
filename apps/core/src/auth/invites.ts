@@ -4,6 +4,7 @@ import {
   inviteIdentifier,
   inviteMs,
   inviteTries,
+  isRecoveryLookup,
   isUsername,
   keyStretching,
   normaliseUsername,
@@ -44,6 +45,7 @@ import {
 } from "./limits.js";
 import { personInfo } from "./logins.js";
 import { createOpaqueServer } from "./opaque-server.js";
+import { endResetCodes } from "./reset-codes.js";
 import { authInvites, authLogins } from "./schema.js";
 
 // Inviting a person to sign in, and resetting a forgotten password, through
@@ -58,6 +60,7 @@ type Making = {
   clientId: string;
   personId: string;
   inviteKind: InviteInfo["kind"];
+  loginRecord?: string;
   replacesInviteId?: string;
   inviteId: string;
   lookup: string;
@@ -84,10 +87,6 @@ type Choosing = {
 };
 
 type Invite = typeof authInvites.$inferSelect;
-
-// A recovery code has no end of its own: it lasts until it's used or
-// replaced. Its row still has a date, far enough away never to arrive.
-const recoveryMs = 100 * 365 * 24 * 60 * 60_000;
 
 export function createInvites(
   db: CoreDatabase,
@@ -168,18 +167,27 @@ export function createInvites(
   // Why an invite ended, or none while it is active.
   function endingOf(invite: Invite): InviteInfo["ended"] {
     if (invite.endedReason) return invite.endedReason;
-    return invite.expiresAt <= now() ? "expired" : null;
+    if (invite.kind === "recovery") {
+      // Short recovery codes lack the entropy of a full-length code.
+      return isRecoveryLookup(invite.lookup) ? null : "cancelled";
+    }
+    return invite.expiresAt! <= now() ? "expired" : null;
   }
 
   function info(invite: Invite): InviteInfo {
-    return {
+    const common = {
       id: invite.id,
       personId: invite.personId,
-      kind: invite.kind,
       createdAt: invite.createdAt.toISOString(),
-      endsAt: invite.expiresAt.toISOString(),
       ended: endingOf(invite),
     };
+    return invite.kind === "recovery"
+      ? { ...common, kind: invite.kind, endsAt: null }
+      : {
+          ...common,
+          kind: invite.kind,
+          endsAt: invite.expiresAt!.toISOString(),
+        };
   }
 
   function checkMake(
@@ -256,12 +264,30 @@ export function createInvites(
     }
   }
 
+  function freeLookup() {
+    // Ended invites keep their lookup so a late code can tell its holder it ended.
+    const held = new Set(
+      db
+        .select({ lookup: authInvites.lookup })
+        .from(authInvites)
+        .all()
+        .map(({ lookup }) => lookup),
+    );
+    const free = codeLookups.filter((lookup) => !held.has(lookup));
+    if (free.length === 0) {
+      throw new AuthError("busy");
+    }
+    return free[randomInt(free.length)]!;
+  }
+
   return {
     // Lists active and ended invites with their status. A recovery code is
     // listed only to its own person's devices.
-    list(principal: Principal): InviteInfo[] {
+    list(principal: Principal, includeRecovery: boolean): InviteInfo[] {
       const own =
-        principal.client.kind === "personal" ? principal.person?.id : undefined;
+        includeRecovery && principal.client.kind === "personal"
+          ? principal.person?.id
+          : undefined;
       return db
         .select()
         .from(authInvites)
@@ -279,9 +305,8 @@ export function createInvites(
       choosing.drop(() => true);
     },
 
-    // Any client invites a person, or resets their password, and registers
-    // the code's secret its device drew. The lookup comes back with the
-    // registration, so the device can show the whole code.
+    // A device registers the secret it drew. The core assigns short lookups;
+    // a recovery lookup comes from the device that drew the full code.
     start(
       principal: Principal,
       address: string,
@@ -289,20 +314,7 @@ export function createInvites(
     ): InviteStarted {
       checkMake(principal, input.personId, input.kind, input.replacesInviteId);
       const inviteId = randomUUID();
-      // A lookup no invite holds, ended ones included, since those keep
-      // theirs to tell a late code it ended.
-      const held = new Set(
-        db
-          .select({ lookup: authInvites.lookup })
-          .from(authInvites)
-          .all()
-          .map(({ lookup }) => lookup),
-      );
-      const free = codeLookups.filter((lookup) => !held.has(lookup));
-      if (free.length === 0) {
-        throw new AuthError("busy");
-      }
-      const lookup = free[randomInt(free.length)]!;
+      const lookup = input.kind === "recovery" ? input.lookup : freeLookup();
       const registrationResponse = server.registrationResponse(
         inviteIdentifier(inviteId),
         input.registrationRequest,
@@ -313,6 +325,10 @@ export function createInvites(
         clientId: principal.client.id,
         personId: input.personId,
         inviteKind: input.kind,
+        loginRecord:
+          input.kind === "reset"
+            ? loginOf(input.personId)?.registrationRecord
+            : undefined,
         replacesInviteId: input.replacesInviteId,
         inviteId,
         lookup,
@@ -333,6 +349,12 @@ export function createInvites(
       let replaced: string | undefined;
       const made = db.transaction(() => {
         const kind = entry.inviteKind;
+        if (
+          kind === "reset" &&
+          loginOf(entry.personId)?.registrationRecord !== entry.loginRecord
+        ) {
+          throw new AuthError("invite_kind_changed");
+        }
         replaced = checkMake(
           principal,
           entry.personId,
@@ -365,9 +387,8 @@ export function createInvites(
             registrationRecord: input.registrationRecord,
             keyStretching: input.keyStretching,
             createdAt: at,
-            expiresAt: new Date(
-              at.getTime() + (kind === "recovery" ? recoveryMs : inviteMs),
-            ),
+            expiresAt:
+              kind === "recovery" ? null : new Date(at.getTime() + inviteMs),
           })
           .returning()
           .get();
@@ -385,9 +406,15 @@ export function createInvites(
       return info(made);
     },
 
-    // Ends a person's invite before it runs out.
+    // Ends an active code. Only the person it belongs to can cancel recovery.
     cancel(principal: Principal, input: CancelInvite) {
-      const invite = inviteOf(input.personId);
+      const recovery = input.kind === "recovery";
+      if (recovery && personalCaller(principal) !== input.personId) {
+        throw new AuthError("forbidden");
+      }
+      const invite = recovery
+        ? recoveryOf(input.personId)
+        : inviteOf(input.personId);
       if (!invite || endingOf(invite)) {
         throw new AuthError("not_found");
       }
@@ -401,6 +428,7 @@ export function createInvites(
       record({
         action: "invite.cancel",
         outcome: "ok",
+        reason: recovery ? "recovery" : undefined,
         personId: principal.person?.id,
         clientId: principal.client.id,
         subjectId: input.personId,
@@ -412,27 +440,36 @@ export function createInvites(
     // Lookups on cooldown get the same response as unknown lookups.
     redeemStart(address: string, input: RedeemStart): RedeemStarted {
       host();
-      const lookup = input.lookup.toUpperCase();
+      const recovery = isRecoveryLookup(input.lookup);
+      const lookup = recovery ? input.lookup : input.lookup.toUpperCase();
       if (
-        lookup.length !== pairingLookupLength ||
-        ![...lookup].every((char) => pairingCodeAlphabet.includes(char))
+        !recovery &&
+        (lookup.length !== pairingLookupLength ||
+          ![...lookup].every((char) => pairingCodeAlphabet.includes(char)))
       ) {
         throw new AuthError("invalid_request");
       }
       limiter.attempt(address);
-      const found = db
+      const code = db
         .select()
         .from(authInvites)
-        .where(eq(authInvites.lookup, lookup))
+        .where(
+          and(
+            eq(authInvites.lookup, lookup),
+            recovery
+              ? eq(authInvites.kind, "recovery")
+              : ne(authInvites.kind, "recovery"),
+          ),
+        )
         .get();
       const at = now();
-      const active = found !== undefined && !endingOf(found);
+      const active = code !== undefined && !endingOf(code);
       const tries =
-        found?.lastTriedAt &&
-        at.getTime() - found.lastTriedAt.getTime() < limits.attemptWindowMs
-          ? found.tries
+        code?.lastTriedAt &&
+        at.getTime() - code.lastTriedAt.getTime() < limits.attemptWindowMs
+          ? code.tries
           : 0;
-      const invite = active && tries >= inviteTries ? undefined : found;
+      const invite = active && tries >= inviteTries ? undefined : code;
       const { serverLoginState, loginResponse } = server.startLogin(
         inviteIdentifier(invite?.id ?? `lookup:${lookup}`),
         invite?.registrationRecord ?? null,
@@ -446,7 +483,7 @@ export function createInvites(
         serverLoginState,
       });
       if (active) {
-        recordAttempt(found, tries, at, address);
+        recordAttempt(code, tries, at, address);
       }
       return {
         redeemId,
@@ -611,14 +648,7 @@ export function createInvites(
           .run();
         db.delete(authInvites).where(eq(authInvites.id, invite.id)).run();
         if (invite.kind === "recovery") {
-          // An earlier reset must not replace the password chosen here.
-          const reset = inviteOf(invite.personId);
-          if (reset?.kind === "reset" && !endingOf(reset)) {
-            db.update(authInvites)
-              .set({ endedReason: "cancelled", endedAt: values.updatedAt })
-              .where(eq(authInvites.id, reset.id))
-              .run();
-          }
+          endResetCodes(db, invite.personId, values.updatedAt);
         }
         const { client, token } = clients.createPersonal({
           ...input.client,

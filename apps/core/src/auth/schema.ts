@@ -189,7 +189,7 @@ export const authInvites = sqliteTable(
     registrationRecord: text("registration_record").notNull(),
     keyStretching: integer("key_stretching").notNull(),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
-    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
     // Challenges issued since the code last checked or the cooldown elapsed.
     // One extra count marks the first refusal during the cooldown.
     tries: integer("tries").notNull().default(0),
@@ -199,6 +199,15 @@ export const authInvites = sqliteTable(
     endedAt: integer("ended_at", { mode: "timestamp_ms" }),
   },
   (table) => [
-    uniqueIndex("auth_invites_person_id_kind").on(table.personId, table.kind),
+    uniqueIndex("auth_invites_person_id_ordinary")
+      .on(table.personId)
+      .where(sql`kind <> 'recovery'`),
+    uniqueIndex("auth_invites_person_id_recovery")
+      .on(table.personId)
+      .where(sql`kind = 'recovery'`),
+    check(
+      "auth_invites_ordinary_expiry",
+      sql`${table.kind} = 'recovery' OR ${table.expiresAt} IS NOT NULL`,
+    ),
   ],
 );

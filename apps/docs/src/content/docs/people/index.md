@@ -74,14 +74,17 @@ it again after you close it. Anyone who has it can choose a new password for
 you.
 
 **Make a new code** makes another and ends the one you had. The code works
-once, and a password you set yourself leaves it working. Only your own
-devices show it, never someone else's or a shared device.
+once, and a password you set yourself leaves it working. To invalidate the
+code without making another, choose **Remove recovery code**. If you think
+someone used one of your signed-in devices, sign out that device and remove
+the recovery code. Only your own devices show these options.
 
 ## Reset a password
 
 If someone forgets their password, open their page and choose **Reset
 password**. Give them the new code: in the Mac app, they choose **Just
-me**, then **Forgot your password?**, enter it and choose a new password.
+me**, then **Forgot your password?**, and select **Use a password code**.
+They enter the code and choose a new password.
 Their current password keeps working until the code is used, so a reset
 started by mistake changes nothing. To end the code, choose **Cancel code**
 and confirm. It also ends if they change or choose a new password

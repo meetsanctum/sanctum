@@ -1,10 +1,12 @@
 import {
   formatInviteCode,
   inviteCheckBinding,
+  inviteCodeProof,
   inviteFinishBinding,
   keyStretching,
   newInviteSecret,
-  splitInviteCode,
+  newRecoveryCode,
+  recoveryLookup,
   verifyInviteConfirmation,
   type HostView,
   type InviteInfo,
@@ -51,7 +53,8 @@ export async function startInvite(
   kind: InviteInfo["kind"] = "invite",
   replacesInviteId?: string,
 ) {
-  const secret = newInviteSecret();
+  const recovery = kind === "recovery";
+  const secret = recovery ? newRecoveryCode() : newInviteSecret();
   const started = registration(secret);
   const response = await post(
     core,
@@ -59,6 +62,7 @@ export async function startInvite(
     {
       personId,
       kind,
+      ...(recovery ? { lookup: await recoveryLookup(secret) } : {}),
       replacesInviteId,
       registrationRequest: started.registrationRequest,
     },
@@ -72,7 +76,7 @@ export async function startInvite(
   return {
     response,
     lookup,
-    code: `${lookup}${secret}`,
+    code: recovery ? secret : `${lookup}${secret}`,
     finish: () => {
       return post(
         core,
@@ -109,7 +113,9 @@ export async function checkInvite(
   } = {},
 ) {
   const call = { remoteAddress: options.remoteAddress };
-  const { lookup, secret } = splitInviteCode(code);
+  const proofInput = await inviteCodeProof(code);
+  if (!proofInput) throw new Error("invalid code format");
+  const { lookup, secret } = proofInput;
   const login = opaque.client.startLogin({ password: secret });
   const start = await post(
     core,

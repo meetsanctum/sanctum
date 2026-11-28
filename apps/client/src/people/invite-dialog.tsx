@@ -1,5 +1,7 @@
 import {
   formatInviteCode,
+  formatRecoveryCode,
+  recoveryCodeLength,
   type InviteInfo,
   type PersonInfo,
 } from "@meetsanctum/auth-protocol";
@@ -47,7 +49,7 @@ type Stage =
   | {
       name: "shown";
       code: string;
-      endsAt: string;
+      endsAt: string | null;
       madeAt: string;
       signal: AbortSignal;
     }
@@ -151,7 +153,10 @@ export function InviteDialog(props: {
   const reset = kind === "reset";
   const recovery = kind === "recovery";
   const replacing = !!inviting.replacesInviteId;
-  const formatted = stage.name === "shown" ? formatInviteCode(stage.code) : "";
+  const formatted =
+    stage.name === "shown"
+      ? (recovery ? formatRecoveryCode : formatInviteCode)(stage.code)
+      : "";
   const making = stage.name === "making";
 
   return (
@@ -239,7 +244,8 @@ export function InviteDialog(props: {
                         reset
                           ? `Give ${name} this code to choose a new password. ${name}’s current password works until then.`
                           : `Give ${name} this code.`,
-                        `It works once, until ${untilText(clock, stage.endsAt)}.`,
+                        stage.endsAt &&
+                          `It works once, until ${untilText(clock, stage.endsAt)}.`,
                         "You can’t see it again after you close this.",
                       ].join(" ")
                     : reset
@@ -263,7 +269,10 @@ export function InviteDialog(props: {
             {stage.name === "shown" && (
               <>
                 <div className="flex flex-col items-center gap-2">
-                  <PairingCode code={stage.code} />
+                  <PairingCode
+                    code={stage.code}
+                    length={recovery ? recoveryCodeLength : undefined}
+                  />
                   {/* The boxes show it; the text is for screen readers, and
                       for copying by hand if Copy code fails. */}
                   <p

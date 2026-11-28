@@ -37,7 +37,11 @@ export function usePeople(live: LiveFeed, includeClients = false) {
       const [people, logins, invites, clients, agents] = await Promise.all([
         coreJson<PersonInfo[]>("/api/people"),
         coreJson<LoginInfo[]>("/api/auth/logins"),
-        coreJson<InviteInfo[]>("/api/auth/invites"),
+        coreJson<InviteInfo[]>(
+          includeClients
+            ? "/api/auth/invites?includeRecovery=true"
+            : "/api/auth/invites",
+        ),
         includeClients ? coreJson<ClientInfo[]>("/api/auth/clients") : [],
         includeClients ? coreJson<AgentInfo[]>("/api/auth/agents") : [],
       ]);
@@ -97,13 +101,15 @@ export type SignIn =
   | {
       state: "signs-in";
       username: string;
-      reset: InviteInfo | null;
+      reset: OrdinaryCode | null;
       // Listed only on the person's own devices.
       recovery: InviteInfo | null;
     }
-  | { state: "invited"; invite: InviteInfo }
+  | { state: "invited"; invite: OrdinaryCode }
   | { state: "invite-ended"; ended: InviteEnded }
   | { state: "none" };
+
+type OrdinaryCode = Exclude<InviteInfo, { kind: "recovery" }>;
 
 export function signInOf(data: PeopleData, personId: string): SignIn {
   const login = data.logins.find((each) => each.personId === personId);

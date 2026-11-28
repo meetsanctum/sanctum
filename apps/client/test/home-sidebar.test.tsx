@@ -47,6 +47,7 @@ it("opens the signed-in person's profile from the floating sidebar and goes back
       case "/api/auth/logins":
         return [{ personId: maya.id, username: "maya" }];
       case "/api/auth/invites":
+      case "/api/auth/invites?includeRecovery=true":
       case "/api/auth/clients":
       case "/api/auth/agents":
         return [];

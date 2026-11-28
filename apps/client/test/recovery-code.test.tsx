@@ -14,9 +14,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SaveRecovery } from "../src/auth/SaveRecovery";
 import { coreJson } from "../src/core-fetch";
-import { makeInvite } from "../src/people/invites";
+import { cancelInvite, makeInvite } from "../src/people/invites";
 import { PersonPage } from "../src/people/person-page";
 import { printRecoveryCode, recoverySheet } from "../src/people/print-recovery";
+import { deferred } from "./deferred";
 
 // A recovery code: a row on your own Sign-In card only, a dialog that shows
 // the code once with Copy code and Print, and a step right after setting up
@@ -65,8 +66,8 @@ const logins: LoginInfo[] = [
   { personId: "alex", username: "alex" },
   { personId: "maya", username: "maya" },
 ];
-const code = "K7QXM4PD";
-const formattedCode = "K7QX-M4PD";
+const code = "K7QXM4PDW8RTV2ZN";
+const formattedCode = "K7QX-M4PD-W8RT-V2ZN";
 
 function recoveryCode(createdAt = new Date().toISOString()): InviteInfo {
   return {
@@ -75,7 +76,7 @@ function recoveryCode(createdAt = new Date().toISOString()): InviteInfo {
     kind: "recovery",
     ended: null,
     createdAt,
-    endsAt: "2126-11-01T10:00:00Z",
+    endsAt: null,
   };
 }
 
@@ -98,7 +99,8 @@ beforeEach(() => {
     if (path === "/api/people") return [alex, maya] as never;
     if (path === "/api/auth/logins") return logins as never;
     if (path === "/api/auth/clients") return [laptop] as never;
-    if (path === "/api/auth/invites") return invites as never;
+    if (path === "/api/auth/invites?includeRecovery=true")
+      return invites as never;
     if (path === "/api/auth/agents") return [] as never;
     throw new Error(`unexpected ${path}`);
   });
@@ -214,6 +216,42 @@ describe("your recovery code", () => {
     );
   });
 
+  it("asks before removing a saved code and then offers to make one", async () => {
+    invites = [recoveryCode()];
+    await show();
+    await click("Remove recovery code");
+    expect(dialog()?.textContent).toContain("The recovery code stops working.");
+    expect(cancelInvite).not.toHaveBeenCalled();
+    vi.mocked(cancelInvite).mockImplementationOnce(async () => {
+      invites = [{ ...invites[0]!, ended: "cancelled" }];
+    });
+    await click("Remove code");
+    expect(cancelInvite).toHaveBeenCalledExactlyOnceWith(
+      alex.id,
+      "recovery",
+      "recovery",
+    );
+    expect(button("Make a code")).toBeDefined();
+    expect(button("Remove recovery code")).toBeUndefined();
+  });
+
+  it("copies the formatted code and confirms it was copied", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    try {
+      await show();
+      await click("Make a code");
+      await click("Copy code");
+      expect(writeText).toHaveBeenCalledExactlyOnceWith(formattedCode);
+      expect(button("Copied")).toBeDefined();
+    } finally {
+      Reflect.deleteProperty(navigator, "clipboard");
+    }
+  });
+
   it("does not schedule an expiry refresh for a saved recovery code", async () => {
     vi.setSystemTime(new Date("2026-11-27T12:00:00Z"));
     invites = [recoveryCode("2026-11-06T12:00:00Z")];
@@ -301,6 +339,7 @@ describe("saving a recovery code after setting up a home", () => {
     expect(makeInvite).toHaveBeenCalledWith(
       { personId: alex.id, kind: "recovery" },
       expect.any(AbortSignal),
+      expect.any(Function),
     );
     expect(button("Print")).toBeDefined();
     await click("Continue");
@@ -329,6 +368,24 @@ describe("saving a recovery code after setting up a home", () => {
     await click("Continue");
     expect(onContinue).toHaveBeenCalledOnce();
     expect(signal.aborted).toBe(true);
+  });
+
+  it("allows continuing after saving the code fails", async () => {
+    const finish = deferred<void>();
+    vi.mocked(makeInvite).mockImplementationOnce(
+      async (_target, _signal, onSaving) => {
+        onSaving?.();
+        await finish.promise;
+        throw new Error("offline");
+      },
+    );
+    const onContinue = await render();
+    await click("Continue");
+    expect(onContinue).not.toHaveBeenCalled();
+    await act(async () => finish.resolve());
+    expect(container.textContent).toContain("The code couldn’t be made.");
+    await click("Continue");
+    expect(onContinue).toHaveBeenCalledOnce();
   });
 
   it("announces the manual-copy fallback when clipboard access fails", async () => {

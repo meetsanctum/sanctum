@@ -1,7 +1,10 @@
-import { formatInviteCode } from "@meetsanctum/auth-protocol";
+import {
+  formatRecoveryCode,
+  recoveryCodeLength,
+} from "@meetsanctum/auth-protocol";
 import { Button, useHomeClock } from "@meetsanctum/ui-sdk";
 import { Copy, KeyRound, Printer } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { makeInvite } from "../people/invites";
 import { printRecoveryCode } from "../people/print-recovery";
@@ -13,8 +16,8 @@ import { useCopyCode } from "./use-copy-code";
 // Right after setting up a home, the first person saves a recovery code: if
 // they forget their password, it lets them choose a new one, even when no
 // device is signed in as them and no one else signs in. This device makes
-// it and shows it once, to copy or print. Continue is available while the
-// request is pending. The person can make a code on their page.
+// it and shows it once, to copy or print. Continue can skip making the
+// code until the core starts saving it.
 
 type Made = { code: string; madeAt: string; signal: AbortSignal };
 
@@ -28,25 +31,40 @@ export function SaveRecovery(props: {
   const attempt = useAuthAttempt();
   const [made, setMade] = useState<Made>();
   const [failed, setFailed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const savingCode = useRef(false);
   const clipboard = useCopyCode();
   const { personId } = props;
 
   useEffect(() => {
     const signal = attempt.start();
-    makeInvite({ personId, kind: "recovery" }, signal).then(
-      (invite) => {
-        if (!signal.aborted)
-          setMade({ code: invite.code, madeAt: invite.info.createdAt, signal });
-      },
-      () => {
-        if (!signal.aborted) setFailed(true);
-      },
-    );
+    makeInvite({ personId, kind: "recovery" }, signal, () => {
+      savingCode.current = true;
+      setSaving(true);
+    })
+      .then(
+        (invite) => {
+          if (!signal.aborted)
+            setMade({
+              code: invite.code,
+              madeAt: invite.info.createdAt,
+              signal,
+            });
+        },
+        () => {
+          if (!signal.aborted) setFailed(true);
+        },
+      )
+      .finally(() => {
+        if (signal.aborted) return;
+        savingCode.current = false;
+        setSaving(false);
+      });
     return () => attempt.cancel();
     // Once, for the person the home was just set up with.
   }, [personId]);
 
-  const formatted = made ? formatInviteCode(made.code) : "";
+  const formatted = made ? formatRecoveryCode(made.code) : "";
   return (
     <Sheet
       glyph={KeyRound}
@@ -64,7 +82,7 @@ export function SaveRecovery(props: {
         {made && (
           <>
             <div className="flex flex-col items-center gap-2">
-              <PairingCode code={made.code} />
+              <PairingCode code={made.code} length={recoveryCodeLength} />
               {/* The boxes show it; the text is for screen readers, and for
                   copying by hand if Copy code fails. */}
               <p
@@ -123,7 +141,9 @@ export function SaveRecovery(props: {
             variant="default"
             size="lg"
             className="w-full"
+            disabled={saving}
             onClick={() => {
+              if (savingCode.current) return;
               attempt.cancel();
               props.onContinue();
             }}

@@ -1,4 +1,9 @@
-import { inviteMs, type InviteInfo } from "@meetsanctum/auth-protocol";
+import {
+  inviteMs,
+  isRecoveryLookup,
+  recoveryLookup,
+  type InviteInfo,
+} from "@meetsanctum/auth-protocol";
 import { eq } from "drizzle-orm";
 import { assert, describe, expect, it } from "vitest";
 
@@ -18,6 +23,7 @@ import {
   claimed,
   get,
   maya,
+  post,
   setLogin,
   sharedClient,
   signIn,
@@ -30,8 +36,14 @@ import {
 // no device is signed in as them. Only their own devices see it, a reset
 // someone else makes leaves it, and using it spends it.
 
-async function listed(core: TestCore, token: string) {
-  const response = await get(core, "/api/auth/invites", { token });
+async function listed(core: TestCore, token: string, includeRecovery = true) {
+  const response = await get(
+    core,
+    includeRecovery
+      ? "/api/auth/invites?includeRecovery=true"
+      : "/api/auth/invites",
+    { token },
+  );
   expect(response.statusCode).toBe(200);
   return response.json<InviteInfo[]>();
 }
@@ -60,12 +72,19 @@ describe("a recovery code", () => {
 
     const made = await invite(core, claim.token, claim.person.id, "recovery");
 
-    expect(made.info).toMatchObject({ kind: "recovery", ended: null });
+    expect(made.info).toMatchObject({
+      kind: "recovery",
+      ended: null,
+      endsAt: null,
+    });
     expect(await listed(core, claim.token)).toEqual([
       expect.objectContaining({ id: made.info!.id, kind: "recovery" }),
     ]);
     expect(await listed(core, jonasToken)).toEqual([]);
     expect(await listed(core, kitchen.token)).toEqual([]);
+    const reset = await invite(core, jonasToken, claim.person.id, "reset");
+    expect(await listed(core, claim.token, false)).toEqual([reset.info]);
+    expect(await listed(core, claim.token)).toEqual([made.info, reset.info]);
   });
 
   it("can't be made for someone else, or on a shared device", async () => {
@@ -102,6 +121,20 @@ describe("a recovery code", () => {
       (await signIn(core, { password: "a recovered password" })).outcome,
     ).toBe("signed-in");
     expect(await listed(core, claim.token)).toEqual([]);
+    expect(
+      core.activity
+        .recent()
+        .filter(
+          ({ action, outcome }) =>
+            action.startsWith("invite.") && outcome === "ok",
+        )
+        .map(({ action, reason }) => ({ action, reason })),
+    ).toEqual(
+      expect.arrayContaining([
+        { action: "invite.create", reason: "recovery" },
+        { action: "invite.redeem", reason: "recovery" },
+      ]),
+    );
     const again = await redeem(core, made.code!, {
       username: maya.username,
       password: "once more",
@@ -168,6 +201,76 @@ describe("a recovery code", () => {
     expect(
       (await signIn(core, { password: "a recovered password" })).outcome,
     ).toBe("signed-in");
+  });
+
+  it("requires a new reset registration after recovery changes the login", async () => {
+    const { core, claim, jonasToken } = await withJonas();
+    const made = await invite(core, claim.token, claim.person.id, "recovery");
+    const reset = await startInvite(core, jonasToken, claim.person.id, "reset");
+    assert(reset.finish);
+
+    expect(
+      await redeem(core, made.code!, { username: maya.username }),
+    ).toMatchObject({
+      outcome: "joined",
+    });
+    expect((await reset.finish()).json()).toEqual({
+      error: "invite_kind_changed",
+    });
+    expect(await listed(core, claim.token)).toEqual([]);
+    expect(
+      (await invite(core, jonasToken, claim.person.id, "reset")).info?.kind,
+    ).toBe("reset");
+  });
+
+  it("only lets the owner remove a recovery code and ends a pending redemption", async () => {
+    const { core, claim, jonasToken } = await withJonas();
+    const kitchen = sharedClient(core);
+    const made = await invite(core, claim.token, claim.person.id, "recovery");
+    const checked = await checkInvite(core, made.code!);
+    assert(checked.outcome === "checked");
+    const registered = await registerInvite(core, checked, maya.username);
+    assert(registered.outcome === "registered");
+    const removal = {
+      personId: claim.person.id,
+      inviteId: made.info!.id,
+      kind: "recovery",
+    };
+    for (const token of [jonasToken, kitchen.token]) {
+      expect(
+        (await post(core, "/api/auth/invites/cancel", removal, { token }))
+          .statusCode,
+      ).toBe(403);
+    }
+
+    expect(
+      (
+        await post(core, "/api/auth/invites/cancel", removal, {
+          token: claim.token,
+        })
+      ).statusCode,
+    ).toBe(204);
+    expect(await listed(core, claim.token)).toEqual([
+      expect.objectContaining({ id: made.info!.id, ended: "cancelled" }),
+    ]);
+    const finished = await finishInvite(core, checked, registered.input);
+    expect(finished).toMatchObject({ outcome: "refused" });
+    expect((await signIn(core)).outcome).toBe("signed-in");
+    expect(
+      (await invite(core, claim.token, claim.person.id, "recovery")).info
+        ?.ended,
+    ).toBeNull();
+  });
+
+  it("stores the recovery lookup for the full code separately from short lookups", async () => {
+    const core = await testCore();
+    const claim = await claimed(core);
+    const made = await invite(core, claim.token, claim.person.id, "recovery");
+    const stored = core.db.select().from(authInvites).get();
+    expect(made.code).toHaveLength(16);
+    expect(isRecoveryLookup(stored!.lookup)).toBe(true);
+    expect(stored?.lookup).toBe(await recoveryLookup(made.code!));
+    expect(stored?.expiresAt).toBeNull();
   });
 
   it("ends when you make a new one", async () => {

@@ -182,7 +182,7 @@ it("adds a person and opens their Settings page using the returned ID", async ()
     if (path === "/api/people") return household as never;
     if (
       path === "/api/auth/logins" ||
-      path === "/api/auth/invites" ||
+      path.startsWith("/api/auth/invites") ||
       path === "/api/auth/clients" ||
       path === "/api/auth/agents"
     )
@@ -235,7 +235,7 @@ it("offers Change password on your own page and Reset password elsewhere", async
       return [{ personId: "maya", username: "maya" }] as never;
     }
     if (
-      path === "/api/auth/invites" ||
+      path.startsWith("/api/auth/invites") ||
       path === "/api/auth/clients" ||
       path === "/api/auth/agents"
     ) {

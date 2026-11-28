@@ -110,15 +110,29 @@ export function PersonPage(props: {
     await refresh();
   };
   const askCancelCode = (code: InviteInfo, trigger: HTMLButtonElement) => {
-    const reset = code.kind === "reset";
+    const recovery = code.kind === "recovery";
+    const label =
+      code.kind === "invite"
+        ? "invite"
+        : recovery
+          ? "recovery code"
+          : "password code";
     setAsking({
-      title: reset ? "Cancel password code?" : "Cancel invite?",
-      description: `The ${reset ? "password" : "invite"} code stops working.`,
-      confirm: reset ? "Cancel code" : "Cancel invite",
+      title: recovery ? "Remove recovery code?" : `Cancel ${label}?`,
+      description: `The ${code.kind === "invite" ? "invite code" : label} stops working.`,
+      confirm: recovery
+        ? "Remove code"
+        : code.kind === "reset"
+          ? "Cancel code"
+          : "Cancel invite",
       trigger,
       run: async () => {
         try {
-          await cancelInvite(code.personId, code.id);
+          if (recovery) {
+            await cancelInvite(code.personId, code.id, "recovery");
+          } else {
+            await cancelInvite(code.personId, code.id);
+          }
         } finally {
           await done();
         }
@@ -157,6 +171,7 @@ export function PersonPage(props: {
           : `${name} stays in People.`,
         signsOutText(devices),
         codeEnds,
+        signIn.state === "signs-in" && "Any saved recovery code stops working.",
         removePerson && agentsGoText(snapshot.agents, target),
         removePerson && `To add ${name} again, use Add a person.`,
       ]

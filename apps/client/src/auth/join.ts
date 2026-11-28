@@ -1,11 +1,10 @@
 import {
   inviteCheckBinding,
+  inviteCodeProof,
   inviteFinishBinding,
   keyStretching,
-  normaliseInviteCode,
   normalisePassword,
   normaliseUsername,
-  splitInviteCode,
   verifyInviteConfirmation,
   type HostView,
   type NewClient,
@@ -51,9 +50,9 @@ export async function checkInviteCode(input: {
   host: HostView;
   code: string;
 }): Promise<CheckedCode> {
-  const code = normaliseInviteCode(input.code);
-  if (!code) throw new JoinError("wrong_code");
-  const { lookup, secret } = splitInviteCode(code);
+  const proof = await inviteCodeProof(input.code);
+  if (!proof) throw new JoinError("wrong_code");
+  const { lookup, secret } = proof;
   const opaque = await loadOpaque();
   input.signal?.throwIfAborted();
   const { clientLoginState, startLoginRequest } = opaque.client.startLogin({
