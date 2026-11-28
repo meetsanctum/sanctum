@@ -5,10 +5,10 @@ import type {
   DeviceQuestion,
 } from "@meetsanctum/app-sdk";
 import { useEffect, useState } from "react";
+import { FieldProblem } from "@meetsanctum/ui-sdk";
 
 import { coreFetch } from "./core-fetch";
 import { QuestionField, refusalWords } from "./device-questions";
-import { SheetProblem } from "./auth/sheet";
 
 // Adding and repairing that ask once they have started, as a TV shows a code
 // only once pairing begins: the questions of the step on the screen, with
@@ -180,7 +180,7 @@ export function AskingFields(props: {
   return (
     <>
       {asking.refusedApart && (
-        <SheetProblem>{asking.refusedApart}</SheetProblem>
+        <FieldProblem>{asking.refusedApart}</FieldProblem>
       )}
       {asking.asks.map((question, index) => (
         <QuestionField

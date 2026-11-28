@@ -532,7 +532,7 @@ describe("a shared device's pairing screen", () => {
     expect(shownCode()).toBeNull();
     expect(requests).toHaveLength(2);
     expect(container.textContent).toContain(
-      "A wrong code was entered too many times, so this device stopped showing one.",
+      "This device stopped showing a codeA wrong code was entered too many times. Show a new code to add it.",
     );
 
     const button = [...container.querySelectorAll("button")].find(

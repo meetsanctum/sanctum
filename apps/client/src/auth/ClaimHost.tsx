@@ -1,4 +1,4 @@
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, FieldProblem } from "@meetsanctum/ui-sdk";
 import { useId, useRef, useState, type FormEvent } from "react";
 
 import { ColourPicker, identityColours } from "../colour-picker";
@@ -12,7 +12,7 @@ import {
 } from "./messages";
 import { SaveRecovery } from "./SaveRecovery";
 import { rememberSignIn, selectHost } from "./session";
-import { Busy, Sheet, SheetActions, SheetField, SheetProblem } from "./sheet";
+import { Busy, Sheet, SheetActions, SheetField } from "./sheet";
 import { StorageNotice, useSecureStorage } from "./SignIn";
 import { useAuthAttempt } from "./use-auth-attempt";
 
@@ -107,7 +107,7 @@ export function ClaimHost(props: {
 
   const problemLine = (field: CredentialProblem["field"]) =>
     problem && problem.field === field ? (
-      <SheetProblem id={problemId}>{problem.text}</SheetProblem>
+      <FieldProblem id={problemId}>{problem.text}</FieldProblem>
     ) : null;
 
   if (step === 1) {

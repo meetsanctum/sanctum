@@ -1,7 +1,6 @@
 import type { DeviceQuestion } from "@meetsanctum/app-sdk";
-import { Input } from "@meetsanctum/ui-sdk";
+import { FieldProblem, Input } from "@meetsanctum/ui-sdk";
 import type { ReactNode } from "react";
-import { SheetProblem } from "./auth/sheet";
 
 // A question a device's driver asks, as adding or repairing it does: its
 // label, its field, and under it where to find the answer or, once the
@@ -92,7 +91,7 @@ export function QuestionField(props: {
         </div>
         {props.beside}
       </div>
-      {why && <SheetProblem id={refusalId}>{why}</SheetProblem>}
+      {why && <FieldProblem id={refusalId}>{why}</FieldProblem>}
       {showHelp && (
         <p id={helpId} className="m-0 text-sm text-muted-foreground">
           {help}

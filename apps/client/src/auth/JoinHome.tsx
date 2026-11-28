@@ -6,6 +6,7 @@ import {
 } from "@meetsanctum/auth-protocol";
 import {
   Button,
+  FieldProblem,
   InputOTP,
   InputOTPGroup,
   InputOTPSeparator,
@@ -29,14 +30,7 @@ import {
   type CredentialProblem,
 } from "./messages";
 import { rememberSignIn } from "./session";
-import {
-  Busy,
-  Sheet,
-  SheetActions,
-  SheetField,
-  SheetProblem,
-  SheetStatus,
-} from "./sheet";
+import { Busy, Sheet, SheetActions, SheetField, SheetStatus } from "./sheet";
 import { StorageNotice, useSecureStorage } from "./SignIn";
 import { useAuthAttempt } from "./use-auth-attempt";
 
@@ -232,7 +226,7 @@ function EnterCode(props: {
           </p>
         </div>
         {working && <SheetStatus>Checking the code…</SheetStatus>}
-        {problem && <SheetProblem id={problemId}>{problem}</SheetProblem>}
+        {problem && <FieldProblem id={problemId}>{problem}</FieldProblem>}
         {props.forgot && (
           <p className="m-0 pt-2 text-center text-[13px] leading-[18px] text-balance text-muted-foreground">
             No code? Someone at home can make you one on your page in Settings →
@@ -317,7 +311,7 @@ function Welcome(props: {
 
   const problemLine = (field: CredentialProblem["field"]) =>
     problem && problem.field === field ? (
-      <SheetProblem id={problemId}>{problem.text}</SheetProblem>
+      <FieldProblem id={problemId}>{problem.text}</FieldProblem>
     ) : null;
 
   // Someone who already signs in chooses a new password.

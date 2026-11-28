@@ -2,7 +2,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
 
-import { Problem } from "../src/problem";
+import { FieldProblem, Problem } from "../src/problem";
 
 // A problem says what happened, then why and what to do, behind a sign a
 // screen reader skips, on the card's fill, its words selectable.
@@ -41,4 +41,20 @@ it("can say what happened alone", () => {
   );
   expect(markup).toContain('data-slot="alert-title"');
   expect(markup).not.toContain('data-slot="alert-description"');
+});
+
+it("says what to change in a field on one line, red sign and words", () => {
+  const markup = renderToStaticMarkup(
+    <FieldProblem id="days-problem">Use a number from 1 to 14.</FieldProblem>,
+  );
+  const holder = document.createElement("div");
+  holder.innerHTML = markup;
+  const line = holder.firstElementChild!;
+
+  expect(line.getAttribute("role")).toBe("alert");
+  expect(line.id).toBe("days-problem");
+  expect(line.textContent).toBe("Use a number from 1 to 14.");
+  expect(line.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+  expect(line.classList).toContain("text-destructive");
+  expect(line.querySelector("[data-slot]")).toBeNull();
 });

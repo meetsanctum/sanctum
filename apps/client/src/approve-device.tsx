@@ -10,6 +10,7 @@ import {
 } from "@meetsanctum/auth-protocol";
 import {
   Button,
+  FieldProblem,
   Input,
   InputOTP,
   InputOTPGroup,
@@ -29,7 +30,6 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import { productName } from "./brand";
-import { SheetProblem } from "./auth/sheet";
 import { CoreError } from "./core-fetch";
 import { problemReason } from "./device-parts";
 import {
@@ -470,7 +470,7 @@ function TroubleLine(props: { trouble?: Trouble }) {
   const { trouble } = props;
   if (!trouble) return null;
   return "field" in trouble ? (
-    <SheetProblem>{trouble.field}</SheetProblem>
+    <FieldProblem>{trouble.field}</FieldProblem>
   ) : (
     <Problem title={trouble.title}>{trouble.reason}</Problem>
   );

@@ -7,7 +7,7 @@ import {
   type PairPolled,
   type PairRequested,
 } from "@meetsanctum/auth-protocol";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, Problem } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { CircleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -30,7 +30,7 @@ import {
 } from "./pairing";
 import { PairingCode } from "./pairing-code";
 import { rememberSignIn } from "./session";
-import { Sheet, SheetActions, SheetProblem, SheetStatus } from "./sheet";
+import { Sheet, SheetActions, SheetStatus } from "./sheet";
 
 const pollMs = 2_000;
 const retryMaxMs = 15_000;
@@ -259,9 +259,6 @@ export function PairDevice(props: {
     return () => controller.abort();
   }, [host, onPaired, round]);
 
-  const status = stopped
-    ? "A wrong code was entered too many times, so this device stopped showing one."
-    : problem;
   const formattedCode =
     shown && !stopped ? formatPairingCode(shown.code) : undefined;
 
@@ -277,7 +274,9 @@ export function PairDevice(props: {
       </span>
       {stopped ? (
         <div className="flex flex-col items-center gap-4 py-4">
-          <SheetProblem>{status}</SheetProblem>
+          <Problem title="This device stopped showing a code">
+            A wrong code was entered too many times. Show a new code to add it.
+          </Problem>
           <Button
             variant="default"
             size="lg"
@@ -344,7 +343,7 @@ export function PairDevice(props: {
         ))}
       </ol>
       {!stopped &&
-        (status ? (
+        (problem ? (
           <p
             role="status"
             className="m-0 flex items-start justify-center gap-2 text-center text-sm leading-5 text-destructive"
@@ -353,7 +352,7 @@ export function PairDevice(props: {
               aria-hidden="true"
               className="mt-0.5 size-4 shrink-0"
             />
-            {status}
+            {problem}
           </p>
         ) : (
           <SheetStatus>

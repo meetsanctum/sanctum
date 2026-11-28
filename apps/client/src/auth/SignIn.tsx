@@ -1,4 +1,4 @@
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, FieldProblem } from "@meetsanctum/ui-sdk";
 import { TriangleAlert } from "lucide-react";
 import { useEffect, useId, useState, type FormEvent } from "react";
 
@@ -7,14 +7,7 @@ import { getShell, type FoundHost, type StoredHost } from "../shell";
 import { checkHost, signIn, SignInError } from "./device";
 import { problemText } from "./messages";
 import { rememberSignIn } from "./session";
-import {
-  Busy,
-  Sheet,
-  SheetActions,
-  SheetField,
-  SheetNote,
-  SheetProblem,
-} from "./sheet";
+import { Busy, Sheet, SheetActions, SheetField, SheetNote } from "./sheet";
 import { useAuthAttempt } from "./use-auth-attempt";
 
 // Whether the shell stores the token securely; undefined while asking.
@@ -159,7 +152,7 @@ export function SignIn(props: {
             </Button>
           )}
         </SheetField>
-        {problem && <SheetProblem id={problemId}>{problem}</SheetProblem>}
+        {problem && <FieldProblem id={problemId}>{problem}</FieldProblem>}
         <StorageNotice secure={secure} />
         <SheetActions>
           <Button

@@ -5,11 +5,16 @@ import {
   type ModelSourceLook,
   type AppInfo,
 } from "@meetsanctum/app-sdk";
-import { Button, Input, Problem, SegmentedControl } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  FieldProblem,
+  Input,
+  Problem,
+  SegmentedControl,
+} from "@meetsanctum/ui-sdk";
 import { CircleCheck } from "lucide-react";
 import { useEffect, useId, useState, type FormEvent } from "react";
 
-import { SheetProblem } from "../auth/sheet";
 import { useAuthAttempt } from "../auth/use-auth-attempt";
 import { productName } from "../brand";
 import {
@@ -258,7 +263,7 @@ export function AddSource(props: {
   const problemLine = problem && (
     <Problem title={problem.title}>{problem.reason}</Problem>
   );
-  const refusedLine = refused && <SheetProblem>{refused}</SheetProblem>;
+  const refusedLine = refused && <FieldProblem>{refused}</FieldProblem>;
   const models = found && (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={ids.model} className={fieldLabel}>

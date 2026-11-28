@@ -1,4 +1,4 @@
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, FieldProblem } from "@meetsanctum/ui-sdk";
 import {
   useId,
   useRef,
@@ -14,7 +14,7 @@ import {
   choosePassword,
   PasswordChangeError,
 } from "../auth/password";
-import { Busy, SheetField, SheetProblem } from "../auth/sheet";
+import { Busy, SheetField } from "../auth/sheet";
 import { useAuthAttempt } from "../auth/use-auth-attempt";
 import { productName } from "../brand";
 import {
@@ -147,7 +147,7 @@ export function ChangePassword(props: {
   const problemId = `${ids}-problem`;
   const problemLine = (field: Field | undefined) =>
     problem && problem.field === field ? (
-      <SheetProblem id={problemId}>{problem.text}</SheetProblem>
+      <FieldProblem id={problemId}>{problem.text}</FieldProblem>
     ) : null;
   const field = (
     name: Field,

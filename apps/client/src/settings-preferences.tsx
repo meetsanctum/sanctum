@@ -5,6 +5,7 @@ import type {
   SettingValue,
 } from "@meetsanctum/app-sdk";
 import {
+  FieldProblem,
   Input,
   Problem,
   SegmentedControl,
@@ -14,7 +15,6 @@ import {
 import { cn } from "cn";
 import { useEffect, useId, useRef, useState } from "react";
 
-import { SheetProblem } from "./auth/sheet";
 import { Section } from "./components";
 import { CoreError, coreJson, currentCredential } from "./core-fetch";
 import { problemReason } from "./device-parts";
@@ -174,7 +174,7 @@ export function PreferencesSection(props: { app: AppInfo; live: LiveFeed }) {
               onChange={(value) => void save(name, value)}
             />
             {problem?.name === name && problem.refused && (
-              <SheetProblem id={problemId}>{problem.refused}</SheetProblem>
+              <FieldProblem id={problemId}>{problem.refused}</FieldProblem>
             )}
             {problem?.name === name && problem.failed && (
               <Problem title={`${setting.title} wasn't changed`}>
