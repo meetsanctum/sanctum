@@ -1,5 +1,6 @@
 import { replyTextMaxLength, type SpeechLanguage } from "@meetsanctum/app-sdk";
 
+import { deColourNames, type Look } from "./sentences.js";
 import { agentsPage } from "./tools.js";
 
 // What the Assistant answers, in each language: short, since a smart speaker
@@ -15,9 +16,16 @@ export type Subject =
 
 /** What happened to the lights, or what they already are. */
 export type LightsState =
-  { is: "on" | "off" | "brighter" | "dimmer" } | { is: "at"; percent: number };
+  | { is: "on" | "off" | "brighter" | "dimmer" }
+  | { is: "at"; percent: number }
+  | { is: "look"; look: Look };
 
 type RestoreIssue = "changed" | "offline" | "uncertain" | "limited" | "failed";
+
+type ColourWarning = {
+  minimumLength: number;
+  appendTo(summary: string): string;
+};
 
 export type Replies = {
   changed(subject: Subject, state: LightsState): string;
@@ -27,10 +35,15 @@ export type Replies = {
   allOff(subject: Subject): string;
   noLights(subject: Subject): string;
   notAnswering(subject: Subject): string;
+  /** A colour, where no light can show one. */
+  noColour(subject: Subject): string;
+  /** A notice about the lights a colour left as they were. */
+  cannotShowColour(names: readonly string[]): ColourWarning;
   missedLights(
     summary: string,
     names: readonly string[],
     allOffline: boolean,
+    reserved?: number,
   ): string;
   nothingChanged: string;
   putBack: string;
@@ -72,8 +85,10 @@ function withNames(
   and: string,
   more: (count: number) => string,
   ending: string,
+  reserved = 0,
 ) {
-  const limit = replyTextMaxLength - summary.length - 1 - ending.length;
+  const limit =
+    replyTextMaxLength - reserved - summary.length - 1 - ending.length;
   const full = list(names, and);
   if (full.length <= limit) return `${summary} ${full}${ending}`;
 
@@ -90,8 +105,27 @@ function withNames(
   return `${summary} ${shortened}${ending}`;
 }
 
-const enState = (state: LightsState) =>
-  state.is === "at" ? `at ${state.percent}%` : state.is;
+function colourWarning(
+  names: readonly string[],
+  and: string,
+  more: (count: number) => string,
+  ending: string,
+): ColourWarning {
+  return {
+    minimumLength: 1 + more(names.length).length + ending.length,
+    appendTo: (summary) => withNames(summary, names, and, more, ending),
+  };
+}
+
+const enWhites = { picker: "white", warm: "warm white", cool: "cool white" };
+
+const enState = (state: LightsState) => {
+  if (state.is === "at") return `at ${state.percent}%`;
+  if (state.is !== "look") return state.is;
+  const { look } = state;
+  if ("colour" in look) return look.colour.toLowerCase();
+  return look.bright ? `bright ${enWhites[look.white]}` : enWhites[look.white];
+};
 
 const enSubject = (subject: Subject) =>
   subject.kind === "home"
@@ -113,13 +147,27 @@ const en: Replies = {
       ? "There are no lights."
       : `No lights in ${subject.name}.`,
   notAnswering: (subject) => `${enSubject(subject)} didn't answer.`,
-  missedLights: (summary, names, allOffline) =>
+  noColour: (subject) =>
+    subject.kind === "home"
+      ? "No light can show colours."
+      : subject.kind === "place"
+        ? `No light in ${subject.name} can show colours.`
+        : `${subject.name} can't show colours.`,
+  cannotShowColour: (names) =>
+    colourWarning(
+      names,
+      "and",
+      (count) => `${count} more`,
+      " can't show colours.",
+    ),
+  missedLights: (summary, names, allOffline, reserved) =>
     withNames(
       summary,
       names,
       "and",
       (count) => `${count} more`,
       allOffline ? " didn't answer." : " couldn't be changed.",
+      reserved,
     ),
   nothingChanged: "Nothing changed.",
   putBack: "Put back.",
@@ -155,14 +203,19 @@ const en: Replies = {
   failed: (toolWords) => toolWords,
 };
 
-const deState = (state: LightsState) =>
-  ({
-    on: "an",
-    off: "aus",
-    brighter: "heller",
-    dimmer: "dunkler",
-    at: `auf ${"percent" in state ? state.percent : 0} %`,
-  })[state.is];
+const deWhites = { picker: "weiß", warm: "warmweiß", cool: "kaltweiß" };
+
+const deState = (state: LightsState) => {
+  if (state.is === "at") return `auf ${state.percent} %`;
+  if (state.is !== "look") {
+    return { on: "an", off: "aus", brighter: "heller", dimmer: "dunkler" }[
+      state.is
+    ];
+  }
+  const { look } = state;
+  if ("colour" in look) return deColourNames[look.colour];
+  return look.bright ? "hell" : deWhites[look.white];
+};
 
 // "Küche: Licht an", since a room's article in German goes by its name.
 const deSaid = (subject: Subject, words: string) =>
@@ -188,7 +241,22 @@ const de: Replies = {
       subject,
       subject.kind === "home" ? "antworten nicht" : "antwortet nicht",
     ),
-  missedLights: (summary, names, allOffline) =>
+  noColour: (subject) =>
+    subject.kind === "home"
+      ? "Kein Licht kann Farben zeigen."
+      : subject.kind === "place"
+        ? `${subject.name}: Kein Licht kann Farben zeigen.`
+        : `${subject.name} kann keine Farben zeigen.`,
+  cannotShowColour: (names) =>
+    colourWarning(
+      names,
+      "und",
+      (count) => `${count} weitere`,
+      names.length > 1
+        ? " können keine Farben zeigen."
+        : " kann keine Farben zeigen.",
+    ),
+  missedLights: (summary, names, allOffline, reserved) =>
     withNames(
       summary,
       names,
@@ -201,6 +269,7 @@ const de: Replies = {
         : names.length > 1
           ? " konnten nicht geändert werden."
           : " konnte nicht geändert werden.",
+      reserved,
     ),
   nothingChanged: "Nichts geändert.",
   putBack: "Zurückgestellt.",

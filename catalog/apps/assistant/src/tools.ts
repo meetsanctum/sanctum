@@ -1,4 +1,4 @@
-import type { RequestContext } from "@meetsanctum/app-sdk";
+import type { Availability, RequestContext } from "@meetsanctum/app-sdk";
 
 // The tools every AI agent gets, as the Assistant calls them, and what it
 // reads of their answers.
@@ -12,12 +12,13 @@ export const agentsPage = "Settings, What AI Agents Can Use";
 // What home_overview answers that the Assistant reads.
 export type Overview = {
   floors: { id: string; name: string }[];
-  rooms: { id: string; name: string }[];
+  rooms: { id: string; name: string; floorId?: string | null }[];
   devices: {
     id: string;
     name: string;
     roomId: string | null;
-    capabilities: { id: string; kind: string }[];
+    availability: Availability;
+    capabilities: { id: string; kind: string; features?: unknown }[];
   }[];
   notAllowed: { title: string; where: string }[];
 };

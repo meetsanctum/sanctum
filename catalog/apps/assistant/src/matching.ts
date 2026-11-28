@@ -5,6 +5,7 @@ import type {
   Choices,
   Intent,
   LanguageSentences,
+  Look,
 } from "./sentences.js";
 
 // Matches what someone said or typed against the Assistant's templates, with
@@ -25,6 +26,7 @@ export type Matched = {
     switch?: "on" | "off";
     step?: "brighter" | "dimmer";
     percent?: number;
+    look?: Look;
   };
 };
 
@@ -100,6 +102,33 @@ function nameOf(names: readonly string[], matched: string) {
   return names.find((name) => normalized(name) === normalized(matched));
 }
 
+// Each template's expression for one language and one set of names, made
+// when first needed and kept while the names are: a request matches the
+// same names more than once, and a light's name makes a long expression.
+const expressions = new WeakMap<
+  LanguageSentences,
+  WeakMap<HomeNames, (RegExp | null)[]>
+>();
+
+function expressionOf(
+  language: LanguageSentences,
+  names: HomeNames,
+  index: number,
+) {
+  let byNames = expressions.get(language);
+  if (!byNames) expressions.set(language, (byNames = new WeakMap()));
+  let made = byNames.get(names);
+  if (!made) byNames.set(names, (made = []));
+  if (made[index] === undefined) {
+    made[index] = compile(
+      language.sentences[index]!.template,
+      language.choices,
+      names,
+    );
+  }
+  return made[index];
+}
+
 /** The first sentence that matches the words, or null for none. */
 export function match(
   text: string,
@@ -107,8 +136,8 @@ export function match(
   names: HomeNames,
 ): Matched | null {
   const words = normalized(text);
-  for (const { template, intent } of language.sentences) {
-    const found = compile(template, language.choices, names)?.exec(words);
+  for (const [index, { intent }] of language.sentences.entries()) {
+    const found = expressionOf(language, names, index)?.exec(words);
     if (!found) continue;
     const groups = found.groups ?? {};
     const matched: Matched = { intent, names: {}, choices: {} };
@@ -128,6 +157,8 @@ export function match(
     if (switched !== undefined) matched.choices.switch = switched;
     const step = choice("step");
     if (step !== undefined) matched.choices.step = step;
+    const look = choice("look");
+    if (look !== undefined) matched.choices.look = look;
     const percent =
       groups.digits === undefined ? choice("percent") : Number(groups.digits);
     if (percent !== undefined) {

@@ -3,6 +3,7 @@ import type {
   LightFeatures,
   LightState,
 } from "@meetsanctum/app-sdk";
+import { lightColours, lightWhites, middleWhite } from "@meetsanctum/app-sdk";
 import { cn } from "cn";
 import {
   ArrowLeft,
@@ -43,21 +44,10 @@ type Range = { min: number; max: number };
 type Appearance = "color" | "temperature";
 type Layer = "ring" | "shades" | "wheel";
 
-const bases = [
-  ["Red", 0],
-  ["Orange", 28],
-  ["Yellow", 48],
-  ["Lime", 76],
-  ["Green", 132],
-  ["Cyan", 190],
-  ["Blue", 220],
-  ["Magenta", 300],
-] as const;
 const shades = [20, 35, 50, 65, 80, 100];
 // The shades go around the ring, leaving its top for Back and its bottom
 // for Done.
 const shadeSlots = [1, 2, 3, 5, 6, 7];
-const whites = 8;
 // Sizes in Tailwind spacing units. The ratio lets a circle fly in from the
 // middle by a share of its own size without measuring the layout.
 const pickerSize = 72;
@@ -99,19 +89,6 @@ const kelvin = (mireds: number) => Math.round(1_000_000 / mireds / 100) * 100;
 // writes a temperature for each of its whites.
 const kelvinText = (mireds: number) => `${number("en", kelvin(mireds))} K`;
 
-// Whites spread evenly across a light's range, coolest first.
-function whitesOf(range: Range) {
-  return [
-    ...new Set(
-      Array.from({ length: whites }, (_, index) =>
-        Math.round(
-          range.min + ((range.max - range.min) * index) / (whites - 1),
-        ),
-      ),
-    ),
-  ];
-}
-
 export function LightPicker(props: {
   name: string;
   features: LightFeatures;
@@ -152,17 +129,13 @@ export function LightPicker(props: {
     (inColour
       ? { hue: state.hue!, saturation: state.saturation ?? 100 }
       : { hue: 0, saturation: 100 });
-  const presets = range ? whitesOf(range) : [];
+  const presets = range ? lightWhites(range) : [];
   const inWhite =
     (props.mixedAppearance || !inColour) &&
     range !== null &&
     state.colorTemperature !== undefined;
   const mireds = range
-    ? clamp(
-        state.colorTemperature ?? presets[Math.floor(presets.length / 2)]!,
-        range.min,
-        range.max,
-      )
+    ? clamp(state.colorTemperature ?? middleWhite(range), range.min, range.max)
     : 0;
   const on = state.on && !disabled;
 
@@ -213,13 +186,13 @@ export function LightPicker(props: {
   const circles: ReactNode[] = [];
   if (appearance === "color" && layer === "ring") {
     const selected = inColour
-      ? nearest(bases, ([, hue]) => hueGap(hue, colour.hue))[1]
+      ? nearest(lightColours, ({ hue }) => hueGap(hue, colour.hue)).hue
       : undefined;
-    bases.forEach(([label, hue], index) =>
+    lightColours.forEach(({ name: label, hue }, index) =>
       circles.push(
         <Circle
           key={label}
-          at={around(index, bases.length, ring)}
+          at={around(index, lightColours.length, ring)}
           colour={swatch({ hue, saturation: 100 })}
           label={label}
           selected={selected === hue}

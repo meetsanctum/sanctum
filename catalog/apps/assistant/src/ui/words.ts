@@ -28,6 +28,10 @@ export function examples(language: SpeechLanguage, room: string | null) {
           what: "Or heller and dunkler",
         },
         {
+          say: "Mach das Licht warmweiß",
+          what: "Or hell, or a colour such as blau",
+        },
+        {
           say: "Stell das Wohnzimmer auf Abend",
           what: "A room's mood, by its name",
         },
@@ -48,6 +52,10 @@ export function examples(language: SpeechLanguage, room: string | null) {
         {
           say: "Set the lights to forty percent",
           what: "Or brighter and dimmer",
+        },
+        {
+          say: "Make the lights warm white",
+          what: "Or bright, or a colour such as blue",
         },
         {
           say: `Set the ${place} to Evening`,
