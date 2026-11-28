@@ -1,7 +1,6 @@
 import {
   aiAssistantPermission,
   assistantAppId,
-  defineAction,
   defineApp,
   languages,
   registerPermission,
@@ -11,20 +10,12 @@ import {
   type VoiceRun,
 } from "@meetsanctum/app-sdk";
 import { expect, it, vi } from "vitest";
-import { z } from "zod";
 
 import { base, running, useCleanUps } from "./app-apart-support.js";
 import { openLive } from "./devices-support.js";
 import { fakeManager } from "./manager-support.js";
 import { fakePiper, fakeSpeechToPhrase } from "./speech-support.js";
-import {
-  claimed,
-  deferredResult,
-  get,
-  post,
-  sharedClient,
-  testCore,
-} from "./support.js";
+import { claimed, deferredResult, get, post, testCore } from "./support.js";
 
 // The home's one language for speech in a running core: the Assistant sets
 // it for someone in the home, speech recognition learns it at once and
@@ -33,35 +24,19 @@ import {
 
 useCleanUps();
 
-async function setup(
-  speech: Parameters<typeof fakeSpeechToPhrase>[0],
-  beforeSetLanguage?: () => Promise<void>,
-) {
+async function setup(speech: Parameters<typeof fakeSpeechToPhrase>[0]) {
   const asked: AssistantRequest[] = [];
-  let assistantCtx: AppContext | undefined;
   const permission = {
     id: aiAssistantPermission,
     reason: "To do what you ask.",
     needed: true,
   };
-  const setLanguage = defineAction({
-    id: "assistant.language",
-    title: "Language",
-    tier: "write",
-    input: z.object({ language: z.enum(["en", "de"]) }),
-    output: z.object({}),
-    run: async (ctx, { language }) => {
-      await beforeSetLanguage?.();
-      await ctx.speech.setLanguage(language);
-      return {};
-    },
-  });
   const assistant = defineApp({
     ...base,
     id: assistantAppId,
     name: "Assistant",
     permissions: [permission],
-    actions: [setLanguage],
+    actions: [],
     sentences: {
       en: ["turn (on|off) the {room} lights"],
       de: ["schalte das licht im {room} (ein|aus)"],
@@ -69,9 +44,6 @@ async function setup(
     notUnderstood: {
       en: "I can only help with lights and moods",
       de: "Ich helfe nur mit Licht und Stimmungen",
-    },
-    start: async (ctx) => {
-      assistantCtx = ctx;
     },
     async requests(_ctx, request) {
       asked.push({ text: request.text, language: request.language } as never);
@@ -90,7 +62,7 @@ async function setup(
       { id: registerPermission, reason: "To register devices.", needed: true },
       permission,
     ],
-    actions: [setLanguage],
+    actions: [],
     start: async (ctx) => {
       driverCtx = ctx;
       await ctx.devices.register({
@@ -199,7 +171,6 @@ async function setup(
     asked,
     ask,
     hearing,
-    assistantCtx: () => assistantCtx!,
     close() {
       stp.server.close();
       piper.server.close();
@@ -207,7 +178,7 @@ async function setup(
   };
 }
 
-it("learns the language the Assistant sets at once, and asks and replies in it", async () => {
+it("learns the language Household sets at once, and asks and replies in it", async () => {
   let words = "turn on the office lights";
   const training = deferredResult<void>();
   const started = deferredResult<void>();
@@ -227,6 +198,7 @@ it("learns the language the Assistant sets at once, and asks and replies in it",
         expect(await home.hearing()).toEqual({
           state: "ready",
           language: "en",
+          speechLanguage: "en",
           activeLanguage: "en",
         }),
       { timeout: 5_000 },
@@ -237,15 +209,17 @@ it("learns the language the Assistant sets at once, and asks and replies in it",
 
     const set = await post(
       home.core,
-      `/api/apps/${assistantAppId}/actions/assistant.language`,
+      "/api/places/home/update",
       { language: "de" },
       home.home,
     );
     expect(set.statusCode).toBe(200);
+    expect(set.json()).toMatchObject({ language: "de" });
     await started.promise;
     expect(await home.hearing()).toEqual({
       state: "downloading",
       language: "de",
+      speechLanguage: "de",
       activeLanguage: "en",
     });
     expect(await home.ask()).toContainEqual({ step: "heard", text: words });
@@ -263,13 +237,19 @@ it("learns the language the Assistant sets at once, and asks and replies in it",
       expect(await home.hearing()).toEqual({
         state: "ready",
         language: "de",
+        speechLanguage: "de",
         activeLanguage: "de",
       }),
     );
     await vi.waitFor(() =>
       expect(messages).toContainEqual({
         type: "hearing",
-        hearing: { state: "ready", language: "de", activeLanguage: "de" },
+        hearing: {
+          state: "ready",
+          language: "de",
+          speechLanguage: "de",
+          activeLanguage: "de",
+        },
       }),
     );
 
@@ -344,31 +324,16 @@ it("says the Assistant's words for speech it doesn't know", async () => {
   }
 });
 
-it("lets only the Assistant set the language, for someone in the home", async () => {
+it("sets the language in Household, and refuses one Sanctum doesn't know", async () => {
   const home = await setup({ transcript: "" });
   try {
-    // Not on its own.
-    await expect(
-      home.assistantCtx().speech.setLanguage("de"),
-    ).rejects.toThrow();
-    // Nor a language speech doesn't know.
     const odd = await post(
       home.core,
-      `/api/apps/${assistantAppId}/actions/assistant.language`,
+      "/api/places/home/update",
       { language: "fr" },
       home.home,
     );
     expect(odd.statusCode).toBe(400);
-    expect(home.core.apps.holds("sanctum.example")?.granted).toContain(
-      aiAssistantPermission,
-    );
-    const other = await post(
-      home.core,
-      "/api/apps/sanctum.example/actions/assistant.language",
-      { language: "de" },
-      home.home,
-    );
-    expect(other.statusCode).toBe(403);
     expect((await home.hearing()).language).toBe("en");
 
     // Only the Assistant's page reads how speech is doing.
@@ -383,38 +348,6 @@ it("lets only the Assistant set the language, for someone in the home", async ()
     });
     expect(assistantPage.statusCode).toBe(200);
   } finally {
-    home.close();
-  }
-});
-
-it("refuses a language change after the shared client is revoked", async () => {
-  const started = deferredResult<void>();
-  const finish = deferredResult<void>();
-  const home = await setup({}, () => {
-    started.resolve();
-    return finish.promise;
-  });
-  try {
-    const shared = sharedClient(home.core);
-    const set = post(
-      home.core,
-      `/api/apps/${assistantAppId}/actions/assistant.language`,
-      { language: "de" },
-      shared,
-    );
-    await started.promise;
-    const revoked = await post(
-      home.core,
-      "/api/auth/clients/revoke",
-      { id: shared.id },
-      home.home,
-    );
-    expect(revoked.statusCode).toBe(204);
-    finish.resolve();
-    expect((await set).statusCode).toBe(403);
-    expect((await home.hearing()).language).toBe("en");
-  } finally {
-    finish.resolve();
     home.close();
   }
 });

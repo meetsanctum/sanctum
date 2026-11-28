@@ -136,6 +136,7 @@ async function show(
             back={back}
             openSettings={() => {}}
             openDevice={() => {}}
+            openHousehold={() => {}}
             addDevices={() => {}}
           />
         </MoodsProvider>

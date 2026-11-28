@@ -65,6 +65,9 @@ export type FromFrame =
   | { type: "open"; page: string; params: PageParams }
   | { type: "back" }
   | { type: "openSettings" }
+  // Settings at Household, where the home's name, place, units and
+  // language are set.
+  | { type: "openHousehold" }
   | { type: "openDevice"; device: string }
   | { type: "addDevices"; returnParams?: PageParams }
   | { type: "ready" }

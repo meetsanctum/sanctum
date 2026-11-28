@@ -29,6 +29,7 @@ const zurichHome = {
   coordinates: { latitude: 47.3769, longitude: 8.5417, elevation: 408 },
   temperatureUnit: "celsius",
   hourCycle: "24h",
+  language: "en",
 };
 type Home = Omit<typeof zurichHome, "timeZone" | "coordinates"> & {
   timeZone: string | null;

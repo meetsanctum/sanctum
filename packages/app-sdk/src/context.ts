@@ -39,7 +39,6 @@ import type {
 } from "./index.js";
 import { homeClock, type HomeClock, type HourCycle } from "./clock.js";
 import type { HostResources } from "./host.js";
-import type { SpeechLanguage } from "./languages.js";
 import type { RequestReply } from "./requests.js";
 import {
   openVoiceRun,
@@ -180,8 +179,6 @@ export interface CoreCalls extends ListenCalls {
   }): Promise<AiToolAnswer>;
   /** Answers the request this call runs for, once; Sanctum's Assistant only. */
   replyRequest(reply: RequestReply): Promise<void>;
-  /** Sets the home's one language for speech; Sanctum's Assistant only, needs `ai.assistant`. */
-  setSpeechLanguage(set: { language: SpeechLanguage }): Promise<void>;
   log(message: string): void;
 }
 
@@ -480,16 +477,6 @@ export interface AppContext {
      */
     resources(): Promise<HostResources>;
   };
-  /**
-   * Sanctum's Assistant only, with `ai.assistant`: the home's speech. The
-   * home has one language, English until the Assistant sets another: smart
-   * speakers hear it, Sanctum's voice says it, and requests and
-   * announcements are in it unless they say otherwise. Speech recognition
-   * learns a new language and keeps hearing in the old one until it can.
-   */
-  readonly speech: {
-    setLanguage(language: SpeechLanguage): Promise<void>;
-  };
   log(message: string): void;
 }
 
@@ -696,9 +683,6 @@ export function createRequestContext(options: ContextOptions): RequestContext {
       listen: (key, { wakeWord }) => openVoiceRun(core, { key, wakeWord }),
     },
     host: { resources: () => core.hostResources() },
-    speech: {
-      setLanguage: (language) => core.setSpeechLanguage({ language }),
-    },
     log: (message) => core.log(message),
   };
 }

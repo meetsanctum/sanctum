@@ -772,18 +772,3 @@ describe("the Assistant's moods", () => {
     expect(replies).toEqual([{ text: "Büro: Abend.", confirmation: true }]);
   });
 });
-
-describe("the Assistant's language", () => {
-  it("sets the home's language for speech", async () => {
-    const set: string[] = [];
-    const action = app.actions.find(({ id }) => id === "assistant.language")!;
-    const ctx = {
-      speech: {
-        setLanguage: async (language: string) => void set.push(language),
-      },
-    };
-    await action.run(ctx as never, action.input.parse({ language: "de" }));
-    expect(set).toEqual(["de"]);
-    expect(() => action.input.parse({ language: "fr" })).toThrow();
-  });
-});

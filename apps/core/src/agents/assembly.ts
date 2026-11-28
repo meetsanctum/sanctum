@@ -1,4 +1,4 @@
-import { aiAssistantPermission } from "@meetsanctum/app-sdk";
+import { aiAssistantPermission, speechLanguage } from "@meetsanctum/app-sdk";
 import { randomUUID } from "node:crypto";
 
 import type { Activity } from "../activity/activity.js";
@@ -205,7 +205,7 @@ export function assembleAgentTools(
       record: activity.for("agents"),
       agentWho: activity.agentWho,
       speech: options.speech,
-      language: () => places.language(),
+      language: () => speechLanguage(places.language()),
     }),
     changes,
     readableDeviceKinds,

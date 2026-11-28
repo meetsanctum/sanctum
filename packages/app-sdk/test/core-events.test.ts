@@ -63,7 +63,6 @@ function context(follow: CoreCalls["follow"], handlers?: CoreEventHandlers) {
     aiTools: unused,
     callAiTool: unused,
     replyRequest: unused,
-    setSpeechLanguage: unused,
     openListen: unused,
     sendListen: unused,
     readListen: unused,

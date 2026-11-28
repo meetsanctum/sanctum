@@ -233,7 +233,6 @@ export function startableHome(options: { devices?: DeviceInfo[] } = {}) {
     aiTools: unused,
     callAiTool: unused,
     replyRequest: unused,
-    setSpeechLanguage: unused,
     openListen: unused,
     sendListen: unused,
     readListen: unused,

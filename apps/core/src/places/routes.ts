@@ -29,7 +29,9 @@ import { roomRemoval } from "./room-removal.js";
 //   GET  /api/places/home                 { name, timeZone, coordinates:
 //                                         { latitude, longitude,
 //                                         elevation } }
-//   POST /api/places/home/update          { name?, timeZone?, coordinates? };
+//   POST /api/places/home/update          { name?, timeZone?, coordinates?,
+//                                         temperatureUnit?, hourCycle?,
+//                                         language? };
 //                                         null takes one away, and
 //                                         coordinates need a time zone;
 //                                         their elevation is optional

@@ -64,6 +64,7 @@ function learningSetup(
     sentences: () => sentences,
     names: () => names,
     language: () => language,
+    homeLanguage: () => language,
     speakersListen: () => listens,
     retrainAfterMs: 200,
     onHearing: (hearing) => hearings.push(hearing),
@@ -488,8 +489,18 @@ describe("what speech recognition learns", () => {
     learning.start();
     await vi.waitFor(() => expect(learning.hearing().state).toBe("ready"));
     expect(hearings).toEqual([
-      { state: "downloading", language: "en", activeLanguage: null },
-      { state: "ready", language: "en", activeLanguage: "en" },
+      {
+        state: "downloading",
+        language: "en",
+        speechLanguage: "en",
+        activeLanguage: null,
+      },
+      {
+        state: "ready",
+        language: "en",
+        speechLanguage: "en",
+        activeLanguage: "en",
+      },
     ]);
     expect(learning.hearsIn()).toBe("en");
 
@@ -503,14 +514,25 @@ describe("what speech recognition learns", () => {
       expect(learning.hearing()).toEqual({
         state: "ready",
         language: "de",
+        speechLanguage: "de",
         activeLanguage: "de",
       }),
     );
     expect(learning.hearsIn()).toBe("de");
     expect(hearings.slice(2)).toEqual([
       // The service had only English loaded.
-      { state: "downloading", language: "de", activeLanguage: "en" },
-      { state: "ready", language: "de", activeLanguage: "de" },
+      {
+        state: "downloading",
+        language: "de",
+        speechLanguage: "de",
+        activeLanguage: "en",
+      },
+      {
+        state: "ready",
+        language: "de",
+        speechLanguage: "de",
+        activeLanguage: "de",
+      },
     ]);
 
     learning.stop();
@@ -532,6 +554,7 @@ describe("what speech recognition learns", () => {
       expect(learning.hearing()).toEqual({
         state: "failed",
         language: "de",
+        speechLanguage: "de",
         activeLanguage: "en",
         failure: "no_sentences",
       });
@@ -573,6 +596,7 @@ describe("what speech recognition learns", () => {
       expect(learning.hearing()).toEqual({
         state: "learning",
         language: "de",
+        speechLanguage: "de",
         activeLanguage: "en",
       });
 
@@ -583,6 +607,7 @@ describe("what speech recognition learns", () => {
       expect(learning.hearing()).toEqual({
         state: "learning",
         language: "en",
+        speechLanguage: "en",
         activeLanguage: "en",
       });
 
@@ -591,6 +616,7 @@ describe("what speech recognition learns", () => {
         expect(learning.hearing()).toEqual({
           state: "ready",
           language: "en",
+          speechLanguage: "en",
           activeLanguage: "en",
         }),
       );
@@ -624,7 +650,12 @@ describe("what speech recognition learns", () => {
       setLanguage("de");
       learning.languageChanged();
       expect(hearings.filter(({ language }) => language === "de")).toEqual([
-        { state: "downloading", language: "de", activeLanguage: null },
+        {
+          state: "downloading",
+          language: "de",
+          speechLanguage: "de",
+          activeLanguage: null,
+        },
       ]);
     } finally {
       learning.stop();
@@ -647,6 +678,7 @@ describe("what speech recognition learns", () => {
       expect(learning.hearing()).toEqual({
         state: "failed",
         language: "en",
+        speechLanguage: "en",
         activeLanguage: null,
         failure: "unavailable",
       });
@@ -659,6 +691,7 @@ describe("what speech recognition learns", () => {
       expect(learning.hearing()).toEqual({
         state: "ready",
         language: "en",
+        speechLanguage: "en",
         activeLanguage: "en",
       });
     } finally {
@@ -679,9 +712,24 @@ describe("what speech recognition learns", () => {
     learning.start();
     await vi.waitFor(() => expect(learning.hearing().state).toBe("ready"));
     expect(hearings).toEqual([
-      { state: "downloading", language: "en", activeLanguage: null },
-      { state: "learning", language: "en", activeLanguage: null },
-      { state: "ready", language: "en", activeLanguage: "en" },
+      {
+        state: "downloading",
+        language: "en",
+        speechLanguage: "en",
+        activeLanguage: null,
+      },
+      {
+        state: "learning",
+        language: "en",
+        speechLanguage: "en",
+        activeLanguage: null,
+      },
+      {
+        state: "ready",
+        language: "en",
+        speechLanguage: "en",
+        activeLanguage: "en",
+      },
     ]);
     learning.stop();
   });
@@ -692,6 +740,7 @@ describe("what speech recognition learns", () => {
     expect(off.learning.hearing()).toEqual({
       state: "failed",
       language: "en",
+      speechLanguage: "en",
       activeLanguage: null,
       failure: "assistant_off",
     });
@@ -710,6 +759,7 @@ describe("what speech recognition learns", () => {
     expect(quiet.learning.hearing()).toEqual({
       state: "no_speaker",
       language: "en",
+      speechLanguage: "en",
       activeLanguage: null,
     });
     quiet.learning.stop();

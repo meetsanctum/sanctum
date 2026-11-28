@@ -38,6 +38,8 @@ export function AppFrame(props: {
   open: (page: string, params?: PageParams) => void;
   back: () => void;
   openSettings: () => void;
+  /** Opens Settings at Household, for a page's link to the home's language. */
+  openHousehold: () => void;
   /** Opens a device's detail, one the app may read, as the bridge checks. */
   openDevice: (device: string) => void;
   /** Opens Add devices, saying the page's title for Back on the way out. */
@@ -84,6 +86,8 @@ export function AppFrame(props: {
           return latest.current.back();
         case "openSettings":
           return latest.current.openSettings();
+        case "openHousehold":
+          return latest.current.openHousehold();
         case "openDevice":
           return latest.current.openDevice(event.device);
         case "addDevices":
