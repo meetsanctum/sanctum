@@ -220,6 +220,22 @@ describe("an entry's words", () => {
       "Office Speaker stopped a request for a newer one",
     );
     expect(
+      asked({
+        reason: "not_understood",
+        detail: {
+          firstSoundMs: 300,
+          stoppedListeningMs: 2_400,
+          heardWordsMs: 2_700,
+          replyReadyMs: 2_800,
+          finishedPlayingMs: 5_000,
+        },
+      }),
+    ).toEqual({
+      title: "Office Speaker heard something it didn't understand",
+      detail: "Listened 2.1 s, answered in 0.4 s, played 2.2 s",
+      problem: false,
+    });
+    expect(
       activityWords(
         clock,
         entry({

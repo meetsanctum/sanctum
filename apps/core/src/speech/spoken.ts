@@ -28,9 +28,9 @@ import type { SpeechTranscript } from "./words.js";
 // Once words are heard, a reply not ready 5 s after listening stops gets
 // "One moment". The reply follows through the speaker's announcement queue,
 // whether or not AI agents may speak there, since it finishes what someone
-// asked. A newer request from the speaker drops it. Each
-// request writes one Activity line with its moments, never what was said,
-// and a run refused writes why.
+// asked. A newer request from the speaker drops it. Activity keeps a request's
+// moments without its words. Speech the speaker couldn't understand gets an
+// informational entry without an Assistant turn, and a refused run records why.
 
 /** How long after listening stops a reply may take before "One moment". */
 export const oneMomentAfterMs = 5_000;
@@ -94,6 +94,7 @@ function sinceHeard(moments: Readonly<RunMoments>) {
   return {
     firstSoundMs: after(moments.firstSound),
     stoppedListeningMs: after(moments.stoppedListening),
+    heardWordsMs: after(moments.heardWords),
     replyReadyMs: after(moments.replyReady),
     finishedPlayingMs: after(moments.finishedPlaying),
   };
@@ -190,7 +191,9 @@ export function createSpokenRequests(options: {
   function recorded(
     request: Asking,
     speaker: Speaker,
-    outcome: { ok: true; late?: number } | { ok: false; reason: string },
+    outcome:
+      | { ok: true; late?: number; reason?: "not_understood" }
+      | { ok: false; reason: string },
     handedOff = false,
   ) {
     const { run } = request;
@@ -198,7 +201,7 @@ export function createSpokenRequests(options: {
     options.record({
       action: "device.request",
       outcome: outcome.ok ? "ok" : "failed",
-      ...(outcome.ok ? {} : { reason: outcome.reason }),
+      ...(outcome.reason ? { reason: outcome.reason } : {}),
       subjectId: run.device,
       actor: `speaker:${run.device}`,
       clientName: speaker.name,
@@ -301,10 +304,18 @@ export function createSpokenRequests(options: {
     const interrupted = ended(signal).then(() => "ended" as const);
     const preparing = new AbortController();
     let asked = false;
+    let heardUnrecognisedSpeech = false;
     let turnFinished: Promise<void> | undefined;
     const finishedNormally = () =>
       run.ended === "played" || run.ended === "done";
     const onRunEnd = () => {
+      // A disconnect or timeout ends the audio and keeps the recognition timing.
+      if (
+        heardUnrecognisedSpeech &&
+        (run.ended === "disconnected" || run.timedOut)
+      ) {
+        return;
+      }
       // The run bounds transcription. Once the turn starts, finishing the
       // audio leaves the turn open. A driver can still stop the request.
       if (!asked || (run.ended !== null && !finishedNormally())) {
@@ -342,28 +353,36 @@ export function createSpokenRequests(options: {
       const text = transcript?.text ?? null;
       const language = transcript?.language ?? startingLanguage;
       const words = text?.trim().slice(0, requestTextMaxLength).trim();
+      run.recognised(words);
       if (!words) {
-        // Speech it doesn't know gets the Assistant's words; silence, none.
-        const sorry =
-          text === null ? null : (options.notUnderstood?.(language) ?? null);
-        const url =
-          sorry &&
-          (await prepareReply(
-            run,
-            { text: sorry },
-            language,
-            AbortSignal.any([run.signal, signal]),
-          ));
-        if (sorry && url && !signal.aborted) {
-          run.reply(url, sorry);
-          await runEnded;
+        if (text === null) {
+          run.fail("nothing-heard");
           return;
         }
+        heardUnrecognisedSpeech = true;
+        const sorry = options.notUnderstood?.(language);
+        const url =
+          sorry &&
+          (await Promise.race([
+            prepareReply(
+              run,
+              { text: sorry },
+              language,
+              AbortSignal.any([run.signal, signal]),
+            ),
+            runEnded.then(() => null),
+          ]));
+        if (sorry && url && !signal.aborted && !run.signal.aborted) {
+          // Let the driver report when the fallback finishes playing.
+          asked = true;
+          run.reply(url, sorry);
+          await runEnded;
+        }
         if (signal.aborted) return;
-        run.fail(text === null ? "nothing-heard" : "not-understood");
+        recorded(request, speaker, { ok: true, reason: "not_understood" });
+        if (!run.signal.aborted) run.fail("not-understood");
         return;
       }
-      run.heard(words);
       asked = true;
       const stopped = run.moments.stoppedListening ?? now();
       wait = delay(Math.max(0, stopped + oneMomentAfterMs - now()));
