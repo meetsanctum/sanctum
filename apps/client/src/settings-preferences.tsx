@@ -49,6 +49,7 @@ const createSession = () => ({
 
 export function PreferencesSection(props: { app: AppInfo; live: LiveFeed }) {
   const { app, live } = props;
+  const problemId = useId();
   const [values, setValues] = useState<AppSettings>();
   const [pending, setPending] = useState<PendingChange[]>([]);
   const sessionRef = useRef<ReturnType<typeof createSession> | undefined>(
@@ -165,10 +166,15 @@ export function PreferencesSection(props: { app: AppInfo; live: LiveFeed }) {
             <SettingField
               setting={setting}
               value={shown[name]}
+              problemId={
+                problem?.name === name && problem.refused
+                  ? problemId
+                  : undefined
+              }
               onChange={(value) => void save(name, value)}
             />
             {problem?.name === name && problem.refused && (
-              <SheetProblem>{problem.refused}</SheetProblem>
+              <SheetProblem id={problemId}>{problem.refused}</SheetProblem>
             )}
             {problem?.name === name && problem.failed && (
               <Problem title={`${setting.title} wasn't changed`}>
@@ -182,14 +188,24 @@ export function PreferencesSection(props: { app: AppInfo; live: LiveFeed }) {
   );
 }
 
-// What to change in a value the app refused: the range where the setting
-// has one, else the value itself.
+// What to change in a value the app refused: its numeric limits, when
+// declared, or the value itself.
 function refusedText(
   appName: string,
   setting: SettingSchema | undefined,
   value: SettingValue | null,
 ) {
-  const { minimum, maximum } = setting ?? {};
+  const { minimum, maximum, multipleOf } = setting ?? {};
+  if (multipleOf !== undefined) {
+    const amount = `a multiple of ${multipleOf}`;
+    if (minimum !== undefined && maximum !== undefined)
+      return `Use ${amount} from ${minimum} to ${maximum}.`;
+    if (minimum !== undefined)
+      return `Use ${amount} that is at least ${minimum}.`;
+    if (maximum !== undefined)
+      return `Use ${amount} that is at most ${maximum}.`;
+    return `Use ${amount}.`;
+  }
   if (minimum !== undefined && maximum !== undefined)
     return `Use a number from ${minimum} to ${maximum}.`;
   if (minimum !== undefined) return `Use ${minimum} or more.`;
@@ -202,6 +218,7 @@ function refusedText(
 function SettingField(props: {
   setting: SettingSchema;
   value: SettingValue | undefined;
+  problemId?: string;
   onChange: (value: SettingValue | null) => void;
 }) {
   const { setting } = props;
@@ -276,10 +293,12 @@ function Toggle(props: {
 function TypedField(props: {
   setting: SettingSchema;
   value: SettingValue | undefined;
+  problemId?: string;
   onChange: (value: SettingValue | null) => void;
 }) {
-  const { setting, value } = props;
+  const { setting, value, problemId } = props;
   const id = useId();
+  const hintId = setting.description ? `${id}-hint` : undefined;
   const shown = value === undefined ? "" : String(value);
   const [draft, setDraft] = useState(shown);
   useEffect(() => setDraft(shown), [shown]);
@@ -305,6 +324,10 @@ function TypedField(props: {
       </label>
       <Input
         id={id}
+        aria-invalid={problemId ? true : undefined}
+        aria-describedby={
+          [hintId, problemId].filter(Boolean).join(" ") || undefined
+        }
         value={draft}
         inputMode={
           !isNumber
@@ -324,7 +347,7 @@ function TypedField(props: {
         }}
         className={cn(field, isNumber && "max-w-32 tabular-nums")}
       />
-      <Hint setting={setting} />
+      <Hint setting={setting} id={hintId} />
     </div>
   );
 }

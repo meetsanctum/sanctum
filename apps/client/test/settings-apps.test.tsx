@@ -14,7 +14,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CoreError, coreJson } from "../src/core-fetch";
 import { SettingsPage } from "../src/settings";
+import { PreferencesSection } from "../src/settings-preferences";
 import { unknownHome } from "./home-fixtures";
+import { problemLines } from "./problem-lines";
 
 // Settings → Apps → the app: every app opens its own page, with its
 // preferences as a form generated from its settings schema, which every
@@ -364,17 +366,88 @@ describe("Settings → Apps → the app", () => {
   it("puts back what the core refused, and says so", async () => {
     await show(admin);
 
-    await type(field("Days"), "30");
-    await act(async () => leave(field("Days")));
+    const input = field("Days");
+    const hintId = input.getAttribute("aria-describedby")!;
+    expect(document.getElementById(hintId)?.textContent).toBe(
+      "How many days the page shows",
+    );
+    await type(input, "30");
+    await act(async () => leave(input));
 
-    expect(field("Days").value).toBe("7");
+    expect(input.value).toBe("7");
     // A field's own line, under it, saying what to use instead.
     const line =
-      field("Days").parentElement!.parentElement!.querySelector(
-        '[role="alert"]',
-      );
+      input.parentElement!.parentElement!.querySelector('[role="alert"]');
     expect(line?.textContent).toBe("Use a number from 1 to 14.");
     expect(line?.querySelector("[data-slot=alert-title]")).toBeNull();
+    expect(line?.id).toBeTruthy();
+    expect(input.getAttribute("aria-describedby")).toBe(
+      `${hintId} ${line!.id}`,
+    );
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+
+    await type(input, "8");
+    await act(async () => leave(input));
+
+    expect(input.getAttribute("aria-describedby")).toBe(hintId);
+    expect(input.hasAttribute("aria-invalid")).toBe(false);
+    expect(line?.isConnected).toBe(false);
+  });
+
+  it("says what step a refused number must use", async () => {
+    const app: AppInfo = {
+      ...weather,
+      id: "sanctum.natural-light",
+      name: "Natural Light",
+      settings: {
+        type: "object",
+        properties: {
+          lowBrightness: {
+            type: "integer",
+            title: "Brightness at night",
+            minimum: 20,
+            maximum: 100,
+            multipleOf: 5,
+            default: 80,
+          },
+        },
+      },
+    };
+    vi.mocked(coreJson)
+      .mockResolvedValueOnce({ lowBrightness: 80 })
+      .mockRejectedValueOnce(new CoreError(400, "invalid_request"));
+    await act(async () =>
+      root.render(<PreferencesSection app={app} live={live} />),
+    );
+
+    const input = field("Brightness at night");
+    await type(input, "83");
+    await act(async () => leave(input));
+
+    expect(input.value).toBe("80");
+    expect(
+      input.parentElement!.parentElement!.querySelector('[role="alert"]')
+        ?.textContent,
+    ).toBe("Use a multiple of 5 from 20 to 100.");
+  });
+
+  it("restores the previous value and shows a connection error under the preference", async () => {
+    await show(admin);
+    vi.mocked(coreJson).mockRejectedValueOnce(new Error("Connection lost"));
+
+    const input = field("Days");
+    await type(input, "8");
+    await act(async () => leave(input));
+
+    expect(input.value).toBe("7");
+    expect(
+      problemLines(
+        input.parentElement!.parentElement!.querySelector('[role="alert"]'),
+      ),
+    ).toEqual([
+      "Days wasn't changed",
+      "Sanctum didn't answer. Check that it's on, then try again.",
+    ]);
   });
 
   it("follows a change made on another client", async () => {
