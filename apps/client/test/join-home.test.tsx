@@ -398,7 +398,7 @@ describe("Forgot your password?", () => {
     );
     expect(document.activeElement).toBe(forgotField());
     const docs = [...container.querySelectorAll("a")].find(
-      (each) => each.textContent === "Get back in without a code",
+      (each) => each.textContent === "How to make a password code",
     );
     expect(docs?.getAttribute("href")).toBe(
       "https://docs.meetsanctum.com/people/forgotten-password/#on-sanctum-itself",

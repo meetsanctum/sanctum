@@ -50,11 +50,11 @@ password?**, and enter the code. See
 ## On Sanctum itself
 
 If no device is signed in as you, you have no recovery code and no one else
-at home signs in, make a code on the machine Sanctum runs on. You need to
-run commands there, as you did to install it.
+at home signs in, make a code on the host, the computer running Sanctum. You
+need to run commands there, as you did to install it.
 
 1. On a computer on your home's network, open a terminal and connect to the
-   machine:
+   host:
 
    ```bash
    ssh you@sanctum.local
@@ -63,14 +63,20 @@ run commands there, as you did to install it.
 2. Make the code. Sanctum lists who signs in and asks which:
 
    ```bash
-   sudo docker exec -it sanctum-core node dist/cli.js recovery-code
+   sudo docker exec -it sanctum-core node dist/cli.js reset-code
    ```
 
-   To skip the question, add the username at the end, as in
-   `recovery-code alex`.
+   To skip the account selection, add your username to the command.
+
+   ```bash
+   sudo docker exec sanctum-core node dist/cli.js reset-code YOUR_USERNAME
+   ```
+
+   If a password code is already active, add `--replace` after your username
+   to make a new one. This ends the previous code.
 
 3. On your Mac, open Sanctum and choose your home, then **Just me** and
    **Forgot your password?**, and enter the code. Choose a new password.
 
 The code works once, for an hour, and Activity shows that Sanctum made it.
-Your password is still chosen on your Mac: the machine never sees it.
+Your password stays on your Mac.

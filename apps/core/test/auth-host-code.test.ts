@@ -4,12 +4,11 @@ import { mkdtemp, rm, stat } from "node:fs/promises";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { activity } from "../src/activity/schema.js";
-import { hostCodeMs } from "../src/auth/invites.js";
 import { createLocalAccess, type LocalAccess } from "../src/local-access.js";
-import { invite, redeem } from "./invite-support.js";
+import { checkInvite, invite, redeem } from "./invite-support.js";
 import { claimed, maya, signIn, testCore } from "./support.js";
 
 // A code for a new password made on the host itself, for someone with no
@@ -49,21 +48,25 @@ describe("a code made on the host", () => {
     ]);
   });
 
-  it("ends after an hour", async () => {
+  it("accepts the code until the one-hour expiry", async () => {
     const core = await testCore();
     await claimed(core);
     const made = await core.auth.invites.makeOnHost(maya.username);
-    core.advance(hostCodeMs + 1);
+    const options = { stretching: keyStretching.profile };
+    core.advance(60 * 60_000 - 1);
+    expect((await checkInvite(core, made.code, options)).outcome).toBe(
+      "checked",
+    );
 
-    const used = await redeem(core, made.code, {
-      username: maya.username,
-      password: "too late",
-      stretching: keyStretching.profile,
-    });
-    expect(used.outcome).not.toBe("joined");
+    core.advance(1);
+    const checked = await checkInvite(core, made.code, options);
+    expect(checked.outcome).toBe("refused");
+    if (checked.outcome !== "refused") throw new Error("Expected a refusal");
+    expect(checked.response.statusCode).toBe(410);
+    expect(checked.response.json()).toEqual({ error: "invite_ended" });
   });
 
-  it("replaces a waiting reset, and leaves the recovery code", async () => {
+  it("requires consent to replace an active reset and leaves the recovery code", async () => {
     const core = await testCore();
     const claim = await claimed(core);
     const recovery = await invite(
@@ -74,7 +77,14 @@ describe("a code made on the host", () => {
     );
     const reset = await invite(core, claim.token, claim.person.id, "reset");
 
-    await core.auth.invites.makeOnHost(maya.username);
+    await expect(
+      core.auth.invites.makeOnHost(maya.username),
+    ).rejects.toMatchObject({
+      code: "invite_changed",
+    });
+    expect((await checkInvite(core, reset.code!)).outcome).toBe("checked");
+
+    await core.auth.invites.makeOnHost(maya.username, true);
 
     expect(
       (
@@ -153,13 +163,15 @@ describe("the local socket", () => {
   }
 
   it("is open to this container's user only, and answers the command", async () => {
+    const makeCode = vi.fn<LocalAccess["makeCode"]>().mockResolvedValue({
+      code: "K7QXM4PD",
+      name: "for maya",
+      endsAt: "2026-11-28T12:00:00Z",
+    });
     const path = await open({
       signIns: () => [{ name: "Maya Keller", username: "maya" }],
-      makeCode: async (username) => ({
-        code: "K7QXM4PD",
-        name: `for ${username}`,
-        endsAt: "2026-11-28T12:00:00Z",
-      }),
+      updatePending: () => false,
+      makeCode,
     });
 
     expect((await stat(path)).mode & 0o777).toBe(0o600);
@@ -168,7 +180,7 @@ describe("the local socket", () => {
       body: [{ name: "Maya Keller", username: "maya" }],
     });
     expect(
-      await call(path, "POST", "/recovery-code", { username: "maya" }),
+      await call(path, "POST", "/reset-code", { username: "maya" }),
     ).toEqual({
       status: 200,
       body: {
@@ -177,9 +189,54 @@ describe("the local socket", () => {
         endsAt: "2026-11-28T12:00:00Z",
       },
     });
-    expect(await call(path, "POST", "/recovery-code", { name: 1 })).toEqual({
+    expect(makeCode).toHaveBeenCalledWith("maya", false);
+    expect(await call(path, "POST", "/reset-code", { name: 1 })).toEqual({
       status: 400,
       body: { error: "invalid_request" },
     });
+    expect(
+      await call(path, "POST", "/reset-code", {
+        username: "maya",
+        replace: "yes",
+      }),
+    ).toEqual({ status: 400, body: { error: "invalid_request" } });
+    expect(makeCode).toHaveBeenCalledOnce();
+    expect(
+      await call(path, "POST", "/reset-code", {
+        username: "maya",
+        replace: true,
+      }),
+    ).toMatchObject({ status: 200 });
+    expect(makeCode).toHaveBeenLastCalledWith("maya", true);
+  });
+
+  it("refuses to issue a code until the update commits", async () => {
+    let onTrial = true;
+    const makeCode = vi.fn<LocalAccess["makeCode"]>().mockResolvedValue({
+      code: "K7QXM4PD",
+      name: "Example",
+      endsAt: "2026-11-28T12:00:00Z",
+    });
+    const path = await open({
+      signIns: () => [],
+      updatePending: () => onTrial,
+      makeCode,
+    });
+
+    expect(
+      await call(path, "POST", "/reset-code", { username: "example" }),
+    ).toEqual({
+      status: 503,
+      body: { error: "update_pending" },
+    });
+    expect(makeCode).not.toHaveBeenCalled();
+
+    onTrial = false;
+    expect(
+      await call(path, "POST", "/reset-code", { username: "example" }),
+    ).toMatchObject({
+      status: 200,
+    });
+    expect(makeCode).toHaveBeenCalledOnce();
   });
 });

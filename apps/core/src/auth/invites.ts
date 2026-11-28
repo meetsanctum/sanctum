@@ -49,10 +49,10 @@ import { createOpaqueServer } from "./opaque-server.js";
 import { authInvites, authLogins } from "./schema.js";
 
 // Inviting a person to sign in, and resetting a forgotten password, through
-// a one-time code (invites.ts in auth-protocol). Whoever invites registers
-// the code's secret from their own device; the person proves it from theirs
-// with OPAQUE, which checks the home as signing in does, then registers a
-// password of their own there. The host sees neither.
+// a one-time code (invites.ts in auth-protocol). A code made on a client
+// registers its secret without revealing it to the host. The person proves
+// the secret with OPAQUE, which checks the home as signing in does, then
+// registers a password of their own. The password stays on their device.
 
 type Making = {
   kind: "make";
@@ -89,7 +89,7 @@ type Invite = typeof authInvites.$inferSelect;
 
 // A code made on the host itself, for someone with no other way back in,
 // works for an hour.
-export const hostCodeMs = 60 * 60_000;
+const hostCodeMs = 60 * 60_000;
 
 // A recovery code has no end of its own: it lasts until it's used or
 // replaced. Its row still has a date, far enough away never to arrive.
@@ -314,14 +314,18 @@ export function createInvites(
     // no other way back in: by a command run there, which only someone who
     // can run commands on the host can do. Unlike every other code, the host
     // draws its secret, and so sees it; it never sees a password. It is a
-    // reset that works once, for an hour, and replaces the person's invite or
-    // reset; their recovery code stays.
-    async makeOnHost(name: string) {
+    // reset that works once, for an hour. Replacing an active invite or reset
+    // requires consent; the person's recovery code stays.
+    async makeOnHost(name: string, replace = false) {
       await opaque.ready;
       const holder = usernameHolder(username(name));
       const person = holder && people.get(holder.personId);
       if (!holder || !person) {
         throw new AuthError("not_found");
+      }
+      const current = inviteOf(person.id);
+      if (current && !endingOf(current) && !replace) {
+        throw new AuthError("invite_changed");
       }
       const inviteId = randomUUID();
       const secret = newInviteSecret();
@@ -336,11 +340,10 @@ export function createInvites(
         password: secret,
         keyStretching: keyStretching.profile,
       });
-      let replaced: string | undefined;
+      const replaced = current?.id;
       const made = db.transaction(() => {
         const lookup = freeLookup();
         const at = now();
-        replaced = inviteOf(person.id)?.id;
         if (replaced) {
           db.delete(authInvites).where(eq(authInvites.id, replaced)).run();
         }

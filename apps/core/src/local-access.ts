@@ -1,23 +1,38 @@
-import { chmod, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { chmod, lstat, mkdir, rm } from "node:fs/promises";
 import { createServer, type IncomingMessage } from "node:http";
-import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 
 import { AuthError } from "./auth/errors.js";
 
 // The core's door for commands run on the host, inside its own container:
-// a Unix socket in its data folder that only the container's own user can
+// a Unix socket outside its data volume that only the container's own user can
 // open, so only someone who can run commands on the host gets through. It
 // lists who signs in and makes a code for a new password for one of them
 // (cli.ts), for someone with no other way back in. Nothing on the network
 // reaches it.
 
 export function localSocketPath(dataDir: string) {
-  return join(dataDir, "core.sock");
+  // Each core on the same machine gets a short socket path, outside backups.
+  const instance = createHash("sha256")
+    .update(resolve(dataDir))
+    .digest("hex")
+    .slice(0, 16);
+  return join(
+    tmpdir(),
+    `sanctum-${process.getuid?.() ?? 0}-${instance}`,
+    "core.sock",
+  );
 }
 
 export type LocalAccess = {
   signIns(): { name: string; username: string }[];
-  makeCode(username: string): Promise<{
+  updatePending(): boolean;
+  makeCode(
+    username: string,
+    replace: boolean,
+  ): Promise<{
     code: string;
     name: string;
     endsAt: string;
@@ -53,16 +68,23 @@ export function createLocalAccess(
       if (request.method === "GET" && request.url === "/sign-ins") {
         return send(200, access.signIns());
       }
-      if (request.method === "POST" && request.url === "/recovery-code") {
+      if (request.method === "POST" && request.url === "/reset-code") {
         const input = await body(request);
-        const username =
-          input && typeof input === "object" && "username" in input
-            ? input.username
-            : undefined;
-        if (typeof username !== "string") {
+        if (
+          !input ||
+          typeof input !== "object" ||
+          !("username" in input) ||
+          typeof input.username !== "string" ||
+          ("replace" in input && typeof input.replace !== "boolean")
+        ) {
           throw new AuthError("invalid_request");
         }
-        return send(200, await access.makeCode(username));
+        if (access.updatePending()) {
+          response.setHeader("retry-after", "5");
+          return send(503, { error: "update_pending" });
+        }
+        const replace = "replace" in input && input.replace === true;
+        return send(200, await access.makeCode(input.username, replace));
       }
       send(404, { error: "not_found" });
     })().catch((error: unknown) => {
@@ -76,8 +98,20 @@ export function createLocalAccess(
   });
 
   return {
-    // A socket left by a core that stopped without closing it goes first.
     async listen() {
+      const folder = dirname(path);
+      await mkdir(folder, { mode: 0o700, recursive: true });
+      const permissions = await lstat(folder);
+      if (
+        !permissions.isDirectory() ||
+        (permissions.mode & 0o077) !== 0 ||
+        permissions.uid !== process.getuid?.()
+      ) {
+        throw new Error(
+          "The local socket folder must be private to the core's user.",
+        );
+      }
+      // A socket left by a core that stopped without closing it goes first.
       await rm(path, { force: true });
       await new Promise<void>((resolve, reject) => {
         server.once("error", reject);

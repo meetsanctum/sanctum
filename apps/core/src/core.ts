@@ -472,7 +472,7 @@ export function createCore(
         },
       ],
       // Commands run on the host, inside this container, reach the core
-      // through a socket in its data folder (local-access.ts).
+      // through a private socket outside its data volume.
       [
         "listen on the local socket",
         async () => {
@@ -482,7 +482,9 @@ export function createCore(
             localSocketPath(config.dataDir),
             {
               signIns: () => invites.signIns(),
-              makeCode: (username) => invites.makeOnHost(username),
+              updatePending: onTrial,
+              makeCode: (username, replace) =>
+                invites.makeOnHost(username, replace),
             },
             log,
           );

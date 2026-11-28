@@ -1,5 +1,6 @@
 import {
   app,
+  dialog,
   ipcMain,
   Menu,
   protocol,
@@ -18,7 +19,7 @@ import { fileURLToPath } from "node:url";
 import { clientScheme, isClientUrl } from "./client-files.js";
 import { createCredentialStore, safeStorageCipher } from "./credentials.js";
 import { deviceName } from "./device-name.js";
-import { isDocsUrl } from "./outside-links.js";
+import { createDocsWindowOpenHandler } from "./outside-links.js";
 import { watchHosts, watchDevHost } from "./discovery.js";
 import { menuTemplate } from "./menu.js";
 import {
@@ -170,10 +171,16 @@ function lockDown(sessions: Session[]) {
 
 // Register once for the app, not once per replacement page session.
 app.on("web-contents-created", (_event, contents) => {
-  contents.setWindowOpenHandler(({ url }) => {
-    if (isDocsUrl(url)) void desktop.openExternal(url);
-    return { action: "deny" };
-  });
+  contents.setWindowOpenHandler(
+    createDocsWindowOpenHandler(
+      (url) => desktop.openExternal(url),
+      () =>
+        dialog.showErrorBox(
+          "Couldn't open the password guide",
+          "Open docs.meetsanctum.com in your browser and look for Forgotten password.",
+        ),
+    ),
+  );
   contents.on("will-navigate", (event, url) => {
     if (!isClientUrl(url)) {
       event.preventDefault();

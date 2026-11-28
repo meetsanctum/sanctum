@@ -248,7 +248,7 @@ function EnterCode(props: {
                 docs open in the browser. */}
             <Button asChild variant="link" size="sm">
               <a href={forgottenPasswordDocs} target="_blank" rel="noreferrer">
-                Get back in without a code
+                How to make a password code
                 <ArrowUpRight data-icon="inline-end" aria-hidden="true" />
               </a>
             </Button>
