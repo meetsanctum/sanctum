@@ -326,6 +326,33 @@ describe("createWriteback", () => {
     ]);
   });
 
+  it("restores the floor after memory recovers without a disk rate", async () => {
+    vi.useFakeTimers();
+    const { writeback, applied, advance } = host();
+    await writeback.start();
+    await advance({ memory: 100 * mb });
+    const reduced = { backgroundBytes: 8 * mb, bytes: 20 * mb };
+    expect(applied).toEqual([floor, reduced]);
+    await advance({}, 11);
+    expect(applied).toEqual([floor, reduced]);
+    await advance({});
+    writeback.stop();
+    expect(writeback.rate()).toBeNull();
+    expect(applied).toEqual([floor, reduced, floor]);
+  });
+
+  it("keeps existing byte limits below the floor while the disk is idle", async () => {
+    vi.useFakeTimers();
+    const { writeback, applied, advance } = host({
+      background: 4 * mb,
+      limit: 16 * mb,
+    });
+    await writeback.start();
+    await advance({}, 12);
+    writeback.stop();
+    expect(applied).toEqual([]);
+  });
+
   it("retries at one-minute intervals across a backward clock correction", async () => {
     vi.useFakeTimers();
     const start = performance.now();
@@ -388,6 +415,30 @@ describe("createWriteback", () => {
     expect(logs).toEqual([
       "Not limiting what waits to be written: no /proc/meminfo",
     ]);
+  });
+
+  it("does not start sampling when startup reads finish after stop", async () => {
+    vi.useFakeTimers();
+    let finishRead!: (value: null) => void;
+    const pending = new Promise<null>((resolve) => {
+      finishRead = resolve;
+    });
+    const apply = vi.fn();
+    const writeback = createWriteback({
+      apply,
+      readDisk: () => pending,
+      log: vi.fn(),
+      read: async (path) =>
+        path === "proc/meminfo" ? "MemAvailable: 1048576 kB\n" : null,
+    });
+    const started = writeback.start();
+    await vi.advanceTimersByTimeAsync(10_000);
+    await started;
+    writeback.stop();
+    finishRead(null);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(apply).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 

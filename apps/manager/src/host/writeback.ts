@@ -201,6 +201,7 @@ export function createWriteback(options: {
   let backingDisk: string | null = null;
   let backingChanged = false;
   let applied: WritebackLimits | null = null;
+  let appliedByManager = false;
   let appliedAt = -Infinity;
   let applying: Promise<void> | null = null;
   let failing = false;
@@ -224,6 +225,7 @@ export function createWriteback(options: {
       .then(() => apply(wanted))
       .then(() => {
         applied = wanted;
+        appliedByManager = true;
         if (device === backingDisk) backingChanged = false;
         failing = false;
         log(
@@ -283,8 +285,12 @@ export function createWriteback(options: {
       exceeds(applied, ceiling) &&
       differs(ceiling, applied);
     if (applying) return;
-    if (!mustLower && applied && (rate === null || !differs(wanted, applied)))
-      return;
+    if (!mustLower && applied) {
+      if (!differs(wanted, applied)) return;
+      // Without a rate, only raise limits the manager set below the floor.
+      if (rate === null && (!appliedByManager || exceeds(applied, wanted)))
+        return;
+    }
     if ((!mustLower || failing) && performance.now() - appliedAt < minApplyMs)
       return;
     // The timer continues to sample while the helper is running. set() owns
