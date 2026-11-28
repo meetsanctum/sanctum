@@ -175,6 +175,11 @@ export interface AppDefinition extends AppManifestFields {
      */
     readonly addLater?: readonly string[];
     /**
+     * When adding asks once started, it asks each addLater question in
+     * order, one per step. A retry may ask the same question again.
+     */
+    readonly addLaterInOrder?: true;
+    /**
      * Why it may refuse adding a device it found, whatever adding it asks,
      * by id, in the words the shell then shows with the device: "It stopped
      * waiting for a key…".

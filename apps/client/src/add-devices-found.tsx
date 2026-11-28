@@ -166,7 +166,7 @@ function FoundCard(props: {
             answers={answers}
             now={now}
             narrow
-            disabled={doing !== null}
+            disabled={doing !== null || failure?.stopping}
             onChange={setAnswer}
           />
           {/* Stacked where the card is narrow, the primary action on top. */}
@@ -185,6 +185,7 @@ function FoundCard(props: {
               className="flex-1"
               disabled={
                 doing !== null ||
+                failure?.stopping ||
                 (!lastsUp && !isComplete(asking.asks, answers))
               }
             >

@@ -268,6 +268,7 @@ export function BlinkButton(props: { device: DeviceInfo }) {
   return (
     <>
       <Button
+        type="button"
         variant="outline"
         size="sm"
         disabled={blinking}

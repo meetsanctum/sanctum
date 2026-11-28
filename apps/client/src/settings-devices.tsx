@@ -139,9 +139,8 @@ export function DevicesSection(props: {
   const [announcement, setAnnouncement] = useState("");
   // Live device messages received during a request take precedence over its response.
   const liveDevices = useRef(new Map<string, DeviceInfo | null>());
-  // Each device's latest save of its room or what it is shown as, until it
-  // answers or a live message for the device arrives; and the latest of
-  // each kind of menu save, whatever has arrived live since.
+  // Each device's latest settings save, until it answers or a live message
+  // for the device arrives, and the latest of each kind of menu save.
   const saveAttempts = useRef(new Map<string, symbol>());
   const saveLatest = useRef(new Map<string, symbol>());
   const now = useMinuteClock();
@@ -315,28 +314,37 @@ export function DevicesSection(props: {
     if (results[device.id]?.kind === "problem") found(device.id);
   };
 
-  // Saves a device's room or what it is shown as. A newer save of the
-  // device or a live message for it takes precedence over a late reply,
-  // and only the latest choice of its kind says that it failed: an earlier
-  // one failing after it says nothing.
+  // A newer save or live message takes precedence over a late reply.
+  const saveDevice = async (
+    device: DeviceInfo,
+    changes: Parameters<AddFoundWork["onSave"]>[1],
+  ) => {
+    const attempt = Symbol();
+    saveAttempts.current.set(device.id, attempt);
+    try {
+      const response = await updateDevice(device.id, changes);
+      if (saveAttempts.current.get(device.id) === attempt) changed(response);
+    } finally {
+      if (saveAttempts.current.get(device.id) === attempt) {
+        saveAttempts.current.delete(device.id);
+      }
+    }
+  };
+
+  // Only the latest menu choice of its kind says that it failed.
   const saveChoice = async (
     device: DeviceInfo,
     changes: { roomId: string | null } | { shownAs: DeviceType | null },
   ) => {
     const attempt = Symbol();
     const kind = `${device.id}/${"roomId" in changes ? "room" : "shownAs"}`;
-    saveAttempts.current.set(device.id, attempt);
     saveLatest.current.set(kind, attempt);
     trying(device);
     try {
-      const response = await updateDevice(device.id, changes);
-      if (saveAttempts.current.get(device.id) === attempt) changed(response);
+      await saveDevice(device, changes);
     } catch (error) {
       if (saveLatest.current.get(kind) === attempt) failed(device, error);
     } finally {
-      if (saveAttempts.current.get(device.id) === attempt) {
-        saveAttempts.current.delete(device.id);
-      }
       if (saveLatest.current.get(kind) === attempt) {
         saveLatest.current.delete(kind);
       }
@@ -526,7 +534,7 @@ export function DevicesSection(props: {
     onAdded: changed,
     onSave: async (device, changes) => {
       try {
-        changed(await updateDevice(device.id, changes));
+        await saveDevice(device, changes);
         return true;
       } catch {
         return false;
@@ -709,15 +717,15 @@ export function DevicesSection(props: {
             update((current) => current.filter((each) => each.id !== id))
           }
         />
-        <AddFoundDialog
-          found={addingFound}
-          work={foundWork}
-          onClose={() => setAddingFound(undefined)}
-          onCloseFocus={() =>
-            focusAfterAdding(lastFound.current, addButton.current)
-          }
-        />
       </Section>
+      <AddFoundDialog
+        found={addingFound}
+        work={foundWork}
+        onClose={() => setAddingFound(undefined)}
+        onCloseFocus={() =>
+          focusAfterAdding(lastFound.current, addButton.current)
+        }
+      />
       <FoundDevicesSection
         found={groupFound}
         appName={appNameOf}

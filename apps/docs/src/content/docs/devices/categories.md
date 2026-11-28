@@ -41,10 +41,10 @@ devices you haven't added to Home.
 
 ## Settings → Devices lists each device once
 
-**Settings → Devices** lists the categories the home has devices in, in
-the same order, with **Unknown Devices** last. Each row counts its devices,
-after how many need attention, how many have an update and how many were
-found on your network. Choosing one opens a page with only its devices,
+**Settings → Devices** lists categories with added devices or devices found
+on your network, in the same order, with **Unknown Devices** last. Each row
+counts its devices, after how many need attention, how many have an update
+and how many were found. Choosing one opens a page with only its devices,
 where you rename them, move them to another room, update and remove them.
 **Add devices** is on both pages.
 

@@ -438,6 +438,9 @@ export function createDriverCore(
           type: each.type,
           asks,
           later: [...(app.driver?.addLater ?? [])],
+          ...(app.driver?.addLaterInOrder
+            ? { addLaterInOrder: true as const }
+            : {}),
           refusals: shownRefusals(app.driver),
         };
       });

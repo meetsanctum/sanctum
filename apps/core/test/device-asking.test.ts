@@ -60,6 +60,7 @@ describe("adding that asks", () => {
       key: "tv-1",
       asks: [],
       later: ["firstCode", "secondCode"],
+      addLaterInOrder: true,
     });
   });
 

@@ -68,7 +68,8 @@
     "addLater": [
       "firstCode",
       "secondCode"
-    ]
+    ],
+    "addLaterInOrder": true
   },
   "permissions": [
     {

@@ -104,14 +104,14 @@ export function useFoundAdding(
   const now = useNow(asking !== null);
   // The attempt's time ran out: the core ended it.
   useEffect(() => {
-    if (asking && doing !== "stopping" && now >= asking.until) {
+    if (asking && doing === null && !failure?.stopping && now >= asking.until) {
       attempt.current = null;
       setAsking(null);
       setAnswers({});
       const reason = endedWords("adding", "time", appName);
       setFailure(reason ? { reason, retry: "add" } : undefined);
     }
-  }, [asking, doing, now, appName]);
+  }, [asking, doing, failure?.stopping, now, appName]);
 
   const answerTo = (id: string) =>
     Object.hasOwn(answers, id) ? answers[id]! : "";
@@ -183,8 +183,18 @@ export function useFoundAdding(
       });
       if (!stillCurrent()) return;
       took(result, answered);
+      return result;
     } catch (error) {
       if (!stillCurrent()) return;
+      if (what === "stopping") {
+        // Keep the attempt so Cancel can check its outcome again.
+        setFailure({
+          reason: problemReason(error),
+          stopping: true,
+          retry: null,
+        });
+        return;
+      }
       if (attempt.current) {
         cancelQuietly("/api/devices/add/cancel", {
           ...device,
@@ -193,11 +203,10 @@ export function useFoundAdding(
       }
       attempt.current = null;
       setAsking(null);
-      setFailure(
-        what === "stopping"
-          ? { reason: problemReason(error), stopping: true, retry: null }
-          : { reason: addProblem(error, appName), retry: retryAfter(error) },
-      );
+      setFailure({
+        reason: addProblem(error, appName),
+        retry: retryAfter(error),
+      });
     } finally {
       if (stillCurrent()) {
         request.current = null;
@@ -208,7 +217,7 @@ export function useFoundAdding(
 
   /** Starts adding, with the answers to what its driver asks first. */
   const add = () => {
-    if (request.current) return;
+    if (request.current || failure?.stopping) return;
     const id = newAttemptId();
     attempt.current = id;
     void send(
@@ -226,6 +235,7 @@ export function useFoundAdding(
 
   /** Answers the step asked, asks for a new code once its time is up, or starts. */
   const submit = () => {
+    if (failure?.stopping) return;
     if (asking) {
       const lasting = lastingOf(asking);
       if (lastsUp && lasting) {
@@ -252,14 +262,19 @@ export function useFoundAdding(
     if (isComplete(found.asks, answers)) add();
   };
 
-  /** Ends the attempt that asks. */
-  const cancel = () => {
-    if (!asking) return;
-    void send(
+  /** Stops the current attempt and reports whether the dialog can close. */
+  const cancel = async () => {
+    if (request.current?.what === "stopping") return false;
+    const id = asking?.attempt ?? attempt.current;
+    if (!id) return true;
+    const result = await send(
       "stopping",
       "/api/devices/add/cancel",
-      { attempt: asking.attempt },
-      asking.asks,
+      { attempt: id },
+      asking?.asks ?? found.asks,
+    );
+    return (
+      result !== undefined && isEnded(result) && result.ended === "cancelled"
     );
   };
 

@@ -13,6 +13,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type RefObject,
 } from "react";
 
 import { BlinkButton } from "./add-devices-cards";
@@ -35,10 +36,9 @@ import { useFoundAdding } from "./found-adding";
 // its own later. It asks what the device's app asks first, adds it, asks
 // each step adding asks once started (a TV's codes), then names and places
 // the device where it ended up. Short segments at the top fill as it goes;
-// how many is planned from what its app declares, and never shrinks. Until
-// the device is in, Cancel and Escape end the attempt and a click beside
-// the dialog does nothing, so a pairing never ends by accident; once it's
-// in, what is shown is saved as it changes, and Done, × and Escape close.
+// the total follows the driver's plan when it has one. Cancel and Escape
+// check whether adding stopped or finished. Once added, Done, × and
+// Escape save any focused name edit and close.
 
 export type AddFoundWork = {
   rooms: readonly Room[];
@@ -68,22 +68,15 @@ export function AddFoundDialog(props: {
 }) {
   const { found } = props;
   return (
-    <Dialog
-      open={!!found}
-      onOpenChange={(open) => {
-        if (!open) props.onClose();
-      }}
-    >
-      {found && (
-        <AddFlow
-          key={`${found.driver}\u0000${found.key}`}
-          found={found}
-          work={props.work}
-          onClose={props.onClose}
-          onCloseFocus={props.onCloseFocus}
-        />
-      )}
-    </Dialog>
+    found && (
+      <AddFlow
+        key={`${found.driver}\u0000${found.key}`}
+        found={found}
+        work={props.work}
+        onClose={props.onClose}
+        onCloseFocus={props.onCloseFocus}
+      />
+    )
   );
 }
 
@@ -98,6 +91,8 @@ function AddFlow(props: {
   const appName = work.appName(found.driver);
   const [addedId, setAddedId] = useState<string>();
   const [justAdded, setJustAdded] = useState<DeviceInfo>();
+  const [namingRoom, setNamingRoom] = useState(false);
+  const nameInput = useRef<HTMLInputElement>(null);
   const adding = useFoundAdding(found, appName, (device) => {
     setAddedId(device.id);
     setJustAdded(device);
@@ -120,36 +115,17 @@ function AddFlow(props: {
     return () => window.clearTimeout(timer);
   }, [asksFirst]);
 
-  // One segment for what it asks first, or for adding where it asks
-  // nothing, and one to name it. An app declares what adding may ask once
-  // started for all its devices, not each, so those steps are planned once
-  // this device's app asks the first of them, as a TV shows its first code.
-  const asksLater = useRef(false);
-  if (asking?.asks.some((question) => found.later.includes(question.id)))
-    asksLater.current = true;
-  const asksAhead = Math.max(
-    1,
-    (asksFirst ? 1 : 0) + (asksLater.current ? found.later.length : 0),
-  );
-  const reached = device
-    ? asksAhead + 1
-    : asking
-      ? (asksFirst ? 1 : 0) +
-        1 +
-        Math.max(
-          0,
-          ...asking.asks.map((question) => found.later.indexOf(question.id)),
-        )
-      : 1;
-  // A step its app didn't plan for adds a segment; none ever empties.
-  const most = useRef(asksAhead + 1);
-  most.current = Math.max(
-    most.current,
-    reached + (device ? 0 : 1),
-    asksAhead + 1,
-  );
-  const total = most.current;
-  const shown = device ? total : Math.min(reached, total - 1);
+  // A driver can declare a fixed sequence of single-question steps. Retrying
+  // a code within that sequence leaves it on the same segment.
+  const plan = found.addLaterInOrder ? found.later : undefined;
+  const step =
+    asking?.asks.length === 1 ? (plan?.indexOf(asking.asks[0]!.id) ?? -1) : -1;
+  const prompts = useRef<number | null>(found.later?.length === 0 ? 0 : null);
+  if (asking) prompts.current = step < 0 ? null : (plan?.length ?? null);
+  const first = asksFirst ? 1 : 0;
+  const total =
+    prompts.current === null ? null : Math.max(1, first + prompts.current) + 1;
+  const reached = device ? (total ?? 1) : Math.max(1, first + step + 1);
 
   const groupTitle = device ? deviceGroupTitle(deviceGroupOf(device)) : null;
   const title = device ? `Added to ${groupTitle}` : `Add ${found.name}`;
@@ -161,9 +137,18 @@ function AddFlow(props: {
         ? found.description
         : "This takes a few seconds.";
 
+  const close = async () => {
+    if (device) {
+      nameInput.current?.blur();
+      props.onClose();
+    } else if (await adding.cancel()) {
+      props.onClose();
+    }
+  };
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (device) props.onClose();
+    if (device) void close();
     else if (failure && failure.retry && !asksFirst) adding.add();
     else adding.submit();
   };
@@ -171,7 +156,7 @@ function AddFlow(props: {
   const lastsUp = adding.lastsUp;
   const primary = device
     ? { label: "Done", disabled: false }
-    : asking
+    : asking && !failure?.stopping
       ? {
           label:
             doing === "checking"
@@ -198,10 +183,16 @@ function AddFlow(props: {
             busy: doing !== null,
           };
 
-  return (
+  const content = (
     <DialogContent
       showCloseButton={!!device}
       aria-describedby={`${ids}-step ${ids}-description`}
+      onEscapeKeyDown={(event) => {
+        if (namingRoom) {
+          event.preventDefault();
+          setNamingRoom(false);
+        }
+      }}
       onInteractOutside={(event) => {
         if (!device) event.preventDefault();
       }}
@@ -211,7 +202,20 @@ function AddFlow(props: {
       }}
     >
       <form onSubmit={submit} className="flex flex-col gap-5">
-        <StepSegments total={total} reached={shown} id={`${ids}-step`} />
+        <StepSegments
+          total={total}
+          reached={reached}
+          status={
+            device
+              ? "Adding complete"
+              : asking
+                ? "Pairing in progress"
+                : doing === "adding"
+                  ? "Adding in progress"
+                  : undefined
+          }
+          id={`${ids}-step`}
+        />
         <DialogHeader>
           <DialogTitle>
             {title}
@@ -230,14 +234,20 @@ function AddFlow(props: {
           )}
         </DialogHeader>
         {device ? (
-          <Placing device={device} work={work} />
+          <Placing
+            device={device}
+            work={work}
+            nameInput={nameInput}
+            namingRoom={namingRoom}
+            setNamingRoom={setNamingRoom}
+          />
         ) : asking ? (
           <AskingFields
             idPrefix={ids}
             asking={asking}
             answers={adding.answers}
             now={adding.now}
-            disabled={doing !== null}
+            disabled={doing !== null || failure?.stopping}
             onChange={adding.setAnswer}
           />
         ) : (
@@ -272,7 +282,7 @@ function AddFlow(props: {
               type="button"
               variant="outline"
               disabled={doing === "stopping"}
-              onClick={props.onClose}
+              onClick={() => void close()}
             >
               {doing === "stopping" ? "Stopping…" : "Cancel"}
             </Button>
@@ -282,12 +292,10 @@ function AddFlow(props: {
               type="submit"
               disabled={primary.disabled}
               // Busy, it keeps focus, so Try again has it if adding fails.
+              aria-busy={"busy" in primary && primary.busy ? true : undefined}
               aria-disabled={
                 "busy" in primary && primary.busy ? true : undefined
               }
-              className={cn(
-                "busy" in primary && primary.busy && "pointer-events-none",
-              )}
             >
               {primary.label}
             </Button>
@@ -296,13 +304,28 @@ function AddFlow(props: {
       </form>
     </DialogContent>
   );
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) void close();
+      }}
+    >
+      {content}
+    </Dialog>
+  );
 }
 
 // How far adding has come: short segments centred at the top, filled up to
 // the step on show, in the ink, since nothing on them can be pressed. They
 // change in place, never moving. A screen reader hears the step with the
 // dialog's description instead.
-function StepSegments(props: { total: number; reached: number; id: string }) {
+function StepSegments(props: {
+  total: number | null;
+  reached: number;
+  status?: string;
+  id: string;
+}) {
   return (
     <>
       <div
@@ -310,7 +333,7 @@ function StepSegments(props: { total: number; reached: number; id: string }) {
         data-slot="step-segments"
         className="-mt-2.5 mb-2 flex justify-center gap-1.5"
       >
-        {Array.from({ length: props.total }, (_, index) => (
+        {Array.from({ length: props.total ?? 1 }, (_, index) => (
           <span
             key={index}
             data-reached={index < props.reached ? "" : undefined}
@@ -322,7 +345,9 @@ function StepSegments(props: { total: number; reached: number; id: string }) {
         ))}
       </div>
       <span id={props.id} className="sr-only">
-        {`Step ${props.reached} of ${props.total}`}
+        {props.total === null
+          ? props.status
+          : `Step ${props.reached} of ${props.total}`}
       </span>
     </>
   );
@@ -331,12 +356,23 @@ function StepSegments(props: { total: number; reached: number; id: string }) {
 // The device just added, named and placed: its name saved when someone
 // leaves the field, what it's shown as and its room as they're chosen, with
 // New room… at the end of the room's menu, and Blink where it can.
-function Placing(props: { device: DeviceInfo; work: AddFoundWork }) {
-  const { device, work } = props;
+function Placing(props: {
+  device: DeviceInfo;
+  work: AddFoundWork;
+  nameInput: RefObject<HTMLInputElement | null>;
+  namingRoom: boolean;
+  setNamingRoom: (naming: boolean) => void;
+}) {
+  const { device, work, namingRoom, setNamingRoom } = props;
   const ids = useId();
   const [madeRooms, setMadeRooms] = useState<Room[]>([]);
-  const [naming, setNaming] = useState(false);
   const [problem, setProblem] = useState<string>();
+  const roomTrigger = useRef<HTMLButtonElement>(null);
+  const namedRoom = useRef(false);
+  useLayoutEffect(() => {
+    if (!namingRoom && namedRoom.current) roomTrigger.current?.focus();
+    namedRoom.current = namingRoom;
+  }, [namingRoom]);
   const rooms = [
     ...work.rooms,
     ...madeRooms.filter(
@@ -356,6 +392,7 @@ function Placing(props: { device: DeviceInfo; work: AddFoundWork }) {
       <NameField
         id={`${ids}-name`}
         device={device}
+        input={props.nameInput}
         onSave={(name) => void save({ name })}
       />
       {showAs && (
@@ -380,24 +417,24 @@ function Placing(props: { device: DeviceInfo; work: AddFoundWork }) {
       )}
       <div className="flex flex-col gap-1.5">
         <span className="text-[13px] font-medium">Room</span>
-        {naming ? (
+        {namingRoom ? (
           <NewRoom
-            onCancel={() => setNaming(false)}
+            onClose={() => setNamingRoom(false)}
             onAdd={async (name) => {
               const room = await work.onAddRoom(name);
               setMadeRooms((before) => [...before, room]);
-              const moved = await save({ roomId: room.id });
-              if (moved) setNaming(false);
-              return moved;
+              return room;
             }}
+            onMove={(roomId) => save({ roomId })}
           />
         ) : (
           <div className="flex flex-wrap items-center gap-2">
             <RoomPicker
+              triggerRef={roomTrigger}
               device={device}
               rooms={rooms}
               onChange={(roomId) => void save({ roomId })}
-              onNewRoom={() => setNaming(true)}
+              onNewRoom={() => setNamingRoom(true)}
             />
             {device.identify && <BlinkButton device={device} />}
           </div>
@@ -411,14 +448,11 @@ function Placing(props: { device: DeviceInfo; work: AddFoundWork }) {
 function NameField(props: {
   id: string;
   device: DeviceInfo;
+  input: RefObject<HTMLInputElement | null>;
   onSave: (name: string | null) => void;
 }) {
   const { device } = props;
-  const [draft, setDraft] = useState(device.name);
-  const [typing, setTyping] = useState(false);
-  useEffect(() => {
-    if (!typing) setDraft(device.name);
-  }, [device.name, typing]);
+  const [draft, setDraft] = useState<string | null>(null);
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={props.id} className="text-[13px] font-medium">
@@ -426,16 +460,16 @@ function NameField(props: {
       </label>
       <Input
         id={props.id}
-        value={draft}
+        ref={props.input}
+        value={draft ?? device.name}
         maxLength={120}
         autoFocus
-        onFocus={() => setTyping(true)}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={() => {
-          setTyping(false);
+          if (draft === null) return;
+          setDraft(null);
           const name = draft.trim();
           if (name !== device.name) props.onSave(name || null);
-          if (!name) setDraft(device.name);
         }}
         onKeyDown={(event) => {
           // Enter saves the name, rather than closing the dialog.
@@ -452,38 +486,48 @@ function NameField(props: {
 // A room made right here: its name, then Add room puts the device in it.
 // Cancel or Escape goes back to the room's menu.
 function NewRoom(props: {
-  onCancel: () => void;
-  onAdd: (name: string) => Promise<boolean>;
+  onClose: () => void;
+  onAdd: (name: string) => Promise<Room>;
+  onMove: (roomId: string) => Promise<boolean>;
 }) {
   const id = useId();
   const field = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   const [working, setWorking] = useState(false);
   const [problem, setProblem] = useState<{ room: string; reason: string }>();
-  useLayoutEffect(() => field.current?.focus(), []);
+  const open = useRef(false);
+  const made = useRef(new Map<string, string>());
+  useLayoutEffect(() => {
+    open.current = true;
+    field.current?.focus();
+    return () => {
+      open.current = false;
+    };
+  }, []);
+  const close = () => {
+    open.current = false;
+    props.onClose();
+  };
   const add = async () => {
     const wanted = name.trim();
     if (!wanted || working) return;
     setWorking(true);
     setProblem(undefined);
     try {
-      await props.onAdd(wanted);
+      const roomId = made.current.get(wanted) ?? (await props.onAdd(wanted)).id;
+      if (!open.current) return;
+      made.current.set(wanted, roomId);
+      const moved = await props.onMove(roomId);
+      if (open.current && moved) close();
     } catch (error) {
-      setProblem({ room: wanted, reason: problemReason(error) });
+      if (open.current)
+        setProblem({ room: wanted, reason: problemReason(error) });
     } finally {
-      setWorking(false);
+      if (open.current) setWorking(false);
     }
   };
   return (
-    <div
-      className="flex flex-col gap-2"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.stopPropagation();
-          props.onCancel();
-        }
-      }}
-    >
+    <div className="flex flex-col gap-2">
       <label htmlFor={id} className="sr-only">
         New room
       </label>
@@ -502,12 +546,7 @@ function NewRoom(props: {
         }}
       />
       <div className="flex justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={props.onCancel}
-        >
+        <Button type="button" variant="outline" size="sm" onClick={close}>
           Cancel
         </Button>
         <Button

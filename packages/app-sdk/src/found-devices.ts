@@ -68,10 +68,11 @@ export type FoundDevice = {
   asks: DeviceQuestion[];
   /**
    * What adding may ask once it has started, by id, in the order its driver
-   * declares them (driver.addLater), so a client can show how far along
-   * adding is before each step arrives.
+   * declares them (driver.addLater). Older cores omit this list.
    */
-  later: string[];
+  later?: string[];
+  /** The listed questions form a sequence of single-question steps. */
+  addLaterInOrder?: true;
   /** Why its driver may refuse adding it whatever it's asked, by id, in its words. */
   refusals: Record<string, string>;
 };

@@ -135,6 +135,7 @@ export function createAppleHomeDevicesApp(options: DriverOptions = {}) {
         },
       },
       addLater: [airplayCode, companionCode],
+      addLaterInOrder: true,
       refusals: {
         notAllowed:
           "The TV didn't let Sanctum pair. On the TV, open Settings, then AirPlay and HomeKit, and allow access to everyone on the same network.",
