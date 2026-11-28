@@ -602,6 +602,40 @@ describe("the core's tools for AI agents", () => {
     });
   });
 
+  it("never shows an agent speech a speaker didn't understand, and pages past it", async () => {
+    const { core, client, area, lamp } = await household();
+    await area("activity.read", true);
+    const record = core.activity.for("devices");
+    // Stands in for a smart speaker's requests: the filter is the action's.
+    const request = (reason?: string) =>
+      record({
+        action: "device.request",
+        outcome: "ok",
+        ...(reason ? { reason } : {}),
+        subjectId: lamp,
+        detail: { capability: "light", capabilityKind: "light" },
+      });
+    const answered = request();
+    request("not_understood");
+    request("not_understood");
+
+    expect(await call(client, "activity", { limit: 1 })).toMatchObject({
+      isError: false,
+      content: { entries: [{ action: "device.request" }], next: null },
+    });
+    const { entries: all } = (await call(client, "activity")).content as {
+      entries: { reason: string | null }[];
+    };
+    expect(all.map((entry) => entry.reason)).toEqual([null]);
+    // The household still sees them.
+    expect(
+      core.activity
+        .page({ kind: "devices", limit: 10 })
+        .entries.filter((entry) => entry.action === "device.request"),
+    ).toHaveLength(3);
+    expect(answered).toBeTruthy();
+  });
+
   it("reads up to 10 days of history for the devices it may see", async () => {
     const { core, client, area, lamp } = await household();
     await area("history.read", true);

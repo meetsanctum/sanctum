@@ -76,6 +76,11 @@ export type ActivityQuery = {
   // An entry's id: those older than it.
   before?: string;
   limit: number;
+  /**
+   * What an AI agent may read: without speech a smart speaker didn't
+   * understand, which an accidental wake can have caught from a room.
+   */
+  forAgents?: boolean;
 };
 
 const same = (a: string | null | undefined, b: string | null | undefined) =>
@@ -368,6 +373,11 @@ export function createActivity(
       if (query.kind) conditions.push(eq(activity.kind, query.kind));
       if (query.deviceCapabilities) {
         conditions.push(deviceActivityIn(query.deviceCapabilities));
+      }
+      if (query.forAgents) {
+        conditions.push(
+          sql`not (${activity.action} = 'device.request' and coalesce(${activity.reason}, '') = 'not_understood')`,
+        );
       }
       const anchor = query.before
         ? db
