@@ -8,6 +8,7 @@ import {
   verifyInviteConfirmation,
   type HostView,
   type InviteInfo,
+  type InviteStarted,
   type RedeemChecked,
   type RedeemFinish,
   type RedeemFinished,
@@ -43,8 +44,7 @@ export async function addPerson(core: TestCore, token: string, name: string) {
   return added.json() as { id: string; name: string };
 }
 
-// Makes a person an invite and returns the code the device would show.
-export async function invite(
+export async function startInvite(
   core: TestCore,
   token: string,
   personId: string,
@@ -53,7 +53,7 @@ export async function invite(
 ) {
   const secret = newInviteSecret();
   const started = registration(secret);
-  const start = await post(
+  const response = await post(
     core,
     "/api/auth/invites/start",
     {
@@ -64,23 +64,38 @@ export async function invite(
     },
     { token },
   );
-  if (start.statusCode !== 200) {
-    return { response: start } as const;
+  if (response.statusCode !== 200) {
+    return { response } as const;
   }
-  const { registrationId, registrationResponse, lookup } = start.json();
-  const finish = await post(
-    core,
-    "/api/auth/invites/finish",
-    {
-      registrationId,
-      registrationRecord: started.finish(registrationResponse),
-      keyStretching: keyStretching.version,
+  const { registrationId, registrationResponse, lookup } =
+    response.json<InviteStarted>();
+  return {
+    response,
+    lookup,
+    code: `${lookup}${secret}`,
+    finish: () => {
+      return post(
+        core,
+        "/api/auth/invites/finish",
+        {
+          registrationId,
+          registrationRecord: started.finish(registrationResponse),
+          keyStretching: keyStretching.version,
+        },
+        { token },
+      );
     },
-    { token },
-  );
+  } as const;
+}
+
+// Makes a person an invite and returns the code the device would show.
+export async function invite(...args: Parameters<typeof startInvite>) {
+  const started = await startInvite(...args);
+  if (!started.finish) return { response: started.response } as const;
+  const finish = await started.finish();
   return {
     response: finish,
-    code: `${lookup}${secret}`,
+    code: started.code,
     info: finish.statusCode === 200 ? (finish.json() as InviteInfo) : null,
   } as const;
 }

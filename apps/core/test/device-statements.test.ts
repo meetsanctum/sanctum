@@ -1,4 +1,9 @@
-import type { ActivityInfo, EntityInfo } from "@meetsanctum/app-sdk";
+import {
+  turnOnSchema,
+  turnOnType,
+  type ActivityInfo,
+  type EntityInfo,
+} from "@meetsanctum/app-sdk";
 import moods from "@meetsanctum/moods";
 import { createNaturalLightApp } from "@meetsanctum/natural-light";
 import { fileURLToPath } from "node:url";
@@ -73,8 +78,8 @@ const catalogApp = (app: AppPackage["app"], folder: string): AppPackage => ({
 });
 
 // A room with six lights, all off, and a client following the home.
-async function sixLights(options: { apps?: readonly AppPackage[] } = {}) {
-  const context = await lampsCore(options);
+async function sixLights(home?: Awaited<ReturnType<typeof lampsCore>>) {
+  const context = home ?? (await lampsCore());
   const { core, maya, lamp } = context;
   const token = maya.token;
   for (const each of [2, 3, 4, 5, 6]) {
@@ -152,18 +157,12 @@ describe("a press of a room's six lights", () => {
   });
 
   it("compiles none for the apps that follow the lights", async () => {
-    // Natural Light reads the core's test clock once the core has one.
-    let clock = () => new Date();
-    const { core, maya, live, press } = await sixLights({
-      apps: [
-        catalogApp(moods, "moods"),
-        catalogApp(
-          createNaturalLightApp({ now: () => clock() }),
-          "natural-light",
-        ),
-      ],
+    const home = await lampsCore({
+      apps: [catalogApp(moods, "moods")],
     });
-    clock = core.now;
+    const { core, maya } = home;
+    // Set the location before Natural Light starts, so there is no queued
+    // location change that can set the lights during the press.
     await post(
       core,
       "/api/places/home/update",
@@ -173,20 +172,33 @@ describe("a press of a room's six lights", () => {
       },
       maya,
     );
-    const targets = async () =>
+    await core.startApps([
+      catalogApp(createNaturalLightApp({ now: core.now }), "natural-light"),
+    ]);
+    const { live, press } = await sixLights(home);
+    const published = async (type: string) =>
       (
         (
           await get(core, "/api/entities?app=sanctum.natural-light", maya)
         ).json() as EntityInfo[]
-      ).filter((entity) => entity.type === "naturalLight.target");
-    // Let the location's curve reach all six lights before measuring a
-    // press. A later curve makes each light need a new look when it comes on.
+      ).filter((entity) => entity.type === type);
+    const targets = () => published("naturalLight.target");
+    // Let the curve reach all six lights before measuring a press. A later
+    // curve makes each light need a new look when it comes on. Natural Light
+    // publishes the room's rule for turning on after the lights' targets, and
+    // a rule from before it followed all six keeps the others off.
     await vi.waitFor(async () => {
       const current = await targets();
       expect(current).toHaveLength(6);
       for (const target of current) {
         expect(target.state).toMatchObject({ status: "following" });
       }
+      const rules = await published(turnOnType.id);
+      expect(rules).toHaveLength(1);
+      const { lights } = turnOnSchema.parse(rules[0]!.state);
+      expect(lights.map((light) => light.state.on)).toEqual(
+        Array(6).fill(true),
+      );
     }, realClock);
     core.advance(6 * 60 * 60_000);
     live.messages.length = 0;

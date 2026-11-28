@@ -125,6 +125,7 @@ async function show(client: AppClient) {
           back={() => {}}
           openSettings={() => {}}
           openDevice={() => {}}
+          openHousehold={() => {}}
           addDevices={() => {}}
         />
       </AppScope>,

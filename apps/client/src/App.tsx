@@ -23,6 +23,7 @@ type View =
   | { name: "sign-in"; host: FoundHost; recheck?: StoredHost }
   | { name: "pair"; host: FoundHost; recheck?: StoredHost }
   | { name: "join"; host: FoundHost }
+  | { name: "forgot"; host: FoundHost }
   | { name: "home"; host: StoredHost }
   | { name: "changed"; host: StoredHost; url: string; found?: FoundHost };
 
@@ -33,6 +34,7 @@ const views = new Set([
   "sign-in",
   "pair",
   "join",
+  "forgot",
   "home",
   "changed",
 ]);
@@ -90,7 +92,8 @@ export function App() {
     view.name === "claim" ||
     view.name === "sign-in" ||
     view.name === "pair" ||
-    view.name === "join"
+    view.name === "join" ||
+    view.name === "forgot"
       ? view.host.id
       : null;
   // Runs when the host being checked or the screen changes, with the view
@@ -171,14 +174,20 @@ export function App() {
           }}
           onForgotten={back}
           onJoin={recheck ? undefined : () => setView({ name: "join", host })}
+          onForgot={
+            recheck ? undefined : () => setView({ name: "forgot", host })
+          }
         />
       );
     }
-    case "join": {
+    case "join":
+    case "forgot": {
       const { host } = view;
       return (
         <JoinHome
+          key={view.name}
           host={host}
+          forgot={view.name === "forgot"}
           onBack={() => setView({ name: "sign-in", host })}
           onJoined={home}
         />

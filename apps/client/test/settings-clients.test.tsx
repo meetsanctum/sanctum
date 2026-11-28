@@ -11,6 +11,7 @@ import {
   clientDetail,
   seenText,
 } from "../src/settings-clients";
+import { problemLines } from "./problem-lines";
 
 const clock = homeClock({ timeZone: "UTC" });
 
@@ -346,8 +347,11 @@ describe("Settings → Linked Devices", () => {
     await act(async () => toggle("Reduce effects").click());
     expect(isOn("Reduce effects")).toBe(false);
     expect(
-      document.querySelector("[role=dialog] [role=alert]")!.textContent,
-    ).toBe("That did not work. Try again.");
+      problemLines(document.querySelector("[role=dialog] [role=alert]")),
+    ).toEqual([
+      "Reduce effects wasn't turned on",
+      "Sanctum ran into a problem. Try again in a moment.",
+    ]);
   });
 
   it("keeps a saved switch value when the client list cannot refresh", async () => {

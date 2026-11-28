@@ -11,6 +11,7 @@ import {
   Button,
   Input,
   PageBar,
+  Problem,
   useHomeClock,
   type LiveFeed,
 } from "@meetsanctum/ui-sdk";
@@ -19,6 +20,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { ColourPicker } from "../colour-picker";
 import { Avatar, BackButton, Row, Section } from "../components";
 import { CoreError, coreJson } from "../core-fetch";
+import { problemReason } from "../device-parts";
 import { platformNames } from "../platforms";
 import { ChangePassword } from "./change-password";
 import { Confirm, type Asking } from "./confirm";
@@ -38,8 +40,6 @@ import { agentsGoText, firstName, signsOutText, usedText } from "./words";
 
 const label = "text-[13px] leading-[18px] font-medium text-muted-foreground";
 
-const tryAgain = "That didn't work. Try again.";
-
 export function PersonPage(props: {
   live: LiveFeed;
   personId: string;
@@ -50,7 +50,7 @@ export function PersonPage(props: {
   back: () => void;
   backTo?: string;
 }) {
-  const { data, failed, refresh } = usePeople(props.live, true);
+  const { data, failed, problem, refresh } = usePeople(props.live, true);
   const [asking, setAsking] = useState<Asking>();
   const [inviting, setInviting] = useState<Inviting>();
   const [saving, setSaving] = useState(false);
@@ -83,13 +83,17 @@ export function PersonPage(props: {
   );
   const loadError = failed && (
     <div className="flex shrink-0 flex-col items-start gap-2">
-      <p role="alert" className="m-0 text-sm text-destructive">
-        {data
-          ? "The details shown here may be out of date."
-          : "This page can't be shown now."}
-      </p>
+      <Problem
+        title={
+          person
+            ? `${person.name}'s details may be out of date`
+            : "This person's details didn't load"
+        }
+      >
+        {problem}
+      </Problem>
       <Button variant="outline" onClick={() => void refresh()}>
-        Retry
+        Try again
       </Button>
     </div>
   );
@@ -115,6 +119,7 @@ export function PersonPage(props: {
       title: reset ? "Cancel password code?" : "Cancel invite?",
       description: `The ${reset ? "password" : "invite"} code stops working.`,
       confirm: reset ? "Cancel code" : "Cancel invite",
+      failed: `${person.name}'s ${reset ? "password code" : "invite"} wasn't cancelled`,
       trigger,
       run: async () => {
         try {
@@ -127,7 +132,7 @@ export function PersonPage(props: {
         error instanceof CoreError &&
         (error.code === "invite_changed" || error.code === "not_found")
           ? "This code is no longer active. Close this to see the current details."
-          : tryAgain,
+          : problemReason(error),
     });
   };
 
@@ -163,6 +168,9 @@ export function PersonPage(props: {
         .filter(Boolean)
         .join(" "),
       confirm: removePerson ? "Remove" : "Remove sign-in",
+      failed: removePerson
+        ? `${target.name} wasn't removed`
+        : `${target.name}'s sign-in wasn't removed`,
       trigger,
       run: async () => {
         if (removePerson) {
@@ -209,7 +217,10 @@ export function PersonPage(props: {
             replacesInviteId:
               kind === "invite" && signIn.state === "invited"
                 ? signIn.invite.id
-                : undefined,
+                : kind === "recovery" && signIn.state === "signs-in"
+                  ? signIn.recovery?.id
+                  : undefined,
+            username: signIn.state === "signs-in" ? signIn.username : undefined,
           })
         }
         onCancelCode={askCancelCode}
@@ -224,6 +235,7 @@ export function PersonPage(props: {
               title: `Sign out ${client.name}?`,
               description: `${firstName(person.name)} signs in again to use it.`,
               confirm: "Sign out",
+              failed: `${client.name} wasn't signed out`,
               trigger,
               run: async () => {
                 await coreJson("/api/auth/clients/revoke", {
@@ -232,7 +244,7 @@ export function PersonPage(props: {
                 });
                 await done();
               },
-              problem: () => tryAgain,
+              problem: problemReason,
             })
           }
         />
@@ -272,7 +284,7 @@ export function PersonPage(props: {
 function lastSignInProblem(person: PersonInfo, error: unknown) {
   return error instanceof CoreError && error.code === "last_login"
     ? `${person.name} is the only person who signs in, so this sign-in stays.`
-    : tryAgain;
+    : problemReason(error);
 }
 
 function NameAndColour(props: {
@@ -285,7 +297,7 @@ function NameAndColour(props: {
   const { person, working } = props;
   const [name, setName] = useState(person.name);
   const [colour, setColour] = useState(person.colour);
-  const [problem, setProblem] = useState<string>();
+  const [problem, setProblem] = useState<{ title: string; reason: string }>();
   const trimmed = name.trim();
   const changes: Omit<ChangePerson, "id"> = {
     ...(trimmed !== person.name && { name: trimmed }),
@@ -304,8 +316,16 @@ function NameAndColour(props: {
         json: { id: person.id, ...changes } satisfies ChangePerson,
       });
       await props.onSaved();
-    } catch {
-      setProblem(tryAgain);
+    } catch (error) {
+      setProblem({
+        title:
+          changes.name && changes.colour
+            ? `${person.name}'s changes weren't saved`
+            : changes.name
+              ? `${person.name} wasn't renamed`
+              : `${person.name}'s colour wasn't changed`,
+        reason: problemReason(error),
+      });
     } finally {
       props.onWorkingChange(false);
     }
@@ -348,11 +368,7 @@ function NameAndColour(props: {
           surface="var(--card)"
           disabled={working}
         />
-        {problem && (
-          <p role="alert" className="m-0 text-sm text-destructive">
-            {problem}
-          </p>
-        )}
+        {problem && <Problem title={problem.title}>{problem.reason}</Problem>}
         <Button
           type="submit"
           className="self-start"

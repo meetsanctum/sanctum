@@ -47,25 +47,41 @@ next try is right. Then it works again.
 On a Mac signed in as you, open your own page: choose your picture at the
 bottom of the sidebar, then **Profile**, or choose your name in **Settings →
 People**. Then choose **Change password** under **Sign-In**. Enter your
-current password, then your new one twice, and choose **Change password**.
+current password, then your new one, and choose **Change password**.
 
 Your current password is checked on your Mac before anything changes, and
 neither password leaves it. Your other devices stay signed in. To sign one
 out, choose **Sign out** beside it under **Linked Devices**.
 
 Forgot it? In the same dialog, choose **Forgot your password?** under
-**Current password**, then enter a new password twice. Your Mac is signed in
+**Current password**, then enter a new password. Your Mac is signed in
 as you, so the old one isn't needed. See
 [If you forget your password](/people/forgotten-password/).
 
 Change password shows only on your own page, on your own device. On someone
 else's page, and on a shared device, it is **Reset password**.
 
+## Your recovery code
+
+A recovery code lets you choose a new password if you forget yours, even
+when no device is signed in as you and no one else at home signs in. The
+first person in a home gets one when setting it up.
+
+To make one, open your own page and choose **Make a code** beside
+**Recovery code**, under **Sign-In**. Copy it into a password manager, or
+choose **Print** and keep the page with your important papers: you can't see
+it again after you close it. Anyone who has it can choose a new password for
+you.
+
+**Make a new code** makes another and ends the one you had. The code works
+once, and a password you set yourself leaves it working. Only your own
+devices show it, never someone else's or a shared device.
+
 ## Reset a password
 
 If someone forgets their password, open their page and choose **Reset
 password**. Give them the new code: in the Mac app, they choose **Just
-me**, then **I have an invite code**, enter it and choose a new password.
+me**, then **Forgot your password?**, enter it and choose a new password.
 Their current password keeps working until the code is used, so a reset
 started by mistake changes nothing. To end the code, choose **Cancel code**
 and confirm. It also ends if they change or choose a new password

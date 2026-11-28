@@ -3,6 +3,7 @@ import type { Me } from "@meetsanctum/auth-protocol";
 import {
   Button,
   mainPage,
+  Problem,
   type createLiveFeed,
   type PageParams,
   type Tile,
@@ -35,6 +36,7 @@ import { SetupGuide, SetupLeft } from "./setup-guide";
 import {
   automationsApp,
   devicesSettingsPage,
+  householdSettingsPage,
   maintenanceSettingsPage,
   settingsApp,
   systemSettingsPage,
@@ -320,6 +322,12 @@ function HomePageWithDevices({
               open={opener(route.app)}
               back={back}
               openSettings={settingsOf(route.app)}
+              openHousehold={(title) =>
+                opener(settingsApp.id)(
+                  householdSettingsPage,
+                  title ? { from: title } : {},
+                )
+              }
               openDevice={(id) => {
                 // A device's detail opens on its first tile, as from a room.
                 const tile = devices.tiles.find((each) => each.deviceId === id);
@@ -453,8 +461,10 @@ class SystemPageBoundary extends Component<
   override render() {
     if (!this.state.failed) return this.props.children;
     return (
-      <div className="flex flex-col items-start gap-3">
-        <p role="alert">Couldn't open {this.props.name}.</p>
+      <div className="flex flex-col items-start gap-2">
+        <Problem title={`${this.props.name} didn't open`}>
+          Something went wrong while showing it. Reload to try again.
+        </Problem>
         <Button variant="outline" onClick={() => location.reload()}>
           Reload
         </Button>

@@ -34,6 +34,7 @@ export type FrameEvent =
   | { type: "open"; page: string; params: PageParams }
   | { type: "back" }
   | { type: "openSettings" }
+  | { type: "openHousehold" }
   | { type: "openDevice"; device: string }
   | { type: "addDevices"; returnParams?: PageParams }
   | { type: "size"; height: number }
@@ -136,6 +137,7 @@ export function openBridge(options: {
         return;
       case "back":
       case "openSettings":
+      case "openHousehold":
       case "ready":
         return on({ type: message.type });
       case "addDevices":

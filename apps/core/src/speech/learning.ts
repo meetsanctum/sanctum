@@ -5,6 +5,7 @@ import {
   type AssistantSentences,
   type Hearing,
   type HearingFailure,
+  type Language,
   type SpeechLanguage,
   type SentenceBlank,
 } from "@meetsanctum/app-sdk";
@@ -88,7 +89,11 @@ export function createLearning(options: {
   sentences: () => AssistantSentences | null;
   // The home's names for each blank.
   names: () => Record<SentenceBlank, string[]>;
+  // The language speech recognition learns and hears: the home's speech
+  // language (speechLanguage).
   language: () => SpeechLanguage;
+  // The home's language, which Hearing names beside the speech language.
+  homeLanguage: () => Language;
   // Whether a smart speaker in the home listens.
   speakersListen: () => boolean;
   // For tests: how long after the last change it retrains.
@@ -134,15 +139,19 @@ export function createLearning(options: {
     const sentences = options.sentences();
     const listens = options.speakersListen();
     const activeLanguage = sentences && listens ? hearsIn() : null;
+    const named = {
+      language: options.homeLanguage(),
+      speechLanguage: language,
+    };
     const failed = (failure: HearingFailure): Hearing => ({
       state: "failed",
-      language,
+      ...named,
       activeLanguage,
       failure,
     });
     if (sentences === null) return failed("assistant_off");
     if (!sentences[language]) return failed("no_sentences");
-    if (!listens) return { state: "no_speaker", language, activeLanguage };
+    if (!listens) return { state: "no_speaker", ...named, activeLanguage };
     if (admissionProblem) return failed(admissionProblem);
     if (managerFailed) return failed("unavailable");
     if (
@@ -152,7 +161,7 @@ export function createLearning(options: {
       const leftOut = learned ? leftOutOf.get(learned) : undefined;
       return {
         state: "ready",
-        language,
+        ...named,
         activeLanguage,
         ...(leftOut ? { leftOut } : {}),
       };
@@ -163,7 +172,7 @@ export function createLearning(options: {
       state:
         current?.phase ??
         (cachedLanguages.has(language) ? "learning" : "downloading"),
-      language,
+      ...named,
       activeLanguage,
     };
   }

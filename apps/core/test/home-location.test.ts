@@ -102,6 +102,7 @@ describe("the home's location", () => {
       coordinates: null,
       temperatureUnit: "celsius",
       hourCycle: "24h",
+      language: "en",
     });
 
     const set = await post(core, "/api/places/home/update", atZurich, maya);
@@ -110,6 +111,7 @@ describe("the home's location", () => {
       ...atZurich,
       temperatureUnit: "celsius",
       hourCycle: "24h",
+      language: "en",
     });
     await post(core, "/api/places/home/update", { name: "Lake house" }, maya);
     expect((await get(core, "/api/places/home", maya)).json()).toEqual({
@@ -117,6 +119,7 @@ describe("the home's location", () => {
       ...atZurich,
       temperatureUnit: "celsius",
       hourCycle: "24h",
+      language: "en",
     });
     expect(core.places.location()).toEqual(zurich);
 
@@ -127,6 +130,7 @@ describe("the home's location", () => {
       coordinates: null,
       temperatureUnit: "celsius",
       hourCycle: "24h",
+      language: "en",
     });
     expect(entries(core).map((entry) => entry.action)).toEqual([
       "home.update",
@@ -189,13 +193,24 @@ describe("the home's location", () => {
     const refused = await post(
       core,
       "/api/places/home/update",
-      { coordinates: atZurich.coordinates },
+      { language: "de", coordinates: atZurich.coordinates },
       maya,
     );
     expect(refused.statusCode).toBe(400);
     expect(refused.json()).toEqual({ error: "time_zone_needed" });
+    expect(core.places.language()).toBe("en");
+    expect(
+      entries(core).some((entry) => entry.action === "home.language"),
+    ).toBe(false);
 
-    await post(core, "/api/places/home/update", atZurich, maya);
+    const saved = await post(
+      core,
+      "/api/places/home/update",
+      { ...atZurich, language: "de" },
+      maya,
+    );
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toMatchObject({ language: "de", ...atZurich });
     expect(
       (await post(core, "/api/places/home/update", { timeZone: null }, maya))
         .statusCode,
@@ -310,6 +325,7 @@ describe("the location suggestion", () => {
       coordinates: null,
       temperatureUnit: "celsius",
       hourCycle: "24h",
+      language: "en",
     });
     expect(entries(core)[0]).toMatchObject({
       action: "home.suggestLocation",

@@ -10,6 +10,7 @@ import { setCoreBaseUrl } from "../src/core-url";
 import { notAnsweringAfterMs } from "../src/connection-veil";
 import type { CoreStatus } from "../src/core-status";
 import type { FoundHost, Shell, StoredHost } from "../src/shell";
+import { problemLines } from "./problem-lines";
 
 // The host never answers as itself until a test says so. Its core answers
 // its health check until a test reports otherwise.
@@ -264,9 +265,10 @@ describe("a stored home that does not answer", () => {
     await click("Choose another home");
     await click("Forget");
 
-    expect(dialog()?.querySelector('[role="alert"]')?.textContent).toBe(
-      "That did not work. Try again.",
-    );
+    expect(problemLines(dialog()?.querySelector('[role="alert"]'))).toEqual([
+      `${host.name} wasn't forgotten`,
+      "This device couldn't save the change. Try again.",
+    ]);
     expect(button("Forget")?.disabled).toBe(false);
     expect(currentCredential()).toEqual({
       url: host.url,

@@ -79,7 +79,6 @@ export const coreCallMethods = [
   "aiTools",
   "callAiTool",
   "replyRequest",
-  "setSpeechLanguage",
   "openListen",
   "sendListen",
   "readListen",

@@ -39,8 +39,13 @@ export const hearingFailures = [
 export type HearingFailure = (typeof hearingFailures)[number];
 
 export type Hearing = {
-  /** The home's selected language. */
+  /** The home's language, which Household sets. */
   language: Language;
+  /**
+   * The language smart speakers hear and speak: the home's, or English
+   * where Sanctum can't hear or speak the home's (speechLanguage).
+   */
+  speechLanguage: SpeechLanguage;
   /** What speakers can hear now, or null while they cannot listen. */
   activeLanguage: SpeechLanguage | null;
   /**

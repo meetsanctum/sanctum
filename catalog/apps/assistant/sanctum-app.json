@@ -1,9 +1,9 @@
 {
   "id": "sanctum.assistant",
   "name": "Assistant",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "core": "^2.0.0",
-  "protocol": 29,
+  "protocol": 30,
   "summary": "Controls lights by voice or typed request.",
   "runtime": {
     "memory": 128,
@@ -127,36 +127,7 @@
     "setup"
   ],
   "settings": null,
-  "actions": [
-    {
-      "id": "assistant.language",
-      "title": "Language",
-      "tier": "write",
-      "input": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "properties": {
-          "language": {
-            "type": "string",
-            "enum": [
-              "en",
-              "de"
-            ]
-          }
-        },
-        "required": [
-          "language"
-        ]
-      },
-      "output": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "type": "object",
-        "properties": {},
-        "additionalProperties": false
-      },
-      "assistant": null
-    }
-  ],
+  "actions": [],
   "events": [],
   "provides": {
     "entities": [],
@@ -166,5 +137,6 @@
     "triggers": [],
     "conditions": [],
     "steps": []
-  }
+  },
+  "oldestPage": "0.4.0"
 }

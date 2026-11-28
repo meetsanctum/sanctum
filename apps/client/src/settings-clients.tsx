@@ -4,7 +4,7 @@ import type {
   PersonInfo,
   SetClientDrawing,
 } from "@meetsanctum/auth-protocol";
-import { Button, Input, useHomeClock } from "@meetsanctum/ui-sdk";
+import { Button, Input, Problem, useHomeClock } from "@meetsanctum/ui-sdk";
 import { EllipsisVertical, Gauge, House, LogOut, Pencil } from "lucide-react";
 import {
   useCallback,
@@ -33,6 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 import { coreJson } from "./core-fetch";
+import { problemReason } from "./device-parts";
 import { firstName, usedText } from "./people/words";
 import { platformNames } from "./platforms";
 import { ClientDrawing, drawnText } from "./settings-client-drawing";
@@ -272,7 +273,7 @@ function EditClient(props: {
   if (props.editing) last.current = props.editing;
   const editing = last.current;
   const [name, setName] = useState("");
-  const [problem, setProblem] = useState<string>();
+  const [problem, setProblem] = useState<{ title: string; reason: string }>();
   const [working, setWorking] = useState(false);
   const { start, cancel } = useAuthAttempt();
 
@@ -311,9 +312,15 @@ function EditClient(props: {
       signal.throwIfAborted();
       props.onDone();
       props.onClose();
-    } catch {
+    } catch (error) {
       if (signal.aborted) return;
-      setProblem("That did not work. Try again.");
+      setProblem({
+        title:
+          editing.action === "rename"
+            ? `${editing.client.name} wasn't renamed`
+            : `${editing.client.name} wasn't signed out`,
+        reason: problemReason(error),
+      });
       setWorking(false);
     }
   };
@@ -353,11 +360,7 @@ function EditClient(props: {
               autoFocus
             />
           )}
-          {problem && (
-            <p role="alert" className="m-0 text-sm text-destructive">
-              {problem}
-            </p>
-          )}
+          {problem && <Problem title={problem.title}>{problem.reason}</Problem>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={close}>
               Cancel

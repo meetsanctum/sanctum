@@ -6,7 +6,7 @@ import {
   type Room,
 } from "@meetsanctum/app-sdk";
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
-import { Button, useHomeClock } from "@meetsanctum/ui-sdk";
+import { Button, Problem, useHomeClock } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import {
   Battery,
@@ -15,7 +15,6 @@ import {
   BatteryMedium,
   BatteryWarning,
   Check,
-  CircleAlert,
   CircleStop,
   EllipsisVertical,
   RefreshCw,
@@ -33,7 +32,7 @@ import {
 import { coreJson } from "./core-fetch";
 import {
   ago,
-  firmwareProblem,
+  firmwareReason,
   firmwareStatus,
   updateButton,
   UpdateDialog,
@@ -309,6 +308,13 @@ function RunningMenu(props: { device: DeviceInfo; onStop: () => void }) {
   );
 }
 
+type UpdateProblem = {
+  id: string;
+  action: "check" | "stop";
+  title: string;
+  reason: string;
+};
+
 /**
  * The Maintenance page: every device on a battery, the next to replace
  * first, with its charge at the end, and every update, each with Update or
@@ -333,7 +339,8 @@ export function MaintenancePage(props: {
   const [updating, setUpdating] = useState<DeviceInfo>();
   // Whether Check for updates is under way, and what it couldn't check.
   const [checking, setChecking] = useState(false);
-  const [problem, setProblem] = useState<string>();
+  // What didn't happen, one for each device it didn't happen to.
+  const [problems, setProblems] = useState<UpdateProblem[]>([]);
   // What a screen reader hears of an outcome.
   const [announcement, setAnnouncement] = useState("");
 
@@ -375,14 +382,14 @@ export function MaintenancePage(props: {
   // asked by its driver when it wakes.
   const checkAll = async () => {
     setChecking(true);
-    setProblem(undefined);
+    setProblems([]);
     const asked = updatable.filter(
       (device) =>
         !device.firmware?.sleeps &&
         device.firmware?.state !== "updating" &&
         device.firmware?.state !== "waiting",
     );
-    const failed: string[] = [];
+    const failed: UpdateProblem[] = [];
     for (const device of asked) {
       try {
         await coreJson<DeviceInfo>("/api/devices/firmware/check", {
@@ -390,15 +397,20 @@ export function MaintenancePage(props: {
           json: { id: device.id },
         });
       } catch (error) {
-        failed.push(
-          `${device.name}: ${firmwareProblem(error, "check", appName(device))}`,
-        );
+        failed.push({
+          id: device.id,
+          action: "check",
+          title: `${device.name} wasn't checked for an update`,
+          reason: firmwareReason(error, "check", appName(device)),
+        });
       }
     }
     setChecking(false);
-    setProblem(failed.length > 0 ? failed.join(" ") : undefined);
+    setProblems(failed);
     setAnnouncement(
-      failed.length > 0 ? failed.join(" ") : "Checked for updates.",
+      failed.length > 0
+        ? failed.map((each) => `${each.title}. ${each.reason}`).join(" ")
+        : "Checked for updates.",
     );
   };
 
@@ -408,11 +420,24 @@ export function MaintenancePage(props: {
         method: "POST",
         json: { id: device.id },
       });
+      setProblems((before) =>
+        before.filter(
+          (each) => each.id !== device.id || each.action !== "stop",
+        ),
+      );
       setAnnouncement(`${device.name}'s update is stopped.`);
     } catch (error) {
-      const text = firmwareProblem(error, "stop", appName(device));
-      setProblem(`${device.name}: ${text}`);
-      setAnnouncement(text);
+      const failed: UpdateProblem = {
+        id: device.id,
+        action: "stop",
+        title: `${device.name}'s update didn't stop`,
+        reason: firmwareReason(error, "stop", appName(device)),
+      };
+      setProblems((before) => [
+        ...before.filter((each) => each.id !== device.id),
+        failed,
+      ]);
+      setAnnouncement(`${failed.title}. ${failed.reason}`);
     }
   };
 
@@ -515,15 +540,11 @@ export function MaintenancePage(props: {
                 </li>
               );
             })}
-            {problem && (
-              <li
-                role="alert"
-                className="flex items-center gap-1 text-[13px] font-medium text-destructive"
-              >
-                <CircleAlert aria-hidden="true" className="size-3.5 shrink-0" />
-                {problem}
+            {problems.map((each) => (
+              <li key={each.id}>
+                <Problem title={each.title}>{each.reason}</Problem>
               </li>
-            )}
+            ))}
           </ul>
         </Section>
       )}

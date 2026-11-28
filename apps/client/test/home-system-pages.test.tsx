@@ -3,6 +3,7 @@ import { act } from "react";
 import { expect, it, vi } from "vitest";
 
 import { container, remountHome } from "./home-shell-harness";
+import { problemLines } from "./problem-lines";
 
 const imports = vi.hoisted(() =>
   vi.fn(() => {
@@ -43,9 +44,12 @@ it.each(["Settings", "Automations"])(
     try {
       await act(async () => systemPage.click());
       await vi.waitFor(() =>
-        expect(container.querySelector("main [role=alert]")?.textContent).toBe(
-          `Couldn't open ${name}.`,
-        ),
+        expect(
+          problemLines(container.querySelector("main [role=alert]")),
+        ).toEqual([
+          `${name} didn't open`,
+          "Something went wrong while showing it. Reload to try again.",
+        ]),
       );
     } finally {
       log.mockRestore();

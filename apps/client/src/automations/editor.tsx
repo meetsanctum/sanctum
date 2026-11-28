@@ -7,7 +7,14 @@ import type {
   WorkflowNode,
   WorkflowProblem,
 } from "@meetsanctum/app-sdk";
-import { Button, Card, Input, PageBar, PageSection } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  Card,
+  Input,
+  PageBar,
+  PageSection,
+  Problem,
+} from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import {
   ChevronDown,
@@ -153,7 +160,8 @@ export function EditorPage(props: {
   const draft = edited ?? initial;
   const [adding, setAdding] = useState<PieceKind | null>(null);
   const [saving, setSaving] = useState(false);
-  const [problem, setProblem] = useState<string>();
+  // What didn't happen, and why.
+  const [problem, setProblem] = useState<{ title: string; reason: string }>();
   // The core's problems, as saved or as a failed save answered.
   const [answered, setProblems] = useState<WorkflowProblem[]>();
   const problems = answered ?? workflow?.problems ?? [];
@@ -229,7 +237,12 @@ export function EditorPage(props: {
       }
       props.back();
     } catch (error) {
-      setProblem(problemOf(error));
+      setProblem({
+        title: workflow
+          ? `${workflow.name} wasn't saved`
+          : `Couldn't add ${name}`,
+        reason: problemOf(error),
+      });
       // The core's problems mark the cards they are about.
       if (error instanceof CoreError && error.code === "invalid_workflow") {
         const body = error.body as { problems?: WorkflowProblem[] } | null;
@@ -325,14 +338,7 @@ export function EditorPage(props: {
             </span>
           </Card>
         )}
-        {problem && (
-          <p
-            role="alert"
-            className="m-0 text-[13px] leading-[18px] font-medium text-(--danger)"
-          >
-            {problem}
-          </p>
-        )}
+        {problem && <Problem title={problem.title}>{problem.reason}</Problem>}
         <PageSection id="editor-name" title="Name">
           <Input
             aria-label="Name"
@@ -557,7 +563,10 @@ export function EditorPage(props: {
                   props.back();
                 } catch (error) {
                   setDeleting(false);
-                  setProblem(problemOf(error));
+                  setProblem({
+                    title: `${workflow!.name} wasn't deleted`,
+                    reason: problemOf(error),
+                  });
                 }
               }}
             >

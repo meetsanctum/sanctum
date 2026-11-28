@@ -12,6 +12,7 @@ import {
   PageBar,
   PageBarButton,
   PageSection,
+  Problem,
   Switch,
   useHomeClock,
 } from "@meetsanctum/ui-sdk";
@@ -19,7 +20,8 @@ import { ChevronRight, CircleAlert, Pencil, Play } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { blockedBy, blockedWords } from "./blocked";
-import { pieceOf, problemOf, type Automations } from "./data";
+import { possessive } from "../frames/use-frame";
+import { pieceOf, problemOf, runProblemOf, type Automations } from "./data";
 import { byHand } from "./list";
 import { MiniAvatar, PieceIcon, Sentence, Status } from "./parts";
 import { momentWords, runWords } from "./when";
@@ -93,7 +95,9 @@ export function AutomationPage(props: {
   const workflow = workflows?.find((each) => each.id === props.id);
   const [runs, setRuns] = useState<WorkflowRunInfo[]>();
   const [runsProblem, setRunsProblem] = useState<string>();
-  const [problem, setProblem] = useState<string>();
+  const [historyRefresh, setHistoryRefresh] = useState(0);
+  // What didn't happen, and why.
+  const [problem, setProblem] = useState<{ title: string; reason: string }>();
   const [working, setWorking] = useState(false);
   const loadRuns = props.automations.runs;
   const reload = props.automations.load;
@@ -135,7 +139,7 @@ export function AutomationPage(props: {
       current = false;
       clearTimeout(timer);
     };
-  }, [loadRuns, reload, props.id, updatedAt, lastRunId]);
+  }, [loadRuns, reload, props.id, updatedAt, lastRunId, historyRefresh]);
 
   if (!workflow || !pieces) {
     return <PageBar title="Automation" />;
@@ -150,13 +154,16 @@ export function AutomationPage(props: {
   const keptBy = workflow.app
     ? (props.names.app(workflow.app) ?? workflow.app)
     : undefined;
-  const act = async (work: () => Promise<unknown>) => {
+  const act = async (
+    work: () => Promise<unknown>,
+    onFailure: (error: unknown) => { title: string; reason: string },
+  ) => {
     setWorking(true);
     setProblem(undefined);
     try {
       await work();
     } catch (error) {
-      setProblem(problemOf(error));
+      setProblem(onFailure(error));
     } finally {
       setWorking(false);
     }
@@ -181,7 +188,15 @@ export function AutomationPage(props: {
           icon={Play}
           label="Run"
           disabled={broken || !!blocked || working}
-          onClick={() => void act(() => props.automations.run(workflow.id))}
+          onClick={() =>
+            void act(
+              () => props.automations.run(workflow.id),
+              (error) => {
+                setHistoryRefresh((count) => count + 1);
+                return runProblemOf(workflow.name, error);
+              },
+            )
+          }
         />
         {!keptBy && (
           <PageBarButton
@@ -231,13 +246,14 @@ export function AutomationPage(props: {
           }
         />
       )}
-      {(problem || runsProblem) && (
-        <p
-          role="alert"
-          className="m-0 text-[13px] leading-[18px] font-medium text-(--danger)"
-        >
-          {problem ?? runsProblem}
-        </p>
+      {problem ? (
+        <Problem title={problem.title}>{problem.reason}</Problem>
+      ) : (
+        runsProblem && (
+          <Problem title={`${possessive(workflow.name)} runs didn't load`}>
+            {runsProblem}
+          </Problem>
+        )
       )}
       <div className="flex flex-wrap items-start gap-8">
         <div className="flex min-w-0 flex-[1_1_380px] flex-col gap-6 sm:max-w-130">
@@ -303,10 +319,15 @@ export function AutomationPage(props: {
                       checked={workflow.enabled}
                       disabled={working}
                       onCheckedChange={(enabled) =>
-                        void act(() =>
-                          props.automations.update({
-                            id: workflow.id,
-                            enabled,
+                        void act(
+                          () =>
+                            props.automations.update({
+                              id: workflow.id,
+                              enabled,
+                            }),
+                          (error) => ({
+                            title: `“Runs on its own” wasn't turned ${enabled ? "on" : "off"}`,
+                            reason: problemOf(error),
                           }),
                         )
                       }

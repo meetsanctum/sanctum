@@ -11,6 +11,7 @@ import { AppNotice, wentBackWords } from "../src/app-state";
 import { appsNotRunning } from "../src/attention";
 import { CoreError, coreJson } from "../src/core-fetch";
 import { entry } from "./activity-fixtures";
+import { problemLines } from "./problem-lines";
 
 // The device's own zone, which the expectations here are worked out in.
 const clock = homeClock();
@@ -193,16 +194,24 @@ describe("what it asks", () => {
     });
   });
 
-  it("says so if it couldn't", async () => {
+  it("names the failed request's version even after the rollback target changes", async () => {
     await show(app());
     vi.mocked(coreJson).mockRejectedValue(new CoreError(409, "conflict"));
     await press("Go back to 0.8.0");
 
     await press("Go back");
 
-    expect(host.querySelector('[role="alert"]')?.textContent).toBe(
-      "Moods couldn't go back. Try again.",
-    );
+    vi.mocked(coreJson).mockResolvedValue({
+      to: { ...to, id: "update-2", version: "0.9.0" },
+    });
+    await show(app("running", { stage: "updating", to: "0.9.0" }));
+    await show(app());
+
+    expect(button("Go back to 0.9.0")).toBeDefined();
+    expect(problemLines(host.querySelector('[role="alert"]'))).toEqual([
+      "Moods didn't go back to 0.8.0",
+      "Sanctum ran into a problem. Try again in a moment.",
+    ]);
   });
 });
 

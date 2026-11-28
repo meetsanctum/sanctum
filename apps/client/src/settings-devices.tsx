@@ -29,8 +29,9 @@ import { coreDevice, coreDevices } from "./core-devices";
 import { coreJson } from "./core-fetch";
 import type { OnHome } from "./dashboards";
 import {
-  firmwareProblem,
+  firmwareReason,
   firmwareStatus,
+  probeProblem,
   updateButton,
   UpdateDialog,
   updatesHint,
@@ -451,7 +452,7 @@ export function DevicesSection(props: {
           : `${device.name} is up to date.`,
       );
     } catch (error) {
-      const text = firmwareProblem(error, "check", appName(device));
+      const text = `Couldn't check for an update. ${firmwareReason(error, "check", appName(device))}`;
       found(device.id, { kind: "problem", text });
       setAnnouncement(text);
     }
@@ -471,7 +472,7 @@ export function DevicesSection(props: {
           : `${device.name} is connected.`,
       );
     } catch (error) {
-      const text = firmwareProblem(error, "probe", appName(device));
+      const text = probeProblem(error, appName(device));
       found(device.id, { kind: "problem", text });
       setAnnouncement(text);
     }
@@ -483,7 +484,7 @@ export function DevicesSection(props: {
       await requestFirmware(device, "stop");
       setAnnouncement(`${device.name}'s update is stopped.`);
     } catch (error) {
-      const text = firmwareProblem(error, "stop", appName(device));
+      const text = `Couldn't stop the update. ${firmwareReason(error, "stop", appName(device))}`;
       found(device.id, { kind: "problem", text });
       setAnnouncement(text);
     }

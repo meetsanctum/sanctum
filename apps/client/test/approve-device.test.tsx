@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApproveDevice } from "../src/approve-device";
 import { CoreError, coreJson } from "../src/core-fetch";
+import { problemLines } from "./problem-lines";
 
 vi.mock("../src/core-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/core-fetch")>()),
@@ -189,14 +190,38 @@ describe("adding a shared device", () => {
     expect(button("Approve").disabled).toBe(true);
   });
 
+  it("names the device that wasn't approved after its request expires", async () => {
+    await find("K7QX-M4PD");
+    await type(dialog().querySelector("input")!, "Kitchen Tablet");
+    vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(404, "not_found"));
+
+    await act(async () => button("Approve").click());
+    expect(problemLines(dialog().querySelector("[role=alert]"))).toEqual([
+      "Kitchen Tablet wasn't approved",
+      "No device is showing this code. Its code changes every 10 minutes, so check the one it shows now.",
+    ]);
+  });
+
+  it("says the lookup couldn't run when the core is busy", async () => {
+    vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(429, "busy"));
+    await find("K7QX-M4PD");
+
+    expect(problemLines(dialog().querySelector("[role=alert]"))).toEqual([
+      "Couldn't find the device",
+      "Sanctum can’t check this device right now. Try again in a moment.",
+    ]);
+    expect(
+      dialog()
+        .querySelector("[data-slot=input-otp]")!
+        .hasAttribute("aria-invalid"),
+    ).toBe(false);
+    expect(button("Find the device").disabled).toBe(false);
+  });
+
   it.each<[PairExchangeFailure, string]>([
     ["wrong_code", "That code doesn’t match the one on the device."],
     ["no_answer", "The device didn’t answer."],
     ["unchecked", "Sanctum couldn’t check this device, so it can’t join."],
-    [
-      "channel_mismatch",
-      "This device isn’t connected to Sanctum directly, so it can’t join.",
-    ],
   ])(
     "says why an exchange that ends with %s didn't check the device",
     async (reason, text) => {
@@ -210,6 +235,22 @@ describe("adding a shared device", () => {
       expect(approved).toEqual([]);
     },
   );
+
+  it("shows a connection mismatch as a lookup problem", async () => {
+    statuses = [{ status: "failed", reason: "channel_mismatch" }];
+    await find("K7QX-M4PD");
+
+    expect(problemLines(dialog().querySelector("[role=alert]"))).toEqual([
+      "Couldn't find the device",
+      "This device isn’t connected to Sanctum directly, so it can’t join. Something on your network may be in between.",
+    ]);
+    expect(
+      dialog()
+        .querySelector("[data-slot=input-otp]")!
+        .hasAttribute("aria-invalid"),
+    ).toBe(false);
+    expect(button("Find the device").disabled).toBe(false);
+  });
 
   it("stops waiting for a device that never answers", async () => {
     statuses = [{ status: "exchanging" }];

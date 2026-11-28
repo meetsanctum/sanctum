@@ -2,7 +2,7 @@ import type {
   AddPerson as AddPersonInput,
   PersonInfo,
 } from "@meetsanctum/auth-protocol";
-import { Button, Input } from "@meetsanctum/ui-sdk";
+import { Button, Input, Problem } from "@meetsanctum/ui-sdk";
 import { useId, useState, type FormEvent, type RefObject } from "react";
 
 import { ColourPicker, leastUsedColour } from "../colour-picker";
@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { coreJson } from "../core-fetch";
+import { problemReason } from "../device-parts";
 
 // Adding a person to the household: their name and colour, the avatar
 // showing them as they are typed. Whether they sign in is their page's to
@@ -32,7 +33,7 @@ export function AddPerson(props: {
   const ids = useId();
   const [name, setName] = useState("");
   const [colour, setColour] = useState(() => leastUsedColour(props.taken));
-  const [problem, setProblem] = useState<string>();
+  const [problem, setProblem] = useState<{ title: string; reason: string }>();
   const [working, setWorking] = useState(false);
   const { open, taken } = props;
 
@@ -61,8 +62,11 @@ export function AddPerson(props: {
       });
       props.onOpenChange(false);
       props.onAdded(added);
-    } catch {
-      setProblem("That didn't work. Try again.");
+    } catch (error) {
+      setProblem({
+        title: `Couldn't add ${trimmed}`,
+        reason: problemReason(error),
+      });
       setWorking(false);
     }
   };
@@ -118,11 +122,7 @@ export function AddPerson(props: {
             onChange={setColour}
             surface="var(--color-popover)"
           />
-          {problem && (
-            <p role="alert" className="m-0 text-sm text-destructive">
-              {problem}
-            </p>
-          )}
+          {problem && <Problem title={problem.title}>{problem.reason}</Problem>}
           <DialogFooter>
             <Button
               type="button"

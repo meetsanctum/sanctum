@@ -21,6 +21,7 @@ import { productName } from "../src/brand";
 import { CoreError, coreJson } from "../src/core-fetch";
 import { NeedsAttentionSection } from "../src/settings-attention";
 import { entry } from "./activity-fixtures";
+import { problemLines } from "./problem-lines";
 
 // The device's own zone, which the expectations here are worked out in.
 const clock = homeClock();
@@ -203,9 +204,10 @@ describe("an update that waits", () => {
     await press("Review");
     await press("Update");
 
-    expect(dialog()!.querySelector('[role="alert"]')!.textContent).toBe(
-      "Moods changed meanwhile, as when it was allowed on another device. Close this and look again.",
-    );
+    expect(problemLines(dialog()!.querySelector('[role="alert"]'))).toEqual([
+      "Moods' update wasn't allowed",
+      "It changed meanwhile, as when it was allowed on another device. Close this and look again.",
+    ]);
   });
 
   it("asks to start one stopped for it, with Allow", async () => {

@@ -1,6 +1,7 @@
 import {
   compare,
   homeLocationSchema,
+  languageIds,
   temperatureUnits,
   type Floor,
   type HomeLocation,
@@ -55,10 +56,11 @@ export const homeChanges = z
     coordinates: coordinates.nullable().optional(),
     temperatureUnit: z.enum(temperatureUnits).optional(),
     hourCycle: z.enum(hourCycles).optional(),
+    language: z.enum(languageIds).optional(),
   })
   .refine(
     (changes) => Object.values(changes).some((value) => value !== undefined),
-    "change the name, the time zone, the coordinates, the temperature unit or the hours",
+    "change the name, the time zone, the coordinates, the temperature unit, the hours or the language",
   );
 // A new floor goes last unless it says where.
 export const newFloor = z.object({ name, level: level.optional() });
@@ -386,7 +388,30 @@ export function createPlaces(
       coordinates: row ? coordinatesOf(row) : null,
       temperatureUnit: row?.temperatureUnit ?? "celsius",
       hourCycle: row?.hourCycle ?? "24h",
+      language: row?.language ?? "en",
     };
+  }
+
+  function recordLanguage(by: ActivityAuthor, language: Language) {
+    record({
+      action: "home.language",
+      outcome: "ok",
+      ...by,
+      detail: { language },
+    });
+  }
+
+  function setLanguage(by: ActivityAuthor, language: Language) {
+    if (homeInfo().language === language) return;
+    db.transaction(() => {
+      const set = { language, updatedAt: now() };
+      db.insert(home)
+        .values({ id: 1, name: defaultHomeName, ...set })
+        .onConflictDoUpdate({ target: home.id, set })
+        .run();
+      recordLanguage(by, language);
+    });
+    options.onLanguageChange?.(language);
   }
 
   return {
@@ -403,26 +428,10 @@ export function createPlaces(
     language: (): Language => read.home.get()?.language ?? "en",
 
     /**
-     * Sets the home's language for speech, which only Sanctum's Assistant
-     * does, for someone in the home.
+     * Sets the home's language, which smart speakers speak and automatic
+     * device names follow; Household sets it for someone in the home.
      */
-    setLanguage(by: ActivityAuthor, language: Language) {
-      if ((read.home.get()?.language ?? "en") === language) return;
-      db.transaction(() => {
-        const set = { language, updatedAt: now() };
-        db.insert(home)
-          .values({ id: 1, name: defaultHomeName, ...set })
-          .onConflictDoUpdate({ target: home.id, set })
-          .run();
-        record({
-          action: "home.language",
-          outcome: "ok",
-          ...by,
-          detail: { language },
-        });
-      });
-      options.onLanguageChange?.(language);
-    },
+    setLanguage,
 
     location: locationNow,
 
@@ -480,46 +489,66 @@ export function createPlaces(
     },
 
     updateHome(by: ChangedBy, input: z.input<typeof homeChanges>) {
-      const changes = homeChanges.parse(input);
-      return change(by, "home.update", () => {
-        const previousZone = clockOf(read.home.get()).timeZone;
-        const current = homeInfo();
-        const zone =
-          changes.timeZone === undefined ? current.timeZone : changes.timeZone;
-        const at = coordinatesAfter(changes.coordinates, current.coordinates);
-        if (at && !zone) {
-          throw new PlacesError(
-            "time_zone_needed",
-            "Coordinates need a time zone",
-          );
-        }
-        const updatedAt = now();
-        const set = {
-          ...(changes.name === undefined ? {} : { name: changes.name }),
-          ...(changes.temperatureUnit === undefined
-            ? {}
-            : { temperatureUnit: changes.temperatureUnit }),
-          ...(changes.hourCycle === undefined
-            ? {}
-            : { hourCycle: changes.hourCycle }),
-          timeZone: zone,
-          latitude: at?.latitude ?? null,
-          longitude: at?.longitude ?? null,
-          elevation: at?.elevation ?? null,
-          updatedAt,
-        };
-        db.insert(home)
-          .values({ id: 1, name: defaultHomeName, ...set })
-          .onConflictDoUpdate({ target: home.id, set })
-          .run();
-        if (
-          options.onTimeZoneChange &&
-          clockOf(read.home.get()).timeZone !== previousZone
-        ) {
-          options.onTimeZoneChange(updatedAt, previousZone);
-        }
-        return { result: homeInfo() };
-      });
+      const { language, ...changes } = homeChanges.parse(input);
+      if (Object.values(changes).every((value) => value === undefined)) {
+        if (language !== undefined) setLanguage(by, language);
+        return homeInfo();
+      }
+      const newLanguage =
+        language !== undefined && language !== homeInfo().language
+          ? language
+          : undefined;
+      return change(
+        by,
+        "home.update",
+        () => {
+          const previousZone = clockOf(read.home.get()).timeZone;
+          const current = homeInfo();
+          const zone =
+            changes.timeZone === undefined
+              ? current.timeZone
+              : changes.timeZone;
+          const at = coordinatesAfter(changes.coordinates, current.coordinates);
+          if (at && !zone) {
+            throw new PlacesError(
+              "time_zone_needed",
+              "Coordinates need a time zone",
+            );
+          }
+          const updatedAt = now();
+          const set = {
+            ...(changes.name === undefined ? {} : { name: changes.name }),
+            ...(changes.temperatureUnit === undefined
+              ? {}
+              : { temperatureUnit: changes.temperatureUnit }),
+            ...(changes.hourCycle === undefined
+              ? {}
+              : { hourCycle: changes.hourCycle }),
+            ...(newLanguage === undefined ? {} : { language: newLanguage }),
+            timeZone: zone,
+            latitude: at?.latitude ?? null,
+            longitude: at?.longitude ?? null,
+            elevation: at?.elevation ?? null,
+            updatedAt,
+          };
+          db.insert(home)
+            .values({ id: 1, name: defaultHomeName, ...set })
+            .onConflictDoUpdate({ target: home.id, set })
+            .run();
+          if (newLanguage !== undefined) recordLanguage(by, newLanguage);
+          if (
+            options.onTimeZoneChange &&
+            clockOf(read.home.get()).timeZone !== previousZone
+          ) {
+            options.onTimeZoneChange(updatedAt, previousZone);
+          }
+          return { result: homeInfo() };
+        },
+        () => {
+          if (newLanguage !== undefined)
+            options.onLanguageChange?.(newLanguage);
+        },
+      );
     },
 
     addFloor(by: ChangedBy, input: z.input<typeof newFloor>): Floor {

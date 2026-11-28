@@ -1,19 +1,21 @@
-import type { DeviceInfo, Hearing, SpeechLanguage } from "@meetsanctum/app-sdk";
+import type {
+  DeviceInfo,
+  Hearing,
+  Language,
+  SpeechLanguage,
+} from "@meetsanctum/app-sdk";
 import {
   Button,
-  NativeSelect,
-  NativeSelectOption,
   PageBar,
   PageSection,
   Problem,
   defineAppUi,
   icons,
   languages,
-  speechLanguages,
   useReducedMotion,
   type PageProps,
 } from "@meetsanctum/ui-sdk";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 
 import { notUnderstood, version } from "../../sanctum-app.json";
 import { useAssistant } from "./use-assistant";
@@ -29,9 +31,10 @@ import {
 } from "./words";
 
 // The Assistant's page: how speech recognition is getting on, or what to
-// try once it listens; Setup, which walks through the language and a first
-// command; the smart speakers, each opening its own detail, with Add a
-// smart speaker; the one language the home speaks; and what you can say.
+// try once it listens; Setup, with a first command to try; the smart
+// speakers, each opening its own detail, with Add a smart speaker; the
+// language they hear and speak, with a link to Household, which sets it;
+// and what you can say.
 // Devices stay the shell's: the page lists them and opens them there. It's
 // the household's, the same on every device.
 
@@ -92,7 +95,7 @@ function HearingLine(props: { hearing: Hearing }) {
   if (props.hearing.state === "ready") {
     return (
       <Ready
-        language={props.hearing.language}
+        language={props.hearing.speechLanguage}
         leftOut={props.hearing.leftOut}
       />
     );
@@ -131,10 +134,10 @@ function HearingCard(props: {
             <>
               {" "}
               Try “
-              <span lang={hearing.language}>
-                {firstTry(hearing.language, room)}
+              <span lang={hearing.speechLanguage}>
+                {firstTry(hearing.speechLanguage, room)}
               </span>
-              ”{hearing.language === "de" && ` at a speaker in ${room}`}.
+              ”{hearing.speechLanguage === "de" && ` at a speaker in ${room}`}.
             </>
           ) : (
             ` ${assignSpeakerRoom}`
@@ -239,31 +242,6 @@ function Speakers(props: {
   );
 }
 
-function LanguageMenu(props: {
-  id: string;
-  language: SpeechLanguage;
-  isChoosing: boolean;
-  onChoose: (language: SpeechLanguage) => void;
-}) {
-  return (
-    <NativeSelect
-      aria-labelledby={props.id}
-      className="w-56"
-      value={props.language}
-      disabled={props.isChoosing}
-      onChange={(event) =>
-        props.onChoose(event.currentTarget.value as SpeechLanguage)
-      }
-    >
-      {speechLanguages.map((language) => (
-        <NativeSelectOption key={language} value={language} lang={language}>
-          {languages[language].name}
-        </NativeSelectOption>
-      ))}
-    </NativeSelect>
-  );
-}
-
 function Examples(props: {
   language: SpeechLanguage;
   room: string | null;
@@ -316,11 +294,30 @@ function LoadFailed(props: { onRetry: () => void }) {
   );
 }
 
-function LanguageChangeError(props: { retry: string }) {
+// The language smart speakers hear and speak, which Household sets: the
+// home's, or English where Sanctum can't hear or speak the home's.
+function LanguageCard(props: {
+  language: Language;
+  speechLanguage: SpeechLanguage;
+  page: PageProps;
+}) {
+  const fallback = props.speechLanguage !== props.language;
   return (
-    <Problem title="The language didn't change">
-      {`The Assistant couldn't save it. ${props.retry}`}
-    </Problem>
+    <div className={card}>
+      <p className="m-0 text-sm font-medium" lang={props.speechLanguage}>
+        {languages[props.speechLanguage].name}
+      </p>
+      <p className={help}>
+        {fallback
+          ? `${languages[props.language].name} isn’t available for speech, so smart speakers speak English.`
+          : "It listens and replies in the home’s language. Switching takes a few minutes."}
+      </p>
+      <div className="flex">
+        <Button variant="link" onClick={props.page.openHousehold}>
+          Change in Household
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -329,7 +326,6 @@ function MainPage(page: PageProps) {
   const { hearing, speakers, roomName } = assistant;
   const languageId = useId();
   const room = firstRoom(speakers, roomName);
-  const [choiceFailed, setChoiceFailed] = useState(false);
 
   if (!hearing || !speakers) {
     return (
@@ -341,9 +337,7 @@ function MainPage(page: PageProps) {
       </>
     );
   }
-  const choose = async (language: SpeechLanguage) =>
-    setChoiceFailed(!(await assistant.choose(language)));
-  const { language, activeLanguage } = hearing;
+  const { language, speechLanguage, activeLanguage } = hearing;
   const onlineSpeakers = speakers.filter(
     (speaker) => speaker.availability === "online",
   );
@@ -374,8 +368,8 @@ function MainPage(page: PageProps) {
       <PageSection id="assistant-setup" title="Setup">
         <Row
           icon={<icons.ListChecks aria-hidden="true" className="size-4" />}
-          title="Set up step by step"
-          line="Choose the language and try your first command"
+          title="Set up"
+          line="Try your first command"
           onPress={() => page.open("setup")}
         />
       </PageSection>
@@ -389,26 +383,16 @@ function MainPage(page: PageProps) {
         >
           Language
         </h2>
-        <div className={card}>
-          <LanguageMenu
-            id={languageId}
-            language={language}
-            isChoosing={assistant.isChoosing}
-            onChoose={(next) => void choose(next)}
-          />
-          <p className={help}>
-            It listens and replies in one language. Switching takes a few
-            minutes.
-          </p>
-          {choiceFailed && (
-            <LanguageChangeError retry="Choose it again in a moment." />
-          )}
-        </div>
+        <LanguageCard
+          language={language}
+          speechLanguage={speechLanguage}
+          page={page}
+        />
       </section>
       <PageSection id="assistant-say" title="What you can say">
         <div className="flex flex-col gap-3 px-2.5 py-2">
           <Examples
-            language={activeLanguage ?? language}
+            language={activeLanguage ?? speechLanguage}
             room={room}
             withAnythingElse
           />
@@ -418,93 +402,35 @@ function MainPage(page: PageProps) {
   );
 }
 
-// Setup, opened from the page whenever someone wants it: the language, then
-// a first command to try. Cancel or Done goes back to the page.
+// Setup, opened from the page whenever someone wants it: the language it
+// hears, which Household sets, and a first command to try. Done goes back to
+// the page.
 function SetupPage(page: PageProps) {
   const assistant = useAssistant();
   const { hearing, speakers, roomName } = assistant;
-  const [step, setStep] = useState<1 | 2>(page.params.step === "try" ? 2 : 1);
-  const [chosen, setChosen] = useState<SpeechLanguage>();
-  const [choiceFailed, setChoiceFailed] = useState(false);
   const titleId = useId();
   const room = firstRoom(speakers, roomName);
-  const language = chosen ?? hearing?.language ?? "en";
-  const tryLanguage = hearing?.activeLanguage ?? hearing?.language;
+  const tryLanguage = hearing?.activeLanguage ?? hearing?.speechLanguage;
 
-  const next = async () => {
-    const changed = await assistant.choose(language);
-    setChoiceFailed(!changed);
-    if (changed) setStep(2);
-  };
-
-  if (step === 1) {
-    return (
-      <>
-        <PageBar
-          title="Setup"
-          actions={[
-            { id: "cancel", label: "Cancel", onPress: page.back },
-            {
-              id: "continue",
-              label: "Continue",
-              primary: true,
-              disabled: !hearing || assistant.isChoosing,
-              onPress: () => void next(),
-            },
-          ]}
-        />
-        <section aria-labelledby={titleId} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-0.5">
-            <p className="m-0 text-[13px] font-medium text-muted-foreground">
-              Step 1 of 2
-            </p>
-            <h2
-              id={titleId}
-              className="m-0 text-[17px] leading-6 font-semibold"
-            >
-              Which language do you speak to it?
-            </h2>
-          </div>
-          <LanguageMenu
-            id={titleId}
-            language={language}
-            isChoosing={assistant.isChoosing}
-            onChoose={setChosen}
-          />
-          {choiceFailed && (
-            <LanguageChangeError retry="Press Continue again in a moment." />
-          )}
-          <div className={card}>
-            <h3 className="m-0 text-[13px] font-semibold text-muted-foreground">
-              Things you can say
-            </h3>
-            <Examples language={language} room={room} />
-          </div>
-          <p className="m-0 text-sm leading-5 text-muted-foreground">
-            Speech recognition runs in your home, so nothing you say leaves it.
-          </p>
-        </section>
-      </>
-    );
-  }
   return (
     <>
       <PageBar
         title="Setup"
         actions={[
-          { id: "back", label: "Back", onPress: () => setStep(1) },
           { id: "done", label: "Done", primary: true, onPress: page.back },
         ]}
       />
       <section aria-labelledby={titleId} className="flex flex-col gap-4">
-        <div className="flex flex-col gap-0.5">
-          <p className="m-0 text-[13px] font-medium text-muted-foreground">
-            Step 2 of 2
-          </p>
-          <h2 id={titleId} className="m-0 text-[17px] leading-6 font-semibold">
-            Try it
-          </h2>
-        </div>
+        <h2 id={titleId} className="m-0 text-[17px] leading-6 font-semibold">
+          Try it
+        </h2>
+        {hearing && (
+          <LanguageCard
+            language={hearing.language}
+            speechLanguage={hearing.speechLanguage}
+            page={page}
+          />
+        )}
         {tryLanguage && room && (
           <>
             <p
@@ -551,10 +477,7 @@ function SetupPage(page: PageProps) {
           <div className={card}>
             <p className="m-0 text-sm font-medium">No smart speaker yet</p>
             <div className="flex">
-              <Button
-                variant="outline"
-                onClick={() => page.addDevices({ step: "try" })}
-              >
+              <Button variant="outline" onClick={() => page.addDevices()}>
                 Add a smart speaker
               </Button>
             </div>

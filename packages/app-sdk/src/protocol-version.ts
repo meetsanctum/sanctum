@@ -57,6 +57,9 @@
 // 29 brings moods as a standard type, mood, and an action that runs a
 // standard type's entities (an action's `runs`), which a core before would
 // refuse in a manifest.
-export const protocolVersion = 29;
+// 30 takes away ctx.speech.setLanguage: the home's language is set in
+// Settings, Household, and Hearing says the language smart speakers use
+// (speechLanguage).
+export const protocolVersion = 30;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 11;

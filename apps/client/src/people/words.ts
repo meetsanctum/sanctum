@@ -59,6 +59,19 @@ export function signInLine(clock: HomeClock, signIn: SignIn, now?: Date) {
 }
 
 /** When a device was last used, to the day: never a time of day. */
+/** When a recovery code was made: "Made today", "Made on 3 November". */
+export function madeText(clock: HomeClock, at: string, now = new Date()) {
+  const made = new Date(at);
+  const days = calendarDaysBetween(
+    made.getTime(),
+    now.getTime(),
+    clock.timeZone,
+  );
+  if (days <= 0) return "Made today";
+  if (days === 1) return "Made yesterday";
+  return `Made on ${clock.dayText(made)}`;
+}
+
 export function usedText(
   clock: HomeClock,
   client: ClientInfo,

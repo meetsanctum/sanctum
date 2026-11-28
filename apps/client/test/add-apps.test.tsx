@@ -8,6 +8,7 @@ import { productName } from "../src/brand";
 import { CoreError, coreJson } from "../src/core-fetch";
 import { AddAppsSection } from "../src/settings-apps";
 import { SettingsOpenerProvider } from "../src/settings-opener";
+import { problemLines } from "./problem-lines";
 
 // Settings → Apps' Add apps: the apps the home could add, each with Add,
 // and the sheet that says what one needs to work, what it starts with and
@@ -396,9 +397,10 @@ describe("Add apps", () => {
     await press(container, "Add Example");
     await press(dialog()!, "Add");
 
-    expect(dialog()!.querySelector('[role="alert"]')!.textContent).toBe(
-      "Example changed meanwhile, as when it was added on another device. Close this and look again.",
-    );
+    expect(problemLines(dialog()!.querySelector('[role="alert"]'))).toEqual([
+      "Couldn't add Example",
+      "It changed meanwhile, as when it was added on another device. Close this and look again.",
+    ]);
     expect(onAdded).not.toHaveBeenCalled();
 
     available = [{ ...example, version: "1.1.0" }];

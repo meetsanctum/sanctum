@@ -8,7 +8,13 @@ import { useState } from "react";
 
 import { Section } from "../components";
 import { switchOffer, useAgents, useAiCanUse } from "./data";
-import { CanUseNote, CanUseRow, CanUseRows, switchProblem } from "./rows";
+import {
+  CanUseNote,
+  CanUseRow,
+  CanUseRows,
+  switchProblem,
+  useSwitchProblem,
+} from "./rows";
 import {
   canUseTitle,
   missingWords,
@@ -33,8 +39,8 @@ export function AppCanUseSection(props: {
   const { agents } = useAgents(props.live);
   const { canUse, acceptChange, refresh } = useAiCanUse(props.live);
   const [pending, setPending] = useState<{ id: string; on: boolean }>();
-  const [problem, setProblem] = useState<string>();
   const offers = offersOf(canUse, props.app.id);
+  const [problem, setProblem] = useSwitchProblem(offers);
   const hasAgent =
     (agents?.length ?? 0) > 0 ||
     // An assistant app never uses its own offers.
@@ -50,8 +56,8 @@ export function AppCanUseSection(props: {
     setProblem(undefined);
     try {
       acceptChange(await switchOffer(offer.app, offer.id, on));
-    } catch {
-      setProblem(switchProblem);
+    } catch (error) {
+      setProblem(switchProblem(offer.id, offer.title, on, error));
       void refresh();
     } finally {
       setPending(undefined);

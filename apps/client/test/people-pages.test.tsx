@@ -17,6 +17,7 @@ import { PeoplePage } from "../src/people/people-page";
 import { PersonPage } from "../src/people/person-page";
 import { entry } from "./activity-fixtures";
 import { deferred } from "./deferred";
+import { problemLines } from "./problem-lines";
 
 // Settings → People and a person's page: the list says how each person
 // signs in, and removing a sign-in or a person asks first, naming what
@@ -251,6 +252,48 @@ describe("the People page", () => {
     );
   });
 
+  it("says when People didn't load, with Try again", async () => {
+    let unanswered = true;
+    const original = vi.mocked(coreJson).getMockImplementation()!;
+    vi.mocked(coreJson).mockImplementation(async (path, init) => {
+      if (path === "/api/people" && unanswered) throw new Error("No answer");
+      return original(path, init);
+    });
+    await act(async () =>
+      root.render(<PeoplePage page={null} live={live} onOpen={() => {}} />),
+    );
+    expect(problemLines(container.querySelector('[role="alert"]'))).toEqual([
+      "People didn't load",
+      "Sanctum didn't answer. Check that it's on, then try again.",
+    ]);
+
+    unanswered = false;
+    await act(async () => button("Try again")!.click());
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(button("Maya Keller: Signs in")).toBeDefined();
+  });
+
+  it("names who wasn't added", async () => {
+    const original = vi.mocked(coreJson).getMockImplementation()!;
+    vi.mocked(coreJson).mockImplementation(async (path, init) => {
+      if (path === "/api/people/add") throw new CoreError(500, "unknown");
+      return original(path, init);
+    });
+    await act(async () =>
+      root.render(<PeoplePage page={null} live={live} onOpen={() => {}} />),
+    );
+    await act(async () => button("Add a person")!.click());
+    const field = dialog().querySelector<HTMLInputElement>("input")!;
+    await act(async () => editName(field, "Robin"));
+    await act(async () => button("Add")!.click());
+
+    expect(problemLines(dialog().querySelector('[role="alert"]'))).toEqual([
+      "Couldn't add Robin",
+      "Sanctum ran into a problem. Try again in a moment.",
+    ]);
+    expect(button("Add")?.disabled).toBe(false);
+  });
+
   it("returns focus to Add a person after cancelling", async () => {
     await act(async () =>
       root.render(<PeoplePage page={null} live={live} onOpen={() => {}} />),
@@ -317,9 +360,10 @@ describe("a person's page", () => {
     await act(async () => button("Remove sign-in")!.click());
     removeLoginError = new CoreError(409, "last_login");
     await confirm("Remove sign-in");
-    expect(dialog().querySelector('[role="alert"]')?.textContent).toBe(
+    expect(problemLines(dialog().querySelector('[role="alert"]'))).toEqual([
+      "Maya Keller's sign-in wasn't removed",
       "Maya Keller is the only person who signs in, so this sign-in stays.",
-    );
+    ]);
   });
 
   it("offers to retry the read when removing a sign-in succeeds but refreshing fails", async () => {
@@ -329,13 +373,14 @@ describe("a person's page", () => {
     await confirm("Remove sign-in");
 
     expect(dialog()).toBeNull();
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      "out of date",
-    );
+    expect(problemLines(container.querySelector('[role="alert"]'))).toEqual([
+      "Maya Keller's details may be out of date",
+      "Sanctum didn't answer. Check that it's on, then try again.",
+    ]);
     expect(button("Remove sign-in")?.disabled).toBe(true);
 
     clientsUnavailable = false;
-    await act(async () => button("Retry")!.click());
+    await act(async () => button("Try again")!.click());
     expect(container.textContent).toContain("Doesn't sign in");
     expect(button("Remove sign-in")).toBeUndefined();
     expect(posted).toHaveLength(1);
@@ -361,6 +406,21 @@ describe("a person's page", () => {
     ).toBe("Maya Lee");
     expect(button("Lavender")?.getAttribute("aria-checked")).toBe("true");
     expect(button("Save")?.disabled).toBe(true);
+  });
+
+  it("says which change wasn't saved", async () => {
+    pendingSave = Promise.reject(new Error("No answer"));
+    pendingSave.catch(() => {});
+    await show("maya");
+    const field =
+      container.querySelector<HTMLInputElement>("input[maxlength]")!;
+    await act(async () => editName(field, "Maya Lee"));
+    await act(async () => button("Save")!.click());
+
+    expect(problemLines(container.querySelector('[role="alert"]'))).toEqual([
+      "Maya Keller wasn't renamed",
+      "Sanctum didn't answer. Check that it's on, then try again.",
+    ]);
   });
 
   it("signs out only the selected device", async () => {

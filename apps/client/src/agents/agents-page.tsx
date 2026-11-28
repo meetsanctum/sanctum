@@ -3,6 +3,7 @@ import type { AppInfo } from "@meetsanctum/app-sdk";
 import {
   Button,
   Input,
+  Problem,
   type LiveFeed,
   useHomeClock,
 } from "@meetsanctum/ui-sdk";
@@ -41,6 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
 import { coreJson } from "../core-fetch";
+import { problemReason } from "../device-parts";
 import { AddAgent } from "./add-agent";
 import { useAgents, useAiCanUse } from "./data";
 import {
@@ -285,7 +287,7 @@ function EditAgent(props: {
   if (props.editing) last.current = props.editing;
   const editing = last.current;
   const [name, setName] = useState("");
-  const [problem, setProblem] = useState<string>();
+  const [problem, setProblem] = useState<{ title: string; reason: string }>();
   const [working, setWorking] = useState(false);
   const wasRemoved = useRef(false);
   const { start, cancel } = useAuthAttempt();
@@ -325,9 +327,14 @@ function EditAgent(props: {
       wasRemoved.current = !renaming;
       props.onDone();
       props.onClose();
-    } catch {
+    } catch (error) {
       if (signal.aborted) return;
-      setProblem("That did not work. Try again.");
+      setProblem({
+        title: renaming
+          ? `${editing.agent.name} wasn't renamed`
+          : `${editing.agent.name} wasn't removed`,
+        reason: problemReason(error),
+      });
       setWorking(false);
     }
   };
@@ -371,11 +378,7 @@ function EditAgent(props: {
               autoFocus
             />
           )}
-          {problem && (
-            <p role="alert" className="m-0 text-sm text-destructive">
-              {problem}
-            </p>
-          )}
+          {problem && <Problem title={problem.title}>{problem.reason}</Problem>}
           <DialogFooter>
             <Button
               type="button"

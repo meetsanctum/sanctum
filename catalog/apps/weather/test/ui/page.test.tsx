@@ -167,6 +167,7 @@ async function show(
               back={() => {}}
               openSettings={() => {}}
               openDevice={() => {}}
+              openHousehold={() => {}}
               addDevices={() => {}}
             />
           </AppScope>

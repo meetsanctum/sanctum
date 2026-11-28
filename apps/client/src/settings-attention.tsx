@@ -27,8 +27,8 @@ import { Section } from "./components";
 import { coreJson } from "./core-fetch";
 import {
   answeredIn,
-  firmwareProblem,
   noAnswer,
+  probeProblem,
   type CheckResult,
   type Status,
 } from "./device-firmware";
@@ -259,7 +259,7 @@ export function NeedsAttentionSection(props: {
       }));
       setAnnouncement(`${device.name} is connected.`);
     } catch (error) {
-      const text = firmwareProblem(error, "probe", appName(device));
+      const text = probeProblem(error, appName(device));
       found(device.id, { kind: "problem", text });
       setAnnouncement(text);
     }

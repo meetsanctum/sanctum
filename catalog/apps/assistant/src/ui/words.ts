@@ -117,7 +117,7 @@ const failures: Record<
 /** What the first card says about hearing, or null for the shell to say. */
 export function hearingWords(hearing: Hearing): HearingWords | null {
   const { activeLanguage } = hearing;
-  const name = languages[hearing.language].name;
+  const name = languages[hearing.speechLanguage].name;
   if (hearing.state === "failed") {
     return hearing.failure === "assistant_off"
       ? null
@@ -140,7 +140,7 @@ export function hearingWords(hearing: Hearing): HearingWords | null {
     hearing.state === "downloading"
       ? `Downloading speech recognition for ${name}`
       : "Learning your rooms and lights";
-  return activeLanguage && activeLanguage !== hearing.language
+  return activeLanguage && activeLanguage !== hearing.speechLanguage
     ? {
         title: `Switching to ${name}`,
         help: `${languages[activeLanguage].name} keeps working until then.`,

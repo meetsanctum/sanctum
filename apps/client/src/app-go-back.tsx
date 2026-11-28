@@ -1,6 +1,6 @@
 import type { AppGoBack, AppInfo } from "@meetsanctum/app-sdk";
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
-import { Button, useHomeClock } from "@meetsanctum/ui-sdk";
+import { Button, Problem, useHomeClock } from "@meetsanctum/ui-sdk";
 import { useEffect, useState } from "react";
 
 import {
@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import { coreJson } from "./core-fetch";
+import { problemReason } from "./device-parts";
 
 // Going back from an app's last update, at the end of its settings. It loses
 // what the app has saved since, so it asks first, saying so; Cancel is
@@ -68,15 +69,16 @@ export function GoBack(props: { app: AppInfo; to: AppGoBack | null }) {
   const clock = useHomeClock();
   const { app, to } = props;
   const [isAsking, setIsAsking] = useState(false);
-  const [problem, setProblem] = useState<string>();
+  const [problem, setProblem] = useState<{ version: string; reason: string }>();
   const path = pathOf(app);
   if (!to || !canGoBack(app)) return null;
   const goBack = () => {
     setIsAsking(false);
     setProblem(undefined);
     // What it says next arrives as it changes, as any app's does.
-    coreJson(path, { method: "POST", json: { id: to.id } }).catch(() =>
-      setProblem(`${app.name} couldn't go back. Try again.`),
+    coreJson(path, { method: "POST", json: { id: to.id } }).catch(
+      (error: unknown) =>
+        setProblem({ version: to.version, reason: problemReason(error) }),
     );
   };
   return (
@@ -85,9 +87,9 @@ export function GoBack(props: { app: AppInfo; to: AppGoBack | null }) {
         Go back to {to.version}
       </Button>
       {problem && (
-        <p role="alert" className="m-0 text-sm text-destructive">
-          {problem}
-        </p>
+        <Problem title={`${app.name} didn't go back to ${problem.version}`}>
+          {problem.reason}
+        </Problem>
       )}
       <Dialog open={isAsking} onOpenChange={setIsAsking}>
         <DialogContent showCloseButton={false}>

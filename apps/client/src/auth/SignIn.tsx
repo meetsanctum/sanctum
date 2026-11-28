@@ -56,6 +56,8 @@ export function SignIn(props: {
   // Joining with an invite code instead, for someone who doesn't sign in
   // yet or chooses a new password.
   onJoin?: () => void;
+  // A recovery code or a password code, for a forgotten password.
+  onForgot?: () => void;
 }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -141,7 +143,22 @@ export function SignIn(props: {
           autoComplete="current-password"
           problemId={fieldsWrong ? problemId : undefined}
           required
-        />
+        >
+          {props.onForgot && (
+            <Button
+              variant="link"
+              size="sm"
+              type="button"
+              className="-ms-2.5 self-start"
+              onClick={() => {
+                attempt.cancel();
+                props.onForgot?.();
+              }}
+            >
+              Forgot your password?
+            </Button>
+          )}
+        </SheetField>
         {problem && <SheetProblem id={problemId}>{problem}</SheetProblem>}
         <StorageNotice secure={secure} />
         <SheetActions>
