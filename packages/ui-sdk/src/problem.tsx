@@ -1,6 +1,7 @@
 import { CircleAlert } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
+import { FieldError } from "./components/ui/field";
 
 /**
  * What went wrong, said in what failed: a red sign, then what happened in
@@ -27,7 +28,7 @@ export function Problem(props: {
 }
 
 /**
- * What to change in a field, on one line under it: a red sign with red
+ * What to change in a field, under it: a red sign with red
  * words, such as "Use a number from 1 to 14." It is not a notice, since the
  * field is where it's fixed. Give the field `aria-invalid` and point its
  * `aria-describedby` at this line's `id`.
@@ -39,13 +40,9 @@ export function FieldProblem(props: {
   children: string;
 }) {
   return (
-    <p
-      id={props.id}
-      role="alert"
-      className="m-0 flex items-start gap-2 text-sm leading-5 text-destructive select-text"
-    >
+    <FieldError id={props.id}>
       <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-      <span>{props.children}</span>
-    </p>
+      <span className="wrap-anywhere">{props.children}</span>
+    </FieldError>
   );
 }

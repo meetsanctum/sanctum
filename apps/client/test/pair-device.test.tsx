@@ -23,6 +23,7 @@ import {
 import { PairDevice } from "../src/auth/PairDevice";
 import { CoreError, coreJson, type CoreFetchInit } from "../src/core-fetch";
 import { getShell, type FoundHost, type StoredHost } from "../src/shell";
+import { problemLines } from "./problem-lines";
 
 vi.mock("../src/core-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/core-fetch")>()),
@@ -531,9 +532,10 @@ describe("a shared device's pairing screen", () => {
 
     expect(shownCode()).toBeNull();
     expect(requests).toHaveLength(2);
-    expect(container.textContent).toContain(
-      "This device stopped showing a codeA wrong code was entered too many times. Show a new code to add it.",
-    );
+    expect(problemLines(container.querySelector('[role="alert"]'))).toEqual([
+      "This device stopped showing a code",
+      "A wrong code was entered too many times. Show a new code to add it.",
+    ]);
 
     const button = [...container.querySelectorAll("button")].find(
       (candidate) => candidate.textContent === "Show a new code",
