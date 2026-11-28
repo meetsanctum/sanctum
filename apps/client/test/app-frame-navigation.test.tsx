@@ -192,6 +192,32 @@ it("opens Add devices and restores Setup's Try it parameters on return", async (
   });
 });
 
+it("opens Household from Setup and returns to Setup", async () => {
+  const { port, said } = await connect();
+  expect(said[0]).toMatchObject({ type: "setup", openHousehold: true });
+  await send(port, { type: "open", page: "setup", params: {} });
+  await waitFor(() =>
+    expect(said).toContainEqual({ type: "show", page: "setup", params: {} }),
+  );
+  await send(port, { type: "bar", title: "Setup", actions: [], revision: 1 });
+  await waitFor(() => expect(pageTitle()).toBe("Setup"));
+  await send(port, { type: "openHousehold" });
+
+  const back = () =>
+    container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Back to Setup"]',
+    );
+  await waitFor(() => {
+    expect(pageTitle()).toBe("Household");
+    expect(back()).not.toBeNull();
+  });
+  await act(async () => back()!.click());
+  expect((await connect()).said[0]).toMatchObject({
+    type: "setup",
+    page: "setup",
+  });
+});
+
 it("discards a speaker lookup from a page that has been left", async () => {
   const pending = deferred<DeviceInfo[]>();
   lookup = pending.promise;

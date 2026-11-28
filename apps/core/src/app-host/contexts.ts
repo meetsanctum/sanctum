@@ -213,7 +213,9 @@ export function createAppContexts(options: {
       services: entry.services,
       claims: () => entry.updating?.claims,
       people: snapshot?.people ?? options.people,
-      places: snapshot?.places ?? options.places,
+      places: snapshot
+        ? { ...snapshot.places, setLanguage: options.places.setLanguage }
+        : options.places,
       devices: snapshot?.devices ?? options.devices,
       presses: {
         press: (driver, press) => options.presses().press(driver, press),

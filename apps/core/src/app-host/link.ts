@@ -27,6 +27,7 @@ import { chmod, mkdir, unlink } from "node:fs/promises";
 import { createServer, type Socket } from "node:net";
 import { dirname } from "node:path";
 
+import type { createCoreCalls } from "./calls.js";
 import { ActionCallError } from "./errors.js";
 
 // The core's end of the socket to an app that runs apart. Whatever arrives
@@ -60,9 +61,12 @@ const codeSince: Partial<Record<string, number>> = {
 // The version whose runner aborts a request's signal on `end`.
 const endSince = 22;
 
+type SocketCalls = CoreCalls &
+  Partial<Pick<ReturnType<typeof createCoreCalls>, "setSpeechLanguage">>;
+
 type Open = {
   // What it may do, decided when the core issued it.
-  core: CoreCalls;
+  core: SocketCalls;
   // The core's context behind the call, such as what caused it, for the activity
   // log: the app's calls back arrive with none of their own.
   enter: <T>(work: () => T) => T;
@@ -286,7 +290,17 @@ export function createAppLink(options: {
       reply(failureOf(`The call ${call} has ended`));
       return;
     }
-    if (!methods.has(method)) {
+    const handler =
+      method === "setSpeechLanguage" &&
+      connection.protocol >= 28 &&
+      connection.protocol <= 29
+        ? open.core.setSpeechLanguage
+        : methods.has(method)
+          ? (open.core[method as keyof CoreCalls] as (
+              ...args: unknown[]
+            ) => Promise<unknown>)
+          : undefined;
+    if (!handler) {
       reply(failureOf(`There is no call ${method}`));
       return;
     }
@@ -295,9 +309,6 @@ export function createAppLink(options: {
       return;
     }
     connection.requests += 1;
-    const handler = open.core[method as keyof CoreCalls] as (
-      ...args: unknown[]
-    ) => Promise<unknown>;
     void open
       .enter(async () => handler(...params))
       .then(
@@ -424,7 +435,7 @@ export function createAppLink(options: {
      * handler stops; the core's calls refuse what follows.
      */
     call(
-      core: CoreCalls,
+      core: SocketCalls,
       actor: Actor,
       body: OutboundCallBody,
       deadlineMs: number,

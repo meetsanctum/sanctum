@@ -117,7 +117,11 @@ function pageProps() {
   } satisfies PageProps;
 }
 
-async function show(client: AppClient, page = "main", props = pageProps()) {
+async function show(
+  client: AppClient,
+  page = "main",
+  props: PageProps = pageProps(),
+) {
   const Page = ui.pages[page]!;
   await act(async () => {
     root.render(
@@ -518,9 +522,30 @@ describe("the Assistant's page", () => {
     });
     await show(client);
     expect(text()).toContain(
-      "Deutsch isn’t available for speech yet, so smart speakers speak English.",
+      "Deutsch isn’t available for speech, so smart speakers speak English.",
     );
     expect(text()).toContain("Ready in English");
+    expect(text()).toContain("Try “Turn off the Office lights”.");
+    expect(
+      [...container.querySelectorAll('[lang="en"]')].map(
+        (span) => span.textContent,
+      ),
+    ).toContain("Turn off the Office lights");
+  });
+
+  it("omits the Household link when the shell cannot open it", async () => {
+    const { client } = fakeClient({
+      hearing: {
+        state: "ready",
+        language: "en",
+        speechLanguage: "en",
+        activeLanguage: "en",
+      },
+      devices: [office],
+    });
+    await show(client, "main", { ...pageProps(), openHousehold: undefined });
+    expect(text()).toContain("Ready in English");
+    expect(button("Change in Household")).toBeUndefined();
   });
 
   it("shows the active language when opened mid-switch", async () => {
@@ -623,7 +648,7 @@ describe("Setup", () => {
 
     expect(text()).toContain("No smart speaker yet");
     await press("Add a smart speaker");
-    expect(props.addDevices).toHaveBeenCalledWith({ step: "try" });
+    expect(props.addDevices).toHaveBeenCalledWith();
   });
 
   it("asks for a room before suggesting a first command for a speaker without one", async () => {

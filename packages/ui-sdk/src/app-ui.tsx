@@ -49,7 +49,7 @@ export type PageProps = {
    * Opens Settings at Household over this page, where the home's name, its
    * place, how it writes units and times, and its language are set.
    */
-  openHousehold(): void;
+  openHousehold?(): void;
   /** Opens Add devices over this page, with optional page params to restore on return. */
   addDevices(returnParams?: PageParams): void;
 };

@@ -17,14 +17,16 @@ import { fakeManager } from "./manager-support.js";
 import { fakePiper, fakeSpeechToPhrase } from "./speech-support.js";
 import { claimed, deferredResult, get, post, testCore } from "./support.js";
 
-// The home's one language for speech in a running core: the Assistant sets
-// it for someone in the home, speech recognition learns it at once and
-// hears in the old one until then, and requests and replies follow it. Its
-// app client can read and follow the status.
+// Household sets the home's language. Speech recognition learns it at once
+// and hears in the old one until then. The Assistant can read and follow
+// speech status, and requests and replies follow the language in use.
 
 useCleanUps();
 
-async function setup(speech: Parameters<typeof fakeSpeechToPhrase>[0]) {
+async function setup(
+  speech: Parameters<typeof fakeSpeechToPhrase>[0],
+  { confirm = true } = {},
+) {
   const asked: AssistantRequest[] = [];
   const permission = {
     id: aiAssistantPermission,
@@ -50,7 +52,7 @@ async function setup(speech: Parameters<typeof fakeSpeechToPhrase>[0]) {
       await request.reply(
         request.language === "de"
           ? { text: "Das Licht ist an." }
-          : { text: "Done", confirmation: true },
+          : { text: "Done", confirmation: confirm },
       );
     },
   });
@@ -300,6 +302,50 @@ it("keeps the saved speech language when the core restarts", async () => {
   const response = await get(restarted, "/api/speech/hearing", home);
   expect(response.statusCode).toBe(200);
   expect(response.json()).toMatchObject({ language: "de" });
+});
+
+it("keeps the home language and uses English when its speech model is missing", async () => {
+  const recognition = languages.de.recognition;
+  Object.assign(languages.de, { recognition: null });
+  const words = "turn on the office lights";
+  let home: Awaited<ReturnType<typeof setup>> | undefined;
+  try {
+    home = await setup({ transcript: () => words }, { confirm: false });
+    const { core, home: caller, hearing, stp, ask, asked, said } = home;
+    const saved = await post(
+      core,
+      "/api/places/home/update",
+      { language: "de" },
+      caller,
+    );
+    expect(saved.statusCode).toBe(200);
+    expect((await get(core, "/api/places/home", caller)).json()).toMatchObject({
+      language: "de",
+    });
+    await vi.waitFor(
+      async () =>
+        expect(await hearing()).toEqual({
+          state: "ready",
+          language: "de",
+          speechLanguage: "en",
+          activeLanguage: "en",
+        }),
+      { timeout: 5_000 },
+    );
+    expect(stp.lessons.at(-1)).toMatchObject({
+      language: "en",
+      templates: ["turn (on|off) the {room} lights"],
+    });
+    expect(await ask()).toContainEqual({ step: "heard", text: words });
+    expect(asked.at(-1)).toEqual({ text: words, language: "en" });
+    expect(said).toContainEqual({
+      type: "synthesize",
+      data: { text: "Done", voice: { name: languages.en.voice } },
+    });
+  } finally {
+    home?.close();
+    Object.assign(languages.de, { recognition });
+  }
 });
 
 it("says the Assistant's words for speech it doesn't know", async () => {

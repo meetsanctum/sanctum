@@ -94,6 +94,8 @@ export type ToFrame =
       page: string;
       params: PageParams;
       context: FrameContext;
+      // Some shells can open Settings directly at Household.
+      openHousehold?: true;
       // For a device page: the device as the app may see it, whose page
       // `page` names among the app's device pages.
       device?: DeviceInfo;

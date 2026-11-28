@@ -133,10 +133,10 @@ function HearingCard(props: {
             <>
               {" "}
               Try “
-              <span lang={hearing.language}>
-                {firstTry(hearing.language, room)}
+              <span lang={hearing.speechLanguage}>
+                {firstTry(hearing.speechLanguage, room)}
               </span>
-              ”{hearing.language === "de" && ` at a speaker in ${room}`}.
+              ”{hearing.speechLanguage === "de" && ` at a speaker in ${room}`}.
             </>
           ) : (
             ` ${assignSpeakerRoom}`
@@ -306,14 +306,16 @@ function LanguageCard(props: {
       </p>
       <p className={help}>
         {fallback
-          ? `${languages[props.language].name} isn’t available for speech yet, so smart speakers speak English.`
+          ? `${languages[props.language].name} isn’t available for speech, so smart speakers speak English.`
           : "It listens and replies in the home’s language. Switching takes a few minutes."}
       </p>
-      <div className="flex">
-        <Button variant="link" onClick={props.page.openHousehold}>
-          Change in Household
-        </Button>
-      </div>
+      {props.page.openHousehold && (
+        <div className="flex">
+          <Button variant="link" onClick={props.page.openHousehold}>
+            Change in Household
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -474,10 +476,7 @@ function SetupPage(page: PageProps) {
           <div className={card}>
             <p className="m-0 text-sm font-medium">No smart speaker yet</p>
             <div className="flex">
-              <Button
-                variant="outline"
-                onClick={() => page.addDevices({ step: "try" })}
-              >
+              <Button variant="outline" onClick={() => page.addDevices()}>
                 Add a smart speaker
               </Button>
             </div>

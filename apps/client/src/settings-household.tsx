@@ -53,7 +53,7 @@ type HomeInfo = {
   coordinates: Coordinates | null;
   temperatureUnit: TemperatureUnit;
   hourCycle: HourCycle;
-  language: Language;
+  language?: Language;
 };
 
 const unitNames: Record<TemperatureUnit, string> = {
@@ -98,7 +98,7 @@ type Draft = {
   timeZone: string;
   temperatureUnit: TemperatureUnit;
   hourCycle: HourCycle;
-  language: Language;
+  language?: Language;
 };
 
 const numberText = (value: number | null | undefined) =>
@@ -116,7 +116,10 @@ const draftOf = (home: HomeInfo): Draft => ({
   timeZone: home.timeZone ?? "",
   temperatureUnit: home.temperatureUnit,
   hourCycle: home.hourCycle,
-  language: home.language,
+  language:
+    home.language && languageIds.includes(home.language)
+      ? home.language
+      : undefined,
 });
 
 // Where the fields put the home: no coordinates, nor elevation, when both
@@ -180,6 +183,7 @@ function HomeForm() {
     };
   const where = whereOf(draft);
   const name = draft.name.trim();
+  const language = draft.language;
   const coordinatesChanged =
     where?.coordinates?.latitude !== home.coordinates?.latitude ||
     where?.coordinates?.longitude !== home.coordinates?.longitude ||
@@ -195,7 +199,7 @@ function HomeForm() {
       temperatureUnit: draft.temperatureUnit,
     }),
     ...(draft.hourCycle !== home.hourCycle && { hourCycle: draft.hourCycle }),
-    ...(draft.language !== home.language && { language: draft.language }),
+    ...(language && language !== home.language && { language }),
   };
   const unchanged = Object.keys(changes).length === 0;
   const hasCoordinates = !!(draft.latitude.trim() || draft.longitude.trim());
@@ -413,31 +417,37 @@ function HomeForm() {
           device.
         </span>
       </div>
-      <div className="flex flex-col gap-2">
-        <label htmlFor={`${ids}-language`} className={label}>
-          Language
-        </label>
-        <NativeSelect
-          id={`${ids}-language`}
-          aria-describedby={`${ids}-language-hint`}
-          className="w-56"
-          value={draft.language}
-          onChange={(event) =>
-            change("language")(event.currentTarget.value as Language)
-          }
-        >
-          {languageIds.map((language) => (
-            <NativeSelectOption key={language} value={language} lang={language}>
-              {languages[language].name}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-        <span id={`${ids}-language-hint`} className={label}>
-          {speechLanguage(draft.language) === draft.language
-            ? "Smart speakers speak it, and take a few minutes to learn a new language."
-            : `Smart speakers speak English, since ${languages[draft.language].name} isn’t available for speech yet.`}
-        </span>
-      </div>
+      {language && (
+        <div className="flex flex-col gap-2">
+          <label htmlFor={`${ids}-language`} className={label}>
+            Language
+          </label>
+          <NativeSelect
+            id={`${ids}-language`}
+            aria-describedby={`${ids}-language-hint`}
+            className="w-56"
+            value={language}
+            onChange={(event) =>
+              change("language")(event.currentTarget.value as Language)
+            }
+          >
+            {languageIds.map((language) => (
+              <NativeSelectOption
+                key={language}
+                value={language}
+                lang={language}
+              >
+                {languages[language].name}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+          <span id={`${ids}-language-hint`} className={label}>
+            {speechLanguage(language) === language
+              ? "Smart speakers speak it, and take a few minutes to learn a new language."
+              : `Smart speakers speak English, since ${languages[language].name} isn’t available for speech.`}
+          </span>
+        </div>
+      )}
       {(note || problem) && (
         <p
           role={problem ? "alert" : "status"}

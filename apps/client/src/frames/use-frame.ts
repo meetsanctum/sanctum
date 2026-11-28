@@ -44,7 +44,7 @@ export function useFrame(options: {
   /** What the frame is told first: which page, and for a device page, its device. */
   setup: () => Pick<
     Extract<ToFrame, { type: "setup" }>,
-    "page" | "params" | "device"
+    "page" | "params" | "device" | "openHousehold"
   >;
   mode: FrameContext["mode"];
   household: FrameHousehold | undefined;

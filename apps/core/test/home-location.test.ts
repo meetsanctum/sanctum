@@ -1,10 +1,12 @@
 import { defineAction, defineApp } from "@meetsanctum/app-sdk";
+import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import { personWithClient } from "./devices-support.js";
 import {
   claimed,
+  deferredResult,
   get,
   post,
   sharedClient,
@@ -70,6 +72,46 @@ const atZurich = {
   },
 };
 const bern = { latitude: 46.948, longitude: 7.4474 };
+
+it("refuses a language save if the client is revoked while sending it", async () => {
+  const core = await testCore();
+  const owner = await claimed(core);
+  const shared = sharedClient(core);
+  const reading = deferredResult<void>();
+  const finish = deferredResult<void>();
+  const payload = Readable.from(
+    (async function* () {
+      reading.resolve();
+      await finish.promise;
+      yield Buffer.from('{"language":"de"}');
+    })(),
+  );
+  const pending = core.server.inject({
+    method: "POST",
+    url: "/api/places/home/update",
+    headers: {
+      authorization: `Bearer ${shared.token}`,
+      "content-type": "application/json",
+    },
+    payload,
+  });
+  try {
+    await reading.promise;
+    const revoked = await post(
+      core,
+      "/api/auth/clients/revoke",
+      { id: shared.id },
+      owner,
+    );
+    expect(revoked.statusCode).toBe(204);
+  } finally {
+    finish.resolve();
+  }
+  const refused = await pending;
+  expect(refused.statusCode).toBe(401);
+  expect(refused.json()).toEqual({ error: "invalid_client_token" });
+  expect(core.places.language()).toBe("en");
+});
 
 it("keeps the home's 12-hour preference through a name-only update", async () => {
   const core = await testCore({ timeZone: "UTC" });
@@ -193,13 +235,24 @@ describe("the home's location", () => {
     const refused = await post(
       core,
       "/api/places/home/update",
-      { coordinates: atZurich.coordinates },
+      { language: "de", coordinates: atZurich.coordinates },
       maya,
     );
     expect(refused.statusCode).toBe(400);
     expect(refused.json()).toEqual({ error: "time_zone_needed" });
+    expect(core.places.language()).toBe("en");
+    expect(
+      entries(core).some((entry) => entry.action === "home.language"),
+    ).toBe(false);
 
-    await post(core, "/api/places/home/update", atZurich, maya);
+    const saved = await post(
+      core,
+      "/api/places/home/update",
+      { ...atZurich, language: "de" },
+      maya,
+    );
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json()).toMatchObject({ language: "de", ...atZurich });
     expect(
       (await post(core, "/api/places/home/update", { timeZone: null }, maya))
         .statusCode,

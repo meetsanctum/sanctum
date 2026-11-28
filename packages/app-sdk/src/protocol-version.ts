@@ -59,7 +59,8 @@
 // refuse in a manifest.
 // 30 takes away ctx.speech.setLanguage: the home's language is set in
 // Settings, Household, and Hearing says the language smart speakers use
-// (speechLanguage).
+// (speechLanguage). The core still accepts the language call from protocols
+// 28 and 29.
 export const protocolVersion = 30;
 /** The oldest version a core still speaks. */
 export const oldestProtocolVersion = 11;

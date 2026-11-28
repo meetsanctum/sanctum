@@ -30,6 +30,7 @@ type Shown = {
   page: string;
   params: PageParams;
   context: FrameContext;
+  openHousehold?: true;
   // For a device page, the device it shows.
   device?: DeviceInfo;
   // A new page on show starts afresh, as a new route does in the shell.
@@ -262,6 +263,7 @@ function connect(loaded: Promise<Loaded>, port: MessagePort) {
           page: message.page,
           params: message.params,
           context: message.context,
+          openHousehold: message.openHousehold,
           ...(message.device ? { device: message.device } : {}),
           generation: 0,
         };
@@ -380,7 +382,11 @@ function Framed(props: {
                     }
                     back={() => send({ type: "back" })}
                     openSettings={() => send({ type: "openSettings" })}
-                    openHousehold={() => send({ type: "openHousehold" })}
+                    openHousehold={
+                      shown.openHousehold === true
+                        ? () => send({ type: "openHousehold" })
+                        : undefined
+                    }
                     openDevice={(device) =>
                       send({ type: "openDevice", device })
                     }

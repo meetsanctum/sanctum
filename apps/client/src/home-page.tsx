@@ -321,8 +321,11 @@ function HomePageWithDevices({
               open={opener(route.app)}
               back={back}
               openSettings={settingsOf(route.app)}
-              openHousehold={() =>
-                opener(settingsApp.id)(householdSettingsPage)
+              openHousehold={(title) =>
+                opener(settingsApp.id)(
+                  householdSettingsPage,
+                  title ? { from: title } : {},
+                )
               }
               openDevice={(id) => {
                 // A device's detail opens on its first tile, as from a room.
