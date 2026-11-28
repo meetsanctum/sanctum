@@ -512,6 +512,49 @@ describe("an app's settings page", () => {
     ).toBe("true");
   });
 
+  it("names the port range when a request to turn on LAN access is refused", async () => {
+    await show({
+      ...moods,
+      permissions: [],
+      requests: [
+        {
+          id: "lan:tcp:49152-65535",
+          reason: "To open a session with the device.",
+          needed: false,
+          asked: null,
+          startsOn: false,
+        },
+      ],
+    });
+    vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(409, "conflict"));
+    const toggle = switchFor(
+      "Talk to devices on your network. Only the devices it found, on any port from 49152 to 65535",
+    );
+
+    await act(async () => toggle.click());
+
+    expect(problemLines(container.querySelector('[role="alert"]'))).toEqual([
+      "“Talk to devices on your network on any port from 49152 to 65535” wasn't turned on",
+      "Another change to Moods is still under way. Try again in a moment.",
+    ]);
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it.each([new TypeError("Failed to fetch"), new CoreError(500, "internal")])(
+    "says when a permission change couldn't be confirmed (%s)",
+    async (error) => {
+      await show(moods);
+      vi.mocked(coreJson).mockRejectedValueOnce(error);
+
+      await act(async () => switchFor("See your remotes' presses").click());
+
+      expect(problemLines(container.querySelector('[role="alert"]'))).toEqual([
+        "Couldn't confirm whether “See your remotes' presses” was turned off",
+        "Check this permission in Moods settings.",
+      ]);
+    },
+  );
+
   it("previews its room section on Home's background, and says where it is", async () => {
     await show(moods);
 

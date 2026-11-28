@@ -20,6 +20,7 @@ import {
   pieces,
   places,
   workflow,
+  workflowRun,
 } from "./automations-fixtures";
 import { problemLines } from "./problem-lines";
 
@@ -75,7 +76,7 @@ const movie = workflow({
 let container: HTMLDivElement;
 let root: Root;
 let workflows = [evening, movie];
-let runs: WorkflowRunInfo[];
+let runs: WorkflowRunInfo[] | Error;
 let availablePieces: PieceInfo[];
 let homeDevices = devices;
 let routes: { page: string; params: Record<string, string> }[];
@@ -102,6 +103,7 @@ beforeEach(() => {
       case "/api/workflows/run":
         return { id: "run" };
       case "/api/workflows/runs?workflow=movie":
+        if (runs instanceof Error) throw runs;
         return runs;
       case "/api/workflows/add": {
         const added = workflow({
@@ -686,41 +688,20 @@ describe("the editor's motion and light pieces", () => {
 });
 
 describe("an automation's history", () => {
-  function run(overrides: Partial<WorkflowRunInfo> = {}): WorkflowRunInfo {
-    return {
-      id: "run",
-      workflowId: "movie",
-      version: 1,
-      status: "succeeded",
-      trigger: { nodes: ["t"], key: null, data: {} },
-      startedBy: null,
-      startedOn: "Kitchen tablet",
-      reason: null,
-      error: null,
-      queuedAt: "2026-10-30T08:00:00.000Z",
-      startedAt: "2026-10-30T08:00:00.000Z",
-      endedAt: "2026-10-30T08:00:01.000Z",
-      steps: [
-        {
-          node: "s",
-          kind: "step",
-          app: null,
-          piece: "lights",
-          status: "succeeded",
-          input: { place: { kind: "room", id: "office" }, to: "on" },
-          output: null,
-          error: null,
-          startedAt: "2026-10-30T08:00:00.000Z",
-          endedAt: "2026-10-30T08:00:01.000Z",
-        },
-      ],
-      ...overrides,
-    };
-  }
+  it("uses the possessive of the automation's name when its history doesn't load", async () => {
+    workflows = [{ ...movie, name: "Evening routines" }];
+    runs = new Error("Disconnected");
+    await show("automation", { id: "movie" });
+
+    expect(problemLines(container.querySelector('[role="alert"]'))).toEqual([
+      "Evening routines' runs didn't load",
+      "Sanctum didn't answer. Check that it's on, then try again.",
+    ]);
+  });
 
   it("describes recorded steps after their config or node has changed", async () => {
     workflows = [{ ...movie, version: 2 }];
-    runs = [run()];
+    runs = [workflowRun()];
     await show("automation", { id: "movie" });
     expect(container.querySelector("ol")?.textContent).toContain(
       "Turn on the lights in Office",
@@ -753,13 +734,13 @@ describe("an automation's history", () => {
         ]),
       },
     ];
-    runs = [run({ status: "running", endedAt: null })];
+    runs = [workflowRun({ status: "running", endedAt: null })];
     await show("automation", { id: "movie" });
     expect(container.textContent).toContain("Running");
     expect(container.querySelector("ol")?.textContent).not.toContain(
       "Not reached",
     );
-    runs = [run()];
+    runs = [workflowRun()];
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });
@@ -773,7 +754,7 @@ describe("an automation's history", () => {
 
   it("keeps a failed action visible when history refreshes", async () => {
     vi.useFakeTimers();
-    runs = [run({ status: "running", endedAt: null })];
+    runs = [workflowRun({ status: "running", endedAt: null })];
     await show("automation", { id: "movie" });
     vi.mocked(coreJson).mockRejectedValueOnce(new Error("Disconnected"));
     await press("Run");

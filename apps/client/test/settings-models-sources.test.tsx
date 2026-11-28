@@ -2,6 +2,7 @@
 import { act } from "react";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 
+import { CoreError, coreJson } from "../src/core-fetch";
 import { mac, now, router } from "./settings-models-fixtures";
 import {
   anthropic,
@@ -385,6 +386,20 @@ describe("AI model source dialogs", () => {
     await click(button("Open Ollama"));
     expect(openApp).toHaveBeenCalledWith("sanctum.ollama");
     expect(document.querySelector("[role=dialog]")).toBeNull();
+  });
+
+  it("explains when Ollama was added but couldn't start", async () => {
+    await show();
+    await click(button("Add a source"));
+    await click(button("Continue"));
+    vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(500, "app_failed"));
+
+    await click(button("Add Ollama"));
+
+    expect(problemLines(dialog()?.querySelector('[role="alert"]'))).toEqual([
+      "Ollama didn't start",
+      "It's added, but Sanctum couldn't start it. It tries again when it restarts.",
+    ]);
   });
 
   it("opens Storage instead of adding Ollama when it does not fit", async () => {

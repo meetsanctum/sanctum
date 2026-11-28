@@ -71,9 +71,13 @@ export function DeleteAppData(props: {
     } catch (error) {
       setIsAsking(false);
       const code = error instanceof CoreError ? error.code : null;
+      if (code === "not_found") {
+        props.onDeleted();
+        return;
+      }
       setProblem(
         code === "unavailable"
-          ? `Some may already be gone. ${productName} can't delete the rest right now: check for an update, then try again.`
+          ? `Some may already be gone. ${productName} can't delete the rest right now. Try again in a moment. If it still doesn't work, check for an update.`
           : `Some may already be gone. ${problemReason(error)}`,
       );
     } finally {

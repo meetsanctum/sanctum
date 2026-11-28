@@ -36,17 +36,32 @@ export function permissionDetail(words: PermissionWords) {
   return [words.detail, words.specifics].filter(Boolean).join(", ") || null;
 }
 
-/** What went wrong switching a permission, in words, by the core's code. */
-/** A permission that didn't change: which, and why. */
+/** What went wrong switching a permission, in words for the person. */
 export function problemOf(
   error: unknown,
   app: AppInfo,
-  title: string,
-  granting = false,
+  words: PermissionWords,
+  granting: boolean,
 ) {
-  const code = error instanceof CoreError ? error.code : null;
+  const permission = words.specifics
+    ? `${words.title} ${words.specifics}`
+    : words.title;
+  const direction = granting ? "on" : "off";
+  if (
+    !(error instanceof CoreError) ||
+    error.code === "unknown" ||
+    (error.status >= 500 &&
+      error.code !== "unavailable" &&
+      error.code !== "update_pending")
+  ) {
+    return {
+      title: `Couldn't confirm whether “${permission}” was turned ${direction}`,
+      reason: `Check this permission in ${app.name} settings.`,
+    };
+  }
+  const { code } = error;
   return {
-    title: `“${title}” wasn't turned ${granting ? "on" : "off"}`,
+    title: `“${permission}” wasn't turned ${direction}`,
     reason:
       code === "unavailable"
         ? granting
@@ -81,9 +96,7 @@ export function PermissionsSection(props: {
         ),
       );
     } catch (error) {
-      setProblem(
-        problemOf(error, app, permissionWords(request.id).title, granted),
-      );
+      setProblem(problemOf(error, app, permissionWords(request.id), granted));
     } finally {
       setPending(undefined);
     }

@@ -185,7 +185,10 @@ describe("a stick plugged in", () => {
     expect(dialog()).not.toBeNull();
 
     await act(async () => adding.reject(new CoreError(500, "app_failed")));
-    expect(dialog()?.querySelector('[role="alert"]')).not.toBeNull();
+    expect(problemLines(dialog()?.querySelector('[role="alert"]'))).toEqual([
+      "Example didn't start",
+      "It's added, but Sanctum couldn't start it. It tries again when it restarts.",
+    ]);
     // It stays, with what went wrong, until someone closes it.
     await later(1_000);
     expect(dialog()?.querySelector('[role="alert"]')).not.toBeNull();
