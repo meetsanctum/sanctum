@@ -52,4 +52,15 @@ describe("smart speakers' chimes", () => {
       "Not a WAV file",
     );
   });
+
+  it("rejects a format chunk cut off by the end of the WAV file", () => {
+    const truncated = file("error").subarray(0, 35);
+    expect(() => wavSound(truncated)).toThrow("Incomplete WAV format chunk");
+  });
+
+  it("rejects a WAV format chunk smaller than its required fields", () => {
+    const shortFormat = file("error");
+    shortFormat.writeUInt32LE(14, 16);
+    expect(() => wavSound(shortFormat)).toThrow("Incomplete WAV format chunk");
+  });
 });

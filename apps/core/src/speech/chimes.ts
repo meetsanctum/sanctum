@@ -30,6 +30,9 @@ export function wavSound(file: Buffer): SpeechAudio {
     const size = file.readUInt32LE(at + 4);
     const body = at + 8;
     if (id === "fmt ") {
+      if (size < 16 || body + size > file.length) {
+        throw new Error("Incomplete WAV format chunk");
+      }
       const format = file.readUInt16LE(body);
       const channels = file.readUInt16LE(body + 2);
       const bits = file.readUInt16LE(body + 14);
