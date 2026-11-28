@@ -273,7 +273,7 @@ export function createSpeech(options: {
       onFetched?: (url: string) => Promise<void>;
       playbackGraceMs?: number;
       dispatchWithinMs?: number;
-      readyWithinMs?: number;
+      readyBy?: number;
     },
   ) {
     const dispatchBy = now() + (how.dispatchWithinMs ?? dispatchWithinMs);
@@ -313,7 +313,10 @@ export function createSpeech(options: {
       {
         finishing: how.finishing,
         playbackGraceMs: how.playbackGraceMs,
-        readyWithinMs: how.readyWithinMs,
+        readyWithinMs:
+          how.readyBy === undefined
+            ? undefined
+            : Math.max(0, how.readyBy - now()),
       },
     );
     const withdraw = () => announcement.withdraw();
@@ -544,9 +547,9 @@ export function createSpeech(options: {
       confirmation?: boolean;
       signal?: AbortSignal;
       onPlayback?: (finished: boolean) => void;
-      // When it has to start, as before "One moment": then any playable
-      // sound goes, short of the usual lead.
-      readyWithinMs?: number;
+      // Timestamp in ms when any playable sound can go, short of the
+      // usual lead, as before "One moment".
+      readyBy?: number;
     }): Promise<string> {
       let told = "";
       const tell = async (url: string) => {
@@ -557,7 +560,7 @@ export function createSpeech(options: {
         finishing: true,
         tell,
         playbackGraceMs: replyPlaybackGraceMs,
-        readyWithinMs: input.readyWithinMs,
+        readyBy: input.readyBy,
       };
       const chime = input.confirmation ? options.chime : undefined;
       const announcement = chime

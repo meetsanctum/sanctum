@@ -22,6 +22,7 @@ type RestoreIssue = "changed" | "offline" | "uncertain" | "limited" | "failed";
 export type Replies = {
   changed(subject: Subject, state: LightsState): string;
   already(subject: Subject, state: LightsState): string;
+  roomRules(state: LightsState, already: boolean): string;
   /** Dimmer leaves lights that are off alone. */
   allOff(subject: Subject): string;
   noLights(subject: Subject): string;
@@ -103,6 +104,8 @@ const en: Replies = {
   changed: (subject, state) => `${enSubject(subject)} ${enState(state)}.`,
   already: (subject, state) =>
     `${enSubject(subject)} already ${enState(state)}.`,
+  roomRules: (state, already) =>
+    `Lights ${already ? "already " : ""}${enState(state)} where room rules allow.`,
   allOff: (subject) =>
     `${enSubject(subject)} ${subject.kind === "light" ? "is" : "are"} off.`,
   noLights: (subject) =>
@@ -172,6 +175,8 @@ const deSaid = (subject: Subject, words: string) =>
 const de: Replies = {
   changed: (subject, state) => deSaid(subject, deState(state)),
   already: (subject, state) => deSaid(subject, `schon ${deState(state)}`),
+  roomRules: (state, already) =>
+    `Licht ${already ? "schon " : ""}${deState(state)}, wo es die Raumregeln erlauben.`,
   allOff: (subject) =>
     deSaid(subject, subject.kind === "home" ? "sind aus" : "ist aus"),
   noLights: (subject) =>

@@ -44,6 +44,12 @@ function speech(pieces: number[], gate?: Promise<void>) {
   };
 }
 
+function gate() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((open) => (resolve = open));
+  return { promise, resolve };
+}
+
 function fetch(url: string, method = "GET", onBytes?: (bytes: number) => void) {
   return new Promise<{
     status: number;
@@ -217,11 +223,6 @@ describe("createAnnouncements", () => {
     });
     const rate = 22_050;
     const halfLead = (rate * readyLeadMs) / 2_000;
-    function gate() {
-      let resolve!: () => void;
-      const promise = new Promise<void>((open) => (resolve = open));
-      return { promise, resolve };
-    }
     const chunks = [halfLead, halfLead, 4_096].map((length) => ({
       length,
       consumed: gate(),
@@ -259,33 +260,55 @@ describe("createAnnouncements", () => {
     expect(await made.encoded).toBe(true);
   });
 
-  it("starts on whatever sound there is once it's due, short of the lead", async () => {
-    const served = await started();
-    const rate = 22_050;
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => (release = resolve));
-    const made = served.create(
-      "speaker",
-      network,
-      4180,
-      speech([rate / 2, rate * 3], gate),
-      undefined,
-      undefined,
-      { finishing: true, readyWithinMs: 30 },
-    );
-    try {
-      const first = await Promise.race([
-        made.ready,
-        new Promise<"waiting">((resolve) =>
-          setTimeout(() => resolve("waiting"), 500),
-        ),
-      ]);
-      expect(first).toBe(true);
-    } finally {
-      release();
-    }
-    expect(await made.encoded).toBe(true);
-  });
+  it.each([true, false])(
+    "starts with a playable frame at or after the cutoff (buffered: %s)",
+    async (buffered) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      announcements = createAnnouncements({
+        host: "127.0.0.1",
+        port: 0,
+        log: (message) => logged.push(message),
+      });
+      const first = gate();
+      const rest = gate();
+      const rate = 22_050;
+      const made = announcements.create(
+        "speaker",
+        network,
+        4180,
+        async function* () {
+          await first.promise;
+          yield { rate, samples: new Int16Array(4_096) };
+          await rest.promise;
+          yield { rate, samples: new Int16Array(4_096) };
+        },
+        undefined,
+        undefined,
+        { finishing: true, readyWithinMs: 30 },
+      );
+      const ready = vi.fn();
+      void made.ready.then(ready);
+      try {
+        if (buffered) first.resolve();
+        await vi.advanceTimersByTimeAsync(29);
+        expect(ready).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        if (!buffered) {
+          expect(ready).not.toHaveBeenCalled();
+          await vi.advanceTimersByTimeAsync(1);
+          first.resolve();
+          await vi.advanceTimersByTimeAsync(0);
+        }
+        expect(ready).toHaveBeenCalledExactlyOnceWith(true);
+      } finally {
+        first.resolve();
+        rest.resolve();
+        await made.encoded;
+        made.withdraw();
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it("has the rest wait their turn on a speaker, in order, until what's before them has played", async () => {
     const served = await started();

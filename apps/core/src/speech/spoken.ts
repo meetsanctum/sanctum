@@ -13,6 +13,7 @@ import type { TurnOpener } from "../agents/assistants.js";
 import { minuteWindows } from "../agents/limits.js";
 import { ActionCallError } from "../app-host/errors.js";
 import type { Hearer, HeardRun, RunMoments } from "./listening.js";
+import type { Speech } from "./speech.js";
 import type { SpeechTranscript } from "./words.js";
 
 // A smart speaker someone asks: its run (listening.ts) becomes a request to
@@ -129,14 +130,7 @@ export function createSpokenRequests(options: {
   speech: () =>
     | {
         keepRepliesReady?(): () => void;
-        reply(input: {
-          device: string;
-          text: string;
-          language: SpeechLanguage;
-          confirmation?: boolean;
-          signal?: AbortSignal;
-          onPlayback?: (finished: boolean) => void;
-        }): Promise<string>;
+        reply: Speech["reply"];
         speak(input: {
           device: string;
           text: string;
@@ -261,7 +255,7 @@ export function createSpokenRequests(options: {
     language: SpeechLanguage,
     signal: AbortSignal,
     placeholder = false,
-    startsBy?: number,
+    readyBy?: number,
   ) {
     const speech = options.speech();
     if (!speech) return null;
@@ -271,9 +265,7 @@ export function createSpokenRequests(options: {
         text: reply.text,
         language,
         ...(reply.confirmation ? { confirmation: true } : {}),
-        ...(startsBy === undefined
-          ? {}
-          : { readyWithinMs: Math.max(0, startsBy - now()) }),
+        readyBy,
         signal,
         onPlayback(finished) {
           // Successful playback falls back to this after allowing time for

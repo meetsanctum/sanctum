@@ -142,18 +142,23 @@ function lightsReply(
     return { text: words.allOff(subject) };
   }
   const changed = lights.some(done);
+  const followsRoomRules = subject.kind === "home" && lights.some(keptOff);
+  const changedText = () =>
+    followsRoomRules
+      ? words.roomRules(state, false)
+      : words.changed(subject, state);
   const missed = lights.filter(
     (light) => !done(light) && !already(light) && !keptOff(light),
   );
   if (missed.length === 0) {
     if (changed) {
-      return { text: words.changed(subject, state), confirmation: true };
+      return { text: changedText(), confirmation: true };
     }
-    // Nothing switched: those that are on already are, the rest kept off.
+    if (!lights.some(already)) return { text: words.nothingChanged };
     return {
-      text: lights.some(already)
-        ? words.already(subject, state)
-        : words.nothingChanged,
+      text: followsRoomRules
+        ? words.roomRules(state, true)
+        : words.already(subject, state),
     };
   }
   if (!changed && missed.every(off)) {
@@ -161,7 +166,7 @@ function lightsReply(
   }
   return {
     text: words.missedLights(
-      changed ? words.changed(subject, state) : words.nothingChanged,
+      changed ? changedText() : words.nothingChanged,
       missed.map((light) => light.name),
       missed.every(offline),
     ),

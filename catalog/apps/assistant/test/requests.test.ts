@@ -300,7 +300,7 @@ describe("the Assistant's requests", () => {
     [
       "turn on all lights",
       [lit("Desk Lamp"), lit("Ceiling Light", "skipped", "kept_off")],
-      { text: "All lights on.", confirmation: true },
+      { text: "Lights on where room rules allow.", confirmation: true },
     ],
     [
       "turn on all lights",
@@ -308,12 +308,12 @@ describe("the Assistant's requests", () => {
         lit("Desk Lamp", "skipped", "already"),
         lit("Ceiling Light", "skipped", "kept_off"),
       ],
-      { text: "All lights already on." },
+      { text: "Lights already on where room rules allow." },
     ],
     [
       "set all lights to 40%",
       [lit("Desk Lamp"), lit("Ceiling Light", "skipped", "kept_off")],
-      { text: "All lights at 40%.", confirmation: true },
+      { text: "Lights at 40% where room rules allow.", confirmation: true },
     ],
     [
       "turn on all lights",
@@ -322,10 +322,10 @@ describe("the Assistant's requests", () => {
         lit("Ceiling Light", "skipped", "kept_off"),
         lit("Shelf", "offline"),
       ],
-      { text: "All lights on. Shelf didn't answer." },
+      { text: "Lights on where room rules allow. Shelf didn't answer." },
     ],
   ])(
-    "leaves the lights rooms' rules keep off unsaid when asked to %s",
+    "accounts for lights kept off by room rules when asked to %s",
     async (text, lights, reply) => {
       const { replies } = await ask(text, {
         tools: { lights: () => json({ change: "c1", lights }) },
@@ -333,6 +333,26 @@ describe("the Assistant's requests", () => {
       expect(replies).toEqual([reply]);
     },
   );
+
+  it("explains in German when room rules kept lights off", async () => {
+    const { replies } = await ask("schalte alle Lichter an", {
+      language: "de",
+      from: "client",
+      tools: {
+        lights: () =>
+          json({
+            change: "c1",
+            lights: [
+              lit("Desk Lamp", "skipped", "already"),
+              lit("Ceiling Light", "skipped", "kept_off"),
+            ],
+          }),
+      },
+    });
+    expect(replies).toEqual([
+      { text: "Licht schon an, wo es die Raumregeln erlauben." },
+    ]);
+  });
 
   it("says which lights couldn't take a brightness change", async () => {
     const { replies } = await ask("set all lights to 40%", {

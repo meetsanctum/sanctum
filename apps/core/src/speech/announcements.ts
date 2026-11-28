@@ -404,8 +404,9 @@ export function createAnnouncements(options: {
         /** Whether FLAC encoding finished successfully. */
         encoded,
         /**
-         * Whether there is sound to play: true once `readyLeadMs` of it, or
-         * all of it, is encoded, false if the speech failed before then.
+         * Whether there is sound to play: true once the lead or the full
+         * speech is encoded, or as soon as any playable frame is available
+         * at or after `readyWithinMs`. False if speech fails before then.
          */
         ready,
         /**
