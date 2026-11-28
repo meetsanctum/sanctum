@@ -184,9 +184,16 @@ describe("a smart speaker's page", () => {
     expect(switchFor("Glow while waiting").getAttribute("aria-checked")).toBe(
       "false",
     );
-    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
-      "Couldn't change it.",
-    );
+    expect(
+      [
+        ...host.querySelectorAll(
+          '[role="alert"] [data-slot=alert-title], [role="alert"] [data-slot=alert-description]',
+        ),
+      ].map((line) => line.textContent),
+    ).toEqual([
+      "Its ring didn't change",
+      "ESPHome couldn't change it. Try again in a moment.",
+    ]);
   });
 
   it("restores brightness when a keyboard adjustment fails", async () => {

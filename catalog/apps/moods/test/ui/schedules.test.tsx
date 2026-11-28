@@ -393,6 +393,43 @@ describe("a scheduled mood's editor", () => {
     await show(ScheduledMoodPage, { room: "office", id: "gone" });
     expect(back).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    {
+      id: undefined,
+      action: "moods.scheduleMood",
+      label: "Save",
+      title: "Couldn't confirm that the schedule was saved",
+    },
+    {
+      id: "s3",
+      action: "moods.unscheduleMood",
+      label: "Remove",
+      title: "Couldn't confirm that this time was removed",
+    },
+  ])(
+    "explains a failed $action and keeps the editor open",
+    async ({ id, action, label, title }) => {
+      await show(ScheduledMoodPage, { room: "office", ...(id && { id }) });
+      if (id) await press(row("Remove from the schedule"));
+      const submit = () => buttons().find((each) => each.textContent === label);
+      client.call.mockRejectedValueOnce(new Error("conflict"));
+      await press(submit());
+
+      const alert = container.querySelector('[role="alert"]');
+      expect(alert?.querySelector("[data-slot=alert-title]")?.textContent).toBe(
+        title,
+      );
+      expect(alert?.textContent).toContain("check the room's schedule");
+      expect(back).not.toHaveBeenCalled();
+      expect(submit()?.disabled).toBe(false);
+
+      await press(submit());
+      expect(calls(action)).toHaveLength(2);
+      expect(container.querySelector('[role="alert"]')).toBeNull();
+      expect(back).toHaveBeenCalledOnce();
+    },
+  );
 });
 
 describe("Moods' main page", () => {

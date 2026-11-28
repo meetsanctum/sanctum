@@ -1,6 +1,7 @@
 import {
   Button,
   PageSection,
+  Problem,
   Slider,
   Switch,
   useAppClient,
@@ -298,12 +299,9 @@ export function SpeakerCards(props: DevicePageProps) {
         </div>
       )}
       {failed && (
-        <p
-          role="alert"
-          className="m-0 px-1 text-[13px] leading-[18px] text-destructive"
-        >
-          Couldn't change it. Check it's switched on, then try again.
-        </p>
+        <Problem title="Its ring didn't change">
+          ESPHome couldn't change it. Try again in a moment.
+        </Problem>
       )}
     </>
   );

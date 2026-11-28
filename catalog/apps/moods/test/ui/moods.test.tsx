@@ -389,6 +389,34 @@ describe("the mood editor", () => {
     expect(buttons.at(-1)).toBe("Delete mood");
   });
 
+  it.each([
+    { id: undefined, action: "moods.createMood", label: "the mood" },
+    { id: "relax", action: "moods.updateMood", label: "Relax" },
+  ])(
+    "keeps the draft and explains when $action fails",
+    async ({ id, action, label }) => {
+      refusals[action] = "conflict";
+      await show(MoodPage, { room: "office", ...(id && { id }) });
+      if (!id) await pressTile("From the lights");
+      await typeName("Reading");
+      await press("Save");
+
+      const alert = container.querySelector('[role="alert"]');
+      expect(alert?.querySelector("[data-slot=alert-title]")?.textContent).toBe(
+        `Couldn't confirm that ${label} was saved`,
+      );
+      expect(alert?.textContent).toContain(
+        "check the room's moods before trying again",
+      );
+      expect(calls(action)).toHaveLength(1);
+      expect(
+        container.querySelector<HTMLInputElement>("#mood-name")?.value,
+      ).toBe("Reading");
+      expect(button("Save")?.disabled).toBe(false);
+      expect(back).not.toHaveBeenCalled();
+    },
+  );
+
   it("leaves a new mood's first step on Cancel, adding nothing", async () => {
     await show(MoodPage, { room: "office" });
     await press("Cancel");
@@ -435,6 +463,31 @@ describe("the mood editor", () => {
     });
     expect(calls("moods.updateMood")).toEqual([]);
     expect(back).toHaveBeenCalledTimes(1);
+  });
+
+  it("says when the preview request fails", async () => {
+    refusals["moods.previewMood"] = "conflict";
+    await show(MoodPage, { room: "office", id: "work" });
+    await press("Preview on the lights");
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "The lights didn't show the mood",
+    );
+  });
+
+  it("says when restoring the lights after a preview fails", async () => {
+    await show(MoodPage, { room: "office", id: "work" });
+    await press("Preview on the lights");
+    refusals["moods.previewMood"] = "conflict";
+    await press("Preview on the lights");
+
+    expect(calls("moods.previewMood").at(-1)).toEqual({
+      roomId: "office",
+      lights: putBack,
+    });
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Couldn't restore the previous light settings",
+    );
   });
 
   it("puts the lights back when the page goes mid-preview", async () => {
@@ -507,9 +560,16 @@ describe("the mood editor", () => {
     await show(MoodPage, { room: "office", id: "relax" });
     await press("Delete mood");
     await press("Delete");
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      "The mood could not be deleted.",
-    );
+    expect(
+      [
+        ...container.querySelectorAll(
+          '[role="alert"] [data-slot=alert-title], [role="alert"] [data-slot=alert-description]',
+        ),
+      ].map((line) => line.textContent),
+    ).toEqual([
+      "Couldn't confirm that Relax was deleted",
+      "Close Moods and reopen it to check the room's moods before trying again.",
+    ]);
     expect(back).not.toHaveBeenCalled();
   });
 });

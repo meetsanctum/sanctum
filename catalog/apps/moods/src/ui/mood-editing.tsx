@@ -1,4 +1,4 @@
-import { Button, PageBar, type Tile } from "@meetsanctum/ui-sdk";
+import { Button, PageBar, Problem, type Tile } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -32,7 +32,8 @@ export function useMoodEditing(options: {
   const [previewing, setPreviewing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState<string>();
+  // What didn't happen, and what to do.
+  const [error, setError] = useState<{ title: string; reason: string }>();
   const [failures, setFailures] = useState<ReadonlyMap<string, number>>(
     () => new Map(),
   );
@@ -41,21 +42,21 @@ export function useMoodEditing(options: {
   const restore = useRef<PreviewLight[] | null>(null);
   // One preview at a time, then the latest one asked for meanwhile.
   const sending = useRef<{
-    next: PreviewLight[] | null;
+    next: { lights: PreviewLight[]; isRestore: boolean } | null;
     done?: Promise<void>;
   }>({
     next: null,
   });
   const send = useCallback(
-    (sent: PreviewLight[]) => {
+    (lights: PreviewLight[], isRestore = false) => {
       const queue = sending.current;
-      queue.next = sent;
+      queue.next = { lights, isRestore };
       queue.done ??= (async () => {
         while (queue.next) {
           const next = queue.next;
           queue.next = null;
           try {
-            const result = await preview(roomId, next);
+            const result = await preview(roomId, next.lights);
             if (result.failed.length === 0) continue;
             setFailures((current) => {
               const counted = new Map(current);
@@ -66,7 +67,18 @@ export function useMoodEditing(options: {
               return counted;
             });
           } catch {
-            setError("The lights could not show the mood.");
+            setError(
+              next.isRestore
+                ? {
+                    title: "Couldn't restore the previous light settings",
+                    reason: "Check the lights and adjust them if needed.",
+                  }
+                : {
+                    title: "The lights didn't show the mood",
+                    reason:
+                      "Moods couldn't send it to them. Try again in a moment.",
+                  },
+            );
           }
         }
         queue.done = undefined;
@@ -94,7 +106,7 @@ export function useMoodEditing(options: {
   // preview still on its way.
   useEffect(
     () => () => {
-      if (restore.current?.length) void send(restore.current);
+      if (restore.current?.length) void send(restore.current, true);
     },
     [send],
   );
@@ -102,7 +114,7 @@ export function useMoodEditing(options: {
   const putBack = async () => {
     const saved = restore.current;
     restore.current = null;
-    if (saved?.length) await send(saved);
+    if (saved?.length) await send(saved, true);
   };
 
   const togglePreview = async () => {
@@ -127,7 +139,13 @@ export function useMoodEditing(options: {
       restore.current = null;
       leave();
     } catch {
-      setError("The mood could not be saved.");
+      setError({
+        title: mood
+          ? `Couldn't confirm that ${mood.name} was saved`
+          : "Couldn't confirm that the mood was saved",
+        reason:
+          "Close Moods and reopen it to check the room's moods before trying again.",
+      });
       setBusy(false);
     }
   };
@@ -151,8 +169,12 @@ export function useMoodEditing(options: {
       // It is off its room's schedule now.
       void schedules.load().catch(() => undefined);
       leave();
-    } catch (failure) {
-      setError("The mood could not be deleted.");
+    } catch {
+      setError({
+        title: `Couldn't confirm that ${mood.name} was deleted`,
+        reason:
+          "Close Moods and reopen it to check the room's moods before trying again.",
+      });
       setConfirming(false);
       setBusy(false);
     }
@@ -259,9 +281,7 @@ export function EditorFooter(props: { editing: MoodEditing; mood?: Mood }) {
   return (
     <>
       {editing.error && (
-        <p role="alert" className="m-0 text-[13px] font-medium text-(--danger)">
-          {editing.error}
-        </p>
+        <Problem title={editing.error.title}>{editing.error.reason}</Problem>
       )}
       {mood && (
         <div className="flex flex-wrap items-center gap-2">

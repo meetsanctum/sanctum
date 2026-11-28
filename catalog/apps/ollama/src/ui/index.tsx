@@ -2,6 +2,7 @@ import {
   Button,
   PageBar,
   PageSection,
+  Problem,
   Switch,
   defineAppUi,
   icons,
@@ -328,15 +329,19 @@ function OfferRow(props: {
   );
 }
 
+type Refused = { title: string; reason: string; offered?: boolean };
+
 function MainPage() {
   const { status, hasFailed, act } = useStatus();
   const [isAnyway, setIsAnyway] = useState(false);
-  const [problem, setProblem] = useState<string>();
+  // What didn't happen, and what to do.
+  // `offered` for a model offered for download, said in that section.
+  const [problem, setProblem] = useState<Refused>();
 
   const run = async (
     action: string,
     input: Record<string, unknown>,
-    refused: string,
+    refused: Refused,
   ) => {
     setProblem(undefined);
     const isDone = await act(action, input);
@@ -348,9 +353,9 @@ function MainPage() {
       <>
         <PageBar title="Ollama" />
         {hasFailed && (
-          <p className={note}>
-            Ollama’s page couldn’t load. It tries again shortly.
-          </p>
+          <Problem title="Ollama’s page didn’t load">
+            It tries again shortly.
+          </Problem>
         )}
       </>
     );
@@ -363,14 +368,6 @@ function MainPage() {
       <PageBar title="Ollama" />
       <div className="flex w-full max-w-160 flex-col gap-6">
         <ThisSanctum host={status.host} />
-        {problem && (
-          <p
-            role="alert"
-            className="m-0 text-[13px] font-medium text-(--danger)"
-          >
-            {problem}
-          </p>
-        )}
         <PageSection id="ollama-models" title="Models on Sanctum">
           {!status.isAnswering ? (
             <p className={`${note} px-2.5 py-2`}>
@@ -387,7 +384,10 @@ function MainPage() {
                   run(
                     "ollama.remove",
                     { model: model.id },
-                    `Couldn’t remove ${model.name}. Try again.`,
+                    {
+                      title: `Couldn’t confirm that ${model.name} was removed`,
+                      reason: "Check the model list before trying again.",
+                    },
                   )
                 }
               />
@@ -402,18 +402,32 @@ function MainPage() {
                 void run(
                   "ollama.stop",
                   { model: download.id },
-                  `Couldn’t stop downloading ${download.name}.`,
+                  download.problem
+                    ? {
+                        title: `Couldn’t cancel the download of ${download.name}`,
+                        reason: "Press Cancel again in a moment.",
+                      }
+                    : {
+                        title: `${download.name} didn’t stop downloading`,
+                        reason: "Press Stop download again in a moment.",
+                      },
                 )
               }
               onRetry={() =>
                 void run(
                   "ollama.download",
                   { model: download.id, anyway: isAnyway },
-                  `Couldn’t download ${download.name}. Try again.`,
+                  {
+                    title: `${download.name} didn’t download`,
+                    reason: "Ollama didn’t start it. Try again in a moment.",
+                  },
                 )
               }
             />
           ))}
+          {problem && !problem.offered && (
+            <Problem title={problem.title}>{problem.reason}</Problem>
+          )}
         </PageSection>
         <div className="flex flex-col gap-2">
           <PageSection
@@ -454,11 +468,19 @@ function MainPage() {
                     void run(
                       "ollama.download",
                       { model: offer.id, anyway: isAnyway },
-                      `Couldn’t download ${offer.name}. Try again.`,
+                      {
+                        title: `${offer.name} didn’t download`,
+                        reason:
+                          "Ollama didn’t start it. Try again in a moment.",
+                        offered: true,
+                      },
                     )
                   }
                 />
               ))
+            )}
+            {problem?.offered && (
+              <Problem title={problem.title}>{problem.reason}</Problem>
             )}
           </PageSection>
           <p className={note}>

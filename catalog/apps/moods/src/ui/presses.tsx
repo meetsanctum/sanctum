@@ -1,6 +1,7 @@
 import type { ActionOutput } from "@meetsanctum/app-sdk";
 import {
   Button,
+  Problem,
   icons,
   pressGroups,
   pressLabel,
@@ -22,6 +23,9 @@ import { ChoicePage } from "./press-choice";
 import { defaultsNote, describeChoice } from "./press-words";
 import { useMoodsApp } from "./state";
 import { WhichLightsPage } from "./which-lights";
+
+/** What didn't happen with a remote's presses, and what to do. */
+export type PressProblem = { title: string; reason: string };
 
 // The Presses page Moods adds to a remote's detail: each press its driver
 // declares, by button where the remote has several, with what it does by
@@ -46,11 +50,11 @@ export function PressesPage(props: DevicePageProps) {
   const [isWhich, setIsWhich] = useState(false);
   // Which lights a press's verbs are for while it does something else.
   const [draftPlace, setDraftPlace] = useState<PressPlace | null>(null);
-  const [loadProblem, setLoadProblem] = useState<string | null>(null);
+  const [loadProblem, setLoadProblem] = useState<PressProblem | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const saving = useRef(false);
   const captureEndsAt = useRef(0);
-  const [problem, setProblem] = useState<string | null>(null);
+  const [problem, setProblem] = useState<PressProblem | null>(null);
   // While finding a press: the one it heard last, if any.
   const [finding, setFinding] = useState<{ heard: string | null } | null>(null);
   const capture = useRef<{ stop(): Promise<void> } | null>(null);
@@ -75,7 +79,10 @@ export function PressesPage(props: DevicePageProps) {
         })
         .catch(() => {
           if (current && version === loadVersion.current) {
-            setLoadProblem("Couldn't read the presses.");
+            setLoadProblem({
+              title: "Its presses didn't load",
+              reason: "Close its detail and open it again.",
+            });
           }
         });
     };
@@ -99,7 +106,10 @@ export function PressesPage(props: DevicePageProps) {
       }
       return true;
     } catch {
-      setProblem("Couldn't stop listening. Try Stop again.");
+      setProblem({
+        title: "Listening didn't stop",
+        reason: "Press Stop again.",
+      });
       return false;
     }
   }, []);
@@ -129,7 +139,10 @@ export function PressesPage(props: DevicePageProps) {
         capture.current = null;
         setFinding(null);
         if (reason === "failed") {
-          setProblem("Couldn't listen for the remote. Try again.");
+          setProblem({
+            title: "Find a press didn't finish",
+            reason: "Select Find a press to try again.",
+          });
         }
       },
     });
@@ -154,7 +167,11 @@ export function PressesPage(props: DevicePageProps) {
       ++loadVersion.current;
       return true;
     } catch {
-      setProblem("Couldn't change that press. Try again.");
+      setProblem({
+        title: "Couldn't confirm the change to this press",
+        reason:
+          "Close the device detail and reopen it to check what this press does.",
+      });
       return false;
     } finally {
       saving.current = false;
@@ -342,9 +359,9 @@ export function PressesPage(props: DevicePageProps) {
         </p>
       )}
       {(problem ?? loadProblem) && (
-        <p className="m-0 px-1 text-[13px] font-medium text-(--danger)">
-          {problem ?? loadProblem}
-        </p>
+        <Problem title={(problem ?? loadProblem)!.title}>
+          {(problem ?? loadProblem)!.reason}
+        </Problem>
       )}
       {!finding && listing && (
         <div className="flex flex-wrap items-center gap-4">

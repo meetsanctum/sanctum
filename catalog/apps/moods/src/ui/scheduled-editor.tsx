@@ -5,6 +5,7 @@ import {
   NativeSelectOption,
   PageBar,
   PageSection,
+  Problem,
   tileIconOf,
   type PageProps,
   useHomeClock,
@@ -113,7 +114,8 @@ function Editor(props: {
   const [draft, setDraft] = useState(() => initial(schedule, moods, editing));
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState<string>();
+  // What didn't happen, and what to do.
+  const [error, setError] = useState<{ title: string; reason: string }>();
   const others = schedule.scheduled.filter((each) => each.id !== editing?.id);
   const ends = endsFrom(others, draft.start);
   const mood = moods.find((each) => each.id === draft.moodId);
@@ -136,7 +138,11 @@ function Editor(props: {
       });
       leave();
     } catch {
-      setError("It could not be saved. Try again.");
+      setError({
+        title: "Couldn't confirm that the schedule was saved",
+        reason:
+          "Close Moods and reopen it to check the room's schedule before trying again.",
+      });
       setBusy(false);
     }
   };
@@ -149,7 +155,10 @@ function Editor(props: {
       await schedules.remove(editing.id);
       leave();
     } catch {
-      setError("It could not be taken off the schedule. Try again.");
+      setError({
+        title: "Couldn't confirm that this time was removed",
+        reason: "Close Moods and reopen it to check the room's schedule.",
+      });
       setBusy(false);
     }
   };
@@ -290,11 +299,7 @@ function Editor(props: {
             ` Until ${minuteWords(clock, draft.end)}, turning the room's lights on brings ${mood.name}.`}
         </p>
       )}
-      {error && (
-        <p role="alert" className="m-0 text-[13px] font-medium text-(--danger)">
-          {error}
-        </p>
-      )}
+      {error && <Problem title={error.title}>{error.reason}</Problem>}
       {editing && (
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {confirming ? (

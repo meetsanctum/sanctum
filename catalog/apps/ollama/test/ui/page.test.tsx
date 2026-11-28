@@ -204,6 +204,59 @@ describe("Ollama's page", () => {
     expect(container.textContent).toContain("Downloading · 1.0 of 1.4 GB");
   });
 
+  it("clears an initial load error when the next poll succeeds", async () => {
+    vi.useFakeTimers();
+    const { client, call } = fakeClient(capable());
+    call.mockRejectedValueOnce(new Error("offline"));
+    await show(client);
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Ollama’s page didn’t load",
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(15_000));
+
+    expect(call).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.querySelector("#ollama-models")?.textContent).toBe(
+      "Models on Sanctum",
+    );
+  });
+
+  it.each([
+    { control: "Download", section: "ollama-offered", model: "Qwen3 8B" },
+    { control: "Try again", section: "ollama-models", model: "Qwen3 1.7B" },
+  ])(
+    "shows a refused $control action only in its own section",
+    async ({ control, section, model }) => {
+      const status = capable();
+      status.downloads[0]!.problem = "Ollama lost its connection.";
+      const { client, call } = fakeClient(status);
+      await show(client);
+      call.mockRejectedValueOnce(new Error("refused"));
+      await act(async () => button(control).click());
+
+      const alerts = container.querySelectorAll('[role="alert"]');
+      expect(alerts).toHaveLength(1);
+      expect(
+        alerts[0]?.closest("section")?.getAttribute("aria-labelledby"),
+      ).toBe(section);
+      expect(alerts[0]?.textContent).toContain(`${model} didn’t download`);
+    },
+  );
+
+  it("names Cancel if clearing a failed download is refused", async () => {
+    const status = capable();
+    status.downloads[0]!.problem = "Ollama lost its connection.";
+    const { client, call } = fakeClient(status);
+    await show(client);
+    call.mockRejectedValueOnce(new Error("refused"));
+    await act(async () => button("Cancel").click());
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Press Cancel again in a moment.",
+    );
+  });
+
   it("still lets someone stop a download when the model list is unavailable", async () => {
     const { client, call } = fakeClient({ ...capable(), isAnswering: false });
     await show(client);
@@ -284,5 +337,22 @@ describe("Ollama's page", () => {
     await act(async () => button("Remove").click());
     await act(async () => button("Remove").click());
     expect(call).toHaveBeenCalledWith("ollama.remove", { model: "qwen3:4b" });
+  });
+
+  it("points to the updated list when a model is already gone at removal", async () => {
+    const status = capable();
+    const { client, call } = fakeClient(status);
+    await show(client);
+
+    await act(async () => button("Remove").click());
+    call
+      .mockRejectedValueOnce(new Error("not found"))
+      .mockResolvedValueOnce({ ...status, models: [] });
+    await act(async () => button("Remove").click());
+
+    expect(button("Remove")).toBeUndefined();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Couldn’t confirm that Qwen3 4B was removedCheck the model list before trying again.",
+    );
   });
 });

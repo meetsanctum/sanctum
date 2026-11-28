@@ -8,6 +8,7 @@ import {
   Button,
   PageBar,
   PageSection,
+  Problem,
   defineAppUi,
   icons,
   languages,
@@ -280,8 +281,10 @@ const firstRoom = (
 
 function LoadFailed(props: { onRetry: () => void }) {
   return (
-    <section className={card} role="alert">
-      <p className="m-0 text-sm font-medium">The Assistant didn't answer.</p>
+    <section className={card}>
+      <Problem title="The Assistant's settings didn't load">
+        The Assistant didn't answer. Try again in a moment.
+      </Problem>
       <div className="flex">
         <Button variant="outline" onClick={props.onRetry}>
           Try again
