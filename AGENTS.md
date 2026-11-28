@@ -243,13 +243,31 @@ What is under which licence, and what neither covers, is in
 
 ## Verification
 
+Several worktrees' agents usually share one computer, and each full run
+fills it: Vitest starts a worker per core in every package Turbo runs. So the
+full set runs under one lock for the whole computer, from the repository
+root, and so does any other full run of these tasks, such as one
+`pnpm turbo run`. The command waits for another worktree's run to finish and
+holds the lock to its last step, so start it in the background or with a
+timeout long enough for both (on Linux, `flock` takes the place of
+`lockf -k`):
+
 ```sh
-pnpm typecheck
-pnpm lint
-pnpm test
-pnpm build
-pnpm format:check
+lockf -k /tmp/sanctum-verification.lock sh -ec '
+  pnpm typecheck
+  pnpm lint
+  pnpm test
+  pnpm build
+  pnpm format:check
+'
 ```
+
+- While iterating, run only what the change touches: one package's task with
+  `pnpm --filter <package> <task>`, or one test file with
+  `pnpm --filter <package> exec vitest run <file>`.
+- Run the full set once, when the change is done and before its pull request
+  is opened or updated, not after every edit. CI runs it again on the pull
+  request, all but `pnpm lint`, whose tsc run is the typecheck's.
 
 `pnpm test:containers` runs real stacks and images in Docker and takes minutes.
 The [Containers workflow](.github/workflows/containers.yml) uses the changed
@@ -260,5 +278,8 @@ CI found, when CI can't run, and before merging a change to app packaging
 that the workflow skips, such as a change to the page builder in
 `packages/ui-sdk/tools/`.
 
-Use focused `pnpm --filter <package> <task>` runs while iterating, then the
-full set before finishing.
+Local container test runs take the same lock:
+
+```sh
+lockf -k /tmp/sanctum-verification.lock pnpm test:containers
+```
