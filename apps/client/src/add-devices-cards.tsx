@@ -4,7 +4,7 @@ import type {
   JoinedDevice,
   Room,
 } from "@meetsanctum/app-sdk";
-import { Button, Input, SegmentedControl } from "@meetsanctum/ui-sdk";
+import { Button, Input, Problem, SegmentedControl } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { Check, CircleAlert } from "lucide-react";
 import {
@@ -22,7 +22,7 @@ import { productName } from "./brand";
 import { coreJson } from "./core-fetch";
 import {
   DeviceIcon,
-  deviceProblem,
+  problemReason,
   RoomPicker,
   showAsOf,
 } from "./device-parts";
@@ -84,9 +84,8 @@ export function stageText(joined: JoinedDevice, device?: DeviceInfo) {
 
 type Tone = "neutral" | "success" | "error";
 
-// A card's tint runs out before its foot, where a problem with Blink or a
-// new room appears in red: red words on a tint laid over the glass fall below
-// 4.5 : 1, and on the glass alone they keep it.
+// A card's tint runs out before its foot, so a problem there, such as
+// Blink's, stands on the glass alone.
 const tones: Record<Tone, string> = {
   neutral:
     "from-white/12 to-white/0 to-85% inset-shadow-[0_1px_0_rgb(255_255_255/0.1),0_0_0_1px_rgb(255_255_255/0.12)]",
@@ -244,8 +243,8 @@ export function ReadyCardContent(props: {
 }
 
 // Blink: has the device show itself, as a light blinks, so a person sees
-// which one it is. It says so while the device blinks, and why where it
-// couldn't.
+// which one it is. It says so while the device blinks, and under it why
+// where it couldn't, with Blink as the way to try again.
 function BlinkButton(props: { device: DeviceInfo }) {
   const [blinking, setBlinking] = useState(false);
   const [problem, setProblem] = useState<string>();
@@ -263,7 +262,7 @@ function BlinkButton(props: { device: DeviceInfo }) {
       timer.current = window.setTimeout(() => setBlinking(false), 2_500);
     } catch (error) {
       setBlinking(false);
-      setProblem(deviceProblem(error));
+      setProblem(problemReason(error));
     }
   };
   return (
@@ -278,12 +277,12 @@ function BlinkButton(props: { device: DeviceInfo }) {
         {blinking ? "Blinking…" : "Blink"}
       </Button>
       {problem && (
-        <p
-          role="alert"
-          className="m-0 basis-full text-[13px] leading-[18px] text-(--ruby-on-carbon)"
+        <Problem
+          title={`${props.device.name} didn't blink`}
+          className="mt-1 basis-full"
         >
           {problem}
-        </p>
+        </Problem>
       )}
     </>
   );
@@ -366,7 +365,7 @@ function RoomChoice(props: {
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState("");
   const [working, setWorking] = useState(false);
-  const [problem, setProblem] = useState<string>();
+  const [problem, setProblem] = useState<{ room: string; reason: string }>();
   const field = useRef<HTMLInputElement>(null);
   const roomTrigger = useRef<HTMLButtonElement>(null);
   const restoreFocus = useRef(false);
@@ -411,7 +410,8 @@ function RoomChoice(props: {
       // The overlay says why it couldn't; the form stays to try again.
       if (moved) leave();
     } catch (error) {
-      if (mine === attempt.current) setProblem(deviceProblem(error));
+      if (mine === attempt.current)
+        setProblem({ room: wanted, reason: problemReason(error) });
     } finally {
       if (mine === attempt.current) setWorking(false);
     }
@@ -455,12 +455,9 @@ function RoomChoice(props: {
           </Button>
         </div>
         {problem && (
-          <p
-            role="alert"
-            className="m-0 text-[13px] leading-[18px] text-(--ruby-on-carbon)"
-          >
-            {problem}
-          </p>
+          <Problem title={`Couldn't add ${problem.room}`} className="mt-1">
+            {problem.reason}
+          </Problem>
         )}
       </form>
     );

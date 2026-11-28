@@ -239,7 +239,6 @@ function Welcome(props: {
     current ?? suggestedUsername(person.name),
   );
   const [password, setPassword] = useState("");
-  const [repeated, setRepeated] = useState("");
   const [problem, setProblem] = useState<CredentialProblem>();
   const [working, setWorking] = useState(false);
   const secure = useSecureStorage();
@@ -251,7 +250,7 @@ function Welcome(props: {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (working) return;
-    const invalid = credentialProblem(username, password, repeated);
+    const invalid = credentialProblem(username, password);
     setProblem(invalid);
     if (invalid) return;
     setWorking(true);
@@ -334,6 +333,7 @@ function Welcome(props: {
         <SheetField
           label="Password"
           type="password"
+          revealable
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           autoComplete="new-password"
@@ -343,16 +343,6 @@ function Welcome(props: {
           autoFocus
         />
         {problemLine("password")}
-        <SheetField
-          label="Repeat password"
-          type="password"
-          value={repeated}
-          onChange={(event) => setRepeated(event.target.value)}
-          autoComplete="new-password"
-          problemId={about("repeated")}
-          required
-        />
-        {problemLine("repeated")}
         {problemLine(undefined)}
         <StorageNotice secure={secure} />
         <SheetActions>
