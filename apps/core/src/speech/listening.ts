@@ -75,6 +75,8 @@ export type HeardRun = {
   readonly moments: Readonly<RunMoments>;
   /** How the driver ended it, once it did. */
   readonly ended: ListenEnd | null;
+  /** The driver's close, or null once the finished run is forgotten. */
+  readonly driverClosed: Promise<ListenEnd | null>;
 };
 
 /** What hears the home's runs; without one, every run is refused `off`. */
@@ -92,6 +94,7 @@ type Run = Omit<HeardRun, "moments" | "ended"> & {
   quiet?: NodeJS.Timeout;
   limit: NodeJS.Timeout;
   controller: AbortController;
+  acknowledgeClose(end: ListenEnd | null): void;
 };
 
 // Sound as an async iterable that ends when told.
@@ -149,6 +152,7 @@ export function createListening(options: {
   function forget(id: string) {
     clearTimeout(expiry.get(id));
     expiry.delete(id);
+    runs.get(id)?.acknowledgeClose(null);
     runs.delete(id);
   }
 
@@ -225,6 +229,10 @@ export function createListening(options: {
       const id = randomBytes(12).toString("base64url");
       const sound = soundQueue();
       const controller = new AbortController();
+      let acknowledgeClose!: Run["acknowledgeClose"];
+      const driverClosed = new Promise<ListenEnd | null>((resolve) => {
+        acknowledgeClose = resolve;
+      });
       const run: Run = {
         id,
         device,
@@ -238,6 +246,8 @@ export function createListening(options: {
         controller,
         signal: controller.signal,
         ended: null,
+        driverClosed,
+        acknowledgeClose,
         moments: {
           heard: now(),
           firstSound: null,
@@ -340,8 +350,10 @@ export function createListening(options: {
         throw new Error(`${driver} closed a run the core cannot close`);
       }
       const run = runOf(driver, parsed.data.run);
-      if (!run || run.finished) return;
+      if (!run) return;
       const { end } = parsed.data;
+      run.acknowledgeClose(end);
+      if (run.finished) return;
       run.ended = end;
       if (end === "played" && run.moments.replyReady !== null)
         run.moments.finishedPlaying = now();

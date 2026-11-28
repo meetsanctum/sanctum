@@ -112,7 +112,7 @@ settings() {
 core_binds() {
   local path binds=""
   # ui-sdk's build holds the kit the core serves apps' pages with.
-  for path in apps/core/dist apps/core/migrations \
+  for path in apps/core/dist apps/core/migrations apps/core/sounds \
     packages/app-sdk/dist packages/auth-protocol/dist packages/ui-sdk/dist; do
     [[ -e "$path" ]] && binds+="${root}/${path}:/app/${path}:ro;"
   done

@@ -45,7 +45,23 @@ function setup(
   }[] = [];
   const spokenLate: unknown[] = [];
   const replied: { text: string; confirmation?: boolean }[] = [];
-  const errorChimes: { device: string; afterSteps: string[] }[] = [];
+  const errorChimes: string[] = [];
+  const playError = vi.fn(
+    async ({
+      device,
+      beforeTelling,
+      signal,
+    }: {
+      device: string;
+      beforeTelling: () => void;
+      signal: AbortSignal;
+    }) => {
+      await options.beforeErrorChime?.();
+      signal.throwIfAborted();
+      beforeTelling();
+      errorChimes.push(device);
+    },
+  );
   const forgotten: string[] = [];
   let answers = options.answers ?? true;
   let room = true;
@@ -102,21 +118,7 @@ function setup(
         input.beforeTelling();
         spokenLate.push(input);
       },
-      playError: async (input) => {
-        await options.beforeErrorChime?.();
-        input.beforeTelling();
-        errorChimes.push({
-          device: input.device,
-          // What the core had told the run by then.
-          afterSteps: (
-            await Promise.all(
-              [...read.keys()].map((run) =>
-                listening.read(driver, { run, after: 0 }),
-              ),
-            )
-          ).flatMap(kinds),
-        });
-      },
+      playError,
     }),
     record: (entry) => void recorded.push(entry),
     log: () => {},
@@ -161,11 +163,13 @@ function setup(
     spokenLate,
     replied,
     errorChimes,
+    playError,
     forgotten,
     wake,
     steps,
     until: (check: () => boolean) =>
       vi.waitFor(() => expect(check()).toBe(true)),
+    acknowledge: (run: string) => listening.close(driver, { run, end: "done" }),
     turnOff: () => (answers = false),
     full: () => (room = false),
     driverGone: () => (drives = false),
@@ -332,8 +336,12 @@ describe("a smart speaker's request", () => {
     const unknown = setup({ heard: "  " });
     const opened = await unknown.wake();
     if (!opened.accepted) throw new Error(opened.refusal);
+    await unknown.until(
+      () => unknown.steps(opened.run).at(-1)?.step === "done",
+    );
+    unknown.acknowledge(opened.run);
     await unknown.until(() => unknown.errorChimes.length === 1);
-    expect(unknown.errorChimes[0]!.device).toBe("device:speaker");
+    expect(unknown.errorChimes).toEqual(["device:speaker"]);
 
     const silent = setup({ heard: null });
     const quiet = await silent.wake();
@@ -341,7 +349,8 @@ describe("a smart speaker's request", () => {
     await silent.until(() =>
       silent.steps(quiet.run).some((step) => step.step === "done"),
     );
-    await new Promise((done) => setTimeout(done, 10));
+    silent.acknowledge(quiet.run);
+    expect(silent.playError).not.toHaveBeenCalled();
     expect(silent.errorChimes).toEqual([]);
   });
 
@@ -386,35 +395,118 @@ describe("a smart speaker's request", () => {
     });
   });
 
-  it("plays the error chime once the run has ended in its error", async () => {
-    const { wake, asked, until, errorChimes } = setup();
+  it("waits for the driver to close the failed run before playing the error chime", async () => {
+    const { wake, asked, until, steps, acknowledge, playError, errorChimes } =
+      setup();
     const opened = await wake();
     if (!opened.accepted) throw new Error(opened.refusal);
     await until(() => asked.length === 1);
     asked[0]!.fail(new ActionCallError("unavailable"));
+    await until(() => steps(opened.run).at(-1)?.step === "done");
+    expect(kinds(steps(opened.run))).toEqual([
+      "stopped",
+      "heard",
+      "error",
+      "done",
+    ]);
+    expect(playError).not.toHaveBeenCalled();
+    acknowledge(opened.run);
     await until(() => errorChimes.length === 1);
-    // A speaker stops what it plays when its run ends in an error, so the
-    // chime is told only after the run's end.
-    expect(errorChimes[0]).toEqual({
-      device: "device:speaker",
-      afterSteps: ["stopped", "heard", "error", "done"],
-    });
+    expect(errorChimes).toEqual(["device:speaker"]);
   });
 
-  it("plays no error chime once a newer request from the speaker took over", async () => {
-    const told = deferredResult<void>();
-    const { wake, asked, until, errorChimes } = setup({
-      beforeErrorChime: () => told.promise,
+  it("drops the error chime if the driver has not closed the run before it expires", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    const { wake, asked, steps, acknowledge, playError } = setup();
+    const opened = await wake();
+    if (!opened.accepted) throw new Error(opened.refusal);
+    await vi.advanceTimersByTimeAsync(0);
+    asked[0]!.fail(new ActionCallError("unavailable"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(steps(opened.run).at(-1)).toEqual({ step: "done" });
+    await vi.advanceTimersByTimeAsync(11_000);
+    acknowledge(opened.run);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(playError).not.toHaveBeenCalled();
+  });
+
+  it.each(["recognition", "reply preparation"] as const)(
+    "plays one error chime when %s fails",
+    async (failure) => {
+      const transcript = deferredResult<string | null>();
+      const error = new Error("Service unavailable");
+      const { wake, asked, until, steps, acknowledge, errorChimes } = setup(
+        failure === "recognition"
+          ? { transcript: transcript.promise }
+          : {
+              prepare: async () => {
+                throw error;
+              },
+            },
+      );
+      const opened = await wake();
+      if (!opened.accepted) throw new Error(opened.refusal);
+      if (failure === "recognition") {
+        await until(() =>
+          steps(opened.run).some((step) => step.step === "stopped"),
+        );
+        transcript.reject(error);
+      } else {
+        await until(() => asked.length === 1);
+        asked[0]!.answer.resolve({ text: "Done" });
+      }
+      await until(() => steps(opened.run).at(-1)?.step === "done");
+      expect(steps(opened.run).slice(-2)).toEqual([
+        { step: "error", error: "failed" },
+        { step: "done" },
+      ]);
+      acknowledge(opened.run);
+      await until(() => errorChimes.length === 1);
+      expect(errorChimes).toEqual(["device:speaker"]);
+    },
+  );
+
+  it.each([
+    "a newer request finishes",
+    "the Assistant is switched off",
+  ] as const)("drops a queued error chime after %s", async (event) => {
+    const queued = deferredResult<void>();
+    const dispatch = deferredResult<void>();
+    const {
+      wake,
+      asked,
+      until,
+      steps,
+      acknowledge,
+      playError,
+      errorChimes,
+      turnOff,
+      spoken,
+    } = setup({
+      beforeErrorChime: () => {
+        queued.resolve();
+        return dispatch.promise;
+      },
     });
     const first = await wake();
     if (!first.accepted) throw new Error(first.refusal);
     await until(() => asked.length === 1);
     asked[0]!.fail(new ActionCallError("unavailable"));
-    const second = await wake();
-    if (!second.accepted) throw new Error(second.refusal);
-    await until(() => asked.length === 2);
-    told.resolve();
-    await new Promise((done) => setTimeout(done, 10));
+    await until(() => steps(first.run).at(-1)?.step === "done");
+    acknowledge(first.run);
+    await queued.promise;
+    if (event === "a newer request finishes") {
+      const second = await wake();
+      if (!second.accepted) throw new Error(second.refusal);
+      await until(() => asked.length === 2);
+      asked[1]!.answer.resolve(null);
+      await until(() => steps(second.run).at(-1)?.step === "done");
+      await until(() => !spoken.actsFor("device:speaker"));
+    } else {
+      turnOff();
+    }
+    dispatch.resolve();
+    await expect(playError.mock.results[0]!.value).rejects.toThrow();
     expect(errorChimes).toEqual([]);
   });
 

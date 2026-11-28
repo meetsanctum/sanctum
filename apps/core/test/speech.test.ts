@@ -1,6 +1,6 @@
 import { languages, type DeviceInfo } from "@meetsanctum/app-sdk";
 import type { Server } from "node:net";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import {
   announcementKeptMs,
@@ -15,101 +15,24 @@ import {
 } from "../src/speech/speech.js";
 import * as wyoming from "../src/speech/wyoming.js";
 import { fakeManager } from "./manager-support.js";
+import { setupSpeech, speaker } from "./speech-service-support.js";
 import { fakePiper } from "./speech-support.js";
 import { deferredDelivery, deferredResult } from "./support.js";
 
 // Speech: Piper runs while a smart speaker can announce and AI agents may
 // speak on them, and what's said goes to the speaker as an address.
 
-const speaker = (id: string, announces: boolean) =>
-  ({
-    id,
-    name: "Office Speaker",
-    availability: "online",
-    capabilities: [
-      {
-        id: "audio",
-        kind: "audio",
-        features: { mutes: true, muteSwitch: true, announces },
-      },
-    ],
-  }) as unknown as DeviceInfo;
-
 let announcements: Announcements | undefined;
 let piper: Server | undefined;
-afterEach(async () => {
-  await announcements?.stop();
+afterEach(() => {
   piper?.close();
-  announcements = undefined;
   piper = undefined;
 });
 
-function setup(options: {
-  devices: DeviceInfo[];
-  areaOn?: boolean;
-  serviceUrl?: string | null;
-  getServiceUrl?: () => Promise<string | null>;
-  getAddress?: () => string;
-  address?: string | null;
-  cidr?: string;
-  want?: (signal: AbortSignal) => Promise<void>;
-  chime?: { rate: number; samples: Int16Array }[];
-  errorChime?: { rate: number; samples: Int16Array }[];
-  hears?: () => boolean;
-  log?: (message: string) => void;
-}) {
-  const calls: string[] = [];
-  const told: { device: string; url: string }[] = [];
-  let areaOn = options.areaOn ?? true;
-  announcements = createAnnouncements({
-    host: "127.0.0.1",
-    port: 0,
-    log: () => {},
-  });
-  const speech = createSpeech({
-    announcements,
-    manager: {
-      serviceUrl:
-        options.getServiceUrl ?? (async () => options.serviceUrl ?? null),
-      hostStatus: async () => ({
-        network:
-          options.address === null
-            ? null
-            : {
-                address:
-                  options.getAddress?.() ?? options.address ?? "192.168.1.20",
-                cidr: options.cidr ?? "192.168.1.20/24",
-              },
-      }),
-      wantServiceForCore: async (service, { signal }) => {
-        calls.push(`want ${service}`);
-        await options.want?.(signal);
-      },
-      releaseServiceForCore: async (service) =>
-        void calls.push(`release ${service}`),
-    },
-    devices: {
-      list: () => options.devices,
-      announce: async (device, url, _actor, fetched) => {
-        if (!fetched) told.push({ device, url });
-      },
-    },
-    areaOn: () => areaOn,
-    ...(options.hears ? { hears: options.hears } : {}),
-    publishedPort: 4180,
-    ...(options.chime ? { chime: options.chime } : {}),
-    ...(options.errorChime ? { errorChime: options.errorChime } : {}),
-    log: options.log ?? (() => {}),
-  });
-  return {
-    speech,
-    calls,
-    told,
-    setArea(on: boolean) {
-      areaOn = on;
-      speech.areaChanged();
-    },
-  };
+function setup(options: Parameters<typeof setupSpeech>[0]) {
+  const fixture = setupSpeech(options);
+  announcements = fixture.announcements;
+  return fixture;
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
@@ -401,112 +324,6 @@ describe("createSpeech", () => {
     }
   });
 
-  it("hands a request its reply's address, a confirmation's as the chime", async () => {
-    const synthesize = vi
-      .spyOn(wyoming, "synthesize")
-      .mockImplementation(async function* () {
-        yield { rate: 22_050, samples: new Int16Array(4096) };
-      });
-    const chime = [{ rate: 22_050, samples: new Int16Array(2048) }];
-    // No Piper: only the chime plays.
-    const { speech, told } = setup({ devices: [], serviceUrl: null, chime });
-    announcements!.port = () => 4180;
-    speech.start();
-    try {
-      const url = await speech.reply({
-        device: "a",
-        text: "Turned off the Office lights",
-        language: "en",
-        confirmation: true,
-      });
-      expect(url).toMatch(/^http:\/\/192\.168\.1\.20:4180\/a\/.+\.flac$/);
-      expect(synthesize).not.toHaveBeenCalled();
-      // The run hands it on: the speaker isn't told as for an announcement.
-      expect(told).toEqual([]);
-      await expect(
-        speech.reply({ device: "a", text: "Hi", language: "en" }),
-      ).rejects.toThrow(SpeechUnavailable);
-    } finally {
-      speech.stop();
-      synthesize.mockRestore();
-    }
-  });
-
-  it("tells a speaker the error chime's address, without Piper and whatever the area says", async () => {
-    const errorChime = [{ rate: 22_050, samples: new Int16Array(2048) }];
-    const { speech, told } = setup({
-      devices: [],
-      serviceUrl: null,
-      areaOn: false,
-      errorChime,
-    });
-    announcements!.port = () => 4180;
-    speech.start();
-    try {
-      await speech.playError({
-        device: "a",
-        actor: { kind: "app", id: "sanctum.example" },
-      });
-      expect(told).toEqual([
-        {
-          device: "a",
-          url: expect.stringMatching(
-            /^http:\/\/192\.168\.1\.20:4180\/a\/.+\.flac$/,
-          ),
-        },
-      ]);
-    } finally {
-      speech.stop();
-    }
-  });
-
-  it("plays no error chime where there is none", async () => {
-    const { speech, told } = setup({ devices: [], serviceUrl: null });
-    announcements!.port = () => 4180;
-    speech.start();
-    try {
-      await expect(
-        speech.playError({
-          device: "a",
-          actor: { kind: "app", id: "sanctum.example" },
-        }),
-      ).rejects.toThrow(SpeechUnavailable);
-      expect(told).toEqual([]);
-    } finally {
-      speech.stop();
-    }
-  });
-
-  it("says a confirmation's words where there is no chime", async () => {
-    const synthesize = vi
-      .spyOn(wyoming, "synthesize")
-      .mockImplementation(async function* () {
-        yield { rate: 22_050, samples: new Int16Array(4096) };
-      });
-    const { speech } = setup({
-      devices: [],
-      serviceUrl: "tcp://127.0.0.1:1",
-      areaOn: false,
-    });
-    announcements!.port = () => 4180;
-    speech.start();
-    try {
-      // Whether or not AI agents may speak: it finishes someone's request.
-      await speech.reply({
-        device: "a",
-        text: "Turned off the Office lights",
-        language: "en",
-        confirmation: true,
-      });
-      expect(synthesize).toHaveBeenCalledWith(
-        expect.objectContaining({ text: "Turned off the Office lights" }),
-      );
-    } finally {
-      speech.stop();
-      synthesize.mockRestore();
-    }
-  });
-
   it("does not send a URL withdrawn after the first playable frame", async () => {
     const synthesize = vi
       .spyOn(wyoming, "synthesize")
@@ -793,6 +610,7 @@ describe("createSpeech", () => {
       port: 0,
       log: () => {},
     });
+    onTestFinished(() => announcements?.stop());
     const speech = createSpeech({
       announcements,
       manager: {

@@ -208,4 +208,4 @@ NVIDIA under CC BY 4.0, download the first time a language is used.
 
 The chimes a smart speaker plays when a request worked or failed are the
 success and error cues of [Cuelume](apps/core/sounds/README.md)'s `press`
-theme, by Daniel Belyi under the MIT licence, rendered into files.
+theme, under the MIT licence, rendered into files.
