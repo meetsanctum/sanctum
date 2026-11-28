@@ -213,11 +213,7 @@ export function createAppContexts(options: {
       services: entry.services,
       claims: () => entry.updating?.claims,
       people: snapshot?.people ?? options.people,
-      // Reads come from a snapshot meanwhile; the language is set at once.
-      places: {
-        ...(snapshot?.places ?? options.places),
-        setLanguage: (by, language) => options.places.setLanguage(by, language),
-      },
+      places: snapshot?.places ?? options.places,
       devices: snapshot?.devices ?? options.devices,
       presses: {
         press: (driver, press) => options.presses().press(driver, press),

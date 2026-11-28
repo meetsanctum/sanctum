@@ -126,7 +126,6 @@ function home(
     aiTools: unused,
     callAiTool: unused,
     replyRequest: unused,
-    setSpeechLanguage: unused,
     openListen: unused,
     sendListen: unused,
     readListen: unused,

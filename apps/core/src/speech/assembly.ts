@@ -2,6 +2,7 @@ import {
   announcePermission,
   assistantAppId,
   moodType,
+  speechLanguage,
   speechLanguages,
   type Hearing,
   type Language,
@@ -45,7 +46,7 @@ export function assembleSpeakerAudio(
 ) {
   const { manager } = config;
   const { devices, places, apps } = options;
-  const language = () => places.language();
+  const language = () => speechLanguage(places.language());
   // The Assistant's, while it answers requests.
   const assistant = () =>
     apps().answersRequests() ? apps().manifest(assistantAppId) : undefined;
@@ -80,6 +81,7 @@ export function assembleSpeakerAudio(
             };
           },
           language,
+          homeLanguage: () => places.language(),
           onWanted: () => speech.speech?.hearingChanged(),
           onHearing: options.onHearing,
           speakersListen: () => devices.list().some(hasListeningPart),
@@ -111,8 +113,8 @@ export function assembleSpeakerAudio(
     ...options,
     transcriber: config.transcriber ?? (() => learning?.transcriber() ?? null),
     notHearing: () => learning?.notHearing() ?? "no_speech_to_text",
-    // The language speech recognition hears in: the home's, or until it
-    // has learned that, the one before.
+    // The language speech recognition hears in: the home's speech language,
+    // or until it has learned that, the one before.
     language: () => learning?.hearsIn() ?? language(),
     notUnderstood: (language) => assistant()?.notUnderstood?.[language] ?? null,
     log: config.log,
@@ -126,7 +128,8 @@ export function assembleSpeakerAudio(
       return (
         learning?.hearing() ?? {
           state: "failed",
-          language: language(),
+          language: places.language(),
+          speechLanguage: language(),
           activeLanguage: null,
           failure: "unavailable",
         }

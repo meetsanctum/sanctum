@@ -67,3 +67,12 @@ const spoken = (language: Language): language is SpeechLanguage => {
 
 /** Every language that can be spoken, in the catalog's order. */
 export const speechLanguages: SpeechLanguage[] = languageIds.filter(spoken);
+
+/**
+ * The language smart speakers use in a home of this language: the
+ * language itself when Sanctum can hear and speak it, and English when it
+ * can't.
+ */
+export function speechLanguage(language: Language): SpeechLanguage {
+  return spoken(language) ? language : "en";
+}

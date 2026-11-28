@@ -3,7 +3,6 @@ import type {
   Hearing,
   LiveDevice,
   Places,
-  SpeechLanguage,
 } from "@meetsanctum/app-sdk";
 import { compare, useAppClient } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -37,7 +36,6 @@ export function useAssistant() {
   const [speakers, setSpeakers] = useState<DeviceInfo[]>();
   const [rooms, setRooms] = useState<Places["rooms"]>([]);
   const [hasFailed, setHasFailed] = useState(false);
-  const [isChoosing, setIsChoosing] = useState(false);
   const pending = useRef<PendingRead | undefined>(undefined);
 
   const load = useCallback(async () => {
@@ -91,23 +89,6 @@ export function useAssistant() {
     };
   }, [client, load]);
 
-  /** Sets the home's language; false when it was refused. */
-  const choose = useCallback(
-    async (language: SpeechLanguage) => {
-      if (!hearing || hearing.language === language) return true;
-      setIsChoosing(true);
-      try {
-        await client.call("assistant.language", { language });
-        return true;
-      } catch {
-        return false;
-      } finally {
-        setIsChoosing(false);
-      }
-    },
-    [client, hearing],
-  );
-
   const roomName = useCallback(
     (id: string | null) => rooms.find((room) => room.id === id)?.name ?? null,
     [rooms],
@@ -118,8 +99,6 @@ export function useAssistant() {
     speakers,
     roomName,
     hasFailed,
-    isChoosing,
-    choose,
     reload: load,
   };
 }
