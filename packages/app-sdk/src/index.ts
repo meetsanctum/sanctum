@@ -108,6 +108,8 @@ export * from "./sun.js";
 export * from "./weather.js";
 export * from "./widgets.js";
 export * from "./workflows.js";
+// The core can reload this build in a development stack with older package exports.
+export { compare } from "./words.js";
 
 /**
  * The core's standard entity types, which any app may provide and, with

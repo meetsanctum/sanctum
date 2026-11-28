@@ -109,7 +109,7 @@ export function createAppLifecycle(options: {
       return { ok: true };
     }
     try {
-      await withTimeout(
+      await entry.link.withLifecycleTimeout(
         Promise.resolve().then(() => run.call(entry.app, ctx, info)),
         name === "stop" ? stopLimitMs(timeoutMs) : timeoutMs,
       );

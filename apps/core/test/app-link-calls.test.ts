@@ -38,7 +38,7 @@ describe("calls over an app's socket", () => {
       );
       const two = link.call(
         calls({ location: second as never }),
-        { kind: "app", id: "test.link" },
+        { kind: "app", id: "sanctum.example" },
         action,
         5_000,
       );

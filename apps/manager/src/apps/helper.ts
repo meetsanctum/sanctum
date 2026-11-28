@@ -2,11 +2,10 @@ import { mkdir, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 
 import { managerDataVolumeName } from "../core-container.js";
-import { assertManaged, managedLabels } from "../docker-resources.js";
-import { inspectContainer } from "../docker.js";
+import { managedLabels } from "../docker-resources.js";
 import type { SpaceDockerLike } from "../host/space.js";
+import { prepareManagerHelper } from "../manager-helper.js";
 import { stacked } from "../stack.js";
-import { managerContainerName } from "../update/manager-update.js";
 
 // A short privileged container, run from the manager's own image, for what only
 // the kernel's loop devices allow. The manager stays unprivileged: it already
@@ -30,17 +29,11 @@ export function createImageHelper(options: {
   const outputFile = ".helper-output";
 
   return async (script) => {
-    const manager = await inspectContainer(docker, managerContainerName);
-    if (!manager) throw new Error("The manager can't find its own image");
-    const stale = await inspectContainer(docker, name);
-    if (stale) {
-      assertManaged({ labels: stale.Config.Labels, name }, role);
-      await docker.getContainer(stale.Id).remove({ force: true, v: true });
-    }
+    const image = await prepareManagerHelper(docker, name, role, true);
     await mkdir(join(dataDir, outputFolder), { recursive: true });
     const { id } = await docker.createContainer({
       name,
-      Image: manager.Image,
+      Image: image,
       Cmd: [
         "sh",
         "-c",

@@ -317,6 +317,16 @@ describe("a report", () => {
     expect(confirms({ on: false }, { on: true })).toBe(false);
   });
 
+  it("matches whole-degree colour reports without overlooking a different look", () => {
+    const red = { colorMode: "color", hue: 359.8, saturation: 79.8 };
+    expect(confirms({ ...red, hue: 0, saturation: 80 }, red)).toBe(true);
+    expect(confirms({ ...red, hue: 0.1, saturation: 80 }, red)).toBe(false);
+    expect(confirms({ ...red, hue: 0, saturation: 79 }, red)).toBe(false);
+    expect(
+      confirms({ hue: 0, saturation: 0 }, { hue: 220, saturation: 0 }),
+    ).toBe(true);
+  });
+
   it("keeps a held colour while the light stays off", () => {
     const held: CapabilitySync = {
       ...offLight,

@@ -31,7 +31,7 @@ import type { ReactNode } from "react";
 import { Sentence } from "./automations/parts";
 import type { Part } from "./automations/words";
 import { Section } from "./components";
-import { plural } from "./plural";
+import { plural, list } from "@meetsanctum/app-sdk/words";
 
 // What an app adds to the home, on its settings page: a driver's devices,
 // its widgets and room section, each drawn by the shell from the manifest's
@@ -73,11 +73,6 @@ const kindNouns: Record<CapabilityKind, [string, string]> = {
   media: ["media player", "media players"],
   audio: ["smart speaker", "smart speakers"],
 };
-
-function list(words: readonly string[]) {
-  if (words.length <= 1) return words.join("");
-  return `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`;
-}
 
 // "Weather's", and "Moods'" for a name that ends in s.
 function possessive(name: string) {
@@ -175,11 +170,19 @@ export function AppAdds(props: {
         <Section id="settings-app-devices" title="Devices It Brings">
           <Line
             icon={SquarePlus}
-            title={own.length === 0 ? "None yet" : plural(own.length, "device")}
+            title={
+              own.length === 0
+                ? "None yet"
+                : plural("en", own.length, {
+                    one: "# device",
+                    other: "# devices",
+                  })
+            }
             detail={
               own.length === 0
                 ? "Add them in Settings → Devices"
                 : list(
+                    "en",
                     capabilityKinds(own).map((kind) => kindNouns[kind][1]),
                   ).replace(/^./, (first) => first.toUpperCase())
             }
@@ -250,13 +253,13 @@ export function AppAdds(props: {
               detail={
                 rooms.length === 0
                   ? "In no room yet"
-                  : `In ${plural(rooms.length, "room")}, in each room's row`
+                  : `In ${plural("en", rooms.length, { one: "# room", other: "# rooms" })}, in each room's row`
               }
             />
             {tiles.length > 0 && (
               <HomeSlice
                 background={props.background}
-                label={`A preview of ${possessive(app.name)} ${isButtonSection ? "buttons" : "tiles"} in a room's row: ${list(samples)}`}
+                label={`A preview of ${possessive(app.name)} ${isButtonSection ? "buttons" : "tiles"} in a room's row: ${list("en", samples)}`}
               >
                 <span className="inline-flex items-center gap-0.5 text-[15px] leading-5 font-medium text-white">
                   {room?.name ?? "Living room"}
@@ -310,8 +313,11 @@ export function AppAdds(props: {
                 title={page.title}
                 detail={
                   devices.length === 0
-                    ? `In the detail of ${list(page.kinds.map((kind) => kindNouns[kind][1]))}`
-                    : `In the detail of your ${devices.length === 1 ? "" : `${devices.length} `}${list(nouns)}`
+                    ? `In the detail of ${list(
+                        "en",
+                        page.kinds.map((kind) => kindNouns[kind][1]),
+                      )}`
+                    : `In the detail of your ${devices.length === 1 ? "" : `${devices.length} `}${list("en", nouns)}`
                 }
               />
             );
@@ -417,7 +423,7 @@ function PiecesSection(props: {
                 detail={`${pieceKindWords[piece.kind]} · ${
                   used === 0
                     ? "Used by no automation yet"
-                    : `Used by ${plural(used, "automation")}`
+                    : `Used by ${plural("en", used, { one: "# automation", other: "# automations" })}`
                 }`}
               />
             </li>
@@ -456,7 +462,10 @@ function SharesSection(props: {
             detail={
               readers.length === 0
                 ? "Read by no other app yet"
-                : `Read by ${list(readers.map((reader) => reader.name))}`
+                : `Read by ${list(
+                    "en",
+                    readers.map((reader) => reader.name),
+                  )}`
             }
           />
         );

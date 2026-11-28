@@ -5,6 +5,7 @@ import {
   type ModelSourceInfo,
 } from "@meetsanctum/app-sdk";
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
+import { list } from "@meetsanctum/app-sdk/words";
 
 import { productName } from "../brand";
 
@@ -21,9 +22,11 @@ export const providerNames: Record<ModelProvider, string> = {
 };
 
 /** The providers by name, as one choice among them: "A, B or C". */
-export const providerList = new Intl.ListFormat("en-GB", {
-  type: "disjunction",
-}).format(modelProviders.map((provider) => providerNames[provider]));
+export const providerList = list(
+  "en",
+  modelProviders.map((provider) => providerNames[provider]),
+  "disjunction",
+);
 
 /** Where the home's AI model can run, as Add a source names each place. */
 export const placeNames = {

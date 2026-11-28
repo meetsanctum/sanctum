@@ -53,8 +53,10 @@ const addSanctum = (core: TestCore, token: string) =>
   );
 
 describe("Ollama on Sanctum as a source", () => {
-  it("lists the models Ollama on Sanctum has", async () => {
-    const { core, token } = await home();
+  it("lists the models Ollama on Sanctum has in numeric name order", async () => {
+    const sources = fakeSources();
+    sources.ollama.models.unshift({ name: "qwen3:14b", size: 9_300_000_000 });
+    const { core, token } = await home({ sources });
 
     const look = await post(
       core,
@@ -70,6 +72,7 @@ describe("Ollama on Sanctum as a source", () => {
       models: [
         { id: "llama3.2:3b", name: "Llama3.2 3B", size: 2_000_000_000 },
         { id: "qwen3:8b", name: "Qwen3 8B", size: 5_200_000_000 },
+        { id: "qwen3:14b", name: "Qwen3 14B", size: 9_300_000_000 },
       ],
     });
   });

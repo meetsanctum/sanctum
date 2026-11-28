@@ -16,6 +16,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
+import { list } from "@meetsanctum/app-sdk/words";
 
 import { productName } from "./brand";
 import { Row, Section } from "./components";
@@ -51,15 +52,12 @@ export const suggestedFloorNames = [
   "Outside",
 ] as const;
 
-const and = (items: readonly string[]) =>
-  new Intl.ListFormat("en", { type: "conjunction" }).format(items);
-
 /** A floor's line: the rooms on it by name. */
 export function floorDetail(floor: Floor, places: Places): string {
   const rooms = places.rooms
     .filter((room) => room.floorId === floor.id)
     .map((room) => room.name);
-  return rooms.length === 0 ? "No rooms yet" : and(rooms);
+  return rooms.length === 0 ? "No rooms yet" : list("en", rooms);
 }
 
 /** What removing a floor takes with it, a sentence each. */
@@ -68,11 +66,14 @@ export function floorRemovalWarning(removal: FloorRemoval): string[] {
   const rooms = removal.rooms.map((room) => room.name);
   if (rooms.length > 0) {
     lines.push(
-      `${and(rooms)} ${rooms.length === 1 ? "stays" : "stay"}, on no floor.`,
+      `${list("en", rooms)} ${rooms.length === 1 ? "stays" : "stay"}, on no floor.`,
     );
   }
   if (removal.workflows.length > 0) {
-    const names = and(removal.workflows.map((each) => `“${each.name}”`));
+    const names = list(
+      "en",
+      removal.workflows.map((each) => `“${each.name}”`),
+    );
     lines.push(
       removal.workflows.length === 1
         ? `The workflow ${names} uses it and will need changing.`

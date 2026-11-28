@@ -120,7 +120,7 @@ export function createCore(
   const onTrial = () => lifecycle.readiness() === "healthOnly";
 
   // The link over the manager's socket, which learns the host's id and
-  // follows what the manager can do.
+  // follows what the manager can do and whether the host is writing out.
   function linkToManager() {
     const client = createManagerClient({
       socketPath: config.managerSocket,
@@ -129,6 +129,7 @@ export function createCore(
     });
     client.learnHostId();
     client.followCapabilities();
+    client.followWriteout();
     return client;
   }
 

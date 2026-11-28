@@ -1,5 +1,5 @@
 import type { ActionOutput, DeviceInfo } from "@meetsanctum/app-sdk";
-import { lightColour, type Tile } from "@meetsanctum/ui-sdk";
+import { compare, lightColour, type Tile } from "@meetsanctum/ui-sdk";
 
 import type { listMoods } from "../moods/actions.js";
 import type { MoodIcon } from "../moods/icons.js";
@@ -13,6 +13,8 @@ import {
   type PreviewLightState,
 } from "../moods/light-states.js";
 import type { Light } from "../targets.js";
+
+const compareNames = compare("en");
 
 // The mood editor's draft: each of the room's lights on or off, with the
 // level and colour it has when on, kept while it is off so it comes back
@@ -42,7 +44,7 @@ export function roomLights(
     )
     .sort(
       (a, b) =>
-        a.device.name.localeCompare(b.device.name) ||
+        compareNames(a.device.name, b.device.name) ||
         a.capability.id.localeCompare(b.capability.id),
     );
 }
