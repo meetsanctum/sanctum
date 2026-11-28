@@ -89,11 +89,15 @@ function troubleOf(
   code: string | undefined,
   name: string,
 ): Trouble {
-  const said = fieldText(error, code);
+  const said = pairingErrorText(error, code);
   // On the name's step only the name is a field; what the code says there
   // is why the device wasn't approved.
   const isName = error instanceof CoreError && error.code === "invalid_request";
-  if (said && (step === "code" || isName)) return { field: said };
+  const wrongConnection =
+    error instanceof ExchangeFailed && error.reason === "channel_mismatch";
+  if (said && ((step === "code" && !wrongConnection) || isName)) {
+    return { field: said };
+  }
   return {
     title:
       step === "code" ? "Couldn't find the device" : `${name} wasn't approved`,
@@ -105,7 +109,7 @@ function troubleOf(
   };
 }
 
-function fieldText(error: unknown, code?: string) {
+function pairingErrorText(error: unknown, code?: string) {
   if (error instanceof ExchangeFailed) {
     switch (error.reason) {
       case "wrong_code":

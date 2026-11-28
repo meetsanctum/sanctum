@@ -19,6 +19,7 @@ import {
   type,
   way,
 } from "./add-devices-support";
+import { problemLines } from "./problem-lines";
 import { light } from "./settings-devices-fixtures";
 
 // A found device whose adding asks once started, as a TV shows a first code
@@ -263,6 +264,21 @@ describe("Add devices, adding a device that asks once started", () => {
       json: { driver: "sanctum.example", key: "tv", attempt: "ignored" },
     });
     expect(named("Add Living Room")).not.toBeNull();
+  });
+
+  it("says when it couldn't stop adding the device", async () => {
+    core.answers.tv = () => asking(1, [first]);
+    await addTv();
+    vi.spyOn(coreFetch, "coreFetch").mockResolvedValue(new Response("{}"));
+    vi.mocked(coreFetch.coreJson).mockRejectedValueOnce(
+      new TypeError("Failed to fetch"),
+    );
+
+    await act(async () => button("Cancel").click());
+    expect(problemLines(page().querySelector("[role=alert]"))).toEqual([
+      "Couldn't stop adding Living Room",
+      "Sanctum didn't answer. Check that it's on, then try again.",
+    ]);
   });
 
   it("cancels while checking an answer and shows Added if the device was added", async () => {

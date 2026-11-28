@@ -273,7 +273,7 @@ export function RepairDevice(props: {
             ))
           )}
           {failure && (
-            <Problem title={`${props.device?.name} wasn't repaired`}>
+            <Problem title={`${device?.name} wasn't repaired`}>
               {failure}
             </Problem>
           )}

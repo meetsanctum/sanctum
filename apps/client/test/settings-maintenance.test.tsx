@@ -387,6 +387,54 @@ describe("the Maintenance page", () => {
     });
   });
 
+  it("clears only the stop notice for the update that stopped on retry", async () => {
+    const hallRemote = device("hall-remote", "Hall remote", "button", {
+      firmware: firmware({ state: "waiting", sleeps: true }),
+    });
+    vi.mocked(coreJson)
+      .mockRejectedValueOnce(new CoreError(504, "timeout"))
+      .mockRejectedValueOnce(new CoreError(504, "timeout"))
+      .mockResolvedValueOnce({
+        ...desk,
+        firmware: firmware({ state: "available" }),
+      });
+    await show([desk, hallRemote]);
+
+    const stopUpdate = async (device: DeviceInfo, action: string) => {
+      const trigger = container.querySelector<HTMLButtonElement>(
+        `button[aria-label="${device.name}: more"]`,
+      )!;
+      await act(async () =>
+        trigger.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+        ),
+      );
+      await click(
+        [...document.querySelectorAll("[role=menuitem]")].find(
+          (item) => item.textContent === action,
+        ),
+      );
+    };
+    const titles = () =>
+      [...container.querySelectorAll("[role=alert]")].map(
+        (alert) => problemLines(alert)[0],
+      );
+
+    await stopUpdate(desk, "Stop update");
+    await stopUpdate(hallRemote, "Cancel update");
+    expect(titles()).toEqual([
+      "Desk lamp's update didn't stop",
+      "Hall remote's update didn't stop",
+    ]);
+
+    await stopUpdate(desk, "Stop update");
+    expect(coreJson).toHaveBeenLastCalledWith("/api/devices/firmware/stop", {
+      method: "POST",
+      json: { id: desk.id },
+    });
+    expect(titles()).toEqual(["Hall remote's update didn't stop"]);
+  });
+
   it("checks every device it can ask for updates, one after another, and says what it couldn't", async () => {
     vi.mocked(coreJson).mockImplementation(async (_path, init = {}) => {
       if ((init.json as { id: string }).id === "porch") {

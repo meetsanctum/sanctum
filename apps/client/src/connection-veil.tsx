@@ -176,7 +176,7 @@ export function ChooseAnotherHome(props: {
     try {
       await forgetHost(host);
     } catch {
-      // Forgetting it is this device's own storage, never a call to the home.
+      // Forgetting it only changes this device's storage.
       setProblem("This device couldn't save the change. Try again.");
       setForgetting(false);
       return;

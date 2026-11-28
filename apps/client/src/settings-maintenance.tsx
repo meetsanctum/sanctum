@@ -308,6 +308,13 @@ function RunningMenu(props: { device: DeviceInfo; onStop: () => void }) {
   );
 }
 
+type UpdateProblem = {
+  id: string;
+  action: "check" | "stop";
+  title: string;
+  reason: string;
+};
+
 /**
  * The Maintenance page: every device on a battery, the next to replace
  * first, with its charge at the end, and every update, each with Update or
@@ -333,9 +340,7 @@ export function MaintenancePage(props: {
   // Whether Check for updates is under way, and what it couldn't check.
   const [checking, setChecking] = useState(false);
   // What didn't happen, one for each device it didn't happen to.
-  const [problems, setProblems] = useState<
-    { id: string; title: string; reason: string }[]
-  >([]);
+  const [problems, setProblems] = useState<UpdateProblem[]>([]);
   // What a screen reader hears of an outcome.
   const [announcement, setAnnouncement] = useState("");
 
@@ -384,7 +389,7 @@ export function MaintenancePage(props: {
         device.firmware?.state !== "updating" &&
         device.firmware?.state !== "waiting",
     );
-    const failed: { id: string; title: string; reason: string }[] = [];
+    const failed: UpdateProblem[] = [];
     for (const device of asked) {
       try {
         await coreJson<DeviceInfo>("/api/devices/firmware/check", {
@@ -394,6 +399,7 @@ export function MaintenancePage(props: {
       } catch (error) {
         failed.push({
           id: device.id,
+          action: "check",
           title: `${device.name} wasn't checked for an update`,
           reason: firmwareReason(error, "check", appName(device)),
         });
@@ -414,10 +420,16 @@ export function MaintenancePage(props: {
         method: "POST",
         json: { id: device.id },
       });
+      setProblems((before) =>
+        before.filter(
+          (each) => each.id !== device.id || each.action !== "stop",
+        ),
+      );
       setAnnouncement(`${device.name}'s update is stopped.`);
     } catch (error) {
-      const failed = {
+      const failed: UpdateProblem = {
         id: device.id,
+        action: "stop",
         title: `${device.name}'s update didn't stop`,
         reason: firmwareReason(error, "stop", appName(device)),
       };

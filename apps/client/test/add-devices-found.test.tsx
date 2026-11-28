@@ -124,11 +124,14 @@ describe("Add devices, adding what drivers found", () => {
 
     await type(field, "a wrong key");
     await act(async () => send.click());
-    expect(page().querySelector("[role=alert]")!.textContent).toBe(
-      "That key doesn't match. Copy it again.",
-    );
+    const alert = page().querySelector("[role=alert]")!;
+    expect(alert.textContent).toBe("That key doesn't match. Copy it again.");
     expect(field.value).toBe("a wrong key");
     expect(field.getAttribute("aria-invalid")).toBe("true");
+    expect(alert.id).toBeTruthy();
+    expect(field.getAttribute("aria-describedby")?.split(/\s+/)).toContain(
+      alert.id,
+    );
 
     await type(field, "the right key");
     await act(async () => send.click());

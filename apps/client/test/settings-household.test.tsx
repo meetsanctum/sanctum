@@ -152,6 +152,20 @@ describe("Settings → Household", () => {
     expect(container.textContent).toContain("Saved.");
   });
 
+  it("offers manual entry when it can't suggest a location", async () => {
+    await act(async () => root.render(<HouseholdSection />));
+    vi.mocked(coreJson).mockRejectedValueOnce(
+      new CoreError(502, "location_unavailable"),
+    );
+
+    await act(async () => button("Suggest from this network").click());
+    expect(problemLines(container.querySelector("[role=alert]"))).toEqual([
+      "Couldn't find where the home is",
+      "The location services didn't answer. Enter the location yourself, or try again.",
+    ]);
+    expect(button("Suggest from this network").disabled).toBe(false);
+  });
+
   it("keeps the elevation of the same place when the suggestion has none", async () => {
     vi.mocked(coreJson).mockImplementationOnce(async () => zurichHome);
     await act(async () => root.render(<HouseholdSection />));

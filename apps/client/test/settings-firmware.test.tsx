@@ -22,6 +22,7 @@ import {
 } from "../src/device-firmware";
 import { SettingsPage } from "../src/settings";
 import { unknownHome } from "./home-fixtures";
+import { problemLines } from "./problem-lines";
 
 // Firmware updates and Check connection in Settings → Devices: what a
 // device's line says, the dialog that asks before an update, and the checks in
@@ -491,6 +492,22 @@ describe("Settings → Devices' firmware", () => {
     ).not.toBeNull();
   });
 
+  it("keeps the update dialog open when the start is refused", async () => {
+    answers["/api/devices/firmware/update"] = () => {
+      throw new CoreError(409, "conflict");
+    };
+    await show();
+    await act(async () => buttonNamed("Update").click());
+    await act(async () => buttonNamed("Update").click());
+
+    const dialog = document.querySelector("[role=dialog]");
+    expect(problemLines(dialog?.querySelector("[role=alert]"))).toEqual([
+      "Office light's update didn't start",
+      "Check this device's firmware status before trying again.",
+    ]);
+    expect(buttonNamed("Update").disabled).toBe(false);
+  });
+
   it("follows an update live until it ends, and announces how", async () => {
     await show();
     const updating = (progress: number) =>
@@ -680,7 +697,7 @@ describe("Settings → Devices' firmware", () => {
     );
     await choose("Office light: more", "Check for update");
     expect(lineOf("Office light")).toContain(
-      "Couldn't check for an update: it didn't answer. Check it's switched on.",
+      "Couldn't check for an update. Zigbee ran into a problem. Try again in a moment.",
     );
   });
 

@@ -246,29 +246,17 @@ export function whyNot(device: DeviceInfo, check: "update" | "probe") {
   return device.firmware?.updatable ? null : "No updates are offered for it";
 }
 
-/** Words for a firmware call that failed. */
-export function firmwareProblem(
-  error: unknown,
-  what: "check" | "update" | "stop" | "probe",
-  appName: string | null,
-) {
+/** Words for a connection check that failed. */
+export function probeProblem(error: unknown, appName: string | null) {
   if (error instanceof CoreError) {
     if (error.code === "unavailable") {
       return `${appName ?? "Its app"} isn't running.`;
     }
     if (error.code === "conflict") {
-      return what === "update"
-        ? "It can't be updated right now. Try again once nothing else is updating."
-        : "That can't be done right now.";
+      return "That can't be done right now.";
     }
     if (error.code === "app_failed" || error.code === "timeout") {
-      return what === "check"
-        ? "Couldn't check for an update: it didn't answer. Check it's switched on."
-        : what === "probe"
-          ? "Couldn't check the connection. Try again."
-          : what === "stop"
-            ? "Couldn't stop the update. Try again."
-            : "Couldn't start the update. Try again.";
+      return "Couldn't check the connection. Try again.";
     }
   }
   return deviceProblem(error);
@@ -291,7 +279,7 @@ export function firmwareReason(
         return `${app} isn't running.`;
       case "conflict":
         return what === "update"
-          ? "Something else is updating. Try again once it has finished."
+          ? "Check this device's firmware status before trying again."
           : "It can't be done right now. Try again in a moment.";
       case "timeout":
         return `${app} didn't answer in time. Try again in a moment.`;

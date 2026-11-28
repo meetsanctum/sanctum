@@ -266,7 +266,7 @@ describe("a stored home that does not answer", () => {
     await click("Forget");
 
     expect(problemLines(dialog()?.querySelector('[role="alert"]'))).toEqual([
-      "Maya's home wasn't forgotten",
+      `${host.name} wasn't forgotten`,
       "This device couldn't save the change. Try again.",
     ]);
     expect(button("Forget")?.disabled).toBe(false);

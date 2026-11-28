@@ -141,7 +141,7 @@ function FoundCard(props: {
   const { found } = props;
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [refused, setRefused] = useState<Refused>();
-  const [failure, setFailure] = useState<string>();
+  const [failure, setFailure] = useState<{ reason: string; stopping?: true }>();
   // What the press under way does: start, answer, ask again or stop.
   const [doing, setDoing] = useState<
     "adding" | "checking" | "asking" | "stopping" | null
@@ -187,7 +187,8 @@ function FoundCard(props: {
       attempt.current = null;
       setAsking(null);
       setAnswers({});
-      setFailure(endedWords("adding", "time", props.appName) ?? undefined);
+      const reason = endedWords("adding", "time", props.appName);
+      setFailure(reason ? { reason } : undefined);
     }
   }, [asking, doing, now, props.appName]);
 
@@ -213,16 +214,18 @@ function FoundCard(props: {
     } else if ("refused" in result) {
       // A refusal of adding it at all is said under its card, in its words.
       const refusal = result.refused;
-      if ("question" in refusal) {
-        if (asking) setFailure(refusalWords(answered, refusal));
-        else setRefused(refusal);
+      if ("question" in refusal && !asking) {
+        setRefused(refusal);
       } else {
-        setFailure(found.refusals[refusal.refusal]);
+        const reason =
+          "question" in refusal
+            ? refusalWords(answered, refusal)
+            : found.refusals[refusal.refusal];
+        setFailure(reason ? { reason } : undefined);
       }
     } else if (isEnded(result)) {
-      setFailure(
-        endedWords("adding", result.ended, props.appName) ?? undefined,
-      );
+      const reason = endedWords("adding", result.ended, props.appName);
+      setFailure(reason ? { reason } : undefined);
     }
   };
 
@@ -261,7 +264,11 @@ function FoundCard(props: {
       }
       attempt.current = null;
       setAsking(null);
-      setFailure(addProblem(error, props.appName));
+      setFailure(
+        what === "stopping"
+          ? { reason: problemReason(error), stopping: true }
+          : { reason: addProblem(error, props.appName) },
+      );
     } finally {
       if (stillCurrent()) {
         request.current = null;
@@ -414,8 +421,15 @@ function FoundCard(props: {
         <CardFoot>{start}</CardFoot>
       )}
       {failure && (
-        <Problem title={`Couldn't add ${found.name}`} className="mt-2">
-          {failure}
+        <Problem
+          title={
+            failure.stopping
+              ? `Couldn't stop adding ${found.name}`
+              : `Couldn't add ${found.name}`
+          }
+          className="mt-2"
+        >
+          {failure.reason}
         </Problem>
       )}
     </DeviceCard>

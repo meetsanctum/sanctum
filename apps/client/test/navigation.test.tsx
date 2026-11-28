@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppsPage, type ListedApp } from "../src/apps-page";
+import { CoreError } from "../src/core-fetch";
 import { dashboardBackground, dashboardFrame } from "../src/dashboards";
 import { ShellFrame } from "../src/shell-frame";
 import { SidebarContent } from "../src/sidebar";
@@ -325,15 +326,26 @@ describe("the dashboard's menu", () => {
     expect(button("Save").disabled).toBe(true);
   });
 
-  it("stays open and says so when the rename does not work", async () => {
-    rename = () => Promise.reject(new Error("not_found"));
+  it.each([
+    {
+      failure: "the connection fails",
+      error: new TypeError("Failed to fetch"),
+      reason: "Sanctum didn't answer. Check that it's on, then try again.",
+    },
+    {
+      failure: "the dashboard is gone",
+      error: new CoreError(404, "not_found"),
+      reason: "It isn't there any more.",
+    },
+  ])("stays open and says why when $failure", async ({ error, reason }) => {
+    rename = () => Promise.reject(error);
     const dialog = await startRenaming();
     await type(dialog.querySelector("input")!, "Living room");
     await act(async () => button("Save").click());
 
     expect(problemLines(dialog.querySelector("[role=alert]"))).toEqual([
       "Night wasn't renamed",
-      "Sanctum didn't answer. Check that it's on, then try again.",
+      reason,
     ]);
     expect(button("Save").disabled).toBe(false);
   });
