@@ -9,6 +9,7 @@ import { activityWords } from "../src/activity/words";
 import { RemoveApp, removalWords } from "../src/app-remove";
 import { CoreError, coreJson } from "../src/core-fetch";
 import { entry } from "./activity-fixtures";
+import { problemLines } from "./problem-lines";
 
 // The device's own zone, which the expectations here are worked out in.
 const clock = homeClock();
@@ -99,6 +100,17 @@ describe("removing an app", () => {
     expect(dialog()).toBeNull();
   });
 
+  it("explains why it can't show what removing an app takes", async () => {
+    vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(404, "not_found"));
+    await press(container, "Remove Example");
+
+    expect(problemLines(container.querySelector('[role="alert"]'))).toEqual([
+      "Couldn't check what goes with Example",
+      "It isn't there any more.",
+    ]);
+    expect(dialog()).toBeNull();
+  });
+
   it("says when it can't be removed while it changes version", async () => {
     vi.mocked(coreJson).mockImplementation(async (path) => {
       if (path.endsWith("/removal")) return removal;
@@ -107,9 +119,10 @@ describe("removing an app", () => {
     await press(container, "Remove Example");
     await press(dialog()!, "Remove");
 
-    expect(container.querySelector('[role="alert"]')!.textContent).toBe(
-      "Example is changing version. Try again once it's done.",
-    );
+    expect(problemLines(container.querySelector('[role="alert"]'))).toEqual([
+      "Example wasn't removed",
+      "It's changing version. Try again once it's done.",
+    ]);
     expect(onRemoved).not.toHaveBeenCalled();
   });
 

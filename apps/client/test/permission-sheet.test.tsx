@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { coreJson, CoreError } from "../src/core-fetch";
 import { usePermissionSheet } from "../src/permission-sheet";
+import { problemLines } from "./problem-lines";
 
 // The shell's sheet that asks for an app's optional permissions: each in
 // Sanctum's words with the app's reason, Allow through the grant route, Not
@@ -204,9 +205,10 @@ describe("the sheet that asks for a permission", () => {
     });
 
     await press("Allow");
-    expect(dialog()?.querySelector('[role="alert"]')?.textContent).toBe(
+    expect(problemLines(dialog()?.querySelector('[role="alert"]'))).toEqual([
+      "“Keep its own workflows” wasn't turned on",
       "Another change to Moods is still under way. Try again in a moment.",
-    );
+    ]);
     // What was turned on stays on, and the sheet asks for the rest.
     expect(dialog()?.querySelector("h2")?.textContent).toBe(
       "Allow Moods to keep its own workflows?",

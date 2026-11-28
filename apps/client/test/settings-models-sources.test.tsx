@@ -436,6 +436,20 @@ describe("AI model source dialogs", () => {
     expect(document.querySelector("[role=dialog]")).toBeNull();
   });
 
+  it("explains when Ollama was added but couldn't start", async () => {
+    await show();
+    await click(button("Add a source"));
+    await click(button("Continue"));
+    vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(500, "app_failed"));
+
+    await click(button("Add Ollama"));
+
+    expect(problemLines(dialog()?.querySelector('[role="alert"]'))).toEqual([
+      "Ollama didn't start",
+      "It's added, but Sanctum couldn't start it. It tries again when it restarts.",
+    ]);
+  });
+
   it("opens Storage instead of adding Ollama when it does not fit", async () => {
     page.ollamaShortfalls = [
       { kind: "space", needs: 256_000_000, free: 128_000_000 },

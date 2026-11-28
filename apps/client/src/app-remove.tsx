@@ -1,5 +1,5 @@
 import type { AppInfo, AppRemoval } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, Problem } from "@meetsanctum/ui-sdk";
 import { useState } from "react";
 import { list } from "@meetsanctum/app-sdk/words";
 
@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import { CoreError, coreJson } from "./core-fetch";
+import { problemReason } from "./device-parts";
 
 // Removing an app, at the end of its settings, after Turn off. It takes the
 // app and all it brings from every screen in the home, so it asks first,
@@ -56,13 +57,16 @@ export function RemoveApp(props: {
   const { app } = props;
   const [removal, setRemoval] = useState<AppRemoval>();
   const [pending, setPending] = useState(false);
-  const [problem, setProblem] = useState<string>();
+  const [problem, setProblem] = useState<{ title: string; reason: string }>();
   const path = `/api/apps/${encodeURIComponent(app.id)}`;
 
   const ask = () => {
     setProblem(undefined);
-    coreJson<AppRemoval>(`${path}/removal`).then(setRemoval, () =>
-      setProblem(`${app.name} can't be removed now. Try again.`),
+    coreJson<AppRemoval>(`${path}/removal`).then(setRemoval, (error: unknown) =>
+      setProblem({
+        title: `Couldn't check what goes with ${app.name}`,
+        reason: problemReason(error),
+      }),
     );
   };
   const remove = async () => {
@@ -74,11 +78,13 @@ export function RemoveApp(props: {
       props.onRemoved();
     } catch (error) {
       setRemoval(undefined);
-      setProblem(
-        error instanceof CoreError && error.code === "conflict"
-          ? `${app.name} is changing version. Try again once it's done.`
-          : `${app.name} couldn't be removed. Try again.`,
-      );
+      setProblem({
+        title: `${app.name} wasn't removed`,
+        reason:
+          error instanceof CoreError && error.code === "conflict"
+            ? "It's changing version. Try again once it's done."
+            : problemReason(error),
+      });
     } finally {
       setPending(false);
     }
@@ -90,11 +96,7 @@ export function RemoveApp(props: {
       <Button variant="destructive" onClick={ask}>
         Remove {app.name}
       </Button>
-      {problem && (
-        <p role="alert" className="m-0 text-sm text-destructive">
-          {problem}
-        </p>
-      )}
+      {problem && <Problem title={problem.title}>{problem.reason}</Problem>}
       <Dialog
         open={removal !== undefined}
         onOpenChange={(open) => {

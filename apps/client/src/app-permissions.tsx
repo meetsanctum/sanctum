@@ -5,7 +5,7 @@ import {
   type PermissionInfo,
   type PermissionWords,
 } from "@meetsanctum/app-sdk";
-import { Button, Switch } from "@meetsanctum/ui-sdk";
+import { Button, Problem, Switch } from "@meetsanctum/ui-sdk";
 import { useState } from "react";
 
 import { productName } from "./brand";
@@ -20,6 +20,7 @@ import {
 } from "./components/ui/dialog";
 import { canUseTitle } from "./agents/words";
 import { CoreError, coreJson } from "./core-fetch";
+import { problemReason } from "./device-parts";
 import { permissionIconOf } from "./permission-icons";
 
 // An app's permissions on its settings page: each in Sanctum's words, with
@@ -35,23 +36,41 @@ export function permissionDetail(words: PermissionWords) {
   return [words.detail, words.specifics].filter(Boolean).join(", ") || null;
 }
 
-/** What went wrong switching a permission, in words, by the core's code. */
+/** What went wrong switching a permission, in words for the person. */
 export function problemOf(
   error: unknown,
   app: AppInfo,
-  title: string,
-  granting = false,
+  words: PermissionWords,
+  granting: boolean,
 ) {
-  const code = error instanceof CoreError ? error.code : null;
-  if (code === "unavailable") {
-    return granting
-      ? `${productName} couldn't give ${app.name} “${title}” in time. Try again.`
-      : `${app.name} still has “${title}”: ${productName} couldn't take it back in time. Try again.`;
+  const permission = words.specifics
+    ? `${words.title} ${words.specifics}`
+    : words.title;
+  const direction = granting ? "on" : "off";
+  if (
+    !(error instanceof CoreError) ||
+    error.code === "unknown" ||
+    (error.status >= 500 &&
+      error.code !== "unavailable" &&
+      error.code !== "update_pending")
+  ) {
+    return {
+      title: `Couldn't confirm whether “${permission}” was turned ${direction}`,
+      reason: `Check this permission in ${app.name} settings.`,
+    };
   }
-  if (code === "conflict") {
-    return `Another change to ${app.name} is still under way. Try again in a moment.`;
-  }
-  return "That did not work. Try again.";
+  const { code } = error;
+  return {
+    title: `“${permission}” wasn't turned ${direction}`,
+    reason:
+      code === "unavailable"
+        ? granting
+          ? `${productName} couldn't give it to ${app.name} in time.`
+          : `${productName} couldn't take it back in time, so ${app.name} still has it.`
+        : code === "conflict"
+          ? `Another change to ${app.name} is still under way. Try again in a moment.`
+          : problemReason(error),
+  };
 }
 
 export function PermissionsSection(props: {
@@ -64,7 +83,7 @@ export function PermissionsSection(props: {
   // The switch being changed, shown where it is going until the core answers.
   const [pending, setPending] = useState<{ id: string; granted: boolean }>();
   const [asking, setAsking] = useState<PermissionInfo>();
-  const [problem, setProblem] = useState<string>();
+  const [problem, setProblem] = useState<ReturnType<typeof problemOf>>();
 
   const change = async (request: PermissionInfo, granted: boolean) => {
     setPending({ id: request.id, granted });
@@ -77,7 +96,7 @@ export function PermissionsSection(props: {
         ),
       );
     } catch (error) {
-      setProblem(problemOf(error, app, permissionWords(request.id).title));
+      setProblem(problemOf(error, app, permissionWords(request.id), granted));
     } finally {
       setPending(undefined);
     }
@@ -148,11 +167,7 @@ export function PermissionsSection(props: {
             {canUseTitle}
           </Button>
         )}
-      {problem && (
-        <p role="alert" className="m-0 text-sm text-destructive">
-          {problem}
-        </p>
-      )}
+      {problem && <Problem title={problem.title}>{problem.reason}</Problem>}
       <Dialog
         open={asking !== undefined}
         onOpenChange={(open) => {

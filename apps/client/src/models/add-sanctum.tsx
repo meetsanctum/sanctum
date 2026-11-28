@@ -135,10 +135,7 @@ export function AddSanctum(props: {
       props.onAppAdded(added);
       setPhase({ kind: "noModel" });
     } catch (error) {
-      setProblem({
-        title: `Couldn't add ${app.name}`,
-        reason: addProblemOf(error, app),
-      });
+      setProblem(addProblemOf(error, app));
     } finally {
       onBusy(false);
     }

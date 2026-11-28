@@ -6,7 +6,7 @@ import {
   type AvailableApp,
   type PermissionInfo,
 } from "@meetsanctum/app-sdk";
-import { Button, type PageParams } from "@meetsanctum/ui-sdk";
+import { Button, Problem, type PageParams } from "@meetsanctum/ui-sdk";
 import { HardDrive, MemoryStick, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import { CoreError, coreJson } from "./core-fetch";
+import { problemReason } from "./device-parts";
 import { permissionIconOf } from "./permission-icons";
 import { useSettingsOpener } from "./settings-opener";
 import { appsSettingsPage, systemSettingsPage } from "./system-apps";
@@ -210,18 +211,31 @@ export function useShortfallFix(
     : undefined;
 }
 
-/** Why adding an app did not work, from the core's answer. */
+/** Why an app wasn't added, or, added, didn't start. */
 export function addProblemOf(error: unknown, app: AvailableApp) {
   const code = error instanceof CoreError ? error.code : null;
   switch (code) {
     case "conflict":
-      return `${app.name} changed meanwhile, as when it was added on another device. Close this and look again.`;
+      return {
+        title: `Couldn't add ${app.name}`,
+        reason:
+          "It changed meanwhile, as when it was added on another device. Close this and look again.",
+      };
     case "unavailable":
-      return `${productName} can't add ${app.name} now. Close this and look again.`;
+      return {
+        title: `Couldn't add ${app.name}`,
+        reason: `${productName} can't add it now. Close this and look again.`,
+      };
     case "app_failed":
-      return `${app.name} is added, but ${productName} couldn't start it. It tries again when it restarts.`;
+      return {
+        title: `${app.name} didn't start`,
+        reason: `It's added, but ${productName} couldn't start it. It tries again when it restarts.`,
+      };
     default:
-      return "That did not work. Try again.";
+      return {
+        title: `Couldn't add ${app.name}`,
+        reason: problemReason(error),
+      };
   }
 }
 
@@ -288,7 +302,7 @@ export function AddAppSheet(props: {
 }) {
   const { app } = props;
   const [pending, setPending] = useState<"add" | "close">();
-  const [problem, setProblem] = useState<string>();
+  const [problem, setProblem] = useState<{ title: string; reason: string }>();
   const needed = app?.requests.filter((request) => request.needed) ?? [];
   const startsOn =
     app?.requests.filter((request) => !request.needed && request.startsOn) ??
@@ -323,8 +337,8 @@ export function AddAppSheet(props: {
     try {
       await onClose();
       return true;
-    } catch {
-      setProblem("That did not work. Try again.");
+    } catch (error) {
+      setProblem({ title: "This didn't close", reason: problemReason(error) });
       return false;
     } finally {
       setPending(undefined);
@@ -387,11 +401,7 @@ export function AddAppSheet(props: {
               </DialogDescription>
             )}
           </DialogHeader>
-          {problem && (
-            <p role="alert" className="m-0 text-sm text-destructive">
-              {problem}
-            </p>
-          )}
+          {problem && <Problem title={problem.title}>{problem.reason}</Problem>}
           {/* Its size, then Cancel and Add, or the way to what keeps it
               from being added, under it in the same two columns, so every
               sheet ends alike. */}
