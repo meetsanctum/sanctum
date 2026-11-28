@@ -702,14 +702,14 @@ export default defineApp({
         },
       },
       firstCode: {
-        label: "Code on the TV (1 of 2)",
+        label: "Code on the TV",
         kind: "code",
         length: 4,
         help: "The TV shows a four-digit code. Any but 0000 works here.",
         refusals: { wrongCode: "That code didn't match." },
       },
       secondCode: {
-        label: "Code on the TV (2 of 2)",
+        label: "Code on the TV",
         kind: "code",
         length: 4,
         help: "A new code is on the TV.",

@@ -8,6 +8,7 @@ import { loadAppPackage } from "./runner-apps.js";
 import {
   deferredDelivery,
   fixtureApps,
+  get,
   post,
   sharedClient,
   type TestCore,
@@ -52,6 +53,16 @@ function entries(core: TestCore, action: string) {
 }
 
 describe("adding that asks", () => {
+  it("lists what it asks once started, so a client knows the steps ahead", async () => {
+    const { core, maya } = await tvsCore();
+    const [tv] = (await get(core, "/api/devices/pairing", maya)).json().found;
+    expect(tv).toMatchObject({
+      key: "tv-1",
+      asks: [],
+      later: ["firstCode", "secondCode"],
+    });
+  });
+
   it("asks each code in a step of its own, then adds the TV", async () => {
     const { core, maya } = await tvsCore();
     const attempt = randomUUID();

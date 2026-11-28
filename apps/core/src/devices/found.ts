@@ -97,6 +97,8 @@ export type Lister = {
   run: number;
   canAdd: boolean;
   questionsOf: (ids: readonly string[]) => DeviceQuestion[];
+  // What adding may ask once started, by id (driver.addLater).
+  later: readonly string[];
   // Why it may refuse adding a device whatever it asks, by id, in its words.
   refusals: Record<string, string>;
 };
@@ -180,6 +182,7 @@ export function createFound(options: {
           description: each.description,
           type: each.type,
           asks,
+          later: [...lister.later],
           refusals: lister.refusals,
         };
       });

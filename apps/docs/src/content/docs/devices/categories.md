@@ -43,9 +43,16 @@ devices you haven't added to Home.
 
 **Settings → Devices** lists the categories the home has devices in, in
 the same order, with **Unknown Devices** last. Each row counts its devices,
-after how many need attention and how many have an update. Choosing one
-opens a page with only its devices, where you rename them, move them to
-another room, update and remove them. **Add devices** is on both pages.
+after how many need attention, how many have an update and how many were
+found on your network. Choosing one opens a page with only its devices,
+where you rename them, move them to another room, update and remove them.
+**Add devices** is on both pages.
+
+Under a category's devices, **Found on Your Network** lists the devices of
+that kind your apps found and you haven't added. Press **Add** beside one:
+a dialog asks what its app needs, such as a key or the codes a TV shows,
+adds it, then lets you name it and choose its room. A device whose app
+doesn't say what it is waits under **Unknown Devices** until you add it.
 
 There a device is in one category, the one for its
 [type](/devices/types/). A motion sensor that measures the light level

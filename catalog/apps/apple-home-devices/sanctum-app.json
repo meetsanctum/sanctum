@@ -35,7 +35,7 @@
     },
     "questions": {
       "airplayCode": {
-        "label": "Code on the TV (1 of 2)",
+        "label": "Code on the TV",
         "kind": "code",
         "length": 4,
         "refusals": {
@@ -44,7 +44,7 @@
         "help": "The TV shows a four-digit code."
       },
       "companionCode": {
-        "label": "Code on the TV (2 of 2)",
+        "label": "Code on the TV",
         "kind": "code",
         "length": 4,
         "refusals": {

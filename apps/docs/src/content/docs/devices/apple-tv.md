@@ -37,14 +37,17 @@ it.
 
 ## Adding an Apple TV
 
-1. Open **Add devices**. The Apple TV is listed under the name it has in
-   its own settings, such as "Living Room", with its model.
-2. Press **Add**. The TV shows a four-digit code. Type it in.
+1. Open **Settings → Devices**, then **Media**. The Apple TV is listed
+   under **Found on Your Network**, with the name it has in its own
+   settings, such as "Living Room", and its model. It's in **Add devices**
+   too.
+2. Press **Add**. The TV shows a four-digit code. Type it in and press
+   **Continue**.
 3. The TV then shows a second code. Type that in too. It lasts about 35
    seconds; if it runs out, press **Show a new code**.
 
-Once both codes match, the Apple TV is added. Put it in a room as you would
-any device.
+Once both codes match, the Apple TV is added. Name it, choose its room and
+press **Done**.
 
 If adding says the TV didn't let Sanctum pair, open **Settings** on the TV,
 then **AirPlay and HomeKit**, and allow access to everyone on the same

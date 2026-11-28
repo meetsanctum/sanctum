@@ -164,7 +164,8 @@ What is under which licence, and what neither covers, is in
   cards ("AI Models", "Needs Attention"), where "and", articles and short
   prepositions inside a title stay small ("Rooms and Floors"); no dividing
   lines; corners from the `--radius` scale, nothing pill-shaped but a
-  count's badge ("3 found").
+  count's badge ("3 found") and the short segments that show how far a
+  dialog of steps has come.
 - Widget titles in the app's colour, but room sections' headings neutral like
   the shell's own; one primary action per widget or card at most, and an
   overlay's Back and Done are outlined, except that Done is the primary

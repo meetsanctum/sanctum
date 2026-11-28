@@ -5,10 +5,12 @@ import {
   type DeviceInfo,
   type DeviceType,
   type FirmwareState,
+  type FoundDevice,
   type HistoryKept,
   type MotionCommand,
   type Places,
   type ProbeResult,
+  type Room,
 } from "@meetsanctum/app-sdk";
 import { Button, type LiveFeed, useHomeClock } from "@meetsanctum/ui-sdk";
 import { Radio } from "lucide-react";
@@ -22,6 +24,7 @@ import {
 import { compare } from "@meetsanctum/app-sdk/words";
 
 import { AddDevices } from "./add-devices";
+import { AddFoundDialog, type AddFoundWork } from "./add-found-dialog";
 import { categoryLooks } from "./category-looks";
 import { RepairDevice } from "./repair-device";
 import { Row, Section } from "./components";
@@ -34,13 +37,13 @@ import {
   probeProblem,
   updateButton,
   UpdateDialog,
-  updatesHint,
   useMinuteClock,
   type CheckResult,
 } from "./device-firmware";
 import {
   deviceGroupOf,
   deviceGroupTitle,
+  foundGroupOf,
   groupNoun,
   unknownGroup,
   upperFirst,
@@ -53,10 +56,14 @@ import {
 } from "./device-line";
 import { DeviceMenu } from "./device-menu";
 import { EditDevice, keepHistory, type Editing } from "./edit-device";
-import { foundHint, useAdding } from "./found-devices";
+import { useAdding } from "./found-devices";
 import { deviceProblem, DeviceIcon, updateDevice } from "./device-parts";
 import { MotionSettings } from "./motion-settings";
 import { DeviceGroupList } from "./settings-device-groups";
+import {
+  focusAfterAdding,
+  FoundDevicesSection,
+} from "./settings-found-devices";
 import type { ServiceNotSetUp } from "./system-status";
 
 // Settings → Devices, where the household manages its hardware: first a
@@ -116,6 +123,10 @@ export function DevicesSection(props: {
   // The device someone is repairing.
   const [repairing, setRepairing] = useState<DeviceInfo>();
   const [adding, setAdding] = useState(props.adding ?? false);
+  // The device found on the network someone is adding from this page, and
+  // the last one, for where focus goes once its dialog closes.
+  const [addingFound, setAddingFound] = useState<FoundDevice>();
+  const lastFound = useRef<FoundDevice>(undefined);
   // The device whose update someone is about to start.
   const [updating, setUpdating] = useState<DeviceInfo>();
   // The motion sensor whose settings are open, by its id, so the dialog
@@ -498,174 +509,224 @@ export function DevicesSection(props: {
       ? devices.filter((device) => deviceGroupOf(device) === props.group)
       : devices;
   const isList = !groupTitle;
+  // What was found on the network of this page's kind, to add right here.
+  const groupFound = isList
+    ? []
+    : (addable?.found ?? []).filter(
+        (each) => foundGroupOf(each) === props.group,
+      );
+  // A page with only devices found shows their card alone.
+  const onlyFound = !isList && listed?.length === 0 && groupFound.length > 0;
+  const appNameOf = (driver: string) =>
+    props.apps.find((app) => app.id === driver)?.name ?? null;
+  const foundWork: AddFoundWork = {
+    rooms,
+    devices: devices ?? [],
+    appName: appNameOf,
+    onAdded: changed,
+    onSave: async (device, changes) => {
+      try {
+        changed(await updateDevice(device.id, changes));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    onAddRoom: (name) =>
+      coreJson<Room>("/api/places/rooms/add", {
+        method: "POST",
+        json: { name },
+      }),
+  };
 
   return (
-    <Section
-      id="settings-devices"
-      title={groupTitle ?? "Devices"}
-      hint={
-        listed &&
-        ([updatesHint(listed), foundHint(addable)]
-          .filter(Boolean)
-          .join(" · ") ||
-          undefined)
-      }
-      action={
-        <Button ref={addButton} onClick={() => setAdding(true)}>
-          Add devices
-        </Button>
-      }
-      page={props.page ?? null}
-      hideBody={!listed}
-      bare={isList && !!devices?.length}
-    >
-      {devices &&
-        listed &&
-        (isList ? (
-          <DeviceGroupList
-            devices={devices}
-            now={now}
-            onOpen={(group) => props.onOpenGroup?.(group)}
-            focusFallback={addButton}
-          />
-        ) : listed.length === 0 ? (
-          // Its last device went while its page was open: the page stays
-          // until someone goes back.
-          <ul className="m-0 flex list-none flex-col gap-3 p-0">
-            <li className="flex items-center gap-3">
-              <GroupRound group={props.group!} />
-              <Row
-                title={`No ${groupNoun(props.group)} any more`}
-                detail={`${upperFirst(groupNoun(props.group))} you add show here`}
-              />
-            </li>
-          </ul>
-        ) : (
-          <ul className="m-0 flex list-none flex-col gap-3 p-0">
-            {listed.map((device) => {
-              const button = updateButton(device, devices);
-              const hasHistory = device.capabilities.some(
-                (capability) => historyFields[capability.kind].length > 0,
-              );
-              return (
-                <li key={device.id} className="flex items-center gap-3">
-                  <DeviceIcon device={device} />
-                  <DeviceLine
-                    device={device}
-                    status={deviceStatus(
-                      clock,
-                      device,
-                      firmwareStatus(device, devices, results[device.id], now),
-                      now,
-                    )}
-                    detail={deviceDetail(device, rooms, pressed[device.id])}
-                  />
-                  {button && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="ms-auto shrink-0"
-                      disabled={button.disabled}
-                      onClick={() => setUpdating(device)}
-                    >
-                      {button.label}
-                    </Button>
-                  )}
-                  <DeviceMenu
-                    device={device}
-                    rooms={rooms}
-                    result={results[device.id]}
-                    kept={hasHistory ? kept[device.id] : undefined}
-                    home={
-                      props.home.devices && {
-                        name: props.home.name,
-                        on: props.home.devices.includes(device.id),
-                      }
-                    }
-                    onHome={(on) =>
-                      attempted(
+    <>
+      <Section
+        id="settings-devices"
+        title={groupTitle ?? "Devices"}
+        action={
+          <Button ref={addButton} onClick={() => setAdding(true)}>
+            Add devices
+          </Button>
+        }
+        page={props.page ?? null}
+        hideBody={!listed}
+        bare={(isList && !!devices?.length) || onlyFound}
+      >
+        {devices &&
+          listed &&
+          (isList ? (
+            <DeviceGroupList
+              devices={devices}
+              found={addable?.found ?? []}
+              now={now}
+              onOpen={(group) => props.onOpenGroup?.(group)}
+              focusFallback={addButton}
+            />
+          ) : onlyFound ? null : listed.length === 0 ? (
+            // Its last device went while its page was open: the page stays
+            // until someone goes back.
+            <ul className="m-0 flex list-none flex-col gap-3 p-0">
+              <li className="flex items-center gap-3">
+                <GroupRound group={props.group!} />
+                <Row
+                  title={`No ${groupNoun(props.group)} any more`}
+                  detail={`${upperFirst(groupNoun(props.group))} you add show here`}
+                />
+              </li>
+            </ul>
+          ) : (
+            <ul className="m-0 flex list-none flex-col gap-3 p-0">
+              {listed.map((device) => {
+                const button = updateButton(device, devices);
+                const hasHistory = device.capabilities.some(
+                  (capability) => historyFields[capability.kind].length > 0,
+                );
+                return (
+                  <li key={device.id} className="flex items-center gap-3">
+                    <DeviceIcon device={device} />
+                    <DeviceLine
+                      device={device}
+                      status={deviceStatus(
+                        clock,
                         device,
-                        "home",
-                        on
-                          ? props.home.add(device.id)
-                          : props.home.remove(device.id),
-                      )
-                    }
-                    onKeep={() =>
-                      attempted(
-                        device,
-                        "history",
-                        keepHistory(device.id, true).then(() =>
-                          keepChanged(device.id, true),
+                        firmwareStatus(
+                          device,
+                          devices,
+                          results[device.id],
+                          now,
                         ),
-                      )
-                    }
-                    onEdit={(action) => setEditing({ action, device })}
-                    onRoom={(roomId) => void saveChoice(device, { roomId })}
-                    onShowAs={(shownAs) => void saveChoice(device, { shownAs })}
-                    onMotion={() => setTuning(device.id)}
-                    onCheck={() => void check(device)}
-                    onProbe={() => void probe(device)}
-                    onStop={() => void stop(device)}
-                    onRepair={() => setRepairing(device)}
-                  />
-                </li>
-              );
-            })}
-          </ul>
-        ))}
-      <p role="status" className="sr-only">
-        {announcement}
-      </p>
-      <UpdateDialog
-        device={updating}
-        appName={updating ? appName(updating) : null}
-        onClose={() => setUpdating(undefined)}
-        // The newest action leads the line, not an earlier check.
-        onUpdate={async (device) => {
-          await requestFirmware(device, "update");
-          found(device.id);
+                        now,
+                      )}
+                      detail={deviceDetail(device, rooms, pressed[device.id])}
+                    />
+                    {button && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="ms-auto shrink-0"
+                        disabled={button.disabled}
+                        onClick={() => setUpdating(device)}
+                      >
+                        {button.label}
+                      </Button>
+                    )}
+                    <DeviceMenu
+                      device={device}
+                      rooms={rooms}
+                      result={results[device.id]}
+                      kept={hasHistory ? kept[device.id] : undefined}
+                      home={
+                        props.home.devices && {
+                          name: props.home.name,
+                          on: props.home.devices.includes(device.id),
+                        }
+                      }
+                      onHome={(on) =>
+                        attempted(
+                          device,
+                          "home",
+                          on
+                            ? props.home.add(device.id)
+                            : props.home.remove(device.id),
+                        )
+                      }
+                      onKeep={() =>
+                        attempted(
+                          device,
+                          "history",
+                          keepHistory(device.id, true).then(() =>
+                            keepChanged(device.id, true),
+                          ),
+                        )
+                      }
+                      onEdit={(action) => setEditing({ action, device })}
+                      onRoom={(roomId) => void saveChoice(device, { roomId })}
+                      onShowAs={(shownAs) =>
+                        void saveChoice(device, { shownAs })
+                      }
+                      onMotion={() => setTuning(device.id)}
+                      onCheck={() => void check(device)}
+                      onProbe={() => void probe(device)}
+                      onStop={() => void stop(device)}
+                      onRepair={() => setRepairing(device)}
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          ))}
+        <p role="status" className="sr-only">
+          {announcement}
+        </p>
+        <UpdateDialog
+          device={updating}
+          appName={updating ? appName(updating) : null}
+          onClose={() => setUpdating(undefined)}
+          // The newest action leads the line, not an earlier check.
+          onUpdate={async (device) => {
+            await requestFirmware(device, "update");
+            found(device.id);
+          }}
+        />
+        <MotionSettings
+          device={tuned}
+          appName={tuned ? appName(tuned) : null}
+          onClose={() => setTuning(undefined)}
+          onCommand={command}
+        />
+        <RepairDevice
+          device={repairing}
+          appName={repairing ? appName(repairing) : null}
+          onClose={() => setRepairing(undefined)}
+          // The device's live updates bring its state, which a reply that
+          // arrives later must not undo.
+          onRepaired={(device) =>
+            setAnnouncement(`${device.name} is repaired.`)
+          }
+        />
+        <EditDevice
+          editing={editing}
+          appName={editing ? appName(editing.device) : null}
+          onClose={() => setEditing(undefined)}
+          onChanged={changed}
+          onRemoved={(id) =>
+            update((current) => current.filter((each) => each.id !== id))
+          }
+          onForgotten={(id) => keepChanged(id, false)}
+        />
+        <AddDevices
+          open={adding}
+          onOpenChange={setAdding}
+          devices={devices ?? []}
+          rooms={rooms}
+          apps={props.apps}
+          adding={addable}
+          notSetUp={props.notSetUp}
+          live={props.live}
+          onChanged={changed}
+          onRemoved={(id) =>
+            update((current) => current.filter((each) => each.id !== id))
+          }
+        />
+        <AddFoundDialog
+          found={addingFound}
+          work={foundWork}
+          onClose={() => setAddingFound(undefined)}
+          onCloseFocus={() =>
+            focusAfterAdding(lastFound.current, addButton.current)
+          }
+        />
+      </Section>
+      <FoundDevicesSection
+        found={groupFound}
+        appName={appNameOf}
+        onAdd={(found) => {
+          lastFound.current = found;
+          setAddingFound(found);
         }}
       />
-      <MotionSettings
-        device={tuned}
-        appName={tuned ? appName(tuned) : null}
-        onClose={() => setTuning(undefined)}
-        onCommand={command}
-      />
-      <RepairDevice
-        device={repairing}
-        appName={repairing ? appName(repairing) : null}
-        onClose={() => setRepairing(undefined)}
-        // The device's live updates bring its state, which a reply that
-        // arrives later must not undo.
-        onRepaired={(device) => setAnnouncement(`${device.name} is repaired.`)}
-      />
-      <EditDevice
-        editing={editing}
-        appName={editing ? appName(editing.device) : null}
-        onClose={() => setEditing(undefined)}
-        onChanged={changed}
-        onRemoved={(id) =>
-          update((current) => current.filter((each) => each.id !== id))
-        }
-        onForgotten={(id) => keepChanged(id, false)}
-      />
-      <AddDevices
-        open={adding}
-        onOpenChange={setAdding}
-        devices={devices ?? []}
-        rooms={rooms}
-        apps={props.apps}
-        adding={addable}
-        notSetUp={props.notSetUp}
-        live={props.live}
-        onChanged={changed}
-        onRemoved={(id) =>
-          update((current) => current.filter((each) => each.id !== id))
-        }
-      />
-    </Section>
+    </>
   );
 }
 

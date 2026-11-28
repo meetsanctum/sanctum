@@ -121,11 +121,11 @@ export function createAppleHomeDevicesApp(options: DriverOptions = {}) {
       },
       questions: {
         [airplayCode]: {
-          ...code("Code on the TV (1 of 2)"),
+          ...code("Code on the TV"),
           help: "The TV shows a four-digit code.",
         },
         [companionCode]: {
-          ...code("Code on the TV (2 of 2)"),
+          ...code("Code on the TV"),
           help: "A new code is on the TV.",
           lasts: { seconds: 35, again: "Show a new code" },
           refusals: {

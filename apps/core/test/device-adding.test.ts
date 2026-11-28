@@ -60,6 +60,7 @@ describe("found devices", () => {
         description: null,
         type: "light",
         asks: [],
+        later: [],
         refusals: { tooLate },
       },
       {
@@ -80,6 +81,7 @@ describe("found devices", () => {
             lasts: null,
           },
         ],
+        later: [],
         refusals: { tooLate },
       },
     ]);

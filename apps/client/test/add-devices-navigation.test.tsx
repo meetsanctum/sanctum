@@ -48,6 +48,7 @@ describe("Add devices navigation while requests finish", () => {
           description: null,
           type: null,
           asks: [],
+          later: [],
           refusals: {},
         },
       ],

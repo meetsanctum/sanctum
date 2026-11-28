@@ -48,6 +48,7 @@ const tv: FoundDevice = {
   description: "Apple TV",
   type: null,
   asks: [],
+  later: [],
   refusals: {},
 };
 

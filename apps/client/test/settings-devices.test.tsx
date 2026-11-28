@@ -23,10 +23,8 @@ import {
   homeChanges,
   live,
   onRemove,
-  pairing,
   requests,
   setDevices,
-  setPairing,
   show,
   type,
 } from "./settings-devices-harness";
@@ -60,29 +58,6 @@ describe("Settings → Devices", () => {
       null,
     );
     expect(container.textContent).toContain("Add devices");
-  });
-
-  it("says over its list what waits to be added, and follows it live", async () => {
-    const found = {
-      driver: "sanctum.zigbee",
-      key: "0x1",
-      name: "Kitchen sensor",
-      description: null,
-      type: null,
-      asks: [],
-      refusals: {},
-    };
-    setPairing({ ...pairing, found: [found, { ...found, key: "0x2" }] });
-    await show(admin);
-    // On its own page, the section's hint leads its card.
-    const hint = () =>
-      document.querySelector("#settings-devices > span")?.textContent;
-    expect(hint()).toBe("2 found on your network");
-
-    await act(async () =>
-      live.publish({ type: "pairing", pairing: { ...pairing, found: [] } }),
-    );
-    expect(hint()).toBeUndefined();
   });
 
   it("lists the devices and follows them live", async () => {

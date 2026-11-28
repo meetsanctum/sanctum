@@ -245,7 +245,7 @@ export function ReadyCardContent(props: {
 // Blink: has the device show itself, as a light blinks, so a person sees
 // which one it is. It says so while the device blinks, and under it why
 // where it couldn't, with Blink as the way to try again.
-function BlinkButton(props: { device: DeviceInfo }) {
+export function BlinkButton(props: { device: DeviceInfo }) {
   const [blinking, setBlinking] = useState(false);
   const [problem, setProblem] = useState<string>();
   const timer = useRef<number>(undefined);

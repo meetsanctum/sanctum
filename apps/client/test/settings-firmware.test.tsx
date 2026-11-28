@@ -17,7 +17,6 @@ import {
   firmwareStatus,
   timeLeft,
   updateButton,
-  updatesHint,
   whyNot,
 } from "../src/device-firmware";
 import { SettingsPage } from "../src/settings";
@@ -280,12 +279,7 @@ describe("a device's line", () => {
     expect(answeredIn(2345)).toBe("2.3 seconds");
   });
 
-  it("counts the updates to start, and says why a check cannot run", () => {
-    const failed = light("b", "B", {
-      firmware: firmware({ state: "failed" }),
-    });
-    expect(updatesHint([available, failed, button])).toBe("2 updates");
-    expect(updatesHint([button])).toBeUndefined();
+  it("says why a check cannot run", () => {
     expect(whyNot(button, "update")).toBe("No updates are offered for it");
     expect(whyNot(button, "probe")).toBe("It sleeps between presses");
     // A sensor on a battery, before it has said how full it is.
@@ -459,9 +453,8 @@ describe("Settings → Devices' firmware", () => {
 
   it("says an update is available, and asks before starting it", async () => {
     await show();
-    expect(
-      document.querySelector("#settings-devices > span")?.textContent,
-    ).toBe("1 update");
+    // On the device's own line, not under the page's title.
+    expect(document.querySelector("#settings-devices > span")).toBeNull();
     expect(lineOf("Office light")).toContain(
       "Update available · Office · Hue Essential",
     );

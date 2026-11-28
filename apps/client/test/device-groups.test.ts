@@ -1,10 +1,11 @@
-import type { DeviceInfo } from "@meetsanctum/app-sdk";
+import type { DeviceInfo, FoundDevice } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
 import {
   deviceGroupOf,
   deviceGroups,
   deviceGroupTitle,
+  foundGroupOf,
   groupCounts,
   groupNoun,
 } from "../src/device-groups";
@@ -53,6 +54,37 @@ describe("Settings → Devices' groups", () => {
     expect(deviceGroups([])).toEqual([]);
   });
 
+  it("hold what was found by the kind its app says, and show a group for it alone", () => {
+    const found = (key: string, type: string | null): FoundDevice => ({
+      driver: "sanctum.example",
+      key,
+      name: key,
+      description: null,
+      type,
+      asks: [],
+      later: [],
+      refusals: {},
+    });
+    expect(foundGroupOf(found("tv", "media-player"))).toBe("media");
+    // One whose app doesn't say is under Unknown Devices until it's added.
+    expect(foundGroupOf(found("box", null))).toBe("unknown");
+    const groups = deviceGroups(
+      [device("desk", "light")],
+      [found("tv", "media-player"), found("box", null), found("bulb", "light")],
+    );
+    expect(
+      groups.map((group) => [
+        group.id,
+        group.devices.length,
+        group.found.map((each) => each.key),
+      ]),
+    ).toEqual([
+      ["lights", 1, ["bulb"]],
+      ["media", 0, ["tv"]],
+      ["unknown", 0, ["box"]],
+    ]);
+  });
+
   it("count what needs attention, then other updates, then the devices", () => {
     const updatable = (id: string) =>
       ({
@@ -63,12 +95,14 @@ describe("Settings → Devices' groups", () => {
     expect(groupCounts(devices, () => false)).toEqual({
       attention: null,
       updates: "2 updates",
+      found: null,
       count: "3 devices",
     });
     // A device that needs attention isn't counted again for its update.
     expect(groupCounts(devices, (each) => each.id !== "c")).toEqual({
       attention: "2 need attention",
       updates: null,
+      found: null,
       count: "3 devices",
     });
     expect(groupCounts([updatable("a")], () => true).attention).toBe(
@@ -77,7 +111,17 @@ describe("Settings → Devices' groups", () => {
     expect(groupCounts([updatable("a")], () => false)).toEqual({
       attention: null,
       updates: "1 update",
+      found: null,
       count: "1 device",
+    });
+    // What was found to add comes before the devices; with none added yet,
+    // it's all the row says.
+    expect(groupCounts([updatable("a")], () => false, 2).found).toBe("2 found");
+    expect(groupCounts([], () => false, 1)).toEqual({
+      attention: null,
+      updates: null,
+      found: "1 found",
+      count: null,
     });
   });
 
