@@ -22,6 +22,8 @@ export const app = defineApp({
   // 0.2.0: its page, which lists the smart speakers by room.
   // 0.2.1: optional choices in sentences as speech recognition reads them.
   // 0.3.0: a room's mood, by its name.
+  // 0.3.1: lights a brightness leaves off are not said to be missed.
+  // 0.3.2: lights a room's rule keeps off are not said to be missed.
   // 0.4.0: no language of its own: Household sets the home's, and its page
   // shows it and links there.
   version: "0.4.0",

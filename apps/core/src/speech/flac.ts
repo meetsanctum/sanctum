@@ -294,6 +294,7 @@ export function createFlacEncoder(sampleRate: number) {
   const pending = new Int32Array(blockSize);
   let filled = 0;
   let frame = 0;
+  let encodedSamples = 0;
   let started = false;
   let ended = false;
 
@@ -311,17 +312,20 @@ export function createFlacEncoder(sampleRate: number) {
     return joined;
   }
 
+  function writeBlock() {
+    encodeFrame(out, pending, filled, frame++, sampleRate);
+    encodedSamples += filled;
+    filled = 0;
+  }
+
   return {
-    hasFrames: () => frame > 0,
+    encodedSamples: () => encodedSamples,
     push(samples: Int16Array) {
       if (ended) throw new Error("The stream has ended");
       const head = header();
       for (let i = 0; i < samples.length; i++) {
         pending[filled++] = samples[i]!;
-        if (filled === blockSize) {
-          encodeFrame(out, pending, blockSize, frame++, sampleRate);
-          filled = 0;
-        }
+        if (filled === blockSize) writeBlock();
       }
       return concat(head, out.take());
     },
@@ -329,8 +333,7 @@ export function createFlacEncoder(sampleRate: number) {
       if (ended) return new Uint8Array(0);
       ended = true;
       const head = header();
-      if (filled > 0) encodeFrame(out, pending, filled, frame++, sampleRate);
-      filled = 0;
+      if (filled > 0) writeBlock();
       return concat(head, out.take());
     },
   };

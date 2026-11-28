@@ -47,14 +47,14 @@ export function problemText(error: unknown): string {
 }
 
 export type CredentialProblem = {
-  field?: "username" | "password" | "repeated";
+  field?: "username" | "password";
   text: string;
 };
 
+// A new username and password, as Set up and Welcome take them.
 export function credentialProblem(
   username: string,
   password: string,
-  repeated: string,
 ): CredentialProblem | undefined {
   if (!isUsername(normaliseUsername(username))) {
     return {
@@ -62,14 +62,15 @@ export function credentialProblem(
       text: "Use 3 to 30 letters, digits, dots or underscores.",
     };
   }
-  return newPasswordProblem(password, repeated);
+  return newPasswordProblem(password);
 }
 
-// A new password and its repeat, as Welcome and Change password take them.
+// A new password, as Set up, Welcome and Change password take it: once,
+// with a way to show it, so it is checked by reading it rather than typed
+// twice.
 export function newPasswordProblem(
   password: string,
-  repeated: string,
-): (CredentialProblem & { field: "password" | "repeated" }) | undefined {
+): (CredentialProblem & { field: "password" }) | undefined {
   const tooWeak = passwordProblem(password);
   if (tooWeak) {
     return {
@@ -79,8 +80,5 @@ export function newPasswordProblem(
           ? "Use at least 8 characters."
           : "That password is too long.",
     };
-  }
-  if (password !== repeated) {
-    return { field: "repeated", text: "Enter the same password twice." };
   }
 }

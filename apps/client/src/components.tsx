@@ -30,7 +30,8 @@ export function WindowDragArea() {
 export function Avatar(props: {
   name: string;
   colour: string;
-  size?: "default" | "lg";
+  // xl previews the one being chosen, such as when setting up a home.
+  size?: "default" | "lg" | "xl";
 }) {
   const initials = props.name
     .split(/\s+/)

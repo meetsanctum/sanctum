@@ -6,8 +6,6 @@ import {
   turnOnSchema,
   turnOnType,
   type Actor,
-  type CapabilityInfo,
-  type DeviceInfo,
   type LightCommand,
   type LightState,
   type LightsChange,
@@ -30,6 +28,16 @@ import type { Entities } from "../entities/entities.js";
 import { roomsOfPlace, type PlacesModule } from "../places/places.js";
 import type { CommandChange, Devices } from "./devices.js";
 import type { HoldDirection, Holds, Remote } from "./holds.js";
+import {
+  canDim,
+  isOn,
+  keyOf,
+  lookOf,
+  stepOf,
+  withSettings,
+  type Light,
+} from "./light-commands.js";
+import { prepare } from "./sync.js";
 import type { View } from "./views.js";
 
 // The lights of a room, a floor, a zone or the whole home together: a
@@ -53,8 +61,8 @@ import type { View } from "./views.js";
 // lights brighter or dimmer by a fifth of their range, and brightens or
 // dims them while the remote's button that ran it is held (holds.ts);
 // lights that cannot dim are left alone by both. An AI agent turns a
-// place's lights on or off, steps them, or sets a brightness and colour
-// temperature within each light's range, and hears of every light it may
+// place's lights on or off, steps them, or sets a brightness, a white or a
+// colour as the room's Lights tile does, and hears of every light it may
 // see there, offline ones too, with how each sent one was before, so its
 // change can be put back.
 
@@ -100,11 +108,6 @@ export const lightsChange = choice({
   brightenOrDimWhileHeld: "While held, brighten or dim",
 }) satisfies z.ZodType<LightsChange>;
 
-/** How far Brighter and Dimmer step a light, of its whole range. */
-export const lightsStepPercent = 20;
-// The short fade of a step, as Hue's dimmer steps.
-const stepSeconds = 0.4;
-
 const held: Partial<Record<LightsChange, HoldDirection>> = {
   brightenWhileHeld: "up",
   dimWhileHeld: "down",
@@ -130,20 +133,32 @@ const request = z.union([
   z.strictObject({ place: lightsPlace, set: lightsSet }),
 ]);
 
-type Light = {
-  device: DeviceInfo;
-  capability: Extract<CapabilityInfo, { kind: "light" }>;
-};
-
 /** What an AI agent asks of a place's lights. */
 type LightsAsk =
   | { to: "on" | "off" | "brighter" | "dimmer"; set?: undefined }
+  | { to?: undefined; set: LightSetting };
+
+type LightSetting =
   | {
-      to?: undefined;
-      set: { brightness?: number; colorTemperature?: number };
+      brightness: number;
+      colorTemperature?: never;
+      hue?: never;
+      saturation?: never;
+    }
+  | {
+      brightness?: number;
+      colorTemperature: number;
+      hue?: never;
+      saturation?: never;
+    }
+  | {
+      brightness?: number;
+      colorTemperature?: never;
+      hue: number;
+      saturation: number;
     };
 
-type SetField = "brightness" | "colorTemperature";
+type SetField = "brightness" | "colorTemperature" | "color";
 
 /** What an AI agent's ask did to one light. */
 export type LightOutcome = {
@@ -154,7 +169,8 @@ export type LightOutcome = {
   // refused on the way.
   result: "sent" | "confirmed" | "skipped" | "offline" | "failed";
   // Why it was left alone or failed: already there, kept off by its room's
-  // rule, off (dimmer leaves those), without what was asked, or the code.
+  // rule, off (dimmer, and a brightness while another light is on, leave
+  // those), without what was asked, or the code.
   why?: string;
   // What was asked that the light can't do, while the rest was sent.
   ignored?: SetField[];
@@ -171,64 +187,6 @@ type Planned = { light: Light; ignored?: SetField[] } & (
 // Refusals for whoever is behind the call, which refuse the whole call
 // rather than fail one light: an AI agent past its limit of commands too.
 const refusals = new Set(["forbidden", "needs_approval", "limited"]);
-
-const isOn = (light: Light) => light.capability.state?.on === true;
-
-const canDim = (light: Light) =>
-  light.capability.kind === "light" && light.capability.features.brightness;
-
-// What a step asks of a light: brighter from off as from nothing, dimmer
-// down to the lowest but never off, and nothing where it is at that end.
-function stepOf(
-  { capability }: Light,
-  to: "brighter" | "dimmer",
-): LightCommand | null {
-  if (capability.kind !== "light") return null;
-  const isLit = capability.state?.on === true;
-  if (to === "dimmer" && !isLit) return null;
-  const level = isLit ? (capability.state?.brightness ?? 100) : 0;
-  const brightness =
-    to === "brighter"
-      ? Math.min(100, level + lightsStepPercent)
-      : Math.max(1, level - lightsStepPercent);
-  return brightness === level
-    ? null
-    : { brightness, transitionSeconds: stepSeconds };
-}
-
-const keyOf = (device: string, capability: string) => `${device}/${capability}`;
-
-// What of a set a light can take: a brightness where it dims, a colour
-// temperature within its range, a colour where it has colour; or nothing.
-function fieldsOf({ capability }: Light, set: LightCommand): LightCommand {
-  const { features } = capability;
-  const fields: LightCommand = {};
-  if (features.brightness && set.brightness !== undefined) {
-    fields.brightness = set.brightness;
-  }
-  const range = features.colorTemperature;
-  if (range && set.colorTemperature !== undefined) {
-    fields.colorTemperature = Math.min(
-      range.max,
-      Math.max(range.min, set.colorTemperature),
-    );
-  }
-  if (features.color && set.hue !== undefined && set.saturation !== undefined) {
-    fields.hue = set.hue;
-    fields.saturation = set.saturation;
-  }
-  return fields;
-}
-
-function withSettings(rule: LightCommand, fields: LightCommand): LightCommand {
-  const command: LightCommand = { ...rule, ...fields };
-  if (fields.colorTemperature !== undefined) {
-    delete command.hue;
-    delete command.saturation;
-  }
-  if (fields.hue !== undefined) delete command.colorTemperature;
-  return command;
-}
 
 export function createLights(options: {
   devices: Pick<Devices, "list" | "command" | "commandFor">;
@@ -428,12 +386,9 @@ export function createLights(options: {
   }
 
   // Sets a place's lights together, as a room's Lights tile and its detail
-  // do. While any is on, only those that are on change, each to what was
-  // asked as far as it can take it, so a mood's colour stays when only its
-  // brightness was asked. While none is on, the place comes on as its rooms'
-  // rules say, with what was asked; a light that can't dim comes on with a
-  // brightness asked of it too, but stays off for a colour it can't show. A
-  // brightness of 0 turns them off.
+  // do, with the same plan as an AI agent's set (planSet): a colour or a
+  // white for every light, a brightness for those that are on or the place
+  // brought up by its rules. A brightness of 0 turns them off.
   async function setWith(
     place: LightsPlace,
     set: LightsSet,
@@ -444,21 +399,45 @@ export function createLights(options: {
       return switchWith(place, "off", view, send);
     }
     const lights = lightsIn(place, view);
-    const lit = lights.filter(isOn);
-    const sending = lit.length
-      ? lit.flatMap((light) => {
-          const command = fieldsOf(light, set);
-          return Object.keys(command).length ? [{ light, command }] : [];
-        })
-      : turningOn(lights).flatMap(({ light, command }) => {
-          const fields = fieldsOf(light, set);
-          if (Object.keys(fields).length === 0) {
-            return set.brightness !== undefined ? [{ light, command }] : [];
-          }
-          return [{ light, command: withSettings(command, fields) }];
-        });
+    const sending = planSet(lights, set).flatMap(({ light, command }) =>
+      command ? [{ light, command }] : [],
+    );
     const result = await sendAll(sending, send);
-    return { on: lit.length > 0 || result.switched > 0, ...result };
+    return { on: lights.some(isOn) || result.switched > 0, ...result };
+  }
+
+  // What a light that is off comes on with when a colour or a white is
+  // chosen for its place: the level of those that are on, on average, so
+  // the place is even; while none is, the rule's look for the lights its
+  // rules bring on and the level of those for the others, or as with
+  // nothing to go by where the rules give none.
+  function comingOnFor(
+    lit: readonly Light[],
+    byRule: ReadonlyMap<Light, LightCommand>,
+  ) {
+    const levels = (
+      lit.length
+        ? lit.filter(canDim).map((light) => light.capability.state?.brightness)
+        : Array.from(byRule, ([{ capability }, command]) =>
+            capability.features.brightness
+              ? (command.brightness ??
+                prepare(capability, command).send?.brightness ??
+                capability.observed?.brightness)
+              : undefined,
+          )
+    ).filter(
+      (level): level is number => typeof level === "number" && level > 0,
+    );
+    const level = levels.length
+      ? Math.round(levels.reduce((sum, each) => sum + each, 0) / levels.length)
+      : undefined;
+    return (light: Light): LightCommand =>
+      byRule.get(light) ??
+      (level === undefined
+        ? withNothingToGoBy(light)
+        : canDim(light)
+          ? { on: true, brightness: level }
+          : { on: true });
   }
 
   // Steps each light that can dim one way, from the level last asked of it,
@@ -483,6 +462,7 @@ export function createLights(options: {
   // What an AI agent's ask does to each light in the place that answers: a
   // command, or why it's left alone.
   function planFor(lights: readonly Light[], ask: LightsAsk): Planned[] {
+    if (ask.set) return planSet(lights, ask.set);
     if (ask.to === "off") {
       return lights.map((light) =>
         isOn(light)
@@ -502,37 +482,90 @@ export function createLights(options: {
         };
       });
     }
-    // Turning on and setting go by each room's rule for the lights that are
-    // off, as its lights button does; one the rule keeps off stays off.
-    const comingOn = new Map(
-      turningOn(lights).map(({ light, command }) => [
-        keyOf(light.device.id, light.capability.id),
-        command,
-      ]),
+    const byRule = new Map(
+      turningOn(lights).map(({ light, command }) => [light, command]),
     );
-    const ruleFor = (light: Light) =>
-      comingOn.get(keyOf(light.device.id, light.capability.id));
-    if (ask.to === "on") {
-      return lights.map((light) => {
-        if (isOn(light)) return { light, why: "already" };
-        const command = ruleFor(light);
-        return command ? { light, command } : { light, why: "kept_off" };
-      });
-    }
-    const set = ask.set!;
     return lights.map((light) => {
-      const fields = fieldsOf(light, set);
-      const ignored = (["brightness", "colorTemperature"] as const).filter(
-        (field) => set[field] !== undefined && fields[field] === undefined,
+      if (isOn(light)) return { light, why: "already" };
+      const command = byRule.get(light);
+      return command ? { light, command } : { light, why: "kept_off" };
+    });
+  }
+
+  // A white reaches every light, including lights that are off and lights
+  // without a white of their own. A colour reaches every light that can
+  // show it, including lights that are off. Brightness alone changes the
+  // lights that are on or brings up a dark place by its rooms' rules.
+  function planSet(lights: readonly Light[], set: LightSetting): Planned[] {
+    const lit = lights.filter(isOn);
+    const byRule = new Map(
+      lit.length
+        ? []
+        : turningOn(lights).map(({ light, command }) => [light, command]),
+    );
+    const look =
+      set.colorTemperature !== undefined || set.hue !== undefined
+        ? comingOnFor(lit, byRule)
+        : undefined;
+    return lights.map((light): Planned => {
+      const fields = lookOf(light, set);
+      const ignored = (
+        [
+          ["brightness", set.brightness, fields.brightness],
+          [
+            "colorTemperature",
+            set.colorTemperature,
+            fields.colorTemperature ?? fields.saturation,
+          ],
+          ["color", set.hue, fields.hue],
+        ] as const
+      ).flatMap(([field, asked, taken]) =>
+        asked !== undefined && taken === undefined ? [field] : [],
       );
-      if (Object.keys(fields).length === 0) {
-        return { light, why: "unsupported", ignored };
-      }
       const partly = ignored.length > 0 ? { ignored } : {};
-      // A light that's on gets only what was asked, so a mood's colour
-      // stays when only its brightness was.
-      if (isOn(light)) return { light, command: fields, ...partly };
-      const rule = ruleFor(light);
+      const takes = Object.keys(fields).length > 0;
+      if (isOn(light)) {
+        const { capability } = light;
+        // A replacement look also replaces the retry, so send the power
+        // and level still pending with it.
+        if (
+          look &&
+          takes &&
+          capability.sync === "pending" &&
+          capability.desired?.on === true
+        ) {
+          const brightness = capability.desired.brightness;
+          return {
+            light,
+            command: withSettings(
+              typeof brightness === "number"
+                ? { on: true, brightness }
+                : { on: true },
+              fields,
+            ),
+            ...partly,
+          };
+        }
+        // A lit light gets only what was asked, so a brightness change
+        // keeps its colour.
+        return takes
+          ? { light, command: fields, ...partly }
+          : { light, why: "unsupported", ignored };
+      }
+      if (look) {
+        // A white brings on a light that has none of its own; a colour
+        // leaves one that can't show it off, whatever level comes with it.
+        if (set.hue !== undefined && fields.hue === undefined) {
+          return { light, why: "unsupported", ignored };
+        }
+        return {
+          light,
+          command: withSettings(look(light), fields),
+          ...partly,
+        };
+      }
+      if (lit.length) return { light, why: "off" };
+      const rule = byRule.get(light);
       if (!rule) return { light, why: "kept_off" };
       return { light, command: withSettings(rule, fields), ...partly };
     });
@@ -540,12 +573,12 @@ export function createLights(options: {
 
   return {
     // An AI agent's ask of a place's lights: on, off, brighter, dimmer, or a
-    // brightness and colour temperature set within each light's range. The
-    // gate admits the agent as for any household write, and again for each
-    // light's command. Every light the agent may see there is answered for:
-    // as sent or confirmed, with what it asked and how the light was before,
-    // so the agent's change can be put back; or left alone, and why; or
-    // offline.
+    // brightness, a white or a colour set within each light's range, as a
+    // room's Lights tile sets them (planFor). The gate admits the agent as
+    // for any household write, and again for each light's command. Every
+    // light the agent may see there is answered for: as sent or confirmed,
+    // with what it asked and how the light was before, so the agent's
+    // change can be put back; or left alone, and why; or offline.
     async changeFor(
       agent: AgentCaller,
       place: LightsPlace,

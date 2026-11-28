@@ -16,8 +16,10 @@ import type { SpeechAudio } from "./wyoming.js";
 // after its turn comes, from memory only. A speaker says one at a time, as a
 // second cuts the first short on it, so the rest wait their turn in order. The address is the gate, as nothing
 // that fetches it can sign in; the port answers only the home's own network
-// and nothing but these addresses. The sound streams as it is spoken, so a
-// speaker starts after the first sentence, not the last.
+// and nothing but these addresses. The sound streams as it is spoken. A
+// speaker starts once a lead of playable sound is ready, or all of it if
+// that's shorter. The lead gives the synthesizer time to make the next
+// sentence and reduces pauses during playback.
 
 /** The IPv4 subnet of the host interface used to reach speakers. */
 export function speakerNetwork(host: string, cidr: string) {
@@ -41,6 +43,13 @@ function ipv4Of(address: string | undefined) {
   const ipv4 = address?.replace(/^::ffff:/, "");
   return ipv4 && isIPv4(ipv4) ? ipv4 : null;
 }
+
+/**
+ * How much sound is made before a speaker is told to play it, in ms. Speech
+ * comes a sentence at a time, at two to three times the speed it's said on a
+ * Pi 4, so this much ahead covers the next sentence's making.
+ */
+export const readyLeadMs = 2_000;
 
 /** How long an address waits for its speaker. */
 export const announcementKeptMs = 60_000;
@@ -280,7 +289,14 @@ export function createAnnouncements(options: {
       {
         finishing = false,
         playbackGraceMs = 1_000,
-      }: { finishing?: boolean; playbackGraceMs?: number } = {},
+        readyWithinMs,
+      }: {
+        finishing?: boolean;
+        playbackGraceMs?: number;
+        // From then on, any playable sound is ready, short of the lead: a
+        // reply that has to start before "One moment" is said.
+        readyWithinMs?: number;
+      } = {},
     ) {
       const queue = byDevice.get(device) ?? [];
       if (queue.length >= maxPerSpeaker) throw new AnnouncementRefused("busy");
@@ -335,16 +351,30 @@ export function createAnnouncements(options: {
         announcement.chunks.push(bytes);
         for (const listener of [...announcement.listeners]) listener();
       };
+      let encoder: ReturnType<typeof createFlacEncoder> | null = null;
+      let isDue = false;
+      const due =
+        readyWithinMs === undefined
+          ? undefined
+          : setTimeout(() => {
+              isDue = true;
+              if (encoder && encoder.encodedSamples() > 0) sounded(true);
+            }, readyWithinMs);
+      due?.unref();
+      void ready.then(() => clearTimeout(due));
       const encoded = (async () => {
-        let encoder: ReturnType<typeof createFlacEncoder> | null = null;
         try {
           for await (const audio of speech(announcement.stop.signal)) {
             if (announcement.stop.signal.aborted) return false;
-            encoder ??= createFlacEncoder(audio.rate);
-            announcement.rate = audio.rate;
+            if (!encoder) {
+              encoder = createFlacEncoder(audio.rate);
+              announcement.rate = audio.rate;
+            }
             announcement.samples += audio.samples.length;
             append(encoder.push(audio.samples));
-            if (encoder.hasFrames()) sounded(true);
+            const lead = (announcement.rate * readyLeadMs) / 1000;
+            const made = encoder.encodedSamples();
+            if (made >= lead || (isDue && made > 0)) sounded(true);
           }
           if (announcement.stop.signal.aborted) return false;
           if (!encoder || announcement.samples === 0) {
@@ -374,8 +404,9 @@ export function createAnnouncements(options: {
         /** Whether FLAC encoding finished successfully. */
         encoded,
         /**
-         * Whether there is sound to play: true once the first of it is
-         * encoded, false if the speech failed before any.
+         * Whether there is sound to play: true once the lead or the full
+         * speech is encoded, or as soon as any playable frame is available
+         * at or after `readyWithinMs`. False if speech fails before then.
          */
         ready,
         /**

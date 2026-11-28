@@ -1,8 +1,4 @@
-import type {
-  CapabilityInfo,
-  LightFeatures,
-  LightState,
-} from "@meetsanctum/app-sdk";
+import type { CapabilityInfo, LightState } from "@meetsanctum/app-sdk";
 import {
   icons,
   LightControls,
@@ -25,28 +21,26 @@ import type { Devices } from "./use-devices";
 // A room's Lights tile's detail: a light's detail for all the room's lights
 // at once, opened from the tile as a light's is from its own. Its header
 // says "Lights" and the room with how many are on, beside Done. Its pages
-// are a light's controls where any of the lights being set has them: its
-// colour and white, with the button that turns them all on or off, and its
-// brightness; a room whose lights only dim has the power button as a page
-// of its own after its brightness. It shows the lights that are on, their
-// level on average and the first reported colour and white, and sets them
-// together through the room's Lights tile's calls (room-lights.tsx): every
-// light that is on takes what it can of a colour, a white or a level, and while
-// none is on the room comes on at it. It has no history or activity of its
-// own, which each light's detail keeps. A room removed meanwhile, or left
-// without lights, closes it.
+// show Colour and White according to what the reachable lights support,
+// with disabled controls for the room's lights when they are all offline.
+// Brightness follows the lit lights while any are on and the reachable
+// lights when the room is off. A room whose lights only dim has the power
+// button as a page of its own after Brightness. It shows the average level
+// and first reported colour and white of the lights that are on. It sets
+// them through the room's Lights tile. Colour and White also reach lights
+// that are off. Brightness adjusts lit lights or brings up a dark room. It
+// has no history or activity of its own, which each light's detail keeps.
+// A room removed meanwhile, or left without lights, closes it.
 
 type Light = Extract<CapabilityInfo, { kind: "light" }>;
 
-// What the room's lights can do between them: a level where any dims, the
-// whites from the warmest to the coolest any takes, and colour where any
-// has it.
-function featuresOf(lights: readonly Light[]): LightFeatures {
+// The whites from the warmest to the coolest any light takes, and colour
+// where any light has it.
+function appearanceOf(lights: readonly Light[]) {
   const ranges = lights.flatMap((light) =>
     light.features.colorTemperature ? [light.features.colorTemperature] : [],
   );
   return {
-    brightness: lights.some((light) => light.features.brightness),
     colorTemperature:
       ranges.length > 0
         ? {
@@ -115,26 +109,32 @@ export function RoomLightsDetail(props: {
     roomId,
     devices.failures.get(roomLightsKey(roomId)),
   );
-  // Only the lights that can receive a group setting. If all are
-  // offline, keep their controls visible but disabled.
-  const targets = new Set(
+  // The lights a colour or a white reaches: every one a command can, or,
+  // while all are offline, every one, so their controls show disabled.
+  const reachable = new Map(
     tiles
-      .filter(
-        (each) => tile?.disabled || (!each.disabled && (!tile?.on || each.on)),
-      )
-      .map((each) => each.key),
+      .filter((each) => tile?.disabled || !each.disabled)
+      .map((each) => [each.key, each]),
   );
-  const lights = devices.devices
-    .filter((device) => device.roomId === roomId)
-    .flatMap((device) =>
-      device.capabilities.filter(
-        (capability): capability is Light =>
-          capability.kind === "light" &&
-          targets.has(tileKey(device.id, capability.id)),
-      ),
-    );
-  const features = featuresOf(lights);
-  const state = stateOf(lights, tile);
+  const lights: Light[] = [];
+  const lit: Light[] = [];
+  for (const device of devices.devices) {
+    if (device.roomId !== roomId) continue;
+    for (const capability of device.capabilities) {
+      if (capability.kind !== "light") continue;
+      const lightTile = reachable.get(tileKey(device.id, capability.id));
+      if (!lightTile) continue;
+      lights.push(capability);
+      if (lightTile.on) lit.push(capability);
+    }
+  }
+  const features = {
+    ...appearanceOf(lights),
+    brightness: tile?.disabled
+      ? lights.some((light) => light.features.brightness)
+      : (tile?.dims ?? false),
+  };
+  const state = stateOf(tile?.on ? lit : lights, tile);
   // A room removed meanwhile, or without lights now, closes its detail.
   const gone = props.open && devices.places !== undefined && (!room || !tile);
   useEffect(() => {

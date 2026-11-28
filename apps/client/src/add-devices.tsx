@@ -6,7 +6,12 @@ import type {
   PairingInfo,
   Room,
 } from "@meetsanctum/app-sdk";
-import { Button, ScrollArea, type LiveFeed } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  Problem,
+  ScrollArea,
+  type LiveFeed,
+} from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { ChevronLeft } from "lucide-react";
 import {
@@ -24,7 +29,7 @@ import { JoiningPage, type JoiningState } from "./add-devices-joining";
 import { OfferedAppSheet } from "./add-devices-offer";
 import { productName } from "./brand";
 import { CoreError, coreJson } from "./core-fetch";
-import { deviceProblem, updateDevice } from "./device-parts";
+import { problemReason, updateDevice } from "./device-parts";
 import { EditDevice, type Editing } from "./edit-device";
 import { Overlay } from "./overlay";
 import { useOverlayHost } from "./overlay-host";
@@ -52,12 +57,20 @@ type Page =
 // How long a radio lets devices join each time: four minutes.
 const joinSeconds = 240;
 
-function openProblem(error: unknown) {
-  if (error instanceof CoreError && error.status >= 500) {
-    return `${productName} could not let devices join. Try again.`;
+// Why looking couldn't start, under "Couldn't start looking" with its Try
+// again.
+function openProblem(error: unknown, app: string | null) {
+  if (error instanceof CoreError && error.code === "unavailable") {
+    return `${app ?? "Its app"} isn't running, so its devices can't join now.`;
   }
-  return deviceProblem(error);
+  if (error instanceof CoreError && error.status >= 500) {
+    return `${productName} couldn't let devices join. Try again in a moment.`;
+  }
+  return problemReason(error);
 }
+
+// What went wrong in Add devices, said under what is on show.
+type AddProblem = { title: string; reason: string };
 
 const closePairing = () =>
   coreJson<PairingInfo>("/api/devices/pairing/close", {
@@ -100,12 +113,12 @@ export function AddDevices(props: {
   }, []);
   // What joined from the first time this overlay let devices join.
   const [since, setSince] = useState<string>();
-  const [problem, setProblem] = useState<string>();
+  const [problem, setProblem] = useState<AddProblem>();
+  // What kept looking from starting, which the joining page says itself.
+  const [openError, setOpenError] = useState<{ error: unknown }>();
   const [opening, setOpening] = useState(false);
   // Whether someone stopped devices joining, rather than the time running out.
   const [stopped, setStopped] = useState(false);
-  // Whether the radio could not start letting devices join.
-  const [failed, setFailed] = useState(false);
   // The core's clock less this one's, so the countdown keeps the core's time.
   const offset = useRef(0);
   // Which time the overlay was opened; an answer for an earlier one is late.
@@ -180,10 +193,8 @@ export function AddDevices(props: {
       const current = session.current;
       needsClose.current = true;
       setOpening(true);
-      setStopped(false);
-      setFailed(false);
       setStopFailed(false);
-      setProblem(undefined);
+      setOpenError(undefined);
       try {
         let startedAt = Date.now();
         let requested = pairingRevision.current;
@@ -191,6 +202,10 @@ export function AddDevices(props: {
           // A preceding overlay's close may have finished while this open
           // was queued. This radio still needs to be stopped when we leave.
           needsClose.current = true;
+          if (current === session.current) {
+            setStopped(false);
+            setProblem(undefined);
+          }
           startedAt = Date.now();
           requested = pairingRevision.current;
           return coreJson<Opened>("/api/devices/pairing/open", {
@@ -204,12 +219,7 @@ export function AddDevices(props: {
         if (requested === pairingRevision.current) receivePairing(opened);
       } catch (error) {
         if (current !== session.current) return;
-        setFailed(true);
-        setProblem(
-          error instanceof CoreError && error.code === "unavailable"
-            ? "It isn't running, so it can't let devices join now."
-            : openProblem(error),
-        );
+        setOpenError({ error });
       } finally {
         if (current === session.current) setOpening(false);
       }
@@ -224,9 +234,14 @@ export function AddDevices(props: {
       await close();
       if (current === session.current) {
         setStopped(true);
+        setOpenError(undefined);
       }
     } catch (error) {
-      if (current === session.current) setProblem(deviceProblem(error));
+      if (current === session.current)
+        setProblem({
+          title: "Looking didn't stop",
+          reason: problemReason(error),
+        });
     }
   };
 
@@ -265,7 +280,11 @@ export function AddDevices(props: {
         setPage({ kind: "choose" });
       }
     } catch (error) {
-      if (current === session.current) setProblem(deviceProblem(error));
+      if (current === session.current)
+        setProblem({
+          title: "Looking didn't stop",
+          reason: problemReason(error),
+        });
     } finally {
       if (current === session.current) isDismissing.current = false;
     }
@@ -286,11 +305,13 @@ export function AddDevices(props: {
     } catch (error) {
       if (current === session.current) {
         setStopFailed(true);
-        setProblem(
-          error instanceof CoreError
-            ? `${productName} could not stop new devices joining. They can until the time is up.`
-            : deviceProblem(error),
-        );
+        setProblem({
+          title: "Looking didn't stop",
+          reason:
+            error instanceof CoreError
+              ? "Devices can still join until the time is up."
+              : problemReason(error),
+        });
       }
     } finally {
       if (current === session.current) isDismissing.current = false;
@@ -307,8 +328,8 @@ export function AddDevices(props: {
     setOffered(undefined);
     setStopFailed(false);
     setStopped(false);
-    setFailed(false);
     setProblem(undefined);
+    setOpenError(undefined);
     setSince(undefined);
     setPairing(undefined);
     setShown([]);
@@ -447,7 +468,10 @@ export function AddDevices(props: {
         current === session.current &&
         saveAttempts.current.get(device.id) === attempt
       )
-        setProblem(deviceProblem(error));
+        setProblem({
+          title: `${device.name}'s changes weren't saved`,
+          reason: problemReason(error),
+        });
       return false;
     } finally {
       if (saveAttempts.current.get(device.id) === attempt)
@@ -494,7 +518,7 @@ export function AddDevices(props: {
         ? { kind: "open", secondsLeft }
         : {
             kind: "closed",
-            why: failed ? "failed" : stopped ? "stopped" : "time",
+            why: openError ? "failed" : stopped ? "stopped" : "time",
           };
   // Done leads once a device is added, unless a card still asks or adds,
   // which closing would stop. After looking stops, it also leads while a
@@ -618,6 +642,11 @@ export function AddDevices(props: {
               isDonePrimary={isDonePrimary}
               devices={props.devices}
               seconds={joinSeconds}
+              failure={
+                openError
+                  ? openProblem(openError.error, appName(page.driver))
+                  : null
+              }
               onStop={() => void stop()}
               onStartAgain={() => void open(page.driver)}
               work={work}
@@ -627,12 +656,9 @@ export function AddDevices(props: {
             {status}
           </p>
           {problem && (
-            <p
-              role="alert"
-              className="m-0 text-center text-sm text-(--ruby-on-carbon)"
-            >
-              {problem}
-            </p>
+            <Problem title={problem.title} className="mx-auto w-full max-w-105">
+              {problem.reason}
+            </Problem>
           )}
           {stopFailed && (
             <div className="flex justify-center">

@@ -29,9 +29,10 @@ import {
 // The run's own limits hold whatever the hearer does: one run per speaker
 // (a newer one ends the older), a few at once in the home, `listenMaxMs` of
 // sound, `listenQuietMs` without any, and a run that never finishes ends
-// after `listeningRunMs`. Each run keeps its moments: when its wake word was heard,
-// its first sound, when listening stopped, when its reply was ready and
-// when that finished playing, which only its driver can say.
+// after `listeningRunMs`. Each run keeps its moments: when its wake word was
+// heard, its first sound, when listening stopped, when recognition finished,
+// when its reply was ready and when that finished playing, which only its
+// driver can say.
 
 /** The most runs at once in the home. */
 export const runsAtOnce = 4;
@@ -48,6 +49,8 @@ export type RunMoments = {
   heard: number;
   firstSound: number | null;
   stoppedListening: number | null;
+  /** When speech recognition gave its words, or found none it knows. */
+  heardWords: number | null;
   replyReady: number | null;
   finishedPlaying: number | null;
 };
@@ -63,7 +66,8 @@ export type HeardRun = {
   sound: AsyncIterable<Buffer>;
   /** Stops listening: the speaker stops sending, and `sound` ends. */
   stopListening(): void;
-  heard(text: string): void;
+  /** Notes when recognition answered and tells the driver any words it heard. */
+  recognised(text?: string): void;
   /** A reply to play from an address the core serves. */
   reply(url: string, text: string): void;
   /** Ends the run in an error. */
@@ -75,14 +79,17 @@ export type HeardRun = {
   readonly moments: Readonly<RunMoments>;
   /** How the driver ended it, once it did. */
   readonly ended: ListenEnd | null;
+  /** Whether the run reached its time limit. */
+  readonly timedOut: boolean;
 };
 
 /** What hears the home's runs; without one, every run is refused `off`. */
 export type Hearer = (run: HeardRun) => void | Promise<void>;
 
-type Run = Omit<HeardRun, "moments" | "ended"> & {
+type Run = Omit<HeardRun, "moments" | "ended" | "timedOut"> & {
   moments: RunMoments;
   ended: ListenEnd | null;
+  timedOut: boolean;
   steps: ListenStep[];
   finished: boolean;
   readers: Set<() => void>;
@@ -238,17 +245,23 @@ export function createListening(options: {
         controller,
         signal: controller.signal,
         ended: null,
+        timedOut: false,
         moments: {
           heard: now(),
           firstSound: null,
           stoppedListening: null,
+          heardWords: null,
           replyReady: null,
           finishedPlaying: null,
         },
         push: (chunk) => sound.push(chunk),
         endSound: sound.end,
         stopListening: () => stopListening(run),
-        heard: (text) => tell(run, { step: "heard", text }),
+        recognised(text) {
+          if (run.finished) return;
+          run.moments.heardWords ??= now();
+          if (text) tell(run, { step: "heard", text });
+        },
         reply(url, text) {
           if (run.finished) return;
           run.moments.replyReady ??= now();
@@ -261,7 +274,10 @@ export function createListening(options: {
           stopListening(run);
           tell(run, { step: "done" });
         },
-        limit: setTimeout(() => fail(run, "failed"), listeningRunMs),
+        limit: setTimeout(() => {
+          run.timedOut = true;
+          fail(run, "failed");
+        }, listeningRunMs),
       };
       run.limit.unref();
       runs.set(id, run);

@@ -220,9 +220,18 @@ describe("an app offered for devices found", () => {
     await press("Example");
 
     expect(sheet()).toBeUndefined();
-    expect(document.querySelector("[role=alert]")?.textContent).toBe(
-      "That did not work. Try again.",
-    );
+    // What happened, then why and what to do.
+    const alert = document.querySelector("[role=alert]")!;
+    expect(
+      [
+        ...alert.querySelectorAll(
+          "[data-slot=alert-title], [data-slot=alert-description]",
+        ),
+      ].map((p) => p.textContent),
+    ).toEqual([
+      "Example's details didn't load",
+      "Sanctum didn't answer. Check that it's on, then try again.",
+    ]);
   });
 
   it("follows the offers live", async () => {

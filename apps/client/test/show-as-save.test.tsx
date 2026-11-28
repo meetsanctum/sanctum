@@ -214,7 +214,12 @@ describe.each(["Settings", "Add devices"])("saving Show as in %s", (where) => {
         ? container.querySelector("li")!
         : document.querySelector("[role=dialog]")!
       ).textContent;
-    expect(said()).toContain("Can't reach Sanctum. Try again.");
+    // Settings still says it in one line; Add devices in a notice.
+    const problem =
+      where === "Settings"
+        ? "Can't reach Sanctum. Try again."
+        : "Sanctum didn't answer. Check that it's on, then try again.";
+    expect(said()).toContain(problem);
     expect(container.textContent).not.toContain("Hall door");
     if (where === "Settings") {
       expect(container.querySelector("[role=status]")?.textContent).toBe(
@@ -224,7 +229,7 @@ describe.each(["Settings", "Add devices"])("saving Show as in %s", (where) => {
 
     failure = undefined;
     await choose("Door");
-    expect(said()).not.toContain("Can't reach Sanctum. Try again.");
+    expect(said()).not.toContain(problem);
     await act(async () => replies[0]!(door));
     expect(container.textContent).toContain("Hall door");
   });
@@ -236,9 +241,13 @@ describe.each(["Settings", "Add devices"])("saving Show as in %s", (where) => {
     await act(async () => replies[1]!(windowDevice));
     await act(async () => refusals[0]!(new TypeError("Failed to fetch")));
     expect(document.body.textContent).toContain("Hall window");
-    expect(document.body.textContent).not.toContain(
-      "Can't reach Sanctum. Try again.",
-    );
+    if (where === "Add devices") {
+      expect(document.querySelector("[role=dialog] [role=alert]")).toBeNull();
+    } else {
+      expect(document.body.textContent).not.toContain(
+        "Can't reach Sanctum. Try again.",
+      );
+    }
   });
 
   if (where === "Add devices") {

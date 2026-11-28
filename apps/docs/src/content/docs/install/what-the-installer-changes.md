@@ -19,3 +19,12 @@ sidebar:
 - **On a laptop**: `/etc/systemd/logind.conf.d/sanctum.conf`, which has the
   system ignore the lid, and the sleep, suspend and hibernate targets
   masked, so it never sleeps.
+
+Once it runs, Sanctum also sets how much the system may hold in memory
+before writing it to the disk (`vm.dirty_background_bytes` and
+`vm.dirty_bytes`). It starts at 32 MiB and, once it has seen the disk its
+data is on writing, allows about two seconds of that disk's writing, so
+saving a large download holds up the home for less long. On a slow SD card
+even 32 MiB can take several seconds to write. It never allows more than the
+system itself would with the memory available. The system forgets these
+settings when it restarts, and Sanctum sets them again as it starts.

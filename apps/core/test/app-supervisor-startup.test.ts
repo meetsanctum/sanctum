@@ -115,6 +115,42 @@ describe("an app's supervised startup", () => {
     expect(entry.supervision!.lastFailure).toBe("failed_start");
   });
 
+  // A new process loads its code from a disk that writes out a backlog
+  // first, as after a large pull on an SD card.
+  it("waits on for hello while the host writes out, up to three minutes more, and says so once", async () => {
+    let writing = true;
+    const { entry, supervisor, phase, logs } = setUp({
+      writingOut: () => writing,
+    });
+    await supervisor.launch(entry);
+
+    await passes(60_000 + 2 * 60_000);
+    expect(phase()).toBe("starting");
+    expect(
+      logs.filter((line) => line.includes("hasn't said hello while the host")),
+    ).toHaveLength(1);
+
+    await passes(60_000);
+    expect(phase()).toBe("restarting");
+    expect(entry.supervision!.lastFailure).toBe("failed_start");
+    expect(logs).toContain(`apps: ${manifest.id} didn't say hello in time`);
+    writing = false;
+  });
+
+  it("stops waiting for hello once the host is done writing out", async () => {
+    let writing = true;
+    const { entry, supervisor, phase } = setUp({ writingOut: () => writing });
+    await supervisor.launch(entry);
+    await passes(90_000);
+    expect(phase()).toBe("starting");
+
+    writing = false;
+    await passes(1_000);
+
+    expect(phase()).toBe("restarting");
+    expect(entry.supervision!.lastFailure).toBe("failed_start");
+  });
+
   it.each([-3_600_000, 3_600_000])(
     "keeps the minute's deadline when the system clock moves by %s ms",
     async (offset) => {

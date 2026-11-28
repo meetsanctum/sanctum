@@ -35,6 +35,8 @@ What it leaves:
   `/boot/firmware/cmdline.txt` (or `/boot/cmdline.txt` on older systems),
   which other containers may count on. To take it out, delete that one word
   from the file's single line and restart the Pi.
+- **How much the system holds before writing to the disk**, as Sanctum set
+  it, until the machine next restarts.
 - **Your devices.** Lights, switches and sensors stay joined to a Zigbee
   network that is gone: reset each, as its instructions say, before it joins
   another.
