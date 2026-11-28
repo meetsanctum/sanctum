@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CoreError, coreJson } from "../src/core-fetch";
 import { HouseholdSection } from "../src/settings-household";
+import { problemLines } from "./problem-lines";
 
 // Settings → Household: anyone sets where the home is, with a suggestion that
 // asks the internet only when pressed. And Settings → Apps: each app's catalog
@@ -173,6 +174,20 @@ describe("Settings → Household", () => {
     expect(container.textContent).toContain("Saved.");
   });
 
+  it("offers manual entry when it can't suggest a location", async () => {
+    await act(async () => root.render(<HouseholdSection />));
+    vi.mocked(coreJson).mockRejectedValueOnce(
+      new CoreError(502, "location_unavailable"),
+    );
+
+    await act(async () => button("Suggest from this network").click());
+    expect(problemLines(container.querySelector("[role=alert]"))).toEqual([
+      "Couldn't find where the home is",
+      "The location services didn't answer. Enter the location yourself, or try again.",
+    ]);
+    expect(button("Suggest from this network").disabled).toBe(false);
+  });
+
   it("keeps the elevation of the same place when the suggestion has none", async () => {
     vi.mocked(coreJson).mockImplementationOnce(async () => zurichHome);
     await act(async () => root.render(<HouseholdSection />));
@@ -301,9 +316,10 @@ describe("Settings → Household", () => {
     await act(async () => button("Save").click());
 
     expect(saved).toEqual([]);
-    expect(container.textContent).toContain(
-      "does not know that place. Check the numbers and the time zone.",
-    );
+    expect(problemLines(container.querySelector('[role="alert"]'))).toEqual([
+      "The changes weren't saved",
+      "Sanctum doesn't know that place. Check the numbers and the time zone.",
+    ]);
   });
 
   it("saves no time zone nobody set, and asks for one with coordinates", async () => {

@@ -4,7 +4,7 @@ import type {
   DeviceQuestion,
   FoundDevice,
 } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, Problem } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
@@ -33,7 +33,7 @@ import {
   useNow,
   type Asking,
 } from "./device-asking";
-import { deviceProblem } from "./device-parts";
+import { problemReason } from "./device-parts";
 import { QuestionField, refusalWords, type Refused } from "./device-questions";
 
 // Add devices' page of what drivers found, as on the home's network: a card
@@ -51,14 +51,14 @@ function addProblem(error: unknown, appName: string | null) {
       case "unavailable":
         return `${appName ?? "Its app"} isn't running, so it can't add it now.`;
       case "timeout":
-        return "It didn't answer in time. Check it's switched on, then try again.";
+        return `${appName ?? "Its app"} didn't answer in time. Try again in a moment.`;
       case "not_found":
         return "It's no longer on your network.";
       case "app_failed":
-        return `${appName ?? "Its app"} couldn't add it. Try again.`;
+        return `${appName ?? "Its app"} ran into a problem. Try again in a moment.`;
     }
   }
-  return deviceProblem(error);
+  return problemReason(error);
 }
 
 export function FoundPage(props: {
@@ -141,7 +141,7 @@ function FoundCard(props: {
   const { found } = props;
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [refused, setRefused] = useState<Refused>();
-  const [failure, setFailure] = useState<string>();
+  const [failure, setFailure] = useState<{ reason: string; stopping?: true }>();
   // What the press under way does: start, answer, ask again or stop.
   const [doing, setDoing] = useState<
     "adding" | "checking" | "asking" | "stopping" | null
@@ -187,7 +187,8 @@ function FoundCard(props: {
       attempt.current = null;
       setAsking(null);
       setAnswers({});
-      setFailure(endedWords("adding", "time", props.appName) ?? undefined);
+      const reason = endedWords("adding", "time", props.appName);
+      setFailure(reason ? { reason } : undefined);
     }
   }, [asking, doing, now, props.appName]);
 
@@ -213,16 +214,18 @@ function FoundCard(props: {
     } else if ("refused" in result) {
       // A refusal of adding it at all is said under its card, in its words.
       const refusal = result.refused;
-      if ("question" in refusal) {
-        if (asking) setFailure(refusalWords(answered, refusal));
-        else setRefused(refusal);
+      if ("question" in refusal && !asking) {
+        setRefused(refusal);
       } else {
-        setFailure(found.refusals[refusal.refusal]);
+        const reason =
+          "question" in refusal
+            ? refusalWords(answered, refusal)
+            : found.refusals[refusal.refusal];
+        setFailure(reason ? { reason } : undefined);
       }
     } else if (isEnded(result)) {
-      setFailure(
-        endedWords("adding", result.ended, props.appName) ?? undefined,
-      );
+      const reason = endedWords("adding", result.ended, props.appName);
+      setFailure(reason ? { reason } : undefined);
     }
   };
 
@@ -261,7 +264,11 @@ function FoundCard(props: {
       }
       attempt.current = null;
       setAsking(null);
-      setFailure(addProblem(error, props.appName));
+      setFailure(
+        what === "stopping"
+          ? { reason: problemReason(error), stopping: true }
+          : { reason: addProblem(error, props.appName) },
+      );
     } finally {
       if (stillCurrent()) {
         request.current = null;
@@ -414,9 +421,16 @@ function FoundCard(props: {
         <CardFoot>{start}</CardFoot>
       )}
       {failure && (
-        <p role="alert" className="m-0 mt-2 text-sm text-(--ruby-on-carbon)">
-          {failure}
-        </p>
+        <Problem
+          title={
+            failure.stopping
+              ? `Couldn't stop adding ${found.name}`
+              : `Couldn't add ${found.name}`
+          }
+          className="mt-2"
+        >
+          {failure.reason}
+        </Problem>
       )}
     </DeviceCard>
   );

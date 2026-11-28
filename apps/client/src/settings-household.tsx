@@ -13,6 +13,7 @@ import {
   Input,
   NativeSelect,
   NativeSelectOption,
+  Problem,
   SegmentedControl,
   Switch,
 } from "@meetsanctum/ui-sdk";
@@ -27,6 +28,7 @@ import {
 import { productName } from "./brand";
 import { Section } from "./components";
 import { CoreError, coreJson } from "./core-fetch";
+import { problemReason } from "./device-parts";
 
 // Settings → Household: the home's name and where the home is: its latitude,
 // longitude, elevation and time zone, which Weather and natural light work
@@ -152,7 +154,7 @@ function HomeForm() {
   const [home, setHome] = useState<HomeInfo>();
   const [draft, setDraft] = useState<Draft>();
   const [note, setNote] = useState<string>();
-  const [problem, setProblem] = useState<string>();
+  const [problem, setProblem] = useState<{ title: string; reason: string }>();
   const [working, setWorking] = useState<"saving" | "suggesting">();
 
   useEffect(() => {
@@ -241,9 +243,11 @@ function HomeForm() {
         `${found.place ? `Near ${found.place}.` : "Found."} Check it, then save.`,
       );
     } catch {
-      setProblem(
-        "The location services did not answer. Enter the location yourself, or try again.",
-      );
+      setProblem({
+        title: "Couldn't find where the home is",
+        reason:
+          "The location services didn't answer. Enter the location yourself, or try again.",
+      });
     } finally {
       setWorking(undefined);
     }
@@ -278,11 +282,13 @@ function HomeForm() {
       });
       setNote("Saved.");
     } catch (error) {
-      setProblem(
-        error instanceof CoreError && error.code === "invalid_request"
-          ? `${productName} does not know that place. Check the numbers and the time zone.`
-          : "That did not work. Try again.",
-      );
+      setProblem({
+        title: "The changes weren't saved",
+        reason:
+          error instanceof CoreError && error.code === "invalid_request"
+            ? `${productName} doesn't know that place. Check the numbers and the time zone.`
+            : problemReason(error),
+      });
     } finally {
       setWorking(undefined);
     }
@@ -438,13 +444,14 @@ function HomeForm() {
             : `Smart speakers speak English, since ${languages[draft.language].name} isn’t available for speech.`}
         </span>
       </div>
-      {(note || problem) && (
-        <p
-          role={problem ? "alert" : "status"}
-          className={`m-0 text-sm ${problem ? "text-destructive" : ""}`}
-        >
-          {problem ?? note}
-        </p>
+      {problem ? (
+        <Problem title={problem.title}>{problem.reason}</Problem>
+      ) : (
+        note && (
+          <p role="status" className="m-0 text-sm">
+            {note}
+          </p>
+        )
       )}
       <div className="flex flex-wrap items-center gap-3">
         <Button

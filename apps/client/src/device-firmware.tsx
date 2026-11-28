@@ -1,5 +1,5 @@
 import type { DeviceInfo, FirmwareInfo } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, Problem } from "@meetsanctum/ui-sdk";
 import { useEffect, useRef, useState } from "react";
 import { plural } from "@meetsanctum/app-sdk/words";
 
@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import { CoreError } from "./core-fetch";
-import { deviceProblem } from "./device-parts";
+import { deviceProblem, problemReason } from "./device-parts";
 
 // A device's firmware and Check connection in Settings → Devices: what the
 // line says of an update and of the checks run from this page, which comes
@@ -246,32 +246,48 @@ export function whyNot(device: DeviceInfo, check: "update" | "probe") {
   return device.firmware?.updatable ? null : "No updates are offered for it";
 }
 
-/** Words for a firmware call that failed. */
-export function firmwareProblem(
-  error: unknown,
-  what: "check" | "update" | "stop" | "probe",
-  appName: string | null,
-) {
+/** Words for a connection check that failed. */
+export function probeProblem(error: unknown, appName: string | null) {
   if (error instanceof CoreError) {
     if (error.code === "unavailable") {
       return `${appName ?? "Its app"} isn't running.`;
     }
     if (error.code === "conflict") {
-      return what === "update"
-        ? "It can't be updated right now. Try again once nothing else is updating."
-        : "That can't be done right now.";
+      return "That can't be done right now.";
     }
     if (error.code === "app_failed" || error.code === "timeout") {
-      return what === "check"
-        ? "Couldn't check for an update: it didn't answer. Check it's switched on."
-        : what === "probe"
-          ? "Couldn't check the connection. Try again."
-          : what === "stop"
-            ? "Couldn't stop the update. Try again."
-            : "Couldn't start the update. Try again.";
+      return "Couldn't check the connection. Try again.";
     }
   }
   return deviceProblem(error);
+}
+
+/**
+ * Why a firmware action didn't go through, for a problem notice whose title
+ * says which: only what the core reports, so an app that failed is never
+ * put down to the device's power.
+ */
+export function firmwareReason(
+  error: unknown,
+  what: "check" | "update" | "stop",
+  appName: string | null,
+) {
+  if (error instanceof CoreError) {
+    const app = appName ?? "Its app";
+    switch (error.code) {
+      case "unavailable":
+        return `${app} isn't running.`;
+      case "conflict":
+        return what === "update"
+          ? "Check this device's firmware status before trying again."
+          : "It can't be done right now. Try again in a moment.";
+      case "timeout":
+        return `${app} didn't answer in time. Try again in a moment.`;
+      case "app_failed":
+        return `${app} ran into a problem. Try again in a moment.`;
+    }
+  }
+  return problemReason(error);
 }
 
 /**
@@ -333,7 +349,7 @@ export function UpdateDialog(props: {
     } catch (error) {
       if (shown.current?.id !== device.id) return;
       setWorking(false);
-      setProblem(firmwareProblem(error, "update", props.appName));
+      setProblem(firmwareReason(error, "update", props.appName));
     }
   };
 
@@ -369,9 +385,9 @@ export function UpdateDialog(props: {
           </DialogDescription>
         </DialogHeader>
         {problem && (
-          <p role="alert" className="m-0 text-sm text-destructive">
+          <Problem title={`${device?.name}'s update didn't start`}>
             {problem}
-          </p>
+          </Problem>
         )}
         <DialogFooter>
           <Button type="button" variant="outline" onClick={props.onClose}>

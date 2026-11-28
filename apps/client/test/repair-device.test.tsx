@@ -4,8 +4,9 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { coreJson } from "../src/core-fetch";
+import { CoreError, coreJson } from "../src/core-fetch";
 import { RepairDevice } from "../src/repair-device";
+import { problemLines } from "./problem-lines";
 import { light } from "./settings-devices-fixtures";
 
 vi.mock("../src/core-fetch", async (importOriginal) => ({
@@ -105,6 +106,19 @@ const code = {
 };
 
 describe("Repair's dialog", () => {
+  it("names the device and its app when the repair request fails", async () => {
+    vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(500, "app_failed"));
+    await show(device);
+    await typeAnswer("new key");
+
+    await act(async () => submit().click());
+    expect(problemLines(document.querySelector("[role=alert]"))).toEqual([
+      "Lamp wasn't repaired",
+      "Example ran into a problem. Try again in a moment.",
+    ]);
+    expect(submit().disabled).toBe(false);
+  });
+
   it.each(["secret", "text"] as const)(
     "uses the field type for a %s answer",
     async (kind) => {

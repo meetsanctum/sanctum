@@ -98,6 +98,7 @@ function DeviceActivity(props: {
       ) : activity.state === "failed" ? (
         <ActivityProblem
           what="Its activity didn't load"
+          reason={activity.problem}
           onRetry={activity.retry}
         />
       ) : (

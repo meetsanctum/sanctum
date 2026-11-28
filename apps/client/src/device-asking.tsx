@@ -4,11 +4,11 @@ import type {
   DeviceAsking,
   DeviceQuestion,
 } from "@meetsanctum/app-sdk";
-import { CircleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { coreFetch } from "./core-fetch";
 import { QuestionField, refusalWords } from "./device-questions";
+import { SheetProblem } from "./auth/sheet";
 
 // Adding and repairing that ask once they have started, as a TV shows a code
 // only once pairing begins: the questions of the step on the screen, with
@@ -180,16 +180,7 @@ export function AskingFields(props: {
   return (
     <>
       {asking.refusedApart && (
-        <p
-          role="alert"
-          className="m-0 flex items-start gap-1.5 text-sm text-destructive"
-        >
-          <CircleAlert
-            aria-hidden="true"
-            className="mt-0.5 size-3.5 shrink-0"
-          />
-          <span>{asking.refusedApart}</span>
-        </p>
+        <SheetProblem>{asking.refusedApart}</SheetProblem>
       )}
       {asking.asks.map((question, index) => (
         <QuestionField

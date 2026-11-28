@@ -1,5 +1,5 @@
 import type { DashboardInfo } from "@meetsanctum/app-sdk";
-import { Button, Input } from "@meetsanctum/ui-sdk";
+import { Button, Input, Problem } from "@meetsanctum/ui-sdk";
 import {
   EllipsisVertical,
   LayoutDashboard,
@@ -29,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 import { SidebarToggle } from "./sidebar";
+import { problemReason } from "./device-parts";
 
 // The top bar, at the top of the page: the sidebar's toggle, then on a
 // dashboard its name and at the right end its ⋮ menu, or while Home is
@@ -220,9 +221,9 @@ function RenameDashboard(props: {
     try {
       await props.onRename(dashboard.id, name.trim());
       if (current === attempt.current) props.onClose();
-    } catch {
+    } catch (error) {
       if (current !== attempt.current) return;
-      setProblem("That did not work. Try again.");
+      setProblem(problemReason(error));
       setWorking(false);
     }
   };
@@ -256,9 +257,9 @@ function RenameDashboard(props: {
             autoFocus
           />
           {problem && (
-            <p role="alert" className="m-0 text-sm text-destructive">
+            <Problem title={`${dashboard?.name} wasn't renamed`}>
               {problem}
-            </p>
+            </Problem>
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={props.onClose}>

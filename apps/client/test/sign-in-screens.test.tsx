@@ -17,6 +17,7 @@ import {
   type StoredHost,
 } from "../src/shell";
 import { deferred } from "./deferred";
+import { problemLines } from "./problem-lines";
 
 vi.mock("../src/auth/device", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/auth/device")>()),
@@ -617,9 +618,10 @@ describe("the forget-home confirmation during sign-in", () => {
     expect(onBack).not.toHaveBeenCalled();
     expect(dialog()?.textContent).toContain("Forget this home?");
     await act(async () => forgetting.resolve());
-    expect(dialog()?.querySelector('[role="alert"]')?.textContent).toBe(
-      "That did not work. Try again.",
-    );
+    expect(problemLines(dialog()?.querySelector('[role="alert"]'))).toEqual([
+      "Office wasn't forgotten",
+      "This device couldn't save the change. Try again.",
+    ]);
   });
 });
 

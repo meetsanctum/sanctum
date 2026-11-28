@@ -18,6 +18,7 @@ import {
   way,
 } from "./add-devices-support";
 import { light } from "./settings-devices-fixtures";
+import { problemLines } from "./problem-lines";
 
 describe("Add devices, adding what drivers found", () => {
   it("shows each found device as a card, saying what it has or what adding it needs", async () => {
@@ -123,11 +124,14 @@ describe("Add devices, adding what drivers found", () => {
 
     await type(field, "a wrong key");
     await act(async () => send.click());
-    expect(page().querySelector("[role=alert]")!.textContent).toBe(
-      "That key doesn't match. Copy it again.",
-    );
+    const alert = page().querySelector("[role=alert]")!;
+    expect(alert.textContent).toBe("That key doesn't match. Copy it again.");
     expect(field.value).toBe("a wrong key");
     expect(field.getAttribute("aria-invalid")).toBe("true");
+    expect(alert.id).toBeTruthy();
+    expect(field.getAttribute("aria-describedby")?.split(/\s+/)).toContain(
+      alert.id,
+    );
 
     await type(field, "the right key");
     await act(async () => send.click());
@@ -251,9 +255,10 @@ describe("Add devices, adding what drivers found", () => {
 
     await act(async () => named("Add Kitchen sensor").click());
 
-    expect(page().querySelector("[role=alert]")!.textContent).toBe(
-      "It didn't answer in time. Check it's switched on, then try again.",
-    );
+    expect(problemLines(page().querySelector("[role=alert]"))).toEqual([
+      "Couldn't add Kitchen sensor",
+      "Example didn't answer in time. Try again in a moment.",
+    ]);
     expect(named("Add Kitchen sensor").disabled).toBe(false);
   });
 
@@ -264,9 +269,10 @@ describe("Add devices, adding what drivers found", () => {
 
     await act(async () => named("Add Kitchen sensor").click());
 
-    expect(page().querySelector("[role=alert]")!.textContent).toBe(
+    expect(problemLines(page().querySelector("[role=alert]"))).toEqual([
+      "Couldn't add Kitchen sensor",
       "It stopped waiting for a key. Turn it off and on again, then add it.",
-    );
+    ]);
     expect(named("Add Kitchen sensor").disabled).toBe(false);
   });
 });
