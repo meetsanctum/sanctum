@@ -52,6 +52,42 @@ describe("Button", () => {
     ]);
   });
 
+  it("animates only a press, and only where motion isn't reduced", () => {
+    for (const variant of [
+      "default",
+      "outline",
+      "ghost",
+      "tile",
+      "option",
+      "glass",
+      "row",
+      "link",
+      "choice",
+    ] as const) {
+      const classes = cn(buttonVariants({ variant })).split(" ");
+      expect([
+        variant,
+        classes.filter((name) => name.includes("transition-")),
+      ]).toEqual([
+        variant,
+        ["transition-transform", "motion-reduce:transition-none"],
+      ]);
+      const moves = classes.filter((name) =>
+        /(^|:)(-?translate-|scale-)/.test(name),
+      );
+      expect([
+        variant,
+        moves.filter((name) => !name.startsWith("motion-safe:")),
+      ]).toEqual([variant, []]);
+    }
+    expect(buttonVariants({})).toContain(
+      "motion-safe:active:not-aria-[haspopup]:translate-y-px",
+    );
+    expect(buttonVariants({ variant: "choice" })).toContain(
+      "motion-safe:active:scale-[0.98]",
+    );
+  });
+
   it("turns the ink where a button is the place on show, on or chosen", () => {
     expect(buttonVariants({ variant: "ghost" })).toContain(
       "aria-[current=page]:bg-foreground",
