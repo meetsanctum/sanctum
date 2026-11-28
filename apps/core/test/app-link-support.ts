@@ -5,10 +5,10 @@ import {
   type CoreMessage,
 } from "@meetsanctum/app-sdk/protocol";
 import { mkdtemp, rm } from "node:fs/promises";
-import { connect, type Socket } from "node:net";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, expect, vi } from "vitest";
+import { afterEach, beforeEach, expect, onTestFinished, vi } from "vitest";
 
 import { createAppLink, type AppLink } from "../src/app-host/link.js";
 
@@ -21,7 +21,7 @@ export const person = { kind: "user", id: "maya" } as const;
 export const welcomeHello = {
   type: "hello",
   protocol: protocolVersion,
-  app: "test.link",
+  app: "sanctum.example",
   version: "1.2.3",
   manifest: digest,
 };
@@ -31,14 +31,13 @@ export let socketPath: string;
 export let link: AppLink;
 export let gone: string[];
 export let ready: number;
-const clients: Socket[] = [];
 export const logs: string[] = [];
 
 type Options = Partial<Parameters<typeof createAppLink>[0]>;
 
 export async function listening(options: Options = {}) {
   link = createAppLink({
-    appId: "test.link",
+    appId: welcomeHello.app,
     version: "1.2.3",
     manifest: digest,
     socket: socketPath,
@@ -52,9 +51,9 @@ export async function listening(options: Options = {}) {
 }
 
 // An app as the socket sees it: whatever it sends, and everything it hears.
-export async function appOnSocket() {
-  const socket = connect(socketPath);
-  clients.push(socket);
+export async function appOnSocket(path = socketPath) {
+  const socket = connect(path);
+  onTestFinished(() => void socket.destroy());
   await new Promise<void>((done, fail) => {
     socket.once("connect", done);
     socket.once("error", fail);
@@ -132,14 +131,13 @@ export const action = {
 export function useLink() {
   beforeEach(async () => {
     folder = await mkdtemp(join(tmpdir(), "sanctum-link-"));
-    socketPath = join(folder, "test.link", "core.sock");
+    socketPath = join(folder, welcomeHello.app, "core.sock");
     gone = [];
     ready = 0;
     logs.length = 0;
   });
 
   afterEach(async () => {
-    for (const client of clients.splice(0)) client.destroy();
     await link.close();
     await rm(folder, { recursive: true, force: true });
   });
