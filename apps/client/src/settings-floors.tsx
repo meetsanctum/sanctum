@@ -314,7 +314,7 @@ export function EditFloor(props: {
   const [onIt, setOnIt] = useState<ReadonlySet<string>>(new Set());
   const [removal, setRemoval] = useState<FloorRemoval>();
   // What failed, said in the dialog; `retry` when what goes with a floor
-  // couldn't be worked out and can be asked again, where Remove floor becomes Try again.
+  // couldn't be worked out and can be asked again.
   const [problem, setProblem] = useState<{
     title: string;
     reason: string;
@@ -395,13 +395,13 @@ export function EditFloor(props: {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!editing || working || current.current !== editing) return;
-    if (editing.action === "remove" && !removal) {
-      if (problem?.retry) check(editing);
-      return;
-    }
+    if (editing.action === "remove" && !removal) return;
     const saving = draft.current;
-    // Which write failed, for what the dialog says.
-    let step: "add" | "rename" | "rooms" | "remove" = "remove";
+    const wantedName = name.trim();
+    let failureTitle =
+      editing.action === "remove"
+        ? `${editing.floor.name} wasn't removed`
+        : `Couldn't add ${wantedName}`;
     setWorking(true);
     setProblem(undefined);
     try {
@@ -412,25 +412,24 @@ export function EditFloor(props: {
         });
         props.onRemoved(editing.floor.id);
       } else {
-        step = "add";
         if (!saving.floor) {
           saving.floor = await coreJson<Floor>("/api/places/floors/add", {
             method: "POST",
-            json: { name: name.trim() },
+            json: { name: wantedName },
           });
         }
         const { id } = saving.floor;
-        step = "rename";
-        if (name.trim() !== saving.floor.name) {
+        if (wantedName !== saving.floor.name) {
+          failureTitle = `${saving.floor.name} wasn't renamed`;
           saving.floor = await coreJson<Floor>("/api/places/floors/update", {
             method: "POST",
-            json: { id, name: name.trim() },
+            json: { id, name: wantedName },
           });
         }
-        step = "rooms";
         for (const room of rooms) {
           const wanted = onIt.has(room.id);
           if (wanted === saving.rooms.has(room.id)) continue;
+          failureTitle = `The floor for ${room.name} wasn't changed`;
           await coreJson("/api/places/rooms/update", {
             method: "POST",
             json: { id: room.id, floorId: wanted ? id : null },
@@ -445,16 +444,8 @@ export function EditFloor(props: {
       props.onSaved();
       if (current.current !== editing) return;
       setWorking(false);
-      const floor = saving.floor?.name ?? name.trim();
       setProblem({
-        title:
-          step === "add"
-            ? `Couldn't add ${name.trim()}`
-            : step === "rename"
-              ? `${floor} wasn't renamed`
-              : step === "rooms"
-                ? `The rooms on ${floor} weren't saved`
-                : `${floor} wasn't removed`,
+        title: failureTitle,
         reason: problemReason(error),
       });
     }
@@ -469,7 +460,7 @@ export function EditFloor(props: {
         : `Remove ${editing?.floor.name}?`;
   const description =
     editing?.action === "remove"
-      ? !removal && !problem?.retry
+      ? !removal && !problem
         ? "Looking at what goes with it…"
         : "Its rooms keep their devices."
       : "Choose its name and the rooms on it.";
@@ -577,6 +568,18 @@ export function EditFloor(props: {
                   </fieldset>
                 </>
               )}
+          {editing?.action === "remove" && problem?.retry && (
+            <Button
+              type="button"
+              variant="outline"
+              className="self-start"
+              onClick={() => {
+                if (current.current === editing) check(editing);
+              }}
+            >
+              Try again
+            </Button>
+          )}
           {problem && <Problem title={problem.title}>{problem.reason}</Problem>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={props.onClose}>
@@ -584,24 +587,23 @@ export function EditFloor(props: {
             </Button>
             <Button
               type="submit"
-              variant={
-                editing?.action === "remove" && !problem?.retry
-                  ? "destructive"
-                  : "default"
-              }
+              variant={editing?.action === "remove" ? "destructive" : "default"}
               disabled={
                 working ||
                 (editing?.action === "remove"
-                  ? !removal && !problem
+                  ? !removal
                   : name.trim().length === 0)
               }
+              onClick={(event) => {
+                // The preview can move the dialog between clicks.
+                if (editing?.action === "remove" && event.detail > 1)
+                  event.preventDefault();
+              }}
             >
               {editing?.action === "remove"
-                ? problem?.retry
-                  ? "Try again"
-                  : working
-                    ? "Removing…"
-                    : "Remove floor"
+                ? working
+                  ? "Removing…"
+                  : "Remove floor"
                 : editing?.action === "add"
                   ? "Add"
                   : "Save"}

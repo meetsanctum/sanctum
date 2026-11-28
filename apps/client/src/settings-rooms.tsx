@@ -404,7 +404,7 @@ function EditRoom(props: {
   const [name, setName] = useState("");
   const [removal, setRemoval] = useState<RoomRemoval>();
   // What failed, said in the dialog; `retry` when what goes with a room
-  // couldn't be worked out and can be asked again, where Remove becomes Try again.
+  // couldn't be worked out and can be asked again.
   const [problem, setProblem] = useState<{
     title: string;
     reason: string;
@@ -444,11 +444,8 @@ function EditRoom(props: {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!editing) return;
-    if (editing.action === "remove" && !removal) {
-      if (problem?.retry) check(editing);
-      return;
-    }
+    if (!editing || working || current.current !== editing) return;
+    if (editing.action === "remove" && !removal) return;
     setWorking(true);
     setProblem(undefined);
     try {
@@ -534,6 +531,18 @@ function EditRoom(props: {
                   autoFocus
                 />
               )}
+          {editing?.action === "remove" && problem?.retry && (
+            <Button
+              type="button"
+              variant="outline"
+              className="self-start"
+              onClick={() => {
+                if (current.current === editing) check(editing);
+              }}
+            >
+              Try again
+            </Button>
+          )}
           {problem && <Problem title={problem.title}>{problem.reason}</Problem>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={props.onClose}>
@@ -541,27 +550,26 @@ function EditRoom(props: {
             </Button>
             <Button
               type="submit"
-              variant={
-                editing?.action === "remove" && !problem?.retry
-                  ? "destructive"
-                  : "default"
-              }
+              variant={editing?.action === "remove" ? "destructive" : "default"}
               disabled={
                 working ||
                 (editing?.action === "remove"
-                  ? !removal && !problem?.retry
+                  ? !removal
                   : name.trim().length === 0)
               }
+              onClick={(event) => {
+                // The preview can move the dialog between clicks.
+                if (editing?.action === "remove" && event.detail > 1)
+                  event.preventDefault();
+              }}
             >
               {editing?.action === "add"
                 ? "Add"
                 : editing?.action === "rename"
                   ? "Save"
-                  : problem?.retry
-                    ? "Try again"
-                    : working
-                      ? "Removing…"
-                      : "Remove"}
+                  : working
+                    ? "Removing…"
+                    : "Remove"}
             </Button>
           </DialogFooter>
         </form>

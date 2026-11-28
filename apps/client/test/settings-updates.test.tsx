@@ -470,7 +470,7 @@ describe("Settings → System", () => {
   });
 
   it.each(["stable", "edge"])(
-    "can update a %s host already reporting its channel",
+    "can update a %s host reporting its channel when versions didn't load",
     async (channel) => {
       const original = vi.mocked(coreJson).getMockImplementation()!;
       vi.mocked(coreJson).mockImplementation(async (path, init) => {
@@ -478,7 +478,7 @@ describe("Settings → System", () => {
           return { version: channel, channel, update: null };
         }
         if (path === "/api/system/update/versions") {
-          return { channel, versions: [{ version: channel }] };
+          throw new CoreError(503, "manager_unavailable");
         }
         return original(path, init);
       });
@@ -486,12 +486,51 @@ describe("Settings → System", () => {
       await report({ state: "online", version: channel });
       await openSystem();
 
+      expect(system().querySelector('[role="alert"]')).toBeNull();
       expect(button("Update", system())?.disabled).toBe(false);
       await act(async () => button("Update", system())!.click());
       await act(async () =>
         button("Update", document.querySelector('[role="dialog"]')!)!.click(),
       );
       expect(started).toEqual([{ version: channel }]);
+    },
+  );
+
+  it.each(["succeeds", "fails"])(
+    "keeps the update-start error when a pending version lookup %s",
+    async (outcome) => {
+      const original = vi.mocked(coreJson).getMockImplementation()!;
+      let finishLookup!: () => void;
+      vi.mocked(coreJson).mockImplementation(async (path, init) => {
+        if (path === "/api/system/update") {
+          return { version: "stable", channel: "stable", update: null };
+        }
+        if (path === "/api/system/update/versions") {
+          return new Promise((resolve, reject) => {
+            finishLookup = () => {
+              if (outcome === "fails")
+                reject(new CoreError(503, "manager_unavailable"));
+              else resolve({ channel: "stable", versions: [] });
+            };
+          });
+        }
+        if (path === "/api/system/update/start")
+          throw new CoreError(409, "busy");
+        return original(path, init);
+      });
+      await render();
+      await report({ state: "online", version: "stable" });
+      await openSystem();
+      await act(async () => button("Update", system())!.click());
+      await act(async () =>
+        button("Update", document.querySelector('[role="dialog"]')!)!.click(),
+      );
+      await act(async () => finishLookup());
+
+      expect(problemLines(system().querySelector('[role="alert"]'))).toEqual([
+        "The update didn't start",
+        "Another update is already running.",
+      ]);
     },
   );
 
@@ -531,6 +570,7 @@ describe("Settings → System", () => {
       "Versions didn't load",
       "Sanctum didn't answer. It asks again every few seconds.",
     ]);
+    expect(system().textContent).not.toContain("No builds yet.");
 
     // Restart the effect under fake timers, as when the core comes back.
     await report({ state: "offline" });
