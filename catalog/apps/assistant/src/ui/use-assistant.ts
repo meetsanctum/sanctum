@@ -5,7 +5,7 @@ import type {
   Places,
   SpeechLanguage,
 } from "@meetsanctum/app-sdk";
-import { useAppClient } from "@meetsanctum/ui-sdk";
+import { compare, useAppClient } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { listeningAudio } from "./words";
@@ -14,7 +14,7 @@ import { listeningAudio } from "./words";
 // speech recognition is doing, the smart speakers (devices whose
 // microphones listen) and the rooms they're in.
 
-const byName = (a: DeviceInfo, b: DeviceInfo) => a.name.localeCompare(b.name);
+const byName = (a: DeviceInfo, b: DeviceInfo) => compare("en")(a.name, b.name);
 
 function updateSpeakers(current: DeviceInfo[], { id, device }: LiveDevice) {
   if (device && listeningAudio(device)) {

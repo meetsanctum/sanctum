@@ -15,7 +15,8 @@ import type { Devices } from "./use-devices";
 // the level of those that are on. Its round icon turns them all off while
 // any is on, and the room on by its rule while none is; a drag across sets
 // every light that is on to its level, or brings the room up at it; the rest
-// opens its detail (room-lights-detail.tsx). It says how many are on and at
+// opens its detail (room-lights-detail.tsx), where a colour or a white
+// brings every light in the room to it, those that are off too. It says how many are on and at
 // what level ("3 on · 60%", "2 of 3 on · 80%"), and is disabled while every
 // light is offline, as their tiles are. A press that reaches no light shows
 // its failure on it, as a light's own does.

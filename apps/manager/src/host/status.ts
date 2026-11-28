@@ -334,6 +334,10 @@ export function createHostStatus(options: {
     sample,
     resources,
 
+    // Whether the disks are draining a backlog now, which only the kernel's
+    // counters say, so it answers while Docker doesn't.
+    writeout: () => readings.writeout(),
+
     // Counts what takes the space again at the next look, once something
     // has freed some.
     recount() {

@@ -4,6 +4,7 @@ import type { ManagerClient } from "../manager.js";
 import { ManagerRefusal } from "../manager.js";
 import type { InstalledApp } from "./installed.js";
 import { asksForPortRange, reachesDevices, type LanPolicies } from "./lan.js";
+import { defaultWriteoutGraceMs } from "./link.js";
 
 // Keeps an app that runs apart running. Its container starts by the
 // manager's hand, and from there: Starting until its start returns; Waiting
@@ -22,7 +23,8 @@ export type AppContainerManager = Pick<
   | "removeAppContainer"
   | "appContainer"
   | "appUsage"
->;
+> &
+  Partial<Pick<ManagerClient, "writingOut">>;
 
 /** How an app apart stands, and what the core keeps of how it got there. */
 export type Supervision = {
@@ -154,6 +156,7 @@ export function createSupervisor(options: {
   const waitPauses = options.waitPausesMs ?? defaultWaitPausesMs;
   const connectWithinMs = options.connectWithinMs ?? defaultConnectWithinMs;
   const connectCheckMs = options.connectCheckMs ?? defaultConnectCheckMs;
+  const isWritingOut = () => manager.writingOut?.() === true;
   // The apps that reach devices stopped while they wait for a manager that
   // can give them their network.
   const stoppedToWait = new WeakSet<InstalledApp>();
@@ -409,23 +412,39 @@ export function createSupervisor(options: {
 
   // Until it says hello, by its deadline, asking now and then whether its container
   // still runs. Hello, or anything else that moves it on, clears the timer.
+  // While the host writes out a backlog to its disks, which a new process
+  // waits behind as it loads, the deadline waits on, for up to
+  // defaultWriteoutGraceMs.
   function awaitHello(entry: InstalledApp, generation: number, by: number) {
     const { id } = entry.app;
+    const latest = by + defaultWriteoutGraceMs;
     let isChecking = false;
+    let isSpared = false;
     const isWaiting = () =>
       isCurrent(entry, generation) && !entry.link.isConnected();
     const check = async () => {
       of(entry).timer = undefined;
       if (!isWaiting()) return;
-      if (performance.now() >= by) {
+      const at = performance.now();
+      const isLate = at >= by;
+      if (isLate && (at >= latest || !isWritingOut())) {
         log(`apps: ${id} didn't say hello in time`);
         failed(entry, "failed_start");
         return;
       }
+      if (isLate && !isSpared) {
+        isSpared = true;
+        log(
+          `apps: ${id} hasn't said hello while the host writes out to its disks; it gets up to ${Math.round(defaultWriteoutGraceMs / 1000)} s more`,
+        );
+      }
       // A slow status request must neither move the deadline nor pile up requests.
       of(entry).timer = setTimeout(
         () => void check(),
-        Math.min(connectCheckMs, Math.max(0, by - performance.now())),
+        Math.min(
+          connectCheckMs,
+          Math.max(0, (isLate ? latest : by) - performance.now()),
+        ),
       );
       if (isChecking) return;
       isChecking = true;

@@ -1,4 +1,5 @@
 import {
+  compare,
   assistantPromptSchema,
   type AppGoBack,
   type AppRunning,
@@ -24,6 +25,8 @@ import type { AvailableApps } from "./available.js";
 import { ActionCallError } from "./errors.js";
 import type { Gate } from "./gate.js";
 import type { AppHost } from "./host.js";
+
+const compareNames = compare("en");
 
 // The client routes to apps:
 //
@@ -150,7 +153,7 @@ export function registerAppRoutes(
   app.get("/api/apps", async (request): Promise<AppInfo[]> => {
     gate.admit(request.principal!, { tier: "read" });
     if (!host.hasInstalled()) throw new ActionCallError("unavailable");
-    return infos().sort((a, b) => a.name.localeCompare(b.name));
+    return infos().sort((a, b) => compareNames(a.name, b.name));
   });
 
   // Which apps the home could add is household information too.
@@ -160,8 +163,7 @@ export function registerAppRoutes(
   });
 
   // Adding one is the household's to choose, like its grants, on every
-  // client. Its sheet closes onto its settings, which say how its first
-  // start goes as it does.
+  // client. Return its current state so the client can show it immediately.
   app.post("/api/apps/add", async (request): Promise<AppInfo> => {
     const parsed = toAdd.safeParse(request.body);
     if (!parsed.success) throw new ActionCallError("invalid_request");

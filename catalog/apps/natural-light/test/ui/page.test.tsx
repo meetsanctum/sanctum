@@ -256,9 +256,7 @@ describe("natural light's page", () => {
       }).client,
     );
 
-    expect(text).toContain(
-      `${(Math.round(today.now.kelvin / 50) * 50).toLocaleString()} K`,
-    );
+    expect(text).toContain("4,150 K");
     expect(text).toContain("Sunrise 07:04 · Peak 12:09 · Sunset 17:13");
     // In name order; a light without colour temperature is left out.
     expect(rows()).toEqual([

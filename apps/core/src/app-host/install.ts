@@ -49,6 +49,8 @@ export function createAppInstaller(options: {
     "releaseOff" | "releaseUndeclared" | "request"
   >;
   supervisor: () => Pick<Supervisor, "ready" | "lost">;
+  // Whether the host is writing out a backlog to its disks now.
+  isWritingOut: () => boolean;
   contexts: Pick<AppContexts, "coreOf" | "timeLeft">;
   // Where the core listens for apps apart.
   appSockets?: string;
@@ -114,6 +116,8 @@ export function createAppInstaller(options: {
         coreSocketName,
       ),
       log,
+      isWritingOut: options.isWritingOut,
+      isOff: () => installed.get(appId)?.off === true,
       onReady() {
         const entry = installed.get(appId);
         if (entry) options.supervisor().ready(entry);

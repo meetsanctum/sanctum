@@ -119,6 +119,10 @@ const already = (light: LightAnswer) =>
 const offline = (light: LightAnswer) => light.result === "offline";
 const off = (light: LightAnswer) =>
   light.result === "skipped" && light.why === "off";
+// A light the room's rule keeps off when the room comes on, as its Lights
+// tile does: the household's choice, so what was asked, not one that missed.
+const keptOff = (light: LightAnswer) =>
+  light.result === "skipped" && light.why === "kept_off";
 
 // What the lights tool did, in a reply.
 function lightsReply(
@@ -138,16 +142,32 @@ function lightsReply(
     return { text: words.allOff(subject) };
   }
   const changed = lights.some(done);
-  const missed = lights.filter((light) => !done(light) && !already(light));
+  const followsRoomRules = subject.kind === "home" && lights.some(keptOff);
+  const changedText = () =>
+    followsRoomRules
+      ? words.roomRules(state, false)
+      : words.changed(subject, state);
+  // Lights left off, or kept off by their room's rule, were what was asked.
+  const missed = lights.filter(
+    (light) =>
+      !done(light) && !already(light) && !off(light) && !keptOff(light),
+  );
   if (missed.length === 0) {
-    return { text: words.changed(subject, state), confirmation: true };
-  }
-  if (!changed && missed.every(off)) {
-    return { text: words.nothingChanged };
+    if (changed) return { text: changedText(), confirmation: true };
+    // Already as asked, where their rooms' rules let them be.
+    const isAlready =
+      lights.some(already) &&
+      lights.every((light) => already(light) || keptOff(light));
+    if (!isAlready) return { text: words.nothingChanged };
+    return {
+      text: followsRoomRules
+        ? words.roomRules(state, true)
+        : words.already(subject, state),
+    };
   }
   return {
     text: words.missedLights(
-      changed ? words.changed(subject, state) : words.nothingChanged,
+      changed ? changedText() : words.nothingChanged,
       missed.map((light) => light.name),
       missed.every(offline),
     ),

@@ -12,23 +12,31 @@ sidebar:
 2. The sheet shows what the app adds to your home, how much memory it can
    use and the permissions it needs or asks to start with, together with
    the reason for each.
-3. Choose **Add** followed by the app's name, such as **Add Weather**. Its
-   settings open so you can see whether it's running.
+3. Choose **Add** followed by the app's name, such as **Add Weather**. The
+   app opens, as it does from **Apps**: its own page, where it gets going,
+   or for an app without one, such as a driver, a page that says what it
+   does. Its settings stay in **Settings → Apps**.
 
 **Add Apps** doesn't show when your home already has every app.
 
 ### When an app can't be added
 
-The sheet says why, and what would help:
+The sheet's title says what's wrong, and its button, in place of **Add**,
+takes you to where you can fix it:
 
-- **It needs a newer Sanctum.** Update Sanctum in Settings → System, then
-  add the app.
-- **Its pages were made for an older Sanctum.** Update Sanctum to get a
-  newer version of the app.
-- **There isn't room for it.** The app needs more memory than is available.
-  Turning off an app you don't use can make room.
-- **There isn't space for it.** The app's data won't fit on the disk.
-  Settings → System shows what is using the space.
+- **Not enough storage**, as in "Not enough storage for Weather". The sheet
+  says how much to free up. That can be more than the app needs, because
+  Sanctum keeps some storage free for updates and for the data your other
+  apps may still add. **Free up space** opens **Settings → System** at its
+  **Storage** card, which shows what takes the storage and can remove old
+  versions.
+- **Not enough memory.** Turn off an app you don't use to make room.
+  **Show apps** opens **Settings → Apps**, where each app's settings end
+  with **Turn off**.
+- **The app needs a newer Sanctum**, or **the app is out of date**, when a
+  newer version of it comes with an update of Sanctum. **Update Sanctum**
+  opens **Settings → System** at its **Updates** card. Once Sanctum is
+  updated, add the app.
 
 ### Zigbee and ESPHome
 

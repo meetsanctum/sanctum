@@ -1,6 +1,7 @@
-// Every language Sanctum knows, one entry each: what it's called, and the
-// speech recognition model and Piper voice that hear and speak it. A
-// language with both can be spoken.
+// Every language Sanctum knows, one entry each: what it's called, the
+// locale its numbers, dates and lists are written in, and the speech
+// recognition model and Piper voice that hear and speak it. A language with
+// both can be spoken.
 
 /** What Sanctum knows about one language. */
 export type LanguageEntry = {
@@ -8,6 +9,8 @@ export type LanguageEntry = {
   readonly name: string;
   /** Its name in English, as AI agents read it: "German". */
   readonly englishName: string;
+  /** The locale its numbers, dates and lists are written in (words.ts). */
+  readonly locale: string;
   /**
    * The speech recognition model that hears it, by Speech-to-Phrase's
    * backend and model name as its image picks them for the language, or
@@ -28,12 +31,14 @@ export const languages = {
   en: {
     name: "English",
     englishName: "English",
+    locale: "en-GB",
     recognition: { backend: "nemo", model: "stt_en_parakeet_tdt_ctc_110m" },
     voice: "en_US-norman-medium",
   },
   de: {
     name: "Deutsch",
     englishName: "German",
+    locale: "de-DE",
     recognition: { backend: "nemo", model: "stt_de_citrinet_1024" },
     voice: "de_DE-thorsten-medium",
   },

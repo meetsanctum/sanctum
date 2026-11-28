@@ -15,6 +15,7 @@ import {
 import { cn } from "cn";
 import { Check, Sun, Volume2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import {
   capitalize,
@@ -29,6 +30,8 @@ import {
   weekendsOnly,
   type FieldSchema,
 } from "./words";
+
+const compareNames = compare("en");
 
 // The control for one field of a piece's config, chosen by the marker its
 // JSON Schema carries: it opens from the field's token in a sentence, and
@@ -572,8 +575,8 @@ export function FieldControl(props: {
             options={[...devices]
               .sort(
                 (a, b) =>
-                  roomName(a.roomId).localeCompare(roomName(b.roomId)) ||
-                  a.name.localeCompare(b.name),
+                  compareNames(roomName(a.roomId), roomName(b.roomId)) ||
+                  compareNames(a.name, b.name),
               )
               .map((device) => ({
                 value: device.id,
@@ -645,7 +648,7 @@ export function FieldControl(props: {
           options={home.entities
             .filter((entity) => entity.type === kind.type)
             .map((entity) => ({ value: entity.key, label: entity.name }))
-            .sort((a, b) => a.label.localeCompare(b.label))}
+            .sort((a, b) => compareNames(a.label, b.label))}
           selected={props.value as string | undefined}
           onSelect={props.onChange}
         />

@@ -21,6 +21,7 @@ import {
   type Tile,
   type TileSection,
 } from "@meetsanctum/ui-sdk";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import { contactText } from "./contact";
 import {
@@ -100,10 +101,18 @@ export const isSwitchable = (
 ): capability is Switchable =>
   capability.kind === "light" || capability.kind === "switch";
 
-type LightTile = Tile & { supportsBrightness?: boolean };
+type LightTile = Tile & {
+  supportsBrightness?: boolean;
+  supportsColour?: boolean;
+  supportsWhite?: boolean;
+};
 
 export const supportsBrightness = (tile: LightTile) =>
   tile.supportsBrightness ?? tile.dims;
+
+export const supportsColour = (tile: LightTile) => tile.supportsColour === true;
+
+export const supportsWhite = (tile: LightTile) => tile.supportsWhite === true;
 
 function tileOf(
   device: DeviceInfo,
@@ -124,6 +133,12 @@ function tileOf(
     dims: false,
     ...(capability.kind === "light" && capability.features.brightness
       ? { supportsBrightness: true }
+      : {}),
+    ...(capability.kind === "light" && capability.features.color
+      ? { supportsColour: true }
+      : {}),
+    ...(capability.kind === "light" && capability.features.colorTemperature
+      ? { supportsWhite: true }
       : {}),
     disabled: false,
   };
@@ -544,7 +559,8 @@ export function tilesOf(
   });
 }
 
-const byName = (a: Tile, b: Tile) => a.name.localeCompare(b.name);
+const compareNames = compare("en");
+const byName = (a: Tile, b: Tile) => compareNames(a.name, b.name);
 
 /** Tiles in a section for each room, in the order of the home's rooms; those without a room come last. */
 /** The id of the section of tiles in no room, among rooms' sections. */

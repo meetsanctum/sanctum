@@ -7,6 +7,7 @@ import {
 } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { useEffect, useState } from "react";
+import { list } from "@meetsanctum/app-sdk/words";
 
 import { coreJson } from "./core-fetch";
 import { knotPath } from "./knot";
@@ -70,11 +71,12 @@ function useHomeCoordinates(live: LiveFeed) {
 
 /** Up to three names, then how many more: "Kitchen, Office, Hall and 2 more". */
 export function someNames(names: string[]) {
-  if (names.length <= 1) return names.join("");
-  if (names.length <= 3) {
-    return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
-  }
-  return `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`;
+  return list(
+    "en",
+    names.length <= 3
+      ? names
+      : [...names.slice(0, 3), `${names.length - 3} more`],
+  );
 }
 
 /** Coordinates as a place is written: "46.95° N, 7.45° E". */

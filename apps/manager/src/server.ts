@@ -85,7 +85,7 @@ export type ServerOptions = {
   // What the manager did on its own, which the core copies (audit.ts).
   audit?: Audit;
   // The host's status, for Settings → System (host/status.ts).
-  status?: Pick<HostStatusReporter, "status" | "resources">;
+  status?: Pick<HostStatusReporter, "status" | "resources" | "writeout">;
   // The host's last 24 hours (host/history.ts).
   history?: Pick<HostHistory, "points">;
   // What apps look for on the home's network (discovery.ts).
@@ -248,6 +248,19 @@ export function createServer(
         : options.status.status();
     },
   );
+
+  // Whether the host is writing out a backlog of the page cache to its
+  // disks, which keeps every fsync waiting, so the core gives apps more
+  // time to answer meanwhile.
+  app.get("/api/host/writeout", async (_request, reply) => {
+    const writeout = await options.status?.writeout();
+    if (!writeout) {
+      return reply
+        .code(503)
+        .send({ error: "This manager reports no writeout" });
+    }
+    return writeout;
+  });
 
   // How busy, how warm and how full of memory the host was in each 5
   // minutes of the last 24 hours.

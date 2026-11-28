@@ -81,7 +81,12 @@ afterEach(async () => {
 const show = (isOnline = true) =>
   act(async () =>
     root.render(
-      <StickOffer live={live} isOnline={isOnline} onAdded={() => undefined} />,
+      <StickOffer
+        live={live}
+        isOnline={isOnline}
+        apps={[]}
+        onAdded={() => undefined}
+      />,
     ),
   );
 

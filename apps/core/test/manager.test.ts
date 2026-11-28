@@ -109,6 +109,38 @@ describe("what apps read of the host", () => {
 });
 
 describe("what the manager can do", () => {
+  it("preserves the amount to free when storage is below its reserve", async () => {
+    const { client, socketPath } = await setUp();
+    const mebibyte = 1024 * 1024;
+    const app = {
+      app: "sanctum.example",
+      memoryMb: 128,
+      dataMb: 256,
+      services: [],
+    };
+    const answer = {
+      [app.app]: {
+        memoryNeedsMb: 128,
+        memoryFreeMb: 1024,
+        dataNeedsMb: 256,
+        dataFreeBytes: 0,
+        dataShortBytes: (256 + 900) * mebibyte,
+      },
+    };
+    const server = createServer((request, response) => {
+      request.resume();
+      if (request.method !== "POST" || request.url !== "/api/apps/capacity") {
+        response.writeHead(404).end();
+        return;
+      }
+      response.end(JSON.stringify(answer));
+    });
+    open.push({ server });
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+
+    expect(await client.appCapacity([app])).toEqual(answer);
+  });
+
   // A manager answering one question, with whatever the test has decided.
   async function answering(socketPath: string) {
     const state = {

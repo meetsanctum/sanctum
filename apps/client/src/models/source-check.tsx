@@ -17,6 +17,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { number } from "@meetsanctum/app-sdk/words";
 
 import { useAuthAttempt } from "../auth/use-auth-attempt";
 import {
@@ -62,7 +63,7 @@ export function factsText(check: ModelCheck) {
       ? `Answered in ${(check.firstWordMs / 1000).toFixed(1)} s`
       : undefined;
   const tokens = check.tokens
-    ? `${answered ? "used" : "Used"} ${check.tokens.toLocaleString()} ${check.tokens === 1 ? "token" : "tokens"}`
+    ? `${answered ? "used" : "Used"} ${number("en", check.tokens)} ${check.tokens === 1 ? "token" : "tokens"}`
     : undefined;
   return [answered, tokens].filter(Boolean).join(" · ") || undefined;
 }

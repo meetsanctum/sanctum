@@ -6,7 +6,7 @@ import {
   type AvailableApp,
   type PermissionInfo,
 } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, type PageParams } from "@meetsanctum/ui-sdk";
 import { HardDrive, MemoryStick, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 
@@ -22,6 +22,9 @@ import {
 } from "./components/ui/dialog";
 import { CoreError, coreJson } from "./core-fetch";
 import { permissionIconOf } from "./permission-icons";
+import { useSettingsOpener } from "./settings-opener";
+import { appsSettingsPage, systemSettingsPage } from "./system-apps";
+import { formatBytes } from "./system-status";
 
 // The sheet that adds an app the home could add, before any of its code
 // runs: what it needs to work, each in Sanctum's words with the app's
@@ -29,10 +32,11 @@ import { permissionIconOf } from "./permission-icons";
 // and storage it takes, side by side above Cancel and Add, the same on every
 // sheet. Every word is Sanctum's, drawn from the manifest,
 // so no app can misstate what it asks for. What keeps it from being added
-// says so in place of the lists, with what would help, and Add can't be
-// pressed. Its other optional permissions are asked where they're first
-// used, as for every app. Add grants what's listed and starts it, and the
-// sheet closes onto its settings.
+// is its title in place of the question, with what would help in place of
+// the lists, and its button, in place of Add, closes the sheet onto the page
+// where that's done. Its other optional permissions are asked where they're
+// first used, as for every app. Add grants what's listed and starts the app.
+// Each caller decides what to open after the sheet closes.
 
 const mebibyte = 1024 * 1024;
 
@@ -114,38 +118,96 @@ function SizeBadge(props: { icon: LucideIcon; label: string; value: string }) {
   );
 }
 
-/** What keeps it from being added, and what would help, in words. */
+/** The page of Settings where what keeps it from being added is fixed. */
+export type ShortfallFix = { label: string; page: string; params?: PageParams };
+
+const updateFix: ShortfallFix = {
+  label: `Update ${productName}`,
+  page: systemSettingsPage,
+  params: { card: "updates" },
+};
+
+/**
+ * What keeps it from being added as a title, what would help, and the
+ * button to where that's done.
+ */
 export function shortfallWords(
   shortfall: AppShortfall,
   name: string,
-): { title: string; line: string } {
+  apps: readonly AppInfo[],
+): { title: string; line: string; fix?: ShortfallFix } {
   switch (shortfall.kind) {
     case "sanctum":
       return {
-        title: `It needs a newer ${productName}.`,
-        line: `Update ${productName} in Settings, then add it.`,
+        title: `${name} needs a newer ${productName}`,
+        line: `Update ${productName}, then add ${name}.`,
+        fix: updateFix,
       };
     case "pages":
       return shortfall.needs === "sanctum"
         ? {
-            title: `It needs a newer ${productName}.`,
-            line: `Update ${productName} in Settings, then add it.`,
+            title: `${name} needs a newer ${productName}`,
+            line: `Update ${productName}, then add ${name}.`,
+            fix: updateFix,
           }
         : {
-            title: `Its pages were made for an older ${productName}.`,
-            line: `A newer ${name} comes with an update of ${productName}.`,
+            title: `${name} is out of date`,
+            line: `A newer ${name} comes with an update of ${productName}. Update ${productName}, then add ${name}.`,
+            fix: updateFix,
           };
-    case "memory":
+    case "memory": {
+      // With no app that could be turned off, there's nothing to show.
+      const canTurnOff = apps.some(
+        (app) => !app.alwaysOn && app.state !== "off",
+      );
+      return canTurnOff
+        ? {
+            title: `Not enough memory for ${name}`,
+            line: `To add ${name}, turn off an app you don't use. Your other apps take the memory ${name} needs.`,
+            fix: { label: "Show apps", page: appsSettingsPage },
+          }
+        : {
+            title: `Not enough memory for ${name}`,
+            line: `${name} needs more memory than ${productName} can give it.`,
+          };
+    }
+    case "space": {
+      // What's free may not cover what's kept for updates and the other
+      // apps' data, so what to free can be more than it needs.
+      const toFree =
+        shortfall.toFree ??
+        (shortfall.free > 0 ? shortfall.needs - shortfall.free : undefined);
+      const amount =
+        toFree === undefined ? "some storage" : formatBytes(toFree, "up");
       return {
-        title: "There isn't room for it.",
-        line: `It needs ${sizeWords(shortfall.needs)} of memory, and ${sizeWords(shortfall.free)} are left beside your other apps. Turning off an app you don't use makes room.`,
+        title: `Not enough storage for ${name}`,
+        line: `To add ${name}, free up ${amount}. ${productName} keeps some storage free for updates and for your other apps.`,
+        fix: {
+          label: "Free up space",
+          page: systemSettingsPage,
+          params: { card: "storage" },
+        },
       };
-    case "space":
-      return {
-        title: "There isn't space for it.",
-        line: `Its data needs ${sizeWords(shortfall.needs)}, and ${sizeWords(shortfall.free)} are free beside what your other apps and updates need. Settings → System says what takes it.`,
-      };
+    }
   }
+}
+
+/**
+ * What the button to a shortfall's fix does: it closes the sheet,
+ * then opens the page where that's done. None where Settings can't be
+ * opened from here.
+ */
+export function useShortfallFix(
+  fix: ShortfallFix | undefined,
+  // Whether the sheet closed.
+  close: () => boolean | Promise<boolean>,
+) {
+  const open = useSettingsOpener();
+  return fix && open
+    ? async () => {
+        if (await close()) open(fix.page, fix.params);
+      }
+    : undefined;
 }
 
 /** Why adding an app did not work, from the core's answer. */
@@ -219,7 +281,9 @@ export function AddAppSheet(props: {
   /** Someone pressed Add, whose answer the sheet then shows. */
   onAdding?: () => void;
   onAdded: (app: AppInfo) => void;
+  apps: readonly AppInfo[];
   onClose: () => void | Promise<void>;
+  onCloseForFix?: () => void | Promise<void>;
   onCloseAutoFocus?: (event: Event) => void;
 }) {
   const { app } = props;
@@ -230,7 +294,8 @@ export function AddAppSheet(props: {
     app?.requests.filter((request) => !request.needed && request.startsOn) ??
     [];
   const [short] = app?.shortfalls ?? [];
-  const blocked = short && app && shortfallWords(short, app.name);
+  const blocked = short && app && shortfallWords(short, app.name, props.apps);
+  const fix = blocked?.fix;
 
   const add = async () => {
     if (!app) return;
@@ -250,18 +315,22 @@ export function AddAppSheet(props: {
     }
   };
 
-  const close = async () => {
-    if (pending) return;
+  // Whether it closed.
+  const close = async (onClose = props.onClose) => {
+    if (pending) return false;
     setPending("close");
     setProblem(undefined);
     try {
-      await props.onClose();
+      await onClose();
+      return true;
     } catch {
       setProblem("That did not work. Try again.");
+      return false;
     } finally {
       setPending(undefined);
     }
   };
+  const toFix = useShortfallFix(fix, () => close(props.onCloseForFix));
 
   return (
     <Dialog
@@ -279,6 +348,7 @@ export function AddAppSheet(props: {
         >
           <DialogHeader className="gap-3">
             <AppIcon
+              appId={app.id}
               icon={app.icon ?? plainIcon}
               className="size-12 [&_svg]:size-7"
             />
@@ -287,10 +357,11 @@ export function AddAppSheet(props: {
                 {props.lead}
               </p>
             )}
-            <DialogTitle>Add {app.name}?</DialogTitle>
+            <DialogTitle>
+              {blocked ? blocked.title : `Add ${app.name}?`}
+            </DialogTitle>
             {blocked ? (
               <DialogDescription className="rounded-md bg-muted px-3 py-2.5 text-foreground">
-                <span className="font-medium">{blocked.title}</span>{" "}
                 {blocked.line}
               </DialogDescription>
             ) : (
@@ -321,8 +392,9 @@ export function AddAppSheet(props: {
               {problem}
             </p>
           )}
-          {/* Its size, then Cancel and Add under it in the same two
-              columns, so every sheet ends alike. */}
+          {/* Its size, then Cancel and Add, or the way to what keeps it
+              from being added, under it in the same two columns, so every
+              sheet ends alike. */}
           <div className="grid grid-cols-2 gap-2">
             <AppSize app={app} />
             <Button
@@ -333,13 +405,23 @@ export function AddAppSheet(props: {
             >
               Cancel
             </Button>
-            <Button
-              className="mt-2"
-              disabled={pending !== undefined || blocked !== undefined}
-              onClick={() => void add()}
-            >
-              {pending === "add" ? "Adding…" : "Add"}
-            </Button>
+            {fix && toFix ? (
+              <Button
+                className="mt-2"
+                disabled={pending !== undefined}
+                onClick={() => void toFix()}
+              >
+                {fix.label}
+              </Button>
+            ) : (
+              <Button
+                className="mt-2"
+                disabled={pending !== undefined || blocked !== undefined}
+                onClick={() => void add()}
+              >
+                {pending === "add" ? "Adding…" : "Add"}
+              </Button>
+            )}
           </div>
         </DialogContent>
       )}

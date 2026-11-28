@@ -41,6 +41,8 @@ import { createPower } from "./host/power.js";
 import { createHostReadings } from "./host/readings.js";
 import { createSpace } from "./host/space.js";
 import { createHostStatus } from "./host/status.js";
+import { createDiskReader } from "./host/writeback-disk.js";
+import { createWriteback, createWritebackHelper } from "./host/writeback.js";
 import { createOperations } from "./operations.js";
 import { createReconciler } from "./reconcile.js";
 import { initialCoreImage } from "./release.js";
@@ -89,6 +91,7 @@ let stackBuilds: ReturnType<typeof followStackBuilds> | undefined;
 let announcer: Awaited<ReturnType<typeof startAnnouncing>> | undefined;
 let appExits: AppExits | undefined;
 let statusDocker: StatusDockerLike | undefined;
+let writeback: ReturnType<typeof createWriteback> | undefined;
 const readings = createHostReadings();
 // Counts what takes the space again once something frees some; set once the
 // status reporter exists.
@@ -98,6 +101,15 @@ let isReady = false;
 if (config.supervise) {
   const docker = createDockerClient();
   statusDocker = docker;
+  // The kernel's limits belong to the whole machine, and so to every stack
+  // on it: only a host's own manager sets them.
+  if (!stack) {
+    writeback = createWriteback({
+      apply: createWritebackHelper({ docker, log }),
+      readDisk: createDiskReader([config.dataDir, config.coreDataDir]),
+      log,
+    });
+  }
   // Before anything creates a core, whose container mounts them.
   await ensureAppFolders(config.dataDir);
   // Filled in below, once what knows of them exists.
@@ -397,7 +409,11 @@ log(
 // Finish an update a restart interrupted before the reconcile loop touches
 // the core, then keep the host converged. A resume that cannot finish leaves
 // its journal open, which keeps updates and the reconcile loop paused, and
-// the manager up to report it rather than restarting forever.
+// the manager up to report it rather than restarting forever. Before either,
+// what waits to be written is limited, since both may pull large images.
+await writeback?.start().catch((error: unknown) => {
+  log(`Could not limit what waits to be written: ${errorMessage(error)}`);
+});
 await host?.updates.resume().catch((error: unknown) => {
   log(`Could not finish the interrupted update: ${errorMessage(error)}`);
 });
@@ -439,6 +455,7 @@ const shutdown = async () => {
   reconciler?.stop();
   serviceReconciler?.stop();
   hostStatus.stop();
+  writeback?.stop();
   appExits?.stop();
   await hostHistory.save();
   discovery?.close();
