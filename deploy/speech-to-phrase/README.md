@@ -15,9 +15,9 @@ Home Assistant's add-on. That runs upstream's Wyoming server only, on port
   and `model` name the recognition model for the language, as Sanctum's
   language catalog does. The server takes only `nemo` and the model upstream
   lists for the lesson's language. A lesson that omits them gets that same
-  model. List names must be lowercase
-  identifiers in Unicode NFC form, such as `room`. Set `SANCTUM_TRAIN_TOKEN`
-  in the container and send its value as `token`. With the variable unset,
+  model. List names must be lowercase identifiers in Unicode NFC form, such
+  as `room`. Set `SANCTUM_TRAIN_TOKEN` in the container and send its value
+  as `token`. With the variable unset,
   training is disabled. Use a private network or a secure transport when
   sending the token, since Wyoming over TCP sends it in clear text.
   The server answers `trained` with a digest once the new grammar is loaded
