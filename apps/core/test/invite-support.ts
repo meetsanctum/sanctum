@@ -106,6 +106,9 @@ export async function checkInvite(
   options: {
     sees?: HostView;
     remoteAddress?: string;
+    // The key stretching the code was registered with, when it wasn't this
+    // helper's fast one: a code the host made uses the real profile.
+    stretching?: typeof keyStretching.profile;
   } = {},
 ) {
   const call = { remoteAddress: options.remoteAddress };
@@ -125,7 +128,7 @@ export async function checkInvite(
     loginResponse,
     keyStretching: version,
   } = start.json<RedeemStarted>();
-  const profile = inviteProfiles[version];
+  const profile = options.stretching ?? inviteProfiles[version];
   if (!profile) {
     throw new Error(`unsupported invite key-stretching version: ${version}`);
   }

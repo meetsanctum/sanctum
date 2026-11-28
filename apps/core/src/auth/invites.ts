@@ -6,6 +6,7 @@ import {
   inviteTries,
   isUsername,
   keyStretching,
+  newInviteSecret,
   normaliseUsername,
   pairingCodeAlphabet,
   pairingLookupLength,
@@ -26,6 +27,7 @@ import {
   type RedeemStart,
   type RedeemStarted,
 } from "@meetsanctum/auth-protocol";
+import * as opaque from "@serenity-kit/opaque";
 import { and, eq, ne } from "drizzle-orm";
 import { randomInt, randomUUID } from "node:crypto";
 
@@ -84,6 +86,10 @@ type Choosing = {
 };
 
 type Invite = typeof authInvites.$inferSelect;
+
+// A code made on the host itself, for someone with no other way back in,
+// works for an hour.
+export const hostCodeMs = 60 * 60_000;
 
 // A recovery code has no end of its own: it lasts until it's used or
 // replaced. Its row still has a date, far enough away never to arrive.
@@ -216,6 +222,23 @@ export function createInvites(
     return current;
   }
 
+  // A lookup no invite holds, ended ones included, since those keep theirs
+  // to tell a late code it ended.
+  function freeLookup() {
+    const held = new Set(
+      db
+        .select({ lookup: authInvites.lookup })
+        .from(authInvites)
+        .all()
+        .map(({ lookup }) => lookup),
+    );
+    const free = codeLookups.filter((lookup) => !held.has(lookup));
+    if (free.length === 0) {
+      throw new AuthError("busy");
+    }
+    return free[randomInt(free.length)]!;
+  }
+
   function username(value: string) {
     const normalised = normaliseUsername(value);
     if (!isUsername(normalised)) {
@@ -272,6 +295,86 @@ export function createInvites(
         .map(info);
     },
 
+    // Who signs in, by name and username, for the command on the host.
+    signIns() {
+      return db
+        .select()
+        .from(authLogins)
+        .all()
+        .flatMap((login) => {
+          const person = people.get(login.personId);
+          return person
+            ? [{ name: person.name, username: login.username }]
+            : [];
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+    },
+
+    // A code for a new password, made on the host itself for someone with
+    // no other way back in: by a command run there, which only someone who
+    // can run commands on the host can do. Unlike every other code, the host
+    // draws its secret, and so sees it; it never sees a password. It is a
+    // reset that works once, for an hour, and replaces the person's invite or
+    // reset; their recovery code stays.
+    async makeOnHost(name: string) {
+      await opaque.ready;
+      const holder = usernameHolder(username(name));
+      const person = holder && people.get(holder.personId);
+      if (!holder || !person) {
+        throw new AuthError("not_found");
+      }
+      const inviteId = randomUUID();
+      const secret = newInviteSecret();
+      const { clientRegistrationState, registrationRequest } =
+        opaque.client.startRegistration({ password: secret });
+      const { registrationRecord } = opaque.client.finishRegistration({
+        clientRegistrationState,
+        registrationResponse: server.registrationResponse(
+          inviteIdentifier(inviteId),
+          registrationRequest,
+        ),
+        password: secret,
+        keyStretching: keyStretching.profile,
+      });
+      let replaced: string | undefined;
+      const made = db.transaction(() => {
+        const lookup = freeLookup();
+        const at = now();
+        replaced = inviteOf(person.id)?.id;
+        if (replaced) {
+          db.delete(authInvites).where(eq(authInvites.id, replaced)).run();
+        }
+        const invite = db
+          .insert(authInvites)
+          .values({
+            id: inviteId,
+            personId: person.id,
+            kind: "reset",
+            lookup,
+            registrationRecord,
+            keyStretching: keyStretching.version,
+            createdAt: at,
+            expiresAt: new Date(at.getTime() + hostCodeMs),
+          })
+          .returning()
+          .get();
+        record({
+          action: "invite.create",
+          outcome: "ok",
+          reason: "reset",
+          actor: "sanctum",
+          subjectId: person.id,
+        });
+        return invite;
+      });
+      choosing.drop((choice) => choice.inviteId === replaced);
+      return {
+        code: `${made.lookup}${secret}`,
+        name: person.name,
+        endsAt: made.expiresAt.toISOString(),
+      };
+    },
+
     // Restoring a backup must not bring back previously issued codes.
     dropAll() {
       db.delete(authInvites).run();
@@ -289,20 +392,7 @@ export function createInvites(
     ): InviteStarted {
       checkMake(principal, input.personId, input.kind, input.replacesInviteId);
       const inviteId = randomUUID();
-      // A lookup no invite holds, ended ones included, since those keep
-      // theirs to tell a late code it ended.
-      const held = new Set(
-        db
-          .select({ lookup: authInvites.lookup })
-          .from(authInvites)
-          .all()
-          .map(({ lookup }) => lookup),
-      );
-      const free = codeLookups.filter((lookup) => !held.has(lookup));
-      if (free.length === 0) {
-        throw new AuthError("busy");
-      }
-      const lookup = free[randomInt(free.length)]!;
+      const lookup = freeLookup();
       const registrationResponse = server.registrationResponse(
         inviteIdentifier(inviteId),
         input.registrationRequest,

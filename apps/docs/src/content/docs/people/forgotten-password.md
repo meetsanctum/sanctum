@@ -46,3 +46,31 @@ for a new password. They open your page in **Settings → People** and choose
 Then, in the Mac app, choose your home, **Just me**, then **Forgot your
 password?**, and enter the code. See
 [Reset a password](/people/#reset-a-password).
+
+## On Sanctum itself
+
+If no device is signed in as you, you have no recovery code and no one else
+at home signs in, make a code on the machine Sanctum runs on. You need to
+run commands there, as you did to install it.
+
+1. On a computer on your home's network, open a terminal and connect to the
+   machine:
+
+   ```bash
+   ssh you@sanctum.local
+   ```
+
+2. Make the code. Sanctum lists who signs in and asks which:
+
+   ```bash
+   sudo docker exec -it sanctum-core node dist/cli.js recovery-code
+   ```
+
+   To skip the question, add the username at the end, as in
+   `recovery-code alex`.
+
+3. On your Mac, open Sanctum and choose your home, then **Just me** and
+   **Forgot your password?**, and enter the code. Choose a new password.
+
+The code works once, for an hour, and Activity shows that Sanctum made it.
+Your password is still chosen on your Mac: the machine never sees it.

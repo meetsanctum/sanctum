@@ -11,6 +11,7 @@ import {
   InputOTPSeparator,
   InputOTPSlot,
 } from "@meetsanctum/ui-sdk";
+import { ArrowUpRight } from "lucide-react";
 import { useId, useRef, useState, type FormEvent } from "react";
 
 import { Avatar } from "../components";
@@ -50,6 +51,10 @@ import { useAuthAttempt } from "./use-auth-attempt";
 
 const half = pairingCodeLength / 2;
 const slots = Array.from({ length: pairingCodeLength }, (_, index) => index);
+
+// How to make a code on Sanctum itself, for someone with no other way in.
+export const forgottenPasswordDocs =
+  "https://docs.meetsanctum.com/people/forgotten-password/#on-sanctum-itself";
 
 // A suggested username from a name: Maya Keller is maya.
 export function suggestedUsername(name: string) {
@@ -234,10 +239,20 @@ function EnterCode(props: {
         {working && <SheetStatus>Checking the code…</SheetStatus>}
         {problem && <SheetProblem id={problemId}>{problem}</SheetProblem>}
         {props.forgot && (
-          <p className="m-0 pt-2 text-center text-[13px] leading-[18px] text-balance text-muted-foreground">
-            No code? Someone at home can make you one on your page in Settings →
-            People.
-          </p>
+          <div className="flex flex-col items-center gap-1 pt-2 text-center">
+            <p className="m-0 text-[13px] leading-[18px] text-balance text-muted-foreground">
+              No code? Someone at home can make you one on your page in Settings
+              → People.
+            </p>
+            {/* For no one else at home: a code made on Sanctum itself. The
+                docs open in the browser. */}
+            <Button asChild variant="link" size="sm">
+              <a href={forgottenPasswordDocs} target="_blank" rel="noreferrer">
+                Get back in without a code
+                <ArrowUpRight data-icon="inline-end" aria-hidden="true" />
+              </a>
+            </Button>
+          </div>
         )}
       </form>
     </Sheet>
