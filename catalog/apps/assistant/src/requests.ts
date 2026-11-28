@@ -247,7 +247,16 @@ function lightsReply(
     state.is === "look"
       ? answered.filter((light) => !unsupported(light))
       : answered;
-  if (lights.length === 0) return { text: words.nothingChanged };
+  if (lights.length === 0) {
+    const plainWhite =
+      state.is === "look" &&
+      "white" in state.look &&
+      state.look.white === "picker" &&
+      !state.look.bright;
+    return {
+      text: plainWhite ? words.already(subject, state) : words.nothingChanged,
+    };
+  }
   if (lights.every(offline)) {
     return { text: words.notAnswering(subject) };
   }

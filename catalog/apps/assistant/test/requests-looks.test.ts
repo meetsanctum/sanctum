@@ -203,6 +203,36 @@ describe("the Assistant's whites and colours", () => {
   });
 
   it.each([
+    ["en", "make the office white", "Office lights already white."],
+    ["de", "mach das Licht weiß", "Office: Licht schon weiß."],
+  ] as const)(
+    "says fixed-white lights that are on are already white in %s",
+    async (language, request, text) => {
+      expect(
+        await replyTo(
+          request,
+          [
+            lit("Desk Lamp", "skipped", "unsupported"),
+            lit("Shelf", "skipped", "unsupported"),
+          ],
+          language,
+        ),
+      ).toEqual([{ text }]);
+    },
+  );
+
+  it.each(["warm white", "cool white", "bright white"])(
+    "says nothing changed when no light can take %s",
+    async (look) => {
+      expect(
+        await replyTo(`make the office ${look}`, [
+          lit("Desk Lamp", "skipped", "unsupported"),
+        ]),
+      ).toEqual([{ text: "Nothing changed." }]);
+    },
+  );
+
+  it.each([
     ["en", "make all the lights blue", "didn't answer.", "can't show colours."],
     [
       "de",
