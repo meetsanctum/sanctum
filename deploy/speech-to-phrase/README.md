@@ -13,17 +13,17 @@ Home Assistant's add-on. That runs upstream's Wyoming server only, on port
 - **`train`** accepts `{ token, language, backend, model, templates, lists }`,
   with sentence templates and the values for their named blanks. `backend`
   and `model` name the recognition model for the language, as Sanctum's
-  language catalog does; the server takes only `nemo` and the model upstream
-  lists for that language, and a lesson without them gets that same model. List names must be
-  lowercase identifiers in Unicode NFC form, such as `room`. Set `SANCTUM_TRAIN_TOKEN`
+  language catalog does. The server takes only English and German with `nemo`
+  and the model upstream lists for that language. A lesson that omits those
+  fields uses the same backend and model. List names must be lowercase
+  identifiers in Unicode NFC form, such as `room`. Set `SANCTUM_TRAIN_TOKEN`
   in the container and send its value as `token`. With the variable unset,
   training is disabled. Use a private network or a secure transport when
   sending the token, since Wyoming over TCP sends it in clear text.
   The server answers `trained` with a digest once the new grammar is loaded
   and saved in `/data`. The previous grammar stays active during training.
-  A repeated lesson returns the same digest immediately, and the first
-  lesson with a model downloads it. What `/data` keeps names the model, so a
-  restart loads the same one.
+  A repeated lesson returns the same digest immediately. A newly compiled
+  lesson saves the model name in `/data` so a restart loads the same one.
 - **`voice-started`** is sent once per utterance when the server detects
   speech. Its detector ends the utterance after 0.7 s of silence and sends
   the transcript.
@@ -51,7 +51,7 @@ it keeps a version of its own.
   repository's AGPL-3.0-only like the rest of `deploy/`.
 - **The models** download from the
   [rhasspy-speech dataset](https://huggingface.co/datasets/rhasspy/rhasspy-speech)
-  the first time a lesson names them, and are not in the image:
+  the first time a lesson needs them, and are not in the image:
   - English:
     [Parakeet TDT-CTC 110M](https://huggingface.co/nvidia/parakeet-tdt_ctc-110m)
     by NVIDIA, under CC BY 4.0.
