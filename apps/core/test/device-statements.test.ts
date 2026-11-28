@@ -1,4 +1,9 @@
-import type { ActivityInfo, EntityInfo } from "@meetsanctum/app-sdk";
+import {
+  turnOnSchema,
+  turnOnType,
+  type ActivityInfo,
+  type EntityInfo,
+} from "@meetsanctum/app-sdk";
 import moods from "@meetsanctum/moods";
 import { createNaturalLightApp } from "@meetsanctum/natural-light";
 import { fileURLToPath } from "node:url";
@@ -173,20 +178,30 @@ describe("a press of a room's six lights", () => {
       },
       maya,
     );
-    const targets = async () =>
+    const published = async (type: string) =>
       (
         (
           await get(core, "/api/entities?app=sanctum.natural-light", maya)
         ).json() as EntityInfo[]
-      ).filter((entity) => entity.type === "naturalLight.target");
+      ).filter((entity) => entity.type === type);
+    const targets = () => published("naturalLight.target");
     // Let the location's curve reach all six lights before measuring a
     // press. A later curve makes each light need a new look when it comes on.
+    // Natural Light publishes the room's rule for turning on after the
+    // lights' targets, and a rule from before it followed all six keeps the
+    // others off.
     await vi.waitFor(async () => {
       const current = await targets();
       expect(current).toHaveLength(6);
       for (const target of current) {
         expect(target.state).toMatchObject({ status: "following" });
       }
+      const rules = await published(turnOnType.id);
+      expect(rules).toHaveLength(1);
+      const { lights } = turnOnSchema.parse(rules[0]!.state);
+      expect(lights.map((light) => light.state.on)).toEqual(
+        Array(6).fill(true),
+      );
     }, realClock);
     core.advance(6 * 60 * 60_000);
     live.messages.length = 0;
