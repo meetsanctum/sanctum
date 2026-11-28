@@ -52,6 +52,7 @@ export function Sheet(props: {
 }) {
   const Glyph = props.glyph;
   const title = useRef<HTMLHeadingElement>(null);
+  const stepId = useId();
   const back = props.back;
   const canGoBack = back !== undefined && !back.disabled;
   const goBack = useEffectEvent(() => back?.onBack());
@@ -126,13 +127,17 @@ export function Sheet(props: {
               </span>
             )}
             {props.step && (
-              <p className="m-0 mb-0.5 text-[13px] leading-[18px] font-medium text-muted-foreground">
+              <p
+                id={stepId}
+                className="m-0 mb-0.5 text-[13px] leading-[18px] font-medium text-muted-foreground"
+              >
                 Step {props.step.at} of {props.step.of}
               </p>
             )}
             <h1
               ref={title}
               id="sheet-title"
+              aria-describedby={props.step ? stepId : undefined}
               tabIndex={-1}
               className="m-0 text-2xl leading-[30px] font-semibold tracking-[-0.01em] text-balance outline-none"
             >

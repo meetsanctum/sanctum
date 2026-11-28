@@ -232,7 +232,12 @@ describe("setting up a new home", () => {
     await act(async () => publish([unclaimed]));
     await click("New home");
     expect(title()).toBe("Set up your home");
-    expect(container.textContent).toContain("Step 1 of 2");
+    const heading = container.querySelector("h1")!;
+    expect(document.activeElement).toBe(heading);
+    const stepId = heading.getAttribute("aria-describedby");
+    expect(document.getElementById(stepId ?? "")?.textContent).toBe(
+      "Step 1 of 2",
+    );
     expect(container.querySelector('[data-slot="avatar"]')).toBeNull();
 
     await fill("Username", "taylor");
