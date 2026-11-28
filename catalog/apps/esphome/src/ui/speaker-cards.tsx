@@ -1,11 +1,11 @@
 import {
   Button,
-  type DevicePageProps,
   PageSection,
   Problem,
   Slider,
   Switch,
   useAppClient,
+  type DevicePageProps,
 } from "@meetsanctum/ui-sdk";
 import {
   useCallback,

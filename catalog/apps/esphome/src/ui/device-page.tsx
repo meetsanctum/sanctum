@@ -1,8 +1,8 @@
 import {
   Card,
-  type DevicePageProps,
   Problem,
   useAppClient,
+  type DevicePageProps,
 } from "@meetsanctum/ui-sdk";
 import { useEffect, useState } from "react";
 

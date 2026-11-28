@@ -1,12 +1,12 @@
 import {
   Button,
-  defineAppUi,
-  icons,
-  type LucideIcon,
   PageBar,
   PageSection,
   Problem,
   Switch,
+  defineAppUi,
+  icons,
+  type LucideIcon,
 } from "@meetsanctum/ui-sdk";
 import { useEffect, useId, useRef, useState } from "react";
 

@@ -1,13 +1,13 @@
 import type { ActionOutput } from "@meetsanctum/app-sdk";
 import {
   Button,
-  type DevicePageProps,
+  Problem,
   icons,
   pressGroups,
   pressLabel,
   pressTitle,
-  Problem,
   useAppClient,
+  type DevicePageProps,
 } from "@meetsanctum/ui-sdk";
 import {
   useCallback,

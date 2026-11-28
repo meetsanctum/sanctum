@@ -4,10 +4,10 @@ import {
   NativeSelect,
   NativeSelectOption,
   PageBar,
-  type PageProps,
   PageSection,
   Problem,
   tileIconOf,
+  type PageProps,
   useHomeClock,
 } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

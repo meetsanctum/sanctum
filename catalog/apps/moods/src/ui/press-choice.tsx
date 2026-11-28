@@ -1,10 +1,10 @@
 import type { DeviceInfo, Places } from "@meetsanctum/app-sdk";
 import {
   Button,
-  icons,
-  type LucideIcon,
   Problem,
+  icons,
   tileIconOf,
+  type LucideIcon,
 } from "@meetsanctum/ui-sdk";
 import type { ReactNode } from "react";
 
