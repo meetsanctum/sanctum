@@ -24,7 +24,13 @@ export function recoverySheet(input: {
   code: string;
   madeAt: string;
 }) {
-  const made = input.clock.dayText(new Date(input.madeAt));
+  // With its year: the page is kept for years, beside newer ones.
+  const made = new Date(input.madeAt).toLocaleDateString("en-GB", {
+    timeZone: input.clock.timeZone,
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
   const rows = [
     ["Person", input.person],
     ["Username", input.username],

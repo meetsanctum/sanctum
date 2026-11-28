@@ -238,6 +238,7 @@ describe("the printed page", () => {
     expect(sheet).toContain("Alex &lt;Keller&gt;");
     const page = new DOMParser().parseFromString(sheet, "text/html");
     expect(page.querySelector(".code")?.textContent).toBe(formattedCode);
+    expect(sheet).toContain("27 November 2026");
     expect(sheet).toContain("Choose Just me, then Forgot your password?");
     expect(sheet).toContain(
       "Anyone with it can choose a new password for you.",
