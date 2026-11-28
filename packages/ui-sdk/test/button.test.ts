@@ -60,7 +60,10 @@ describe("Button", () => {
       "tile",
       "option",
       "glass",
+      "placeholder",
       "row",
+      "grip",
+      "destructive",
       "link",
       "choice",
     ] as const) {
