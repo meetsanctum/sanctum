@@ -288,6 +288,10 @@ describe("what the manager can do", () => {
     expect(manager.asked).toBeLessThanOrEqual(asked + 1);
   });
 
+  // The stand-in manager ends the connection with its answer: otherwise the
+  // client's kept-alive socket holds server.close() until the server's
+  // keep-alive timeout, five seconds that have nothing to do with the
+  // client and, with a slow start, run past the wait.
   it("lets the process exit when closed while a capability answer is in flight", async () => {
     const { socketPath } = await setUp();
     const child = spawn(process.execPath, [
@@ -303,6 +307,7 @@ describe("what the manager can do", () => {
        const server = createServer((request, response) => {
          request.resume();
          manager.close();
+         response.setHeader("connection", "close");
          response.end(JSON.stringify({ appContainers: true, memoryLimits: true }));
          server.close(() => console.log("closed"));
        });
