@@ -50,11 +50,11 @@ _LOGGER = logging.getLogger("sanctum")
 
 # The core names a lesson's model from its language catalog (app-sdk's
 # languages.ts): Parakeet for English and Citrinet for German, the models
-# that heard every command right on a Pi 4. Only these languages can fetch
-# models, and each takes the model upstream lists for this backend.
+# that heard every command right on a Pi 4. It takes only a model upstream
+# lists for the lesson's language on this backend, the one it has, so a
+# lesson can't fetch anything else. A lesson without one, from an older
+# core, gets that same model.
 BACKEND = "nemo"
-# The models used by Speech-to-Phrase 2.2.0, whose saved lessons omit the name.
-LEGACY_MODELS = {"en": "stt_en_parakeet_tdt_ctc_110m", "de": "stt_de_citrinet_1024"}
 _OMITTED_MODEL = object()
 
 # What one lesson may hold, far above a home's sentences and names.
@@ -75,7 +75,6 @@ class Taught:
         self.state_path = data / "sanctum.json"
         self.language: Optional[str] = None
         self.digest: Optional[str] = None
-        self.uses_legacy_digest = False
         self.holder: Optional[wyoming_server.GrammarHolder] = None
         self.info = wyoming_server.build_info(
             "en", "none", requires_external_vad=False
@@ -86,17 +85,12 @@ class Taught:
     def grammar(self, language: str, digest: str) -> Path:
         return self.data / language / "grammars" / digest / "grammar.fst"
 
-    def matching_digest(self, lesson: Dict[str, Any], digest: str) -> Optional[str]:
-        language = lesson["language"]
-        if self.language != language:
-            return None
-        if self.uses_legacy_digest and lesson["model"] == LEGACY_MODELS[language]:
-            digest = _digest(
-                {key: value for key, value in lesson.items() if key != "model"}
-            )
-        if self.digest == digest and self.grammar(language, digest).is_file():
-            return digest
-        return None
+    def has_lesson(self, language: str, digest: str) -> bool:
+        return (
+            self.digest == digest
+            and self.language == language
+            and self.grammar(language, digest).is_file()
+        )
 
     def read_state(self) -> Dict[str, Any]:
         try:
@@ -106,9 +100,10 @@ class Taught:
         return state if isinstance(state, dict) else {}
 
     def write_state(self, language: str, model: str, digest: str) -> None:
+        # Version 1 with the model beside it: an older image reads the rest
+        # and ignores the model, so going back to it keeps the grammar.
         state = {
-            # The older image can still load a grammar built for its model.
-            "version": 1 if model == LEGACY_MODELS.get(language) else 2,
+            "version": 1,
             "language": language,
             "model": model,
             "digest": digest,
@@ -124,16 +119,14 @@ class Taught:
         version = state.get("version")
         if (
             type(version) is not int
-            or version not in (1, 2)
+            or version != 1
             or not isinstance(language, str)
             or not isinstance(digest, str)
             or not re.fullmatch(r"[0-9a-f]{64}", digest)
         ):
             return
-        legacy_digest = version == 1 and "model" not in state
-        name = _model_for(
-            language, LEGACY_MODELS.get(language) if legacy_digest else state.get("model")
-        )
+        # An older image saved no model: it was the one for its language.
+        name = _model_for(language, state.get("model", _OMITTED_MODEL))
         if name is None:
             return
         grammar = self.grammar(language, digest)
@@ -147,21 +140,15 @@ class Taught:
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Couldn't load the saved %s grammar", language)
             return
-        self.activate(holder, info, digest, uses_legacy_digest=legacy_digest)
+        self.activate(holder, info, digest)
 
     def activate(
-        self,
-        holder: wyoming_server.GrammarHolder,
-        info: Info,
-        digest: str,
-        *,
-        uses_legacy_digest: bool = False,
+        self, holder: wyoming_server.GrammarHolder, info: Info, digest: str
     ) -> None:
         self.info = info
         self.holder = holder
         self.language = holder.language
         self.digest = digest
-        self.uses_legacy_digest = uses_legacy_digest
 
 
 async def _load_grammar(
@@ -188,9 +175,11 @@ async def _load_grammar(
 
 def _model_for(language: Any, model: Any) -> Optional[str]:
     """The model for a language, as named or upstream's, if upstream lists it."""
-    if not isinstance(language, str) or language not in LEGACY_MODELS:
+    if not isinstance(language, str):
         return None
     listed = models.model_name_for(language, BACKEND)
+    if listed is None:
+        return None
     return listed if model is _OMITTED_MODEL or model == listed else None
 
 
@@ -268,14 +257,12 @@ async def _train(taught: Taught, data: Any) -> Event:
     except ValueError as error:
         return Error(text=str(error), code="invalid-lesson").event()
     language = lesson["language"]
-    matched = taught.matching_digest(lesson, digest)
-    if matched is not None:
-        return Event("trained", {"digest": matched, "changed": False})
+    if taught.has_lesson(language, digest):
+        return Event("trained", {"digest": digest, "changed": False})
     async with taught.lock:
         # Another request may have taught this lesson while we waited.
-        matched = taught.matching_digest(lesson, digest)
-        if matched is not None:
-            return Event("trained", {"digest": matched, "changed": False})
+        if taught.has_lesson(language, digest):
+            return Event("trained", {"digest": digest, "changed": False})
         grammar = taught.grammar(language, digest)
         previous = (
             taught.grammar(taught.language, taught.digest)

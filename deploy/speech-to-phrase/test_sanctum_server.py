@@ -111,22 +111,6 @@ class TrainingTests(unittest.IsolatedAsyncioTestCase):
             server._digest(lesson), server._digest({**lesson, "model": "another-model"})
         )
 
-    async def test_unsupported_languages_are_rejected_before_model_lookup(self):
-        with patch.object(server.models, "model_name_for") as model_for:
-            reply = await server._train(self.taught, {**LESSON, "language": "es"})
-            self.assertEqual(reply.data["code"], "invalid-lesson")
-            digest = "0" * 64
-            grammar = self.taught.grammar("es", digest)
-            grammar.parent.mkdir(parents=True)
-            grammar.touch()
-            self.taught.state_path.write_text(
-                server.json.dumps({"version": 1, "language": "es", "digest": digest})
-            )
-            await self.taught.restore()
-            self.assertIsNone(self.taught.digest)
-            model_for.assert_not_called()
-        self.ensure.assert_not_called()
-
     async def test_trains_with_the_lesson_model_and_keeps_it(self):
         german = server.models.model_name_for("de", server.BACKEND)
         lesson = {
@@ -155,26 +139,18 @@ class TrainingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(restored.digest, reply.data["digest"])
         self.assertEqual(restored.language, "de")
 
-    async def test_reuses_the_saved_grammar_from_an_older_image(self):
-        lesson = {"language": "en", "templates": LESSON["templates"], "lists": {}}
-        digest = server._digest(lesson)
-        grammar = self.taught.grammar("en", digest)
-        self.compile(None, None, None, lesson["templates"], lesson["lists"], grammar)
+    async def test_restores_an_older_image_state_with_its_language_model(self):
+        reply = await server._train(self.taught, LESSON)
+        digest = reply.data["digest"]
+        english = server.models.model_name_for("en", server.BACKEND)
         self.taught.state_path.write_text(
             server.json.dumps({"version": 1, "language": "en", "digest": digest})
         )
-        restored = server.Taught(self.data, train_token=TOKEN)
+        restored = server.Taught(self.data)
+        self.ensure.reset_mock()
         await restored.restore()
-        self.loader.assert_called_once()
-        repeated = await server._train(
-            restored,
-            {**LESSON, "backend": "nemo", "model": "stt_en_parakeet_tdt_ctc_110m"},
-        )
-        self.assertEqual(
-            repeated, Event("trained", {"digest": digest, "changed": False})
-        )
-        self.compiler.assert_not_called()
-        self.loader.assert_called_once()
+        self.ensure.assert_called_once_with(english, self.data / "models")
+        self.assertEqual(restored.digest, digest)
 
     async def test_restore_refuses_a_model_for_another_language(self):
         reply = await server._train(self.taught, LESSON)
@@ -182,7 +158,7 @@ class TrainingTests(unittest.IsolatedAsyncioTestCase):
         self.taught.state_path.write_text(
             server.json.dumps(
                 {
-                    "version": 2,
+                    "version": 1,
                     "language": "en",
                     "model": server.models.model_name_for("de", server.BACKEND),
                     "digest": digest,
