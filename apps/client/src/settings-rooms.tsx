@@ -531,11 +531,13 @@ function EditRoom(props: {
                   autoFocus
                 />
               )}
+          {problem && <Problem title={problem.title}>{problem.reason}</Problem>}
+          {/* Asks again what goes with it, apart from Remove. */}
           {editing?.action === "remove" && problem?.retry && (
             <Button
               type="button"
               variant="outline"
-              className="self-start"
+              className="-mt-2 self-start"
               onClick={() => {
                 if (current.current === editing) check(editing);
               }}
@@ -543,7 +545,6 @@ function EditRoom(props: {
               Try again
             </Button>
           )}
-          {problem && <Problem title={problem.title}>{problem.reason}</Problem>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={props.onClose}>
               Cancel
@@ -558,7 +559,9 @@ function EditRoom(props: {
                   : name.trim().length === 0)
               }
               onClick={(event) => {
-                // The preview can move the dialog between clicks.
+                // A double click's second click never removes: once Try
+                // again is answered the dialog shrinks, and Remove can move
+                // under the pointer.
                 if (editing?.action === "remove" && event.detail > 1)
                   event.preventDefault();
               }}
