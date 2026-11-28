@@ -41,6 +41,7 @@ const watchEvery = 1_500;
 const watchTimeoutMs = 10_000;
 const setupMinutes = agentSetupMs / 60_000;
 const canUseListLabel = "What AI agents can use";
+type SetupProblem = { title: string; reason: string };
 
 type Step =
   | { kind: "name" }
@@ -97,7 +98,7 @@ export function AddAgent(props: {
   const [step, setStep] = useState<Step>({ kind: "name" });
   const [name, setName] = useState("");
   const [working, setWorking] = useState(false);
-  const [problem, setProblem] = useState<string>();
+  const [problem, setProblem] = useState<SetupProblem>();
   const setupAttempt = useAuthAttempt();
   // The latest, so watching doesn't start again each time the list renders.
   const onConnected = useRef(props.onConnected);
@@ -131,7 +132,14 @@ export function AddAgent(props: {
         byHand: false,
       });
     } catch (error) {
-      if (!signal.aborted) setProblem(startProblem(error));
+      if (!signal.aborted)
+        setProblem({
+          title:
+            step.kind === "ended"
+              ? "Couldn't make a new prompt"
+              : `Couldn't add ${agentName}`,
+          reason: startProblem(error),
+        });
     } finally {
       if (!signal.aborted) setWorking(false);
     }
@@ -216,7 +224,6 @@ export function AddAgent(props: {
             hasPermissionsFailed={props.hasPermissionsFailed}
             working={working}
             problem={problem}
-            failed={`Couldn't add ${name.trim()}`}
             onCancel={close}
             onContinue={() => void start(name.trim())}
           />
@@ -259,7 +266,7 @@ export function AddAgent(props: {
               </DialogDescription>
             </DialogHeader>
             {problem && (
-              <Problem title="Couldn't make a new prompt">{problem}</Problem>
+              <Problem title={problem.title}>{problem.reason}</Problem>
             )}
             <DialogFooter>
               <Button variant="outline" onClick={close}>
@@ -288,9 +295,7 @@ function NameStep(props: {
   canUse: AiCanUse | undefined;
   hasPermissionsFailed: boolean;
   working: boolean;
-  problem?: string;
-  // What didn't happen, over the problem.
-  failed: string;
+  problem?: SetupProblem;
   onCancel: () => void;
   onContinue: () => void;
 }) {
@@ -336,7 +341,9 @@ function NameStep(props: {
           Loading what AI agents can use…
         </p>
       )}
-      {props.problem && <Problem title={props.failed}>{props.problem}</Problem>}
+      {props.problem && (
+        <Problem title={props.problem.title}>{props.problem.reason}</Problem>
+      )}
       <DialogFooter>
         <Button type="button" variant="outline" onClick={props.onCancel}>
           Cancel
