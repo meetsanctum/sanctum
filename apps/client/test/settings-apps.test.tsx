@@ -368,9 +368,13 @@ describe("Settings → Apps → the app", () => {
     await act(async () => leave(field("Days")));
 
     expect(field("Days").value).toBe("7");
-    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      "Days can’t be that. Check it and try again.",
-    );
+    // A field's own line, under it, saying what to use instead.
+    const line =
+      field("Days").parentElement!.parentElement!.querySelector(
+        '[role="alert"]',
+      );
+    expect(line?.textContent).toBe("Use a number from 1 to 14.");
+    expect(line?.querySelector("[data-slot=alert-title]")).toBeNull();
   });
 
   it("follows a change made on another client", async () => {

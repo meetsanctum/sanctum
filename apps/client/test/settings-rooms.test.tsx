@@ -15,6 +15,7 @@ import { CoreError, coreJson } from "../src/core-fetch";
 import { SettingsPage } from "../src/settings";
 import { counted, removalWarning, roomDetail } from "../src/settings-rooms";
 import { unknownHome } from "./home-fixtures";
+import { problemLines } from "./problem-lines";
 
 vi.mock("../src/core-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/core-fetch")>()),
@@ -453,13 +454,41 @@ describe("Settings → Rooms", () => {
     await show(admin);
     await choose("Office: more", "Remove");
 
-    expect(dialog()!.textContent).toContain(
-      "Sanctum could not say what goes with it.",
-    );
-    expect(dialog()!.querySelector("[role=alert]")!.textContent).toBe(
-      "That room is not there any more.",
-    );
+    expect(problemLines(dialog()!.querySelector("[role=alert]"))).toEqual([
+      "Couldn't check what goes with Office",
+      "It isn't there any more.",
+    ]);
     expect(button("Remove").disabled).toBe(true);
+  });
+
+  it("checks again what goes with the room with Try again", async () => {
+    const original = vi.mocked(coreJson).getMockImplementation()!;
+    let unanswered = true;
+    vi.mocked(coreJson).mockImplementation(async (path, init) => {
+      if (path.startsWith("/api/places/rooms/removal?") && unanswered) {
+        throw new Error("Connection lost");
+      }
+      return original(path, init);
+    });
+    await show(admin);
+    await choose("Office: more", "Remove");
+
+    expect(problemLines(dialog()!.querySelector("[role=alert]"))).toEqual([
+      "Couldn't check what goes with Office",
+      "Sanctum didn't answer. Check that it's on, then try again.",
+    ]);
+    unanswered = false;
+    await act(async () => button("Try again").click());
+
+    expect(dialog()!.querySelector("[role=alert]")).toBeNull();
+    expect(button("Remove").disabled).toBe(false);
+    expect(requests).toContainEqual({
+      path: "/api/places/rooms/removal?id=office",
+      json: undefined,
+    });
+    expect(requests.map((request) => request.path)).not.toContain(
+      "/api/places/rooms/remove",
+    );
   });
 
   it("leaves a later dialog open when an earlier answer comes late", async () => {

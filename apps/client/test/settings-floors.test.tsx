@@ -14,6 +14,7 @@ import {
   inOrder,
 } from "../src/settings-floors";
 import { unknownHome } from "./home-fixtures";
+import { problemLines } from "./problem-lines";
 
 // Settings → Rooms' floors: their lines and order, the sheet that adds and
 // edits one with the rooms on it, a room's Floor menu, and what removing
@@ -362,9 +363,10 @@ describe("Settings → Rooms' floors", () => {
     await check("office");
     await act(async () => button("Add").click());
 
-    expect(dialog()!.querySelector("[role=alert]")?.textContent).toContain(
-      "Try again.",
-    );
+    expect(problemLines(dialog()!.querySelector("[role=alert]"))).toEqual([
+      "The rooms on Outside weren't saved",
+      "Sanctum didn't answer. Check that it's on, then try again.",
+    ]);
     await type(dialog()!.querySelector("input")!, "Garden");
     await check("hall");
     await act(async () => button("Add").click());

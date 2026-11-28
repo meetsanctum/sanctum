@@ -18,6 +18,7 @@ import type { StoredHost } from "../src/shell";
 import type { SystemStatus } from "../src/system-status";
 import type { UpdateInfo } from "../src/system-update";
 import { piStatus } from "./system-status-fixtures";
+import { problemLines } from "./problem-lines";
 
 // Settings → System's Updates and the connection veil: someone updates the
 // host from the UI, the screen rides out the core's restart, and a shared
@@ -494,6 +495,27 @@ describe("Settings → System", () => {
     },
   );
 
+  it("says in its card when an update didn't start", async () => {
+    const original = vi.mocked(coreJson).getMockImplementation()!;
+    vi.mocked(coreJson).mockImplementation(async (path, init) => {
+      if (path === "/api/system/update/start") throw new CoreError(409, "busy");
+      return original(path, init);
+    });
+    await render();
+    await openSystem();
+    await act(async () => button("Update to dev-3", system())!.click());
+    await act(async () => {
+      button("Update", document.querySelector('[role="dialog"]')!)!.click();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+
+    expect(problemLines(system().querySelector('[role="alert"]'))).toEqual([
+      "The update didn't start",
+      "Another update is already running.",
+    ]);
+    expect(button("Update to dev-3", system())?.disabled).toBe(false);
+  });
+
   it("retries a build list that failed while the manager was away", async () => {
     const original = vi.mocked(coreJson).getMockImplementation()!;
     let isAway = true;
@@ -505,7 +527,10 @@ describe("Settings → System", () => {
     });
     await render();
     await openSystem();
-    expect(system().querySelector('[role="alert"]')).not.toBeNull();
+    expect(problemLines(system().querySelector('[role="alert"]'))).toEqual([
+      "Versions didn't load",
+      "Sanctum didn't answer. It asks again every few seconds.",
+    ]);
 
     // Restart the effect under fake timers, as when the core comes back.
     await report({ state: "offline" });

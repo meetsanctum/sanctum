@@ -1,5 +1,5 @@
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
-import { Button, useHomeClock } from "@meetsanctum/ui-sdk";
+import { Button, Problem, useHomeClock } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { Check, ChevronDown, Circle, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -189,7 +189,11 @@ function Updates(props: {
   const [selected, setSelected] = useState<string>();
   const [confirming, setConfirming] = useState<string>();
   const [starting, setStarting] = useState(false);
-  const [problem, setProblem] = useState<string>();
+  // What failed: reading the versions, or starting an update.
+  const [problem, setProblem] = useState<{
+    of: "versions" | "update";
+    reason: string;
+  }>();
 
   // What the host can update to. Cleanup can remove builds from the registry.
   useEffect(() => {
@@ -209,8 +213,14 @@ function Updates(props: {
         setProblem(undefined);
       } catch (error) {
         if (!isCurrent) return;
-        setProblem(problemText(error));
-        if (isAway(error)) timer = setTimeout(load, 2_000);
+        const away = isAway(error);
+        setProblem({
+          of: "versions",
+          reason: away
+            ? `${productName} didn't answer. It asks again every few seconds.`
+            : problemText(error),
+        });
+        if (away) timer = setTimeout(load, 2_000);
       }
     };
     void load();
@@ -253,7 +263,7 @@ function Updates(props: {
       followStart(started);
       setSelected(undefined);
     } catch (error) {
-      setProblem(problemText(error));
+      setProblem({ of: "update", reason: problemText(error) });
     } finally {
       setStarting(false);
       setConfirming(undefined);
@@ -300,12 +310,15 @@ function Updates(props: {
       {!running && (
         <>
           {status.channel === "dev" ? (
-            <VersionPicker
-              versions={choices}
-              running={coreVersion}
-              selected={choice}
-              onSelect={setSelected}
-            />
+            // Until the builds are read, nothing is known about them.
+            builds && (
+              <VersionPicker
+                versions={choices}
+                running={coreVersion}
+                selected={choice}
+                onSelect={setSelected}
+              />
+            )
           ) : (
             <p className="m-0 text-sm">
               Updates to the newest {status.channel} release.
@@ -322,10 +335,16 @@ function Updates(props: {
           </Button>
         </>
       )}
-      {problem && (
-        <p role="alert" className="m-0 text-[13px] text-(--danger)">
-          {problem}
-        </p>
+      {problem && (problem.of === "update" || isDev) && (
+        <Problem
+          title={
+            problem.of === "update"
+              ? "The update didn't start"
+              : "Versions didn't load"
+          }
+        >
+          {problem.reason}
+        </Problem>
       )}
       <Dialog
         open={confirming !== undefined}

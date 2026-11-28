@@ -1,5 +1,5 @@
 import type { Floor, FloorRemoval, Places } from "@meetsanctum/app-sdk";
-import { Button, Input } from "@meetsanctum/ui-sdk";
+import { Button, Input, Problem } from "@meetsanctum/ui-sdk";
 import {
   EllipsisVertical,
   GripVertical,
@@ -18,7 +18,6 @@ import {
 } from "react";
 import { list } from "@meetsanctum/app-sdk/words";
 
-import { productName } from "./brand";
 import { Row, Section } from "./components";
 import { Checkbox } from "./components/ui/checkbox";
 import {
@@ -36,6 +35,7 @@ import {
   DropdownMenuTrigger,
 } from "./components/ui/dropdown-menu";
 import { CoreError, coreJson } from "./core-fetch";
+import { problemReason } from "./device-parts";
 
 // Settings → Rooms' floors, before its rooms: each floor in the household's
 // order, which every list of floors follows, with the rooms on it. A floor
@@ -96,14 +96,6 @@ export function inOrder(places: Places, ids: readonly string[]): Places {
     level,
   }));
   return { ...places, floors };
-}
-
-function floorProblem(error: unknown) {
-  if (error instanceof CoreError) {
-    if (error.code === "not_found") return "That floor is not there any more.";
-    return `${productName} ran into a problem. Try again.`;
-  }
-  return `Can't reach ${productName}. Try again.`;
 }
 
 export type FloorEditing =
@@ -321,13 +313,39 @@ export function EditFloor(props: {
   const [name, setName] = useState("");
   const [onIt, setOnIt] = useState<ReadonlySet<string>>(new Set());
   const [removal, setRemoval] = useState<FloorRemoval>();
-  const [problem, setProblem] = useState<string>();
+  // What failed, said in the dialog; `retry` when what goes with a floor
+  // couldn't be worked out and can be asked again, where Remove floor becomes Try again.
+  const [problem, setProblem] = useState<{
+    title: string;
+    reason: string;
+    retry?: boolean;
+  }>();
   const [working, setWorking] = useState(false);
   // Keep successful writes for this opening: retrying a partial save must
   // reuse its floor, and untouched room choices must leave live changes alone.
   const draft = useRef<{ floor?: Floor; rooms: Set<string> }>({
     rooms: new Set(),
   });
+
+  const check = (opened: Extract<FloorEditing, { floor: Floor }>) => {
+    setProblem(undefined);
+    coreJson<FloorRemoval>(
+      `/api/places/floors/removal?id=${encodeURIComponent(opened.floor.id)}`,
+    ).then(
+      (answer) => {
+        if (current.current === opened) setRemoval(answer);
+      },
+      (error: unknown) => {
+        if (current.current === opened)
+          setProblem({
+            title: `Couldn't check what goes with ${opened.floor.name}`,
+            reason: problemReason(error),
+            // Gone already: there is nothing to check again.
+            retry: !(error instanceof CoreError && error.code === "not_found"),
+          });
+      },
+    );
+  };
 
   // The places as the sheet opened with them, so a change elsewhere doesn't
   // reset what someone is choosing.
@@ -356,17 +374,8 @@ export function EditFloor(props: {
     setRemoval(undefined);
     setProblem(undefined);
     setWorking(false);
-    if (opened?.action !== "remove") return;
-    coreJson<FloorRemoval>(
-      `/api/places/floors/removal?id=${encodeURIComponent(opened.floor.id)}`,
-    ).then(
-      (answer) => {
-        if (current.current === opened) setRemoval(answer);
-      },
-      (error: unknown) => {
-        if (current.current === opened) setProblem(floorProblem(error));
-      },
-    );
+    if (opened?.action === "remove") check(opened);
+    // Only when it opens: check is new on every render.
   }, [props.editing]);
 
   const floorId = editing?.action === "add" ? null : editing?.floor.id;
@@ -386,7 +395,13 @@ export function EditFloor(props: {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!editing || working || current.current !== editing) return;
+    if (editing.action === "remove" && !removal) {
+      if (problem?.retry) check(editing);
+      return;
+    }
     const saving = draft.current;
+    // Which write failed, for what the dialog says.
+    let step: "add" | "rename" | "rooms" | "remove" = "remove";
     setWorking(true);
     setProblem(undefined);
     try {
@@ -397,6 +412,7 @@ export function EditFloor(props: {
         });
         props.onRemoved(editing.floor.id);
       } else {
+        step = "add";
         if (!saving.floor) {
           saving.floor = await coreJson<Floor>("/api/places/floors/add", {
             method: "POST",
@@ -404,12 +420,14 @@ export function EditFloor(props: {
           });
         }
         const { id } = saving.floor;
+        step = "rename";
         if (name.trim() !== saving.floor.name) {
           saving.floor = await coreJson<Floor>("/api/places/floors/update", {
             method: "POST",
             json: { id, name: name.trim() },
           });
         }
+        step = "rooms";
         for (const room of rooms) {
           const wanted = onIt.has(room.id);
           if (wanted === saving.rooms.has(room.id)) continue;
@@ -427,7 +445,18 @@ export function EditFloor(props: {
       props.onSaved();
       if (current.current !== editing) return;
       setWorking(false);
-      setProblem(floorProblem(error));
+      const floor = saving.floor?.name ?? name.trim();
+      setProblem({
+        title:
+          step === "add"
+            ? `Couldn't add ${name.trim()}`
+            : step === "rename"
+              ? `${floor} wasn't renamed`
+              : step === "rooms"
+                ? `The rooms on ${floor} weren't saved`
+                : `${floor} wasn't removed`,
+        reason: problemReason(error),
+      });
     }
   };
 
@@ -440,10 +469,8 @@ export function EditFloor(props: {
         : `Remove ${editing?.floor.name}?`;
   const description =
     editing?.action === "remove"
-      ? !removal
-        ? problem
-          ? `${productName} could not say what goes with it.`
-          : "Looking at what goes with it…"
+      ? !removal && !problem?.retry
+        ? "Looking at what goes with it…"
         : "Its rooms keep their devices."
       : "Choose its name and the rooms on it.";
 
@@ -550,29 +577,31 @@ export function EditFloor(props: {
                   </fieldset>
                 </>
               )}
-          {problem && (
-            <p role="alert" className="m-0 text-sm text-destructive">
-              {problem}
-            </p>
-          )}
+          {problem && <Problem title={problem.title}>{problem.reason}</Problem>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={props.onClose}>
               Cancel
             </Button>
             <Button
               type="submit"
-              variant={editing?.action === "remove" ? "destructive" : "default"}
+              variant={
+                editing?.action === "remove" && !problem?.retry
+                  ? "destructive"
+                  : "default"
+              }
               disabled={
                 working ||
                 (editing?.action === "remove"
-                  ? !removal
+                  ? !removal && !problem
                   : name.trim().length === 0)
               }
             >
               {editing?.action === "remove"
-                ? working
-                  ? "Removing…"
-                  : "Remove floor"
+                ? problem?.retry
+                  ? "Try again"
+                  : working
+                    ? "Removing…"
+                    : "Remove floor"
                 : editing?.action === "add"
                   ? "Add"
                   : "Save"}

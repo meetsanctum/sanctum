@@ -6,6 +6,7 @@ import type {
 } from "@meetsanctum/app-sdk";
 import {
   Input,
+  Problem,
   SegmentedControl,
   Switch,
   type LiveFeed,
@@ -13,8 +14,10 @@ import {
 import { cn } from "cn";
 import { useEffect, useId, useRef, useState } from "react";
 
+import { SheetProblem } from "./auth/sheet";
 import { Section } from "./components";
 import { CoreError, coreJson, currentCredential } from "./core-fetch";
+import { problemReason } from "./device-parts";
 
 // Settings → Apps → the app: its preferences, a form generated from its
 // settings schema. They are the household's, so everyone sees and changes
@@ -51,7 +54,14 @@ export function PreferencesSection(props: { app: AppInfo; live: LiveFeed }) {
   const sessionRef = useRef<ReturnType<typeof createSession> | undefined>(
     undefined,
   );
-  const [problem, setProblem] = useState<string>();
+  // What went wrong with a change, shown under its setting: a value the
+  // app refused, said as the field's own line, or a change that didn't
+  // reach it.
+  const [problem, setProblem] = useState<{
+    name: string;
+    refused?: string;
+    failed?: string;
+  }>();
   const properties = Object.entries(app.settings?.properties ?? {});
 
   useEffect(() => {
@@ -127,11 +137,17 @@ export function PreferencesSection(props: { app: AppInfo; live: LiveFeed }) {
           setValues(answer);
       } catch (error) {
         if (!session.isCurrent) return;
-        const title = app.settings?.properties[name]?.title ?? name;
         setProblem(
           error instanceof CoreError && error.code === "invalid_request"
-            ? `${title} can’t be that. Check it and try again.`
-            : "That did not work. Try again.",
+            ? {
+                name,
+                refused: refusedText(
+                  app.name,
+                  app.settings?.properties[name],
+                  value,
+                ),
+              }
+            : { name, failed: problemReason(error) },
         );
       } finally {
         session.revision += 1;
@@ -145,21 +161,42 @@ export function PreferencesSection(props: { app: AppInfo; live: LiveFeed }) {
     <Section id="settings-preferences" title="Preferences">
       <div className="flex flex-col gap-4">
         {properties.map(([name, setting]) => (
-          <SettingField
-            key={name}
-            setting={setting}
-            value={shown[name]}
-            onChange={(value) => void save(name, value)}
-          />
+          <div key={name} className="flex flex-col gap-2">
+            <SettingField
+              setting={setting}
+              value={shown[name]}
+              onChange={(value) => void save(name, value)}
+            />
+            {problem?.name === name && problem.refused && (
+              <SheetProblem>{problem.refused}</SheetProblem>
+            )}
+            {problem?.name === name && problem.failed && (
+              <Problem title={`${setting.title} wasn't changed`}>
+                {problem.failed}
+              </Problem>
+            )}
+          </div>
         ))}
-        {problem && (
-          <p role="alert" className="m-0 text-sm text-destructive">
-            {problem}
-          </p>
-        )}
       </div>
     </Section>
   );
+}
+
+// What to change in a value the app refused: the range where the setting
+// has one, else the value itself.
+function refusedText(
+  appName: string,
+  setting: SettingSchema | undefined,
+  value: SettingValue | null,
+) {
+  const { minimum, maximum } = setting ?? {};
+  if (minimum !== undefined && maximum !== undefined)
+    return `Use a number from ${minimum} to ${maximum}.`;
+  if (minimum !== undefined) return `Use ${minimum} or more.`;
+  if (maximum !== undefined) return `Use ${maximum} or less.`;
+  const shown =
+    value === null ? "that" : typeof value === "string" ? `“${value}”` : value;
+  return `${appName} can't use ${shown}. Try a different one.`;
 }
 
 function SettingField(props: {
