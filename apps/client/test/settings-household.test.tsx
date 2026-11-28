@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CoreError, coreJson } from "../src/core-fetch";
 import { HouseholdSection } from "../src/settings-household";
+import { problemLines } from "./problem-lines";
 
 // Settings → Household: anyone sets where the home is, with a suggestion that
 // asks the internet only when pressed. And Settings → Apps: each app's catalog
@@ -279,9 +280,10 @@ describe("Settings → Household", () => {
     await act(async () => button("Save").click());
 
     expect(saved).toEqual([]);
-    expect(container.textContent).toContain(
-      "does not know that place. Check the numbers and the time zone.",
-    );
+    expect(problemLines(container.querySelector('[role="alert"]'))).toEqual([
+      "The changes weren't saved",
+      "Sanctum doesn't know that place. Check the numbers and the time zone.",
+    ]);
   });
 
   it("saves no time zone nobody set, and asks for one with coordinates", async () => {
