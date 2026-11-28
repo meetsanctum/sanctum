@@ -260,5 +260,15 @@ CI found, when CI can't run, and before merging a change to app packaging
 that the workflow skips, such as a change to the page builder in
 `packages/ui-sdk/tools/`.
 
-Use focused `pnpm --filter <package> <task>` runs while iterating, then the
-full set before finishing.
+Several worktrees' agents usually share one computer, and each full run
+fills it: Vitest starts a worker per core in every package Turbo runs. So:
+
+- While iterating, run only what the change touches: one package's task with
+  `pnpm --filter <package> <task>`, or one test file with
+  `pnpm --filter <package> exec vitest run <file>`.
+- Run the full set once, when the change is done and before its pull request
+  is opened or updated, not after every edit. CI runs it again on the pull
+  request.
+- Before starting the full set, check that no other worktree's is running
+  (`pgrep -fl 'turbo run'`), and wait for it to finish first. One full run at
+  a time on the computer.
