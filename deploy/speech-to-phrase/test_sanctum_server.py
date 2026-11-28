@@ -25,7 +25,7 @@ class TrainingTests(unittest.IsolatedAsyncioTestCase):
         tmp = self.enterContext(tempfile.TemporaryDirectory())
         self.data = Path(tmp)
         self.taught = server.Taught(self.data, train_token=TOKEN)
-        self.enterContext(
+        self.ensure = self.enterContext(
             patch.object(server.models, "ensure_model", return_value=self.data)
         )
         self.compiler = self.enterContext(
@@ -78,6 +78,76 @@ class TrainingTests(unittest.IsolatedAsyncioTestCase):
         await restored.restore()
         self.assertEqual(restored.digest, retried.data["digest"])
         self.assertEqual(restored.holder.file.read_text(), lesson["templates"][0])
+
+    def test_a_lesson_takes_the_model_listed_for_its_language(self):
+        english = server.models.model_name_for("en", server.BACKEND)
+        german = server.models.model_name_for("de", server.BACKEND)
+        named = server._lesson({**LESSON, "backend": "nemo", "model": english})
+        self.assertEqual(named["model"], english)
+        # A lesson from a core that names none gets the same model.
+        self.assertEqual(server._lesson(LESSON)["model"], english)
+        self.assertEqual(
+            server._digest(named), server._digest(server._lesson(LESSON))
+        )
+        for lesson in (
+            {**LESSON, "model": german},
+            {**LESSON, "model": "../elsewhere"},
+            {**LESSON, "backend": "coqui", "model": english},
+            {**LESSON, "language": "xx"},
+            {**LESSON, "language": None},
+        ):
+            with self.assertRaises(ValueError):
+                server._lesson(lesson)
+
+    async def test_trains_with_the_lesson_model_and_keeps_it(self):
+        german = server.models.model_name_for("de", server.BACKEND)
+        lesson = {
+            **LESSON,
+            "language": "de",
+            "model": german,
+            "templates": ["mach das licht an"],
+        }
+        reply = await server._train(self.taught, lesson)
+        self.assertTrue(reply.data["changed"])
+        self.ensure.assert_called_with(german, self.data / "models")
+        state = self.taught.read_state()
+        self.assertEqual(
+            state,
+            {
+                "version": 2,
+                "language": "de",
+                "model": german,
+                "digest": reply.data["digest"],
+            },
+        )
+        restored = server.Taught(self.data)
+        await restored.restore()
+        self.assertEqual(restored.digest, reply.data["digest"])
+        self.assertEqual(restored.language, "de")
+
+    async def test_restores_a_first_version_state_and_refuses_another_model(self):
+        reply = await server._train(self.taught, LESSON)
+        digest = reply.data["digest"]
+        self.taught.state_path.write_text(
+            server.json.dumps({"version": 1, "language": "en", "digest": digest})
+        )
+        restored = server.Taught(self.data)
+        await restored.restore()
+        self.assertEqual(restored.digest, digest)
+
+        self.taught.state_path.write_text(
+            server.json.dumps(
+                {
+                    "version": 2,
+                    "language": "en",
+                    "model": server.models.model_name_for("de", server.BACKEND),
+                    "digest": digest,
+                }
+            )
+        )
+        elsewhere = server.Taught(self.data)
+        await elsewhere.restore()
+        self.assertIsNone(elsewhere.digest)
 
     async def test_uncommitted_grammar_does_not_replace_the_saved_one(self):
         original = await server._train(self.taught, LESSON)

@@ -1,13 +1,14 @@
 import {
   grammarSteps,
+  languages,
   sentenceBlanks,
   sentenceLimits,
   type AssistantSentences,
   type Hearing,
   type HearingFailure,
   type Language,
-  type SpeechLanguage,
   type SentenceBlank,
+  type SpeechLanguage,
 } from "@meetsanctum/app-sdk";
 
 import { ManagerRefusal, type ManagerClient } from "../manager.js";
@@ -79,7 +80,8 @@ function lessonWithNames(
       .filter((blank) => used.has(blank))
       .map((blank) => [blank, names[blank].slice()]),
   );
-  return { language, templates: usable, lists };
+  const { backend, model } = languages[language].recognition;
+  return { language, backend, model, templates: usable, lists };
 }
 
 export function createLearning(options: {

@@ -42,6 +42,8 @@ describe("what speech recognition learns", () => {
     expect(calls).toEqual(["want speech-to-phrase"]);
     expect(fake.lessons[0]).toEqual({
       language: "en",
+      backend: "nemo",
+      model: "stt_en_parakeet_tdt_ctc_110m",
       templates: ["turn (on|off) the {room} lights", "turn on [the] {light}"],
       // Only the blanks its sentences use.
       lists: { room: ["Office", "Kitchen"], light: ["Desk Lamp"] },
@@ -93,6 +95,8 @@ describe("what speech recognition learns", () => {
       );
       expect(teach.mock.lastCall?.[0].lesson).toEqual({
         language: "en",
+        backend: "nemo",
+        model: "stt_en_parakeet_tdt_ctc_110m",
         templates: ["turn on [the] {light}"],
         lists: { light: ["Desk Lamp"] },
       });

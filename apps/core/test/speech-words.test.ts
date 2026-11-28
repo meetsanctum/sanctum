@@ -101,7 +101,13 @@ describe("hearing a run's words", () => {
         host: "127.0.0.1",
         port: fake.port,
         token: "secret",
-        lesson: { language: "en", templates: ["lights on"], lists: {} },
+        lesson: {
+          language: "en",
+          backend: "nemo",
+          model: "stt_en_parakeet_tdt_ctc_110m",
+          templates: ["lights on"],
+          lists: {},
+        },
       }),
     ).rejects.toThrow("ECONNREFUSED");
   });
@@ -124,6 +130,8 @@ describe("hearing a run's words", () => {
     const fake = await service({ token: "secret" });
     const lesson = {
       language: "en",
+      backend: "nemo",
+      model: "stt_en_parakeet_tdt_ctc_110m",
       templates: ["turn off the {room} lights"],
       lists: { room: ["Office"] },
     };
