@@ -83,8 +83,15 @@ describe("Button", () => {
     expect(buttonVariants({})).toContain(
       "motion-safe:active:not-aria-[haspopup]:translate-y-px",
     );
-    expect(buttonVariants({ variant: "choice" })).toContain(
-      "motion-safe:active:scale-[0.98]",
+    const choice = cn(
+      buttonVariants({ variant: "choice", size: "choice" }),
+    ).split(" ");
+    expect(choice).toContain("motion-safe:active:scale-[0.98]");
+    expect(choice).toContain(
+      "motion-safe:active:not-aria-[haspopup]:translate-y-0",
+    );
+    expect(choice).not.toContain(
+      "motion-safe:active:not-aria-[haspopup]:translate-y-px",
     );
   });
 
