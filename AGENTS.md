@@ -243,12 +243,20 @@ What is under which licence, and what neither covers, is in
 
 ## Verification
 
+Run the full set from the repository root under a shared lock so that only
+one worktree runs it at a time. On macOS, use the command below. On Linux,
+replace `lockf -k` with `flock`. Use the same lock path in every worktree and
+leave the lock file in place. The command waits for its turn and holds the
+lock through the formatting check.
+
 ```sh
-pnpm typecheck
-pnpm lint
-pnpm test
-pnpm build
-pnpm format:check
+lockf -k /tmp/sanctum-verification.lock sh -ec '
+  pnpm typecheck
+  pnpm lint
+  pnpm test
+  pnpm build
+  pnpm format:check
+'
 ```
 
 `pnpm test:containers` runs real stacks and images in Docker and takes minutes.
@@ -267,8 +275,5 @@ fills it: Vitest starts a worker per core in every package Turbo runs. So:
   `pnpm --filter <package> <task>`, or one test file with
   `pnpm --filter <package> exec vitest run <file>`.
 - Run the full set once, when the change is done and before its pull request
-  is opened or updated, not after every edit. CI runs it again on the pull
-  request.
-- Before starting the full set, check that no other worktree's is running
-  (`pgrep -fl 'turbo run'`), and wait for it to finish first. One full run at
-  a time on the computer.
+  is opened or updated, not after every edit. CI runs the checks on the pull
+  request and covers lint through typecheck.

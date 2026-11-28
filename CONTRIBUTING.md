@@ -105,18 +105,11 @@ sign-in.
 
 ## Checks
 
-```sh
-pnpm typecheck
-pnpm lint
-pnpm test
-pnpm build
-pnpm format:check
-```
-
 Use focused runs while iterating, such as `pnpm --filter @meetsanctum/core
-test`, then the full set before you finish. After changing an app's actions,
-events, settings or widgets, run `pnpm manifest` and commit the regenerated
-`sanctum-app.json`.
+test`, then run the full set under the shared lock described in
+[Verification in AGENTS.md](AGENTS.md#verification). After changing an app's
+actions, events, settings or widgets, run `pnpm manifest` and commit the
+regenerated `sanctum-app.json`.
 
 CI runs `pnpm test:containers` for covered changes. See
 [Verification in AGENTS.md](AGENTS.md#verification) for when to run it locally.
