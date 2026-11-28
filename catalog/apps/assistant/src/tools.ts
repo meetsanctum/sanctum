@@ -12,12 +12,12 @@ export const agentsPage = "Settings, What AI Agents Can Use";
 // What home_overview answers that the Assistant reads.
 export type Overview = {
   floors: { id: string; name: string }[];
-  rooms: { id: string; name: string }[];
+  rooms: { id: string; name: string; floorId?: string | null }[];
   devices: {
     id: string;
     name: string;
     roomId: string | null;
-    capabilities: { id: string; kind: string }[];
+    capabilities: { id: string; kind: string; features?: unknown }[];
   }[];
   notAllowed: { title: string; where: string }[];
 };

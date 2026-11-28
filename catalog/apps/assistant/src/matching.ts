@@ -5,6 +5,7 @@ import type {
   Choices,
   Intent,
   LanguageSentences,
+  Look,
 } from "./sentences.js";
 
 // Matches what someone said or typed against the Assistant's templates, with
@@ -25,6 +26,7 @@ export type Matched = {
     switch?: "on" | "off";
     step?: "brighter" | "dimmer";
     percent?: number;
+    look?: Look;
   };
 };
 
@@ -128,6 +130,8 @@ export function match(
     if (switched !== undefined) matched.choices.switch = switched;
     const step = choice("step");
     if (step !== undefined) matched.choices.step = step;
+    const look = choice("look");
+    if (look !== undefined) matched.choices.look = look;
     const percent =
       groups.digits === undefined ? choice("percent") : Number(groups.digits);
     if (percent !== undefined) {

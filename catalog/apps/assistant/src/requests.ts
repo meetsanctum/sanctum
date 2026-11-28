@@ -1,6 +1,8 @@
 import {
   controlPermission,
   isActionError,
+  lightColours,
+  middleWhite,
   permissionWords,
   type AssistantRequestCall,
   type RequestContext,
@@ -15,7 +17,7 @@ import {
   type Subject,
 } from "./replies.js";
 import { readMoods, runMood } from "./moods.js";
-import { languageSentences } from "./sentences.js";
+import { languageSentences, type Look } from "./sentences.js";
 import { agentsPage, callTool, type Overview } from "./tools.js";
 
 // Answers a request: matches its words against the sentences with the
@@ -124,14 +126,124 @@ const off = (light: LightAnswer) =>
 const keptOff = (light: LightAnswer) =>
   light.result === "skipped" && light.why === "kept_off";
 
+// A light that takes none of what was asked: one a colour can't show, or a
+// lit one that only dims, which is as white as it gets.
+const unsupported = (light: LightAnswer) =>
+  light.result === "skipped" && light.why === "unsupported";
+
+// Warm and cool whites, 2,700 K and 6,500 K in mireds; the core keeps each
+// light within its own range.
+const warmWhite = 370;
+const coolWhite = 154;
+// Any white does for lights without whites of their own: those with colour
+// lose their saturation, and those that only dim come on.
+const neutralWhite = 250;
+
+type Range = { min: number; max: number };
+
+function whiteRangeOf(features: unknown): Range | null {
+  if (typeof features !== "object" || features === null) return null;
+  const range = (features as { colorTemperature?: unknown }).colorTemperature;
+  if (typeof range !== "object" || range === null) return null;
+  const { min, max } = range as Partial<Range>;
+  return typeof min === "number" && typeof max === "number"
+    ? { min, max }
+    : null;
+}
+
+// The lights of a place, by their capabilities in the overview.
+function lightsIn(place: Place, overview: Overview) {
+  let inPlace: (
+    device: Overview["devices"][number],
+    capability: string,
+  ) => boolean;
+  if (place.kind === "home") inPlace = () => true;
+  else if (place.kind === "lights") {
+    const chosen = new Set(
+      place.lights.map(({ device, capability }) => `${device}/${capability}`),
+    );
+    inPlace = (device, capability) => chosen.has(`${device.id}/${capability}`);
+  } else {
+    const rooms = new Set(
+      place.kind === "room"
+        ? [place.id]
+        : overview.rooms
+            .filter((room) => room.floorId === place.id)
+            .map((room) => room.id),
+    );
+    inPlace = (device) => device.roomId !== null && rooms.has(device.roomId);
+  }
+  return overview.devices.flatMap((device) =>
+    lightsOf(device).filter((capability) => inPlace(device, capability.id)),
+  );
+}
+
+// What the lights tool sets for a look. The white a picker starts on is
+// the middle of the whites across every range the place's lights take, as
+// the room's Lights tile spreads them.
+function lookSet(look: Look, place: Place, overview: Overview) {
+  if ("colour" in look) {
+    const { hue } = lightColours.find(({ name }) => name === look.colour)!;
+    return { hue, saturation: 100 };
+  }
+  const brightness = look.bright ? { brightness: 100 } : {};
+  if (look.white === "warm") {
+    return { colorTemperature: warmWhite, ...brightness };
+  }
+  if (look.white === "cool") {
+    return { colorTemperature: coolWhite, ...brightness };
+  }
+  const ranges = lightsIn(place, overview).flatMap((light) => {
+    const range = whiteRangeOf(light.features);
+    return range ? [range] : [];
+  });
+  const colorTemperature =
+    ranges.length > 0
+      ? middleWhite({
+          min: Math.min(...ranges.map(({ min }) => min)),
+          max: Math.max(...ranges.map(({ max }) => max)),
+        })
+      : neutralWhite;
+  return { colorTemperature, ...brightness };
+}
+
 // What the lights tool did, in a reply.
 function lightsReply(
-  lights: LightAnswer[],
+  answered: LightAnswer[],
   subject: Subject,
   state: LightsState,
   words: Replies,
 ): RequestReply {
-  if (lights.length === 0) return { text: words.noLights(subject) };
+  if (answered.length === 0) return { text: words.noLights(subject) };
+  // A colour leaves the lights that can't show one as they are, as the
+  // room's Lights tile does: they are named, but nothing failed.
+  if (state.is === "look" && "colour" in state.look) {
+    const cannot = answered.filter(unsupported);
+    if (cannot.length === answered.length) {
+      return { text: words.noColour(subject) };
+    }
+    if (cannot.length > 0) {
+      const reply = lightsReply(
+        answered.filter((light) => !unsupported(light)),
+        subject,
+        state,
+        words,
+      );
+      return {
+        ...reply,
+        text: words.cannotShowColour(
+          reply.text,
+          cannot.map((light) => light.name),
+        ),
+      };
+    }
+  }
+  // A white leaves only lights that are as white as they get.
+  const lights =
+    state.is === "look"
+      ? answered.filter((light) => !unsupported(light))
+      : answered;
+  if (lights.length === 0) return { text: words.nothingChanged };
   if (lights.every(offline)) {
     return { text: words.notAnswering(subject) };
   }
@@ -203,6 +315,16 @@ async function changeLights(
     }
     input = { place: target.place, set: { brightness: percent } };
     state = { is: "at", percent };
+  } else if (intent.do === "look") {
+    const look = matched.choices.look;
+    if (look === undefined) {
+      return { text: languageSentences[request.language].notUnderstood };
+    }
+    input = {
+      place: target.place,
+      set: lookSet(look, target.place, overview),
+    };
+    state = { is: "look", look };
   } else {
     const to =
       intent.do === "switch"

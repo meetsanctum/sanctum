@@ -184,6 +184,94 @@ describe("matching English", () => {
   });
 });
 
+describe("matching whites and colours", () => {
+  it("reads a white or a colour for each place, typed or said", () => {
+    expect(en("make the office white")).toEqual({
+      intent: { do: "look", where: "room" },
+      names: { room: "Office" },
+      choices: { look: { white: "picker" } },
+    });
+    expect(en("Make the office bright white.")).toMatchObject({
+      choices: { look: { white: "picker", bright: true } },
+    });
+    expect(en("make the office bright")).toMatchObject({
+      choices: { look: { white: "picker", bright: true } },
+    });
+    expect(en("turn the kitchen lights blue")).toMatchObject({
+      intent: { do: "look", where: "room" },
+      names: { room: "Kitchen" },
+      choices: { look: { colour: "Blue" } },
+    });
+    expect(en("set the lights in the den to warm white")).toMatchObject({
+      names: { room: "Den" },
+      choices: { look: { white: "warm" } },
+    });
+    expect(en("turn the lights on the ground floor cool white")).toMatchObject({
+      intent: { where: "floor" },
+      choices: { look: { white: "cool" } },
+    });
+    expect(en("make all the lights magenta")).toMatchObject({
+      intent: { where: "home" },
+      choices: { look: { colour: "Magenta" } },
+    });
+    expect(en("set the desk lamp to lime")).toMatchObject({
+      intent: { where: "light" },
+      names: { light: "Desk Lamp" },
+    });
+    expect(en("make the lights red")).toMatchObject({
+      intent: { do: "look", where: "here" },
+      choices: { look: { colour: "Red" } },
+    });
+  });
+
+  it("takes a light's name first, keeps brighter a step and leaves moods' sentences to moods", () => {
+    expect(en("make the office light green")).toMatchObject({
+      intent: { do: "look", where: "light" },
+      names: { light: "Office Light" },
+    });
+    expect(en("make the office lights brighter")).toMatchObject({
+      intent: { do: "step" },
+      choices: { step: "brighter" },
+    });
+    expect(en("set the office to blue")).toBeNull();
+    expect(en("make the office purple")).toBeNull();
+  });
+
+  it("reads German whites and colours", () => {
+    expect(de("mach das Büro weiß")).toEqual({
+      intent: { do: "look", where: "room" },
+      names: { room: "Büro" },
+      choices: { look: { white: "picker" } },
+    });
+    expect(de("mach das Licht im Büro ganz hell")).toMatchObject({
+      choices: { look: { white: "picker", bright: true } },
+    });
+    expect(de("Mach das Licht hell")).toMatchObject({
+      intent: { do: "look", where: "here" },
+      choices: { look: { white: "picker", bright: true } },
+    });
+    expect(de("mach das Licht heller")).toMatchObject({
+      intent: { do: "step" },
+    });
+    expect(de("stell das Licht in der Küche auf Warmweiß")).toMatchObject({
+      names: { room: "Küche" },
+      choices: { look: { white: "warm" } },
+    });
+    expect(de("Licht im Wohnzimmer auf limettengrün")).toMatchObject({
+      choices: { look: { colour: "Lime" } },
+    });
+    expect(de("mach alle Lichter blau")).toMatchObject({
+      intent: { where: "home" },
+      choices: { look: { colour: "Blue" } },
+    });
+    expect(de("stell die Stehlampe auf kaltweiß")).toMatchObject({
+      intent: { where: "light" },
+      choices: { look: { white: "cool" } },
+    });
+    expect(de("stell das Büro auf blau")).toBeNull();
+  });
+});
+
 describe("matching moods", () => {
   it("reads a mood in a room, or the speaker's room", () => {
     expect(en("set the kitchen to movie night")).toMatchObject({

@@ -1,5 +1,10 @@
-import { replyTextMaxLength, type SpeechLanguage } from "@meetsanctum/app-sdk";
+import {
+  replyTextMaxLength,
+  type LightColourName,
+  type SpeechLanguage,
+} from "@meetsanctum/app-sdk";
 
+import type { Look } from "./sentences.js";
 import { agentsPage } from "./tools.js";
 
 // What the Assistant answers, in each language: short, since a smart speaker
@@ -15,7 +20,9 @@ export type Subject =
 
 /** What happened to the lights, or what they already are. */
 export type LightsState =
-  { is: "on" | "off" | "brighter" | "dimmer" } | { is: "at"; percent: number };
+  | { is: "on" | "off" | "brighter" | "dimmer" }
+  | { is: "at"; percent: number }
+  | { is: "look"; look: Look };
 
 type RestoreIssue = "changed" | "offline" | "uncertain" | "limited" | "failed";
 
@@ -27,6 +34,10 @@ export type Replies = {
   allOff(subject: Subject): string;
   noLights(subject: Subject): string;
   notAnswering(subject: Subject): string;
+  /** A colour, where no light can show one. */
+  noColour(subject: Subject): string;
+  /** What changed, then the lights a colour left as they were. */
+  cannotShowColour(summary: string, names: readonly string[]): string;
   missedLights(
     summary: string,
     names: readonly string[],
@@ -90,8 +101,15 @@ function withNames(
   return `${summary} ${shortened}${ending}`;
 }
 
-const enState = (state: LightsState) =>
-  state.is === "at" ? `at ${state.percent}%` : state.is;
+const enWhites = { picker: "white", warm: "warm white", cool: "cool white" };
+
+const enState = (state: LightsState) => {
+  if (state.is === "at") return `at ${state.percent}%`;
+  if (state.is !== "look") return state.is;
+  const { look } = state;
+  if ("colour" in look) return look.colour.toLowerCase();
+  return look.bright ? `bright ${enWhites[look.white]}` : enWhites[look.white];
+};
 
 const enSubject = (subject: Subject) =>
   subject.kind === "home"
@@ -113,6 +131,20 @@ const en: Replies = {
       ? "There are no lights."
       : `No lights in ${subject.name}.`,
   notAnswering: (subject) => `${enSubject(subject)} didn't answer.`,
+  noColour: (subject) =>
+    subject.kind === "home"
+      ? "No light can show colours."
+      : subject.kind === "place"
+        ? `No light in ${subject.name} can show colours.`
+        : `${subject.name} can't show colours.`,
+  cannotShowColour: (summary, names) =>
+    withNames(
+      summary,
+      names,
+      "and",
+      (count) => `${count} more`,
+      " can't show colours.",
+    ),
   missedLights: (summary, names, allOffline) =>
     withNames(
       summary,
@@ -155,14 +187,30 @@ const en: Replies = {
   failed: (toolWords) => toolWords,
 };
 
-const deState = (state: LightsState) =>
-  ({
-    on: "an",
-    off: "aus",
-    brighter: "heller",
-    dimmer: "dunkler",
-    at: `auf ${"percent" in state ? state.percent : 0} %`,
-  })[state.is];
+const deColours: Record<LightColourName, string> = {
+  Red: "rot",
+  Orange: "orange",
+  Yellow: "gelb",
+  Lime: "limettengrün",
+  Green: "grün",
+  Cyan: "cyan",
+  Blue: "blau",
+  Magenta: "magenta",
+};
+const deWhites = { picker: "weiß", warm: "warmweiß", cool: "kaltweiß" };
+
+const deState = (state: LightsState) => {
+  if (state.is === "at") return `auf ${state.percent} %`;
+  if (state.is !== "look") {
+    return { on: "an", off: "aus", brighter: "heller", dimmer: "dunkler" }[
+      state.is
+    ];
+  }
+  const { look } = state;
+  if ("colour" in look) return deColours[look.colour];
+  if (!look.bright) return deWhites[look.white];
+  return look.white === "picker" ? "hell" : `hell ${deWhites[look.white]}`;
+};
 
 // "Küche: Licht an", since a room's article in German goes by its name.
 const deSaid = (subject: Subject, words: string) =>
@@ -187,6 +235,22 @@ const de: Replies = {
     deSaid(
       subject,
       subject.kind === "home" ? "antworten nicht" : "antwortet nicht",
+    ),
+  noColour: (subject) =>
+    subject.kind === "home"
+      ? "Kein Licht kann Farben zeigen."
+      : subject.kind === "place"
+        ? `${subject.name}: Kein Licht kann Farben zeigen.`
+        : `${subject.name} kann keine Farben zeigen.`,
+  cannotShowColour: (summary, names) =>
+    withNames(
+      summary,
+      names,
+      "und",
+      (count) => `${count} weitere`,
+      names.length > 1
+        ? " können keine Farben zeigen."
+        : " kann keine Farben zeigen.",
     ),
   missedLights: (summary, names, allOffline) =>
     withNames(

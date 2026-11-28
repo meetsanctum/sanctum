@@ -117,6 +117,47 @@ const turnOnLightState = z.discriminatedUnion("on", [
     ),
 ]);
 
+/**
+ * The colours a light's picker offers, around its ring, and the Assistant
+ * by name: each at full saturation.
+ */
+export const lightColours = [
+  { name: "Red", hue: 0 },
+  { name: "Orange", hue: 28 },
+  { name: "Yellow", hue: 48 },
+  { name: "Lime", hue: 76 },
+  { name: "Green", hue: 132 },
+  { name: "Cyan", hue: 190 },
+  { name: "Blue", hue: 220 },
+  { name: "Magenta", hue: 300 },
+] as const;
+
+export type LightColourName = (typeof lightColours)[number]["name"];
+
+const lightWhiteCount = 8;
+
+/**
+ * The whites a light's picker offers across a colour temperature range in
+ * mireds, coolest first, spread evenly.
+ */
+export function lightWhites(range: { min: number; max: number }) {
+  return [
+    ...new Set(
+      Array.from({ length: lightWhiteCount }, (_, index) =>
+        Math.round(
+          range.min + ((range.max - range.min) * index) / (lightWhiteCount - 1),
+        ),
+      ),
+    ),
+  ];
+}
+
+/** The white a picker starts on, without one of its own: its middle one. */
+export function middleWhite(range: { min: number; max: number }) {
+  const whites = lightWhites(range);
+  return whites[Math.floor(whites.length / 2)]!;
+}
+
 export const turnOnSchema = z.object({
   /** The room it is for. */
   placeId: z.string().min(1),

@@ -1,5 +1,6 @@
 import type {
   AssistantSentences,
+  LightColourName,
   NotUnderstood,
   SentenceBlank,
   SpeechLanguage,
@@ -12,9 +13,9 @@ import type {
 // means.
 //
 // Besides the core's blanks ({room}, {floor}, {light}), a template may hold
-// a choice, `<switch>`, `<step>` or `<percent>`: the words it may be, which
-// it is said as for speech recognition and read back as a value. Numbers
-// are written out, since recognition takes no ranges.
+// a choice, `<switch>`, `<step>`, `<percent>` or `<look>`: the words it may
+// be, which it is said as for speech recognition and read back as a value.
+// Numbers are written out, since recognition takes no ranges.
 
 /** Where a request's lights are. */
 export type Where = "here" | SentenceBlank | "home";
@@ -24,17 +25,28 @@ export type Intent =
   | { do: "switch"; where: Where }
   | { do: "step"; where: Where; to?: "brighter" | "dimmer" }
   | { do: "set"; where: Where }
+  | { do: "look"; where: Where }
   | { do: "mood" }
   | { do: "restore" }
   | { do: "timer" };
 
-export type ChoiceName = "switch" | "step" | "percent";
+export type ChoiceName = "switch" | "step" | "percent" | "look";
+
+/**
+ * A white or a colour for lights, as a room's Lights tile offers them: the
+ * white its picker starts on, or a warm or a cool one, bright at full; or
+ * one of the picker's colours.
+ */
+export type Look =
+  | { white: "picker" | "warm" | "cool"; bright?: true }
+  | { colour: LightColourName };
 
 /** Each choice's words, and what each means. */
 export type Choices = {
   switch: Record<string, "on" | "off">;
   step: Record<string, "brighter" | "dimmer">;
   percent: Record<string, number>;
+  look: Record<string, Look>;
 };
 
 export type Sentence = { template: string; intent: Intent };
@@ -50,6 +62,7 @@ const switchOf = (where: Where): Intent => ({ do: "switch", where });
 const stepOf = (where: Where, to?: "brighter" | "dimmer"): Intent =>
   to ? { do: "step", where, to } : { do: "step", where };
 const setOf = (where: Where): Intent => ({ do: "set", where });
+const lookOf = (where: Where): Intent => ({ do: "look", where });
 
 // A named light before a room's lights: "turn off the office light" means
 // the light called Office Light where there is one.
@@ -77,6 +90,22 @@ const en: LanguageSentences = {
       ninety: 90,
       "a hundred": 100,
       "one hundred": 100,
+    },
+    // "Bright" is white at full, so every light comes on bright.
+    look: {
+      white: { white: "picker" },
+      "warm white": { white: "warm" },
+      "cool white": { white: "cool" },
+      bright: { white: "picker", bright: true },
+      "bright white": { white: "picker", bright: true },
+      red: { colour: "Red" },
+      orange: { colour: "Orange" },
+      yellow: { colour: "Yellow" },
+      lime: { colour: "Lime" },
+      green: { colour: "Green" },
+      cyan: { colour: "Cyan" },
+      blue: { colour: "Blue" },
+      magenta: { colour: "Magenta" },
     },
   },
   sentences: [
@@ -200,6 +229,55 @@ const en: LanguageSentences = {
       template: "(set|dim|turn) [the] (light|lights) to <percent> percent",
       intent: setOf("here"),
     },
+    // A white or a colour. A room's name without "lights" after "set" is a
+    // mood's sentence, so "set the office to bright" can be a mood's name.
+    { template: "(make|turn) [the] {light} <look>", intent: lookOf("light") },
+    {
+      template: "(set|change|turn) [the] {light} to <look>",
+      intent: lookOf("light"),
+    },
+    {
+      template: "(make|turn) [the] (light|lights) in [the] {room} <look>",
+      intent: lookOf("room"),
+    },
+    {
+      template:
+        "(set|change|turn) [the] (light|lights) in [the] {room} to <look>",
+      intent: lookOf("room"),
+    },
+    {
+      template: "(make|turn) [the] {room} [(light|lights)] <look>",
+      intent: lookOf("room"),
+    },
+    {
+      template: "(set|change|turn) [the] {room} (light|lights) to <look>",
+      intent: lookOf("room"),
+    },
+    {
+      template: "(make|turn) [the] (light|lights) on [the] {floor} <look>",
+      intent: lookOf("floor"),
+    },
+    {
+      template:
+        "(set|change|turn) [the] (light|lights) on [the] {floor} to <look>",
+      intent: lookOf("floor"),
+    },
+    {
+      template: "(make|turn) all [of] [the] lights <look>",
+      intent: lookOf("home"),
+    },
+    {
+      template: "(set|change|turn) all [of] [the] lights to <look>",
+      intent: lookOf("home"),
+    },
+    {
+      template: "(make|turn) [the] (light|lights) <look>",
+      intent: lookOf("here"),
+    },
+    {
+      template: "(set|change|turn) [the] (light|lights) to <look>",
+      intent: lookOf("here"),
+    },
     // A room's mood, by its name: after the lights, so a light's name wins.
     {
       template: "(set|switch|change) [the] {room} to {mood}",
@@ -260,6 +338,22 @@ const de: LanguageSentences = {
       achtzig: 80,
       neunzig: 90,
       hundert: 100,
+    },
+    // „Hell“ ist Weiß bei voller Helligkeit.
+    look: {
+      weiß: { white: "picker" },
+      warmweiß: { white: "warm" },
+      kaltweiß: { white: "cool" },
+      hell: { white: "picker", bright: true },
+      "ganz hell": { white: "picker", bright: true },
+      rot: { colour: "Red" },
+      orange: { colour: "Orange" },
+      gelb: { colour: "Yellow" },
+      limettengrün: { colour: "Lime" },
+      grün: { colour: "Green" },
+      cyan: { colour: "Cyan" },
+      blau: { colour: "Blue" },
+      magenta: { colour: "Magenta" },
     },
   },
   sentences: [
@@ -366,6 +460,66 @@ const de: LanguageSentences = {
         "(stell|stelle|dimm|dimme|mach|mache) [(das|die)] (Licht|Lichter|Lampen) auf <percent> Prozent",
       intent: setOf("here"),
     },
+    // Weiß oder eine Farbe. „Stell das Büro auf …“ ist der Satz einer
+    // Stimmung.
+    {
+      template: "(mach|mache) [(das|die|den)] {light} <look>",
+      intent: lookOf("light"),
+    },
+    {
+      template: "(stell|stelle) [(das|die|den)] {light} auf <look>",
+      intent: lookOf("light"),
+    },
+    {
+      template:
+        "(mach|mache) [(das|die)] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {room} <look>",
+      intent: lookOf("room"),
+    },
+    {
+      template:
+        "(stell|stelle) [(das|die)] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {room} auf <look>",
+      intent: lookOf("room"),
+    },
+    {
+      template:
+        "(mach|mache) (im|in der|in den|in|auf dem|auf der) {room} [(das|die)] (Licht|Lichter|Lampen) <look>",
+      intent: lookOf("room"),
+    },
+    {
+      template: "(mach|mache) [(das|die|den)] {room} <look>",
+      intent: lookOf("room"),
+    },
+    {
+      template:
+        "(Licht|Lichter) (im|in der|in den|in|auf dem|auf der) {room} [auf] <look>",
+      intent: lookOf("room"),
+    },
+    {
+      template:
+        "(mach|mache) [(das|die)] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {floor} <look>",
+      intent: lookOf("floor"),
+    },
+    {
+      template:
+        "(stell|stelle) [(das|die)] (Licht|Lichter|Lampen) (im|in der|in den|in|auf dem|auf der) {floor} auf <look>",
+      intent: lookOf("floor"),
+    },
+    {
+      template: "(mach|mache) alle (Lichter|Lampen) <look>",
+      intent: lookOf("home"),
+    },
+    {
+      template: "(stell|stelle) alle (Lichter|Lampen) auf <look>",
+      intent: lookOf("home"),
+    },
+    {
+      template: "(mach|mache) [(das|die)] (Licht|Lichter|Lampen) <look>",
+      intent: lookOf("here"),
+    },
+    {
+      template: "(stell|stelle) [(das|die)] (Licht|Lichter|Lampen) auf <look>",
+      intent: lookOf("here"),
+    },
     // Die Stimmung eines Raums, nach dem Licht.
     {
       template: "(stell|stelle|setz|setze) [(den|das|die)] {room} auf {mood}",
@@ -410,7 +564,7 @@ export const languageSentences: Record<SpeechLanguage, LanguageSentences> = {
   de,
 };
 
-const choicePattern = /<(switch|step|percent)>/g;
+const choicePattern = /<(switch|step|percent|look)>/g;
 
 /** A template as speech recognition learns it: each choice as its words. */
 export function spokenTemplate(template: string, choices: Choices) {
