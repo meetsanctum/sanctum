@@ -7,6 +7,7 @@ import type {
 import {
   Button,
   Input,
+  Problem,
   type LiveFeed,
   useHomeClock,
 } from "@meetsanctum/ui-sdk";
@@ -28,6 +29,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { SheetProblem } from "../auth/sheet";
 import { useAuthAttempt } from "../auth/use-auth-attempt";
 import { productName } from "../brand";
 import { Section } from "../components";
@@ -46,6 +48,7 @@ import {
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
 import { coreJson } from "../core-fetch";
+import { problemReason } from "../device-parts";
 import { AddSource } from "./add-source";
 import { ModelPicker } from "./model-picker";
 import { SourceCheck, sourceIconOf } from "./source-check";
@@ -412,7 +415,15 @@ function EditSource(props: {
   const [text, setText] = useState("");
   const [model, setModel] = useState("");
   const [models, setModels] = useState<ModelChoice[]>();
-  const [problem, setProblem] = useState<string>();
+  // What didn't happen and why; `refused` for a key the provider didn't
+  // take, said under its field.
+  const [problem, setProblem] = useState<{
+    title?: string;
+    reason: string;
+    refused?: boolean;
+  }>();
+  // A source that lists no models has nothing to choose from.
+  const [noModels, setNoModels] = useState(false);
   const [working, setWorking] = useState(false);
   const wasRemoved = useRef(false);
   // A new model or key is checked: the dialog follows it to its result.
@@ -432,6 +443,7 @@ function EditSource(props: {
     setModel(props.editing?.source.model ?? "");
     setModels(undefined);
     setProblem(undefined);
+    setNoModels(false);
     setWorking(false);
     setChecked(undefined);
     const opened = props.editing;
@@ -455,10 +467,13 @@ function EditSource(props: {
           setWorking(false);
           setChecked(opened.source.id);
         })
-        .catch(() => {
+        .catch((error: unknown) => {
           if (controller.signal.aborted) return;
           setWorking(false);
-          setProblem("Couldn't start the check. Try again.");
+          setProblem({
+            title: "The check didn't start",
+            reason: problemReason(error),
+          });
         });
       return () => controller.abort();
     }
@@ -474,15 +489,22 @@ function EditSource(props: {
       .then((look) => {
         if (signal.aborted) return;
         if (!look.found) {
-          setProblem(problemText(look.problem, opened.source));
+          setProblem({
+            title: "Models didn't load",
+            reason: problemText(look.problem, opened.source),
+          });
         } else if (look.models.length === 0) {
-          setProblem("This source has no models to choose from.");
+          setNoModels(true);
         } else {
           setModels(look.models);
         }
       })
-      .catch(() => {
-        if (!signal.aborted) setProblem("That did not work. Try again.");
+      .catch((error: unknown) => {
+        if (!signal.aborted)
+          setProblem({
+            title: "Models didn't load",
+            reason: problemReason(error),
+          });
       });
     return () => controller.abort();
   }, [props.editing, cancel, onDone]);
@@ -534,10 +556,21 @@ function EditSource(props: {
       const status = (error as { status?: number }).status;
       setProblem(
         action === "key" && status === 403
-          ? problemText("key", source)
-          : status === 404
-            ? problemText("model", source)
-            : "That did not work. Try again.",
+          ? { reason: problemText("key", source), refused: true }
+          : {
+              title:
+                action === "rename"
+                  ? `${source.computer ?? name} wasn't renamed`
+                  : action === "key"
+                    ? "The key wasn't replaced"
+                    : action === "model"
+                      ? "The model wasn't changed"
+                      : `${name} wasn't removed`,
+              reason:
+                action === "model" && status === 404
+                  ? problemText("model", source)
+                  : problemReason(error),
+            },
       );
       setWorking(false);
     }
@@ -585,10 +618,8 @@ function EditSource(props: {
             <DialogHeader>
               <DialogTitle>Check again</DialogTitle>
             </DialogHeader>
-            {problem && (
-              <p role="alert" className="m-0 text-sm text-destructive">
-                {problem}
-              </p>
+            {problem?.title && (
+              <Problem title={problem.title}>{problem.reason}</Problem>
             )}
             <DialogFooter>
               <Button onClick={close}>Done</Button>
@@ -636,11 +667,16 @@ function EditSource(props: {
                 value={text}
                 maxLength={512}
                 disabled={working}
-                onChange={(event) => setText(event.target.value)}
+                onChange={(event) => {
+                  setText(event.target.value);
+                  if (problem?.refused) setProblem(undefined);
+                }}
                 required
                 autoFocus
+                aria-invalid={!!problem?.refused}
               />
             )}
+            {problem?.refused && <SheetProblem>{problem.reason}</SheetProblem>}
             {action === "model" && models && (
               <ModelPicker
                 aria-label="Model"
@@ -650,10 +686,13 @@ function EditSource(props: {
                 disabled={working}
               />
             )}
-            {problem && (
-              <p role="alert" className="m-0 text-sm text-destructive">
-                {problem}
+            {action === "model" && noModels && (
+              <p className="m-0 text-sm text-muted-foreground">
+                This source has no models to choose from.
               </p>
+            )}
+            {problem?.title && (
+              <Problem title={problem.title}>{problem.reason}</Problem>
             )}
             <DialogFooter>
               <Button

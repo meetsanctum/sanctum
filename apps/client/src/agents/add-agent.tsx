@@ -9,7 +9,7 @@ import {
   type AgentSetupStarted,
   type AgentSetupStatus,
 } from "@meetsanctum/auth-protocol";
-import { Button, Input, useHomeClock } from "@meetsanctum/ui-sdk";
+import { Button, Input, Problem, useHomeClock } from "@meetsanctum/ui-sdk";
 import { Copy, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { CoreError, coreJson } from "../core-fetch";
+import { problemReason } from "../device-parts";
 import { canUseTitle, missingWords, offersByGroup, offersOf } from "./words";
 
 // Adding an AI agent: a name, with everything AI agents can use named under
@@ -77,9 +78,9 @@ const endedWords = {
 
 function startProblem(error: unknown) {
   if (error instanceof CoreError && error.code === "busy") {
-    return "Several agents are being added already. Wait a few minutes and try again.";
+    return "Several agents are being added already. Wait a few minutes, then try again.";
   }
-  return "That did not work. Try again.";
+  return problemReason(error);
 }
 
 export function AddAgent(props: {
@@ -215,6 +216,7 @@ export function AddAgent(props: {
             hasPermissionsFailed={props.hasPermissionsFailed}
             working={working}
             problem={problem}
+            failed={`Couldn't add ${name.trim()}`}
             onCancel={close}
             onContinue={() => void start(name.trim())}
           />
@@ -257,9 +259,7 @@ export function AddAgent(props: {
               </DialogDescription>
             </DialogHeader>
             {problem && (
-              <p role="alert" className="m-0 text-sm text-destructive">
-                {problem}
-              </p>
+              <Problem title="Couldn't make a new prompt">{problem}</Problem>
             )}
             <DialogFooter>
               <Button variant="outline" onClick={close}>
@@ -289,6 +289,8 @@ function NameStep(props: {
   hasPermissionsFailed: boolean;
   working: boolean;
   problem?: string;
+  // What didn't happen, over the problem.
+  failed: string;
   onCancel: () => void;
   onContinue: () => void;
 }) {
@@ -326,19 +328,15 @@ function NameStep(props: {
           </span>
         </div>
       ) : props.hasPermissionsFailed ? (
-        <p role="alert" className="m-0 text-sm text-destructive">
-          {canUseListLabel} didn&apos;t load. Close this and open it again.
-        </p>
+        <Problem title={`${canUseListLabel} didn't load`}>
+          Close this and open it again.
+        </Problem>
       ) : (
         <p role="status" className="m-0 text-[13px] text-muted-foreground">
           Loading what AI agents can use…
         </p>
       )}
-      {props.problem && (
-        <p role="alert" className="m-0 text-sm text-destructive">
-          {props.problem}
-        </p>
-      )}
+      {props.problem && <Problem title={props.failed}>{props.problem}</Problem>}
       <DialogFooter>
         <Button type="button" variant="outline" onClick={props.onCancel}>
           Cancel
@@ -486,9 +484,15 @@ function PromptStep(props: {
             : `The prompt works once and expires ${setupMinutes} minutes after you make it.`}
         </span>
         {copyFailed && (
-          <p role="alert" className="m-0 text-sm text-destructive">
-            It couldn't be copied. It's selected: copy it with your keyboard.
-          </p>
+          <Problem
+            title={
+              step.byHand
+                ? "The command wasn't copied"
+                : "The prompt wasn't copied"
+            }
+          >
+            It's selected: copy it with your keyboard.
+          </Problem>
         )}
       </div>
       <p

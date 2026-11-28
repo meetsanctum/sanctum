@@ -1,6 +1,8 @@
-import { Switch } from "@meetsanctum/ui-sdk";
+import { Problem, Switch } from "@meetsanctum/ui-sdk";
 import type { LucideIcon } from "lucide-react";
 import { useId, useRef, type ReactNode } from "react";
+
+import { problemReason } from "../device-parts";
 
 // A line of what AI agents can use: what it is, a line under it, and its
 // switch, or the words that say it has none. The line under it wraps rather
@@ -64,14 +66,15 @@ export function CanUseRows(props: { children: ReactNode }) {
   );
 }
 
-/** The words under a list, or what went wrong with the last change. */
-export function CanUseNote(props: { problem?: string; children: ReactNode }) {
+/** The words under a list, after what went wrong with its last change. */
+export function CanUseNote(props: {
+  problem?: SwitchProblem;
+  children: ReactNode;
+}) {
   return (
     <>
       {props.problem && (
-        <p role="alert" className="m-0 text-sm text-destructive">
-          {props.problem}
-        </p>
+        <Problem title={props.problem.title}>{props.problem.reason}</Problem>
       )}
       <p className="m-0 text-[13px] leading-[18px] font-medium text-muted-foreground">
         {props.children}
@@ -80,4 +83,18 @@ export function CanUseNote(props: { problem?: string; children: ReactNode }) {
   );
 }
 
-export const switchProblem = "That did not work. Try again.";
+/** A switch that didn't change: which, and why. */
+export type SwitchProblem = { id: string; title: string; reason: string };
+
+export function switchProblem(
+  id: string,
+  title: string,
+  on: boolean,
+  error: unknown,
+): SwitchProblem {
+  return {
+    id,
+    title: `“${title}” wasn't turned ${on ? "on" : "off"}`,
+    reason: problemReason(error),
+  };
+}

@@ -21,6 +21,7 @@ import {
   places,
   workflow,
 } from "./automations-fixtures";
+import { problemLines } from "./problem-lines";
 
 vi.mock("../src/core-fetch", async (original) => ({
   ...(await original()),
@@ -776,10 +777,18 @@ describe("an automation's history", () => {
     await show("automation", { id: "movie" });
     vi.mocked(coreJson).mockRejectedValueOnce(new Error("Disconnected"));
     await press("Run");
-    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    const lines = [
+      "Movie night didn't run",
+      "Sanctum didn't answer. Check that it's on, then try again.",
+    ];
+    expect(problemLines(container.querySelector('[role="alert"]'))).toEqual(
+      lines,
+    );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });
-    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect(problemLines(container.querySelector('[role="alert"]'))).toEqual(
+      lines,
+    );
   });
 });

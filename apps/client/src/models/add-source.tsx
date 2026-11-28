@@ -5,10 +5,11 @@ import {
   type ModelSourceLook,
   type AppInfo,
 } from "@meetsanctum/app-sdk";
-import { Button, Input, SegmentedControl } from "@meetsanctum/ui-sdk";
+import { Button, Input, Problem, SegmentedControl } from "@meetsanctum/ui-sdk";
 import { CircleCheck } from "lucide-react";
 import { useEffect, useId, useState, type FormEvent } from "react";
 
+import { SheetProblem } from "../auth/sheet";
 import { useAuthAttempt } from "../auth/use-auth-attempt";
 import { productName } from "../brand";
 import {
@@ -20,6 +21,7 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { coreJson } from "../core-fetch";
+import { problemReason } from "../device-parts";
 import { AddSanctum, ollamaAppId } from "./add-sanctum";
 import type { AddSourceResponse, ModelsResponse } from "./data";
 import { ModelPicker } from "./model-picker";
@@ -83,7 +85,10 @@ export function AddSource(props: {
   const [key, setKey] = useState("");
   const [found, setFound] = useState<Found>();
   const [model, setModel] = useState("");
-  const [problem, setProblem] = useState<string>();
+  // What a Check found at the address or key, said under its field.
+  const [refused, setRefused] = useState<string>();
+  // A check or an add that didn't reach its end.
+  const [problem, setProblem] = useState<{ title: string; reason: string }>();
   const [looking, setLooking] = useState(false);
   const [adding, setAdding] = useState(false);
   // The source just added, whose check the dialog follows.
@@ -110,6 +115,7 @@ export function AddSource(props: {
     setKey("");
     setFound(undefined);
     setModel("");
+    setRefused(undefined);
     setProblem(undefined);
     setLooking(false);
     setAdding(false);
@@ -121,6 +127,7 @@ export function AddSource(props: {
     cancel();
     setFound(undefined);
     setModel("");
+    setRefused(undefined);
     setProblem(undefined);
     setLooking(false);
   };
@@ -129,6 +136,7 @@ export function AddSource(props: {
     if (looking || adding) return;
     const signal = start();
     setLooking(true);
+    setRefused(undefined);
     setProblem(undefined);
     setFound(undefined);
     const kind = step === "computer" ? "computer" : provider;
@@ -150,14 +158,14 @@ export function AddSource(props: {
           : "",
       );
       if (!answer.found) {
-        setProblem(
+        setRefused(
           problemText(answer.problem, {
             kind,
             address: answer.address ?? address.trim(),
           }),
         );
       } else if (answer.models.length === 0) {
-        setProblem(
+        setRefused(
           kind === "computer"
             ? "Ollama answered, but has no local models. Run ollama pull on that computer, then check again."
             : `${providerNames[kind]} lists no models for this key.`,
@@ -165,8 +173,15 @@ export function AddSource(props: {
       } else {
         setFound({ models: answer.models, address: answer.address });
       }
-    } catch {
-      if (!signal.aborted) setProblem("That did not work. Try again.");
+    } catch (error) {
+      if (!signal.aborted)
+        setProblem({
+          title:
+            kind === "computer"
+              ? `Couldn't check ${address.trim()}`
+              : "Couldn't check the key",
+          reason: problemReason(error),
+        });
     } finally {
       if (!signal.aborted) setLooking(false);
     }
@@ -212,9 +227,14 @@ export function AddSource(props: {
       });
       signal.throwIfAborted();
       showCheck(info, before);
-    } catch {
+    } catch (error) {
       if (signal.aborted) return;
-      setProblem("That did not work. Try again.");
+      setProblem({
+        title: `Couldn't add ${
+          step === "computer" ? computer.trim() : providerNames[provider]
+        }`,
+        reason: problemReason(error),
+      });
       setAdding(false);
     }
   };
@@ -236,10 +256,9 @@ export function AddSource(props: {
   );
   const foundEdge = found ? "border-(--leaf-text)/60" : undefined;
   const problemLine = problem && (
-    <p role="alert" className="m-0 text-sm text-destructive">
-      {problem}
-    </p>
+    <Problem title={problem.title}>{problem.reason}</Problem>
   );
+  const refusedLine = refused && <SheetProblem>{refused}</SheetProblem>;
   const models = found && (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={ids.model} className={fieldLabel}>
@@ -412,7 +431,7 @@ export function AddSource(props: {
                   disabled={adding}
                   autoFocus
                   aria-describedby={`${ids.address}-help`}
-                  aria-invalid={!!problem && !found}
+                  aria-invalid={!!refused}
                   className={foundEdge}
                   onChange={(event) => {
                     setAddress(event.target.value);
@@ -431,10 +450,11 @@ export function AddSource(props: {
                   disabled={!address.trim() || looking || adding}
                   onClick={() => void look()}
                 >
-                  {problem && !found ? "Check again" : "Check"}
+                  {(refused || problem) && !found ? "Check again" : "Check"}
                 </Button>
               </div>
               {status}
+              {refusedLine}
               <p id={`${ids.address}-help`} className={help}>
                 An address on your network, such as 192.168.1.40. Port 11434,
                 unless you changed it there: add it as 192.168.1.40:11500.
@@ -518,7 +538,7 @@ export function AddSource(props: {
                   disabled={adding}
                   autoFocus
                   aria-describedby={`${ids.key}-help`}
-                  aria-invalid={!!problem && !found}
+                  aria-invalid={!!refused}
                   className={foundEdge}
                   onChange={(event) => {
                     setKey(event.target.value);
@@ -541,6 +561,7 @@ export function AddSource(props: {
                 </Button>
               </div>
               {status}
+              {refusedLine}
               <p id={`${ids.key}-help`} className={help}>
                 Create one in your {providerNames[provider]} account, where you
                 can also set a spending limit. {productName} stores it encrypted

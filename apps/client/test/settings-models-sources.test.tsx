@@ -18,6 +18,7 @@ import {
   selectMenuItem,
   show,
 } from "./settings-models-support";
+import { problemLines } from "./problem-lines";
 
 vi.mock("../src/core-fetch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/core-fetch")>()),
@@ -199,9 +200,17 @@ describe("AI model source dialogs", () => {
 
     await enterText(labelled("Address"), "192.168.1.9");
     await click(button("Check"));
-    expect(document.body.textContent).toContain(
+    // What the check found is the field's own line, under it.
+    const address = labelled("Address");
+    expect(address.getAttribute("aria-invalid")).toBe("true");
+    const line = address
+      .closest("div")!
+      .parentElement!.querySelector('[role="alert"]');
+    expect(line?.textContent).toContain(
       "Nothing answered at 192.168.1.9:11434",
     );
+    expect(line?.querySelector("[data-slot=alert-title]")).toBeNull();
+    expect(button("Check again")).toBeDefined();
 
     await enterText(labelled("Address"), "studio.local");
     await click(button("Check"));
@@ -410,9 +419,10 @@ describe("AI model source dialogs", () => {
     await click(button("Add a source"));
     await click(button("Continue"));
 
-    expect(document.querySelector('[role="alert"]')?.textContent).toContain(
-      "Ollama isn't answering.",
-    );
+    expect(problemLines(document.querySelector('[role="alert"]'))).toEqual([
+      "Ollama's models didn't load",
+      "Ollama isn't answering. Check that the Ollama app is running.",
+    ]);
     expect(document.body.textContent).not.toContain(
       "Go to the Ollama app to download a model.",
     );

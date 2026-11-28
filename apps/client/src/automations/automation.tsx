@@ -12,6 +12,7 @@ import {
   PageBar,
   PageBarButton,
   PageSection,
+  Problem,
   Switch,
   useHomeClock,
 } from "@meetsanctum/ui-sdk";
@@ -93,7 +94,8 @@ export function AutomationPage(props: {
   const workflow = workflows?.find((each) => each.id === props.id);
   const [runs, setRuns] = useState<WorkflowRunInfo[]>();
   const [runsProblem, setRunsProblem] = useState<string>();
-  const [problem, setProblem] = useState<string>();
+  // What didn't happen, and why.
+  const [problem, setProblem] = useState<{ title: string; reason: string }>();
   const [working, setWorking] = useState(false);
   const loadRuns = props.automations.runs;
   const reload = props.automations.load;
@@ -150,13 +152,13 @@ export function AutomationPage(props: {
   const keptBy = workflow.app
     ? (props.names.app(workflow.app) ?? workflow.app)
     : undefined;
-  const act = async (work: () => Promise<unknown>) => {
+  const act = async (failed: string, work: () => Promise<unknown>) => {
     setWorking(true);
     setProblem(undefined);
     try {
       await work();
     } catch (error) {
-      setProblem(problemOf(error));
+      setProblem({ title: failed, reason: problemOf(error) });
     } finally {
       setWorking(false);
     }
@@ -181,7 +183,11 @@ export function AutomationPage(props: {
           icon={Play}
           label="Run"
           disabled={broken || !!blocked || working}
-          onClick={() => void act(() => props.automations.run(workflow.id))}
+          onClick={() =>
+            void act(`${workflow.name} didn't run`, () =>
+              props.automations.run(workflow.id),
+            )
+          }
         />
         {!keptBy && (
           <PageBarButton
@@ -231,13 +237,14 @@ export function AutomationPage(props: {
           }
         />
       )}
-      {(problem || runsProblem) && (
-        <p
-          role="alert"
-          className="m-0 text-[13px] leading-[18px] font-medium text-(--danger)"
-        >
-          {problem ?? runsProblem}
-        </p>
+      {problem ? (
+        <Problem title={problem.title}>{problem.reason}</Problem>
+      ) : (
+        runsProblem && (
+          <Problem title={`${workflow.name}'s runs didn't load`}>
+            {runsProblem}
+          </Problem>
+        )
       )}
       <div className="flex flex-wrap items-start gap-8">
         <div className="flex min-w-0 flex-[1_1_380px] flex-col gap-6 sm:max-w-130">
@@ -303,11 +310,13 @@ export function AutomationPage(props: {
                       checked={workflow.enabled}
                       disabled={working}
                       onCheckedChange={(enabled) =>
-                        void act(() =>
-                          props.automations.update({
-                            id: workflow.id,
-                            enabled,
-                          }),
+                        void act(
+                          `“Runs on its own” wasn't turned ${enabled ? "on" : "off"}`,
+                          () =>
+                            props.automations.update({
+                              id: workflow.id,
+                              enabled,
+                            }),
                         )
                       }
                     />

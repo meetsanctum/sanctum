@@ -12,8 +12,8 @@ import type { PersonInfo } from "@meetsanctum/auth-protocol";
 import type { LiveFeed } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { productName } from "../brand";
 import { CoreError, coreJson } from "../core-fetch";
+import { problemReason } from "../device-parts";
 import type { Names } from "./words";
 
 // What Automations reads from the core: the household's workflows and the
@@ -38,9 +38,8 @@ export function problemOf(error: unknown) {
     if (error.code === "not_found") {
       return "That automation is gone. It may have been deleted elsewhere.";
     }
-    return `${productName} ran into a problem. Try again.`;
   }
-  return `Can't reach ${productName}. Try again.`;
+  return problemReason(error);
 }
 
 export function useAutomations(live: LiveFeed) {

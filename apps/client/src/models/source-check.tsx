@@ -4,7 +4,7 @@ import type {
   ModelSourceInfo,
   ModelSourceLook,
 } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, Problem } from "@meetsanctum/ui-sdk";
 import {
   Check,
   Circle,
@@ -27,6 +27,7 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { coreJson } from "../core-fetch";
+import { problemReason } from "../device-parts";
 import type { ModelsResponse } from "./data";
 import { ModelPicker } from "./model-picker";
 import {
@@ -118,7 +119,11 @@ export function SourceCheck(props: {
   const check = source?.check;
   const [shown, setShown] = useState<Shown>({ kind: "check" });
   const [acting, setActing] = useState(false);
-  const [failedAction, setFailedAction] = useState<CheckAction>();
+  // The action that didn't go through, and why.
+  const [failed, setFailed] = useState<{
+    action: CheckAction;
+    reason: string;
+  }>();
   // What was done before the check that's under way: the dialog's own
   // change, or a switch; Check again has nothing before it.
   const [done, setDone] = useState<string | undefined>(props.done);
@@ -132,7 +137,7 @@ export function SourceCheck(props: {
   const act = async (action: CheckAction) => {
     if (acting || !source) return;
     setActing(true);
-    setFailedAction(undefined);
+    setFailed(undefined);
     try {
       const info = await coreJson<ModelsResponse>(
         `/api/models/sources/${source.id}/${action}`,
@@ -140,8 +145,8 @@ export function SourceCheck(props: {
       );
       setDone(action === "use" ? "Now your home's AI model" : undefined);
       props.onChanged(info);
-    } catch {
-      setFailedAction(action);
+    } catch (error) {
+      setFailed({ action, reason: problemReason(error) });
     } finally {
       setActing(false);
     }
@@ -230,8 +235,8 @@ export function SourceCheck(props: {
         }
         facts={facts}
         problem={
-          failedAction === "check"
-            ? "Couldn't start the check. Try again."
+          failed?.action === "check"
+            ? { title: "The check didn't start", reason: failed.reason }
             : undefined
         }
         footer={
@@ -282,8 +287,11 @@ export function SourceCheck(props: {
       }
       facts={facts}
       problem={
-        !source.inUse && failedAction === "use"
-          ? "Couldn't switch to it. Try again."
+        !source.inUse && failed?.action === "use"
+          ? {
+              title: `Your home didn't switch to ${name}`,
+              reason: failed.reason,
+            }
           : undefined
       }
       footer={
@@ -350,7 +358,7 @@ function Result(props: {
   // What the check found, in a quieter one.
   facts?: string;
   children?: ReactNode;
-  problem?: string;
+  problem?: { title: string; reason: string };
   footer: ReactNode;
 }) {
   return (
@@ -385,9 +393,7 @@ function Result(props: {
         {props.children}
       </div>
       {props.problem && (
-        <p role="alert" className="m-0 text-sm text-destructive">
-          {props.problem}
-        </p>
+        <Problem title={props.problem.title}>{props.problem.reason}</Problem>
       )}
       <DialogFooter>{props.footer}</DialogFooter>
     </div>
@@ -406,7 +412,7 @@ function ChooseModel(props: {
   const [source] = useState(props.source);
   const [models, setModels] = useState<ModelChoice[]>();
   const [model, setModel] = useState("");
-  const [problem, setProblem] = useState<string>();
+  const [problem, setProblem] = useState<{ title: string; reason: string }>();
   const [working, setWorking] = useState(false);
   const { start, cancel } = useAuthAttempt();
 
@@ -418,11 +424,19 @@ function ChooseModel(props: {
     })
       .then((look) => {
         if (signal.aborted) return;
-        if (!look.found) setProblem(problemText(look.problem, source));
+        if (!look.found)
+          setProblem({
+            title: "Models didn't load",
+            reason: problemText(look.problem, source),
+          });
         else setModels(look.models.filter((each) => each.id !== source.model));
       })
-      .catch(() => {
-        if (!signal.aborted) setProblem("That did not work. Try again.");
+      .catch((error: unknown) => {
+        if (!signal.aborted)
+          setProblem({
+            title: "Models didn't load",
+            reason: problemReason(error),
+          });
       });
     return () => {
       controller.abort();
@@ -445,11 +459,13 @@ function ChooseModel(props: {
       props.onChanged(info);
     } catch (error) {
       if (signal.aborted) return;
-      setProblem(
-        (error as { status?: number }).status === 404
-          ? problemText("model", source)
-          : "That did not work. Try again.",
-      );
+      setProblem({
+        title: "The model wasn't changed",
+        reason:
+          (error as { status?: number }).status === 404
+            ? problemText("model", source)
+            : problemReason(error),
+      });
       setWorking(false);
     }
   };
@@ -483,11 +499,7 @@ function ChooseModel(props: {
               : null}
         </p>
       )}
-      {problem && (
-        <p role="alert" className="m-0 text-sm text-destructive">
-          {problem}
-        </p>
-      )}
+      {problem && <Problem title={problem.title}>{problem.reason}</Problem>}
       <DialogFooter>
         <Button
           type="button"
