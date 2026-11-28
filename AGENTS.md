@@ -243,11 +243,11 @@ What is under which licence, and what neither covers, is in
 
 ## Verification
 
-Run the full set from the repository root under a shared lock so that only
-one worktree runs it at a time. On macOS, use the command below. On Linux,
-replace `lockf -k` with `flock`. Use the same lock path in every worktree and
-leave the lock file in place. The command waits for its turn and holds the
-lock through the formatting check.
+Several worktrees' agents usually share one computer, and each full run
+fills it: Vitest starts a worker per core in every package Turbo runs. So the
+full set runs under one lock for the whole computer, from the repository
+root. The command waits for another worktree's run to finish and holds the
+lock to its last step (on Linux, `flock` takes the place of `lockf -k`):
 
 ```sh
 lockf -k /tmp/sanctum-verification.lock sh -ec '
@@ -259,6 +259,13 @@ lockf -k /tmp/sanctum-verification.lock sh -ec '
 '
 ```
 
+- While iterating, run only what the change touches: one package's task with
+  `pnpm --filter <package> <task>`, or one test file with
+  `pnpm --filter <package> exec vitest run <file>`.
+- Run the full set once, when the change is done and before its pull request
+  is opened or updated, not after every edit. CI runs it again on the pull
+  request, all but `pnpm lint`, whose tsc run is the typecheck's.
+
 `pnpm test:containers` runs real stacks and images in Docker and takes minutes.
 The [Containers workflow](.github/workflows/containers.yml) uses the changed
 paths to decide when to run the tests on arm64. Leave the tests to CI for
@@ -267,13 +274,3 @@ changes the workflow covers, such as changes in `apps/manager/`, `deploy/`,
 CI found, when CI can't run, and before merging a change to app packaging
 that the workflow skips, such as a change to the page builder in
 `packages/ui-sdk/tools/`.
-
-Several worktrees' agents usually share one computer, and each full run
-fills it: Vitest starts a worker per core in every package Turbo runs. So:
-
-- While iterating, run only what the change touches: one package's task with
-  `pnpm --filter <package> <task>`, or one test file with
-  `pnpm --filter <package> exec vitest run <file>`.
-- Run the full set once, when the change is done and before its pull request
-  is opened or updated, not after every edit. CI runs the checks on the pull
-  request and covers lint through typecheck.
