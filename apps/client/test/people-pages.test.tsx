@@ -140,7 +140,7 @@ beforeEach(() => {
     }
     if (path === "/api/people") return people as never;
     if (path === "/api/auth/logins") return logins as never;
-    if (path.startsWith("/api/auth/invites")) return invites as never;
+    if (path === "/api/auth/invites") return invites as never;
     if (path === "/api/auth/agents") {
       return [
         {
@@ -296,9 +296,6 @@ describe("a person's page", () => {
       "Maya stays in People. Maya's iPhone signs out now.",
     );
     expect(alert.textContent).toContain("The password code stops working.");
-    expect(alert.textContent).toContain(
-      "Any saved recovery code stops working.",
-    );
     expect(document.activeElement?.textContent).toBe("Cancel");
 
     await confirm("Remove sign-in");
@@ -442,14 +439,6 @@ describe("a person's page", () => {
     expect(posted).toEqual([["/api/people/remove", { id: "sam" }]]);
     expect(back).toHaveBeenCalledOnce();
     expect(container.textContent).not.toContain("Sam");
-  });
-
-  it("says a saved recovery code ends when removing a person who signs in", async () => {
-    await show("maya");
-    await act(async () => button("Remove Maya Keller")!.click());
-    expect(dialog().textContent).toContain(
-      "Any saved recovery code stops working.",
-    );
   });
 });
 

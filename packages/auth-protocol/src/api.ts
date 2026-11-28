@@ -307,30 +307,26 @@ export type InviteEnded = "expired" | "cancelled";
 export type InviteInfo = {
   id: string;
   personId: string;
+  kind: "invite" | "reset" | "recovery";
   createdAt: string;
+  endsAt: string;
   /** Why the invite ended, or none while it is active. */
   ended: InviteEnded | null;
-} & (
-  | { kind: "invite" | "reset"; endsAt: string }
-  | { kind: "recovery"; endsAt: null }
-);
+};
 
 export type InviteStart = {
   personId: string;
+  kind: InviteInfo["kind"];
   /** The active code the sender confirmed they want to replace, if any. */
   replacesInviteId?: string;
   registrationRequest: string;
-} & ({ kind: "invite" | "reset" } | { kind: "recovery"; lookup: string });
+};
 export type InviteStarted = RegistrationStarted & {
-  /** The prefix for an invite or reset, or the digest for a recovery code. */
+  /** The code's first characters, which find the invite. */
   lookup: string;
 };
 export type InviteFinish = RegistrationFinish;
-export type CancelInvite = {
-  personId: string;
-  inviteId: string;
-  kind?: "recovery";
-};
+export type CancelInvite = { personId: string; inviteId: string };
 
 // Redeeming takes four calls: OPAQUE's first round with the code's secret,
 // the check that the code and the home are right (the person then sees whose

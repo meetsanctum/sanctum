@@ -41,9 +41,7 @@ function client(changes: Partial<ClientInfo>): ClientInfo {
   };
 }
 
-type OrdinaryCode = Exclude<InviteInfo, { kind: "recovery" }>;
-
-function invite(changes: Partial<OrdinaryCode>): OrdinaryCode {
+function invite(changes: Partial<InviteInfo>): InviteInfo {
   return {
     id: "invite",
     personId: "sam",
@@ -101,11 +99,7 @@ describe("signing in", () => {
   });
 
   it("keeps a recovery code apart from an invite or reset", () => {
-    const recovery: InviteInfo = {
-      ...invite({ personId: "maya" }),
-      kind: "recovery",
-      endsAt: null,
-    };
+    const recovery = invite({ personId: "maya", kind: "recovery" });
     const withRecovery = {
       ...household,
       invites: [...household.invites, recovery],

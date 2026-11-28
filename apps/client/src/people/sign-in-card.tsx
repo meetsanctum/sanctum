@@ -73,7 +73,7 @@ export function SignInCard(props: {
   let rows: ReactNode;
   switch (signIn.state) {
     case "signs-in": {
-      const { recovery, reset } = signIn;
+      const reset = signIn.reset;
       rows = (
         <>
           <CardRow title="Username">
@@ -105,19 +105,15 @@ export function SignInCard(props: {
             <CardRow
               title="Recovery code"
               detail={
-                recovery
-                  ? madeText(clock, recovery.createdAt)
+                signIn.recovery
+                  ? madeText(clock, signIn.recovery.createdAt)
                   : "Lets you back in if you forget your password"
               }
               wrapDetail
             >
-              {small(recovery ? "Make a new code" : "Make a code", () =>
+              {small(signIn.recovery ? "Make a new code" : "Make a code", () =>
                 props.onInvite("recovery"),
               )}
-              {recovery &&
-                small("Remove recovery code", (trigger) =>
-                  props.onCancelCode(recovery, trigger),
-                )}
             </CardRow>
           )}
           {reset && (

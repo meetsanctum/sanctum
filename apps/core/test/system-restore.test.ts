@@ -108,7 +108,7 @@ describe("a restore from a backup", () => {
     });
   });
 
-  it("drops invites, password resets and recovery codes from the backup", async () => {
+  it("drops invite and password reset codes from the backup", async () => {
     const before = await testCore();
     const admin = await claimed(before);
     const person = await addPerson(before, admin.token, "Jonas");
@@ -118,10 +118,6 @@ describe("a restore from a backup", () => {
     expect(
       (await invite(before, admin.token, admin.person.id, "reset")).info?.kind,
     ).toBe("reset");
-    expect(
-      (await invite(before, admin.token, admin.person.id, "recovery")).info
-        ?.kind,
-    ).toBe("recovery");
     await writeFile(join(before.dataDir, restoreMarkerFile), marker);
 
     const after = await testCore({ dataDir: before.dataDir });

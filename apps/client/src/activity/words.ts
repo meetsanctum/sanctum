@@ -613,11 +613,7 @@ function setupEntry(clock: HomeClock, entry: ActivityInfo): Words | null {
             : `Invited ${name ?? "someone"} to sign in`,
       );
     case "invite.cancel":
-      return said(
-        entry.reason === "recovery"
-          ? "Removed a recovery code"
-          : `Cancelled ${name ? `${name}'s` : "an"} invite`,
-      );
+      return said(`Cancelled ${name ? `${name}'s` : "an"} invite`);
     case "invite.redeem":
       if (entry.outcome === "ok") {
         return said(

@@ -3,9 +3,14 @@ import {
   normaliseUsername,
   pairingCodeAlphabet,
   pairingCodeLength,
-  recoveryCodeLength,
 } from "@meetsanctum/auth-protocol";
-import { Button, InputOTP } from "@meetsanctum/ui-sdk";
+import {
+  Button,
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSeparator,
+  InputOTPSlot,
+} from "@meetsanctum/ui-sdk";
 import { useId, useRef, useState, type FormEvent } from "react";
 
 import { Avatar } from "../components";
@@ -23,7 +28,6 @@ import {
   problemText,
   type CredentialProblem,
 } from "./messages";
-import { CodeSlots } from "./pairing-code";
 import { rememberSignIn } from "./session";
 import {
   Busy,
@@ -43,6 +47,9 @@ import { useAuthAttempt } from "./use-auth-attempt";
 // unless they change it. Forgot your password? on the sign-in screen opens
 // the same steps for a recovery code or a code someone at home made, and
 // welcomes the person back.
+
+const half = pairingCodeLength / 2;
+const slots = Array.from({ length: pairingCodeLength }, (_, index) => index);
 
 // A suggested username from a name: Maya Keller is maya.
 export function suggestedUsername(name: string) {
@@ -122,16 +129,13 @@ function EnterCode(props: {
   const [code, setCode] = useState("");
   const [problem, setProblem] = useState<string | undefined>(props.notice);
   const [working, setWorking] = useState(false);
-  const [passwordCode, setPasswordCode] = useState(false);
-  const recovery = Boolean(props.forgot && !passwordCode);
-  const length = recovery ? recoveryCodeLength : pairingCodeLength;
   const attempt = useAuthAttempt();
   const input = useRef<HTMLInputElement>(null);
   const problemId = useId();
   const hintId = useId();
 
   const check = async (typed: string) => {
-    if (working || typed.length !== length) return;
+    if (working || typed.length < pairingCodeLength) return;
     setProblem(undefined);
     setWorking(true);
     const signal = attempt.start();
@@ -185,19 +189,13 @@ function EnterCode(props: {
       >
         <div className="flex flex-col items-center gap-2">
           <InputOTP
-            key={length}
             ref={input}
             aria-label={
-              recovery
-                ? "Recovery code"
-                : props.forgot
-                  ? "Password code"
-                  : "Invite code"
+              props.forgot ? "Recovery code or password code" : "Invite code"
             }
             aria-describedby={problem ? `${hintId} ${problemId}` : hintId}
             aria-invalid={problem ? true : undefined}
-            maxLength={length}
-            containerClassName={recovery ? "flex-col" : undefined}
+            maxLength={pairingCodeLength}
             value={code}
             readOnly={working}
             filter={(typed) =>
@@ -214,31 +212,24 @@ function EnterCode(props: {
             autoComplete="one-time-code"
             autoFocus
           >
-            <CodeSlots extended={recovery} />
+            <InputOTPGroup>
+              {slots.slice(0, half).map((index) => (
+                <InputOTPSlot key={index} index={index} />
+              ))}
+            </InputOTPGroup>
+            <InputOTPSeparator />
+            <InputOTPGroup>
+              {slots.slice(half).map((index) => (
+                <InputOTPSlot key={index} index={index} />
+              ))}
+            </InputOTPGroup>
           </InputOTP>
           <p
             id={hintId}
             className="m-0 text-center text-[13px] leading-[18px] text-muted-foreground"
           >
-            {recovery
-              ? "The code has 16 letters and digits in four groups."
-              : "The code has 8 letters and digits, such as K7QX-M4PD."}
+            The code has 8 letters and digits, such as K7QX-M4PD.
           </p>
-          {props.forgot && (
-            <Button
-              type="button"
-              variant="link"
-              size="sm"
-              disabled={working}
-              onClick={() => {
-                setCode("");
-                setProblem(undefined);
-                setPasswordCode(!passwordCode);
-              }}
-            >
-              {recovery ? "Use a password code" : "Use a recovery code"}
-            </Button>
-          )}
         </div>
         {working && <SheetStatus>Checking the code…</SheetStatus>}
         {problem && <SheetProblem id={problemId}>{problem}</SheetProblem>}

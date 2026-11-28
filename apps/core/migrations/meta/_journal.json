@@ -435,13 +435,6 @@
       "when": 1795819602396,
       "tag": "0061_recovery-codes",
       "breakpoints": true
-    },
-    {
-      "idx": 62,
-      "version": "6",
-      "when": 1795827321920,
-      "tag": "0062_recovery-code-constraints",
-      "breakpoints": true
     }
   ]
 }

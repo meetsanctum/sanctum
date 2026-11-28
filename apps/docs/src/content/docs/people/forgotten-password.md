@@ -44,5 +44,5 @@ If no device is signed in as you, someone else at home can make you a code
 for a new password. They open your page in **Settings → People** and choose
 **Reset password**, on their own Mac or on one of the home's shared devices.
 Then, in the Mac app, choose your home, **Just me**, then **Forgot your
-password?**, select **Use a password code**, and enter the code. See
+password?**, and enter the code. See
 [Reset a password](/people/#reset-a-password).

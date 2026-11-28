@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { recoveryLookup, type SignedIn } from "@meetsanctum/auth-protocol";
+import type { SignedIn } from "@meetsanctum/auth-protocol";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,7 +10,6 @@ import { checkHost, claimHost, signIn, SignInError } from "../src/auth/device";
 import { SignIn } from "../src/auth/SignIn";
 import { setCredential } from "../src/core-fetch";
 import { setCoreBaseUrl } from "../src/core-url";
-import { printRecoveryCode } from "../src/people/print-recovery";
 import {
   getShell,
   type FoundHost,
@@ -25,19 +24,6 @@ vi.mock("../src/auth/device", async (importOriginal) => ({
   claimHost: vi.fn(),
   signIn: vi.fn(),
 }));
-
-vi.mock("@serenity-kit/opaque", () => ({
-  ready: Promise.resolve(),
-  client: {
-    startRegistration: () => ({
-      clientRegistrationState: "state",
-      registrationRequest: "request",
-    }),
-    finishRegistration: () => ({ registrationRecord: "registration-record" }),
-  },
-}));
-
-vi.mock("../src/people/print-recovery", () => ({ printRecoveryCode: vi.fn() }));
 
 const office: FoundHost = {
   id: "6b0f6f4e-2a52-4f8e-9a51-1d1d1f6e6e73",
@@ -315,31 +301,7 @@ describe("setting up a new home", () => {
       pin: null,
     });
     vi.mocked(claimHost).mockResolvedValue(signedIn);
-    const finishRecovery = deferred<Response>();
-    const recoveryRequests: {
-      path: string;
-      authorization: string | null;
-      body: unknown;
-    }[] = [];
-    vi.mocked(fetch).mockImplementation(async (url, init) => {
-      const path = String(url);
-      if (!path.includes("/api/auth/invites/")) return new Promise(() => {});
-      const body = JSON.parse(String(init?.body));
-      recoveryRequests.push({
-        path,
-        authorization: new Headers(init?.headers).get("authorization"),
-        body,
-      });
-      return path.endsWith("/start")
-        ? Response.json({
-            registrationId: "registration-id",
-            registrationResponse: "response",
-            lookup: body.lookup,
-          })
-        : finishRecovery.promise;
-    });
     await enterCredentials();
-    await fill("Username", " Taylor ");
     await click("Continue");
     await fill("Your name", " Taylor Reed ");
     const peach = container.querySelector<HTMLButtonElement>(
@@ -352,7 +314,7 @@ describe("setting up a new home", () => {
     expect(claimHost).toHaveBeenCalledExactlyOnceWith({
       url: unclaimed.url,
       signal: expect.any(AbortSignal),
-      username: " Taylor ",
+      username: "taylor",
       password: "correct-password",
       person: { name: "Taylor Reed", colour: "#fcd2b3" },
       client: { name: "Mac", platform: "macos" },
@@ -377,56 +339,8 @@ describe("setting up a new home", () => {
 
     await act(async () => saving.resolve());
 
+    // Then the first person saves a recovery code, or goes on without one.
     expect(title()).toBe("Save a recovery code");
-    await act(async () => {
-      await vi.waitFor(() => expect(recoveryRequests).toHaveLength(2));
-    });
-    expect(
-      buttons().find((button) => button.textContent === "Continue")?.disabled,
-    ).toBe(true);
-    await act(async () =>
-      finishRecovery.resolve(
-        Response.json({
-          id: "recovery",
-          personId: signedIn.person.id,
-          kind: "recovery",
-          createdAt: "2026-11-27T10:00:00Z",
-          ended: null,
-          endsAt: null,
-        }),
-      ),
-    );
-    const code = Array.from(
-      container.querySelectorAll('[data-slot="input-otp-slot"]'),
-    )
-      .map((slot) => slot.textContent)
-      .join("");
-    expect(code).toMatch(/^[A-Z2-9]{16}$/);
-    expect(recoveryRequests).toEqual([
-      {
-        path: `${unclaimed.url}/api/auth/invites/start`,
-        authorization: "Bearer setup-token",
-        body: {
-          kind: "recovery",
-          personId: signedIn.person.id,
-          lookup: await recoveryLookup(code),
-          registrationRequest: "request",
-        },
-      },
-      {
-        path: `${unclaimed.url}/api/auth/invites/finish`,
-        authorization: "Bearer setup-token",
-        body: {
-          registrationId: "registration-id",
-          registrationRecord: "registration-record",
-          keyStretching: 1,
-        },
-      },
-    ]);
-    await click("Print");
-    expect(printRecoveryCode).toHaveBeenCalledWith(
-      expect.objectContaining({ username: "taylor" }),
-    );
     await click("Continue");
     expect(container.querySelector(".home-screen")).not.toBeNull();
   });

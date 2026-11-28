@@ -1,4 +1,3 @@
-import { normaliseUsername } from "@meetsanctum/auth-protocol";
 import { Button } from "@meetsanctum/ui-sdk";
 import { useId, useRef, useState, type FormEvent } from "react";
 
@@ -12,7 +11,7 @@ import {
   type CredentialProblem,
 } from "./messages";
 import { SaveRecovery } from "./SaveRecovery";
-import { rememberSignIn } from "./session";
+import { rememberSignIn, selectHost } from "./session";
 import { Busy, Sheet, SheetActions, SheetField, SheetProblem } from "./sheet";
 import { StorageNotice, useSecureStorage } from "./SignIn";
 import { useAuthAttempt } from "./use-auth-attempt";
@@ -84,7 +83,8 @@ export function ClaimHost(props: {
         signal,
       );
       signal.throwIfAborted();
-      setPassword("");
+      // The recovery code is made as this device, signed in now.
+      selectHost(stored);
       setClaimed({ stored, personId: signedIn.person.id });
     } catch (error) {
       if (signal.aborted) return;
@@ -99,7 +99,7 @@ export function ClaimHost(props: {
       <SaveRecovery
         personId={claimed.personId}
         person={name.trim()}
-        username={normaliseUsername(username)}
+        username={username}
         onContinue={() => props.onClaimed(claimed.stored)}
       />
     );

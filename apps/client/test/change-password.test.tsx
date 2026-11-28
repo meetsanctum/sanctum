@@ -96,8 +96,7 @@ beforeEach(() => {
     if (path === "/api/people") return [alex, maya] as never;
     if (path === "/api/auth/logins") return logins as never;
     if (path === "/api/auth/clients") return [laptop] as never;
-    if (path === "/api/auth/invites?includeRecovery=true")
-      return invites as never;
+    if (path === "/api/auth/invites") return invites as never;
     if (path === "/api/auth/agents") return [] as never;
     throw new Error(`unexpected ${path}`);
   });

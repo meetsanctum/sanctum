@@ -188,41 +188,29 @@ describe("joining with an invite code", () => {
     expect(title()).toBe("Sign in to Office");
   });
 
-  it.each([
-    ["I have an invite code", "join"],
-    ["Forgot your password?", "forgot"],
-  ] as const)(
-    "keeps checking the chosen home's certificate for %s after a failed sign-in",
-    async (button, name) => {
-      vi.mocked(signIn).mockRejectedValue(
-        new SignInError("wrong_username_or_password"),
-      );
-      await click("Just me");
-      await fill("Username", "maya");
-      await fill("Password", "incorrect");
-      await click("Sign in");
-      expect(signIn).toHaveBeenCalledOnce();
-      await click(button);
-      expect(trust.check).toHaveBeenLastCalledWith(office.id, {
-        name,
-        host: office,
-      });
-    },
-  );
+  it("keeps checking the chosen home's certificate when joining after a failed sign-in", async () => {
+    vi.mocked(signIn).mockRejectedValue(
+      new SignInError("wrong_username_or_password"),
+    );
+    await click("Just me");
+    await fill("Username", "maya");
+    await fill("Password", "incorrect");
+    await click("Sign in");
+    expect(signIn).toHaveBeenCalledOnce();
+    await click("I have an invite code");
+    expect(trust.check).toHaveBeenLastCalledWith(office.id, {
+      name: "join",
+      host: office,
+    });
+  });
 
-  it.each([
-    ["join", "Join Office"],
-    ["forgot", "Forgot your password?"],
-  ] as const)(
-    "resumes %s after the desktop replaces its session",
-    async (name, heading) => {
-      trust.resumed.mockResolvedValueOnce({ name, host: office });
-      await act(async () => root.unmount());
-      root = createRoot(container);
-      await act(async () => root.render(<App />));
-      expect(title()).toBe(heading);
-    },
-  );
+  it("resumes Join after the desktop replaces its session", async () => {
+    trust.resumed.mockResolvedValueOnce({ name: "join", host: office });
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await act(async () => root.render(<App />));
+    expect(title()).toBe("Join Office");
+  });
 
   it("checks the code once it's whole, then welcomes the person", async () => {
     vi.mocked(checkInviteCode).mockResolvedValue(checked());
@@ -392,8 +380,10 @@ describe("joining with an invite code", () => {
 });
 
 describe("Forgot your password?", () => {
-  const forgotField = (label = "Recovery code") =>
-    container.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
+  const forgotField = () =>
+    container.querySelector<HTMLInputElement>(
+      'input[aria-label="Recovery code or password code"]',
+    )!;
 
   it("asks for a recovery or password code, and says who can make one", async () => {
     await click("Just me");
@@ -411,45 +401,38 @@ describe("Forgot your password?", () => {
     expect(title()).toBe("Sign in to Office");
   });
 
-  it.each([
-    ["Recovery code", "K7QX-M4PD-W8RT-V2ZN"],
-    ["Password code", "K7QX-M4PD"],
-  ])(
-    "welcomes the person back with a %s to choose a new password",
-    async (label, code) => {
-      vi.mocked(checkInviteCode).mockResolvedValue(checked("mayak"));
-      vi.mocked(finishJoin).mockResolvedValue({
-        token: "recovered_token",
-        confirmation: "mac",
-        client: { id: "macbook", kind: "personal" },
-        person: maya,
-      } as RedeemFinished);
-      await click("Just me");
-      await click("Forgot your password?");
-      if (label === "Password code") await click("Use a password code");
-      await type(forgotField(label), code);
-      expect(checkInviteCode).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({ code: code.replaceAll("-", "") }),
-      );
+  it("welcomes the person back to choose a new password, and signs in", async () => {
+    vi.mocked(checkInviteCode).mockResolvedValue(checked("mayak"));
+    vi.mocked(finishJoin).mockResolvedValue({
+      token: "recovered_token",
+      confirmation: "mac",
+      client: { id: "macbook", kind: "personal" },
+      person: maya,
+    } as RedeemFinished);
+    await click("Just me");
+    await click("Forgot your password?");
+    await type(forgotField(), "K7QXM4PD");
+    expect(checkInviteCode).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ code: "K7QXM4PD" }),
+    );
 
-      expect(title()).toBe("Welcome back, Maya Keller");
-      expect(container.textContent).toContain(
-        "Choose a new password. It never leaves this device.",
-      );
-      await fill("New password", "staple battery horse");
-      await click("Sign in");
-      expect(finishJoin).toHaveBeenCalledWith(
-        expect.objectContaining({
-          username: "mayak",
-          password: "staple battery horse",
-        }),
-      );
-      expect(saved).toEqual([
-        expect.objectContaining({ token: "recovered_token", kind: "personal" }),
-      ]);
-      expect(container.querySelector(".home-screen")).not.toBeNull();
-    },
-  );
+    expect(title()).toBe("Welcome back, Maya Keller");
+    expect(container.textContent).toContain(
+      "Choose a new password. It never leaves this device.",
+    );
+    await fill("New password", "staple battery horse");
+    await click("Sign in");
+    expect(finishJoin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        username: "mayak",
+        password: "staple battery horse",
+      }),
+    );
+    expect(saved).toEqual([
+      expect.objectContaining({ token: "recovered_token", kind: "personal" }),
+    ]);
+    expect(container.querySelector(".home-screen")).not.toBeNull();
+  });
 });
 
 describe("a suggested username", () => {

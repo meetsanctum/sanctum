@@ -1,8 +1,6 @@
 import {
-  isRecoveryLookup,
   keyStretching,
   platforms,
-  recoveryLookupLength,
   type AgentInfo,
   type AgentSetupStarted,
   type AgentSetupStatus,
@@ -74,11 +72,6 @@ const message = z
   .regex(/^[A-Za-z0-9_-]+$/)
   .max(2_048);
 const id = z.string().min(1).max(64);
-const inviteRegistration = {
-  personId: id,
-  replacesInviteId: id.optional(),
-  registrationRequest: message,
-};
 const clientName = z.string().trim().min(1).max(60);
 const newClient = z.object({ name: clientName, platform: z.enum(platforms) });
 const username = z.string().max(64);
@@ -128,22 +121,19 @@ const schemas = {
     registrationRequest: message,
   }) satisfies z.ZodType<SetLoginStart>,
   removeLogin: z.object({ personId: id }) satisfies z.ZodType<RemoveLogin>,
-  inviteList: z.object({ includeRecovery: z.literal("true").optional() }),
-  inviteStart: z.discriminatedUnion("kind", [
-    z.object({ ...inviteRegistration, kind: z.enum(["invite", "reset"]) }),
-    z.object({
-      ...inviteRegistration,
-      kind: z.literal("recovery"),
-      lookup: z.string().refine(isRecoveryLookup),
-    }),
-  ]) satisfies z.ZodType<InviteStart>,
+  inviteStart: z.object({
+    personId: id,
+    kind: z.enum(["invite", "reset", "recovery"]),
+    recoveryVersion: z.number().int().optional(),
+    replacesInviteId: id.optional(),
+    registrationRequest: message,
+  }) satisfies z.ZodType<InviteStart>,
   cancelInvite: z.object({
     personId: id,
     inviteId: id,
-    kind: z.literal("recovery").optional(),
   }) satisfies z.ZodType<CancelInvite>,
   redeemStart: z.object({
-    lookup: z.string().max(recoveryLookupLength),
+    lookup: z.string().max(8),
     startLoginRequest: message,
   }) satisfies z.ZodType<RedeemStart>,
   redeemCheck: z.object({
@@ -437,8 +427,7 @@ export async function registerAuth(
   // no token, as signing in doesn't.
   const invites = auth.invites;
   app.get("/api/auth/invites", async (request): Promise<InviteInfo[]> => {
-    const { includeRecovery } = parse(schemas.inviteList, request.query);
-    return invites.list(principal(request), includeRecovery === "true");
+    return invites.list(principal(request));
   });
   app.post("/api/auth/invites/start", async (request) =>
     invites.start(

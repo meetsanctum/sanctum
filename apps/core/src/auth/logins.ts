@@ -35,7 +35,6 @@ import { clientInfo, type Clients, type Principal } from "./clients.js";
 import { AuthError } from "./errors.js";
 import { createPendingStore, type Limiter, type Limits } from "./limits.js";
 import { createOpaqueServer } from "./opaque-server.js";
-import { endResetCodes } from "./reset-codes.js";
 import { authInvites, authLogins, authServer } from "./schema.js";
 
 // Claiming the host, logins and signing in, all through OPAQUE: devices
@@ -182,6 +181,22 @@ export function createLogins(
   const registrationResponse = server.registrationResponse;
   const startLogin = server.startLogin;
   const finishLogin = server.finishLogin;
+
+  // A code for a new password someone made for this person ends once they
+  // set one themselves, so whoever holds it can't replace theirs.
+  function endResetCodes(personId: string, at: Date) {
+    db.update(authInvites)
+      .set({ endedReason: "cancelled", endedAt: at })
+      .where(
+        and(
+          eq(authInvites.personId, personId),
+          eq(authInvites.kind, "reset"),
+          isNull(authInvites.endedReason),
+          gt(authInvites.expiresAt, at),
+        ),
+      )
+      .run();
+  }
 
   function take<K extends Pending["kind"]>(
     kind: K,
@@ -574,7 +589,7 @@ export function createLogins(
           })
           .where(eq(authLogins.personId, personId))
           .run();
-        endResetCodes(db, personId, at);
+        endResetCodes(personId, at);
         record({
           action: "password.change",
           outcome: "ok",
@@ -646,7 +661,7 @@ export function createLogins(
           })
           .where(eq(authLogins.personId, personId))
           .run();
-        endResetCodes(db, personId, at);
+        endResetCodes(personId, at);
         record({
           action: "password.choose",
           outcome: "ok",

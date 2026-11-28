@@ -138,7 +138,6 @@ describe("Settings' pages", () => {
           return maya;
         case "/api/auth/logins":
         case "/api/auth/invites":
-        case "/api/auth/invites?includeRecovery=true":
         case "/api/auth/clients":
         case "/api/auth/agents":
           return [];
