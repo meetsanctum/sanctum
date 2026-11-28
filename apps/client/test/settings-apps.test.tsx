@@ -2,6 +2,7 @@
 import type {
   AppInfo,
   AppSettings,
+  AvailableApp,
   EntityInfo,
   Places,
 } from "@meetsanctum/app-sdk";
@@ -122,6 +123,7 @@ let container: HTMLDivElement;
 let stored: AppSettings;
 let updates: unknown[];
 let opened: [string, unknown][];
+let openedApps: string[];
 let entities: EntityInfo[];
 const live = createLiveFeed();
 
@@ -130,6 +132,7 @@ beforeEach(() => {
   stored = { temperatureUnit: "celsius", feelsLike: false, days: 7 };
   updates = [];
   opened = [];
+  openedApps = [];
   entities = [];
   vi.mocked(coreJson).mockReset();
   vi.mocked(coreJson).mockImplementation(async (path, init = {}) => {
@@ -171,6 +174,7 @@ async function show(me: Me, page = "app", app = weather.id) {
         page={page}
         params={{ id: app }}
         open={(next, params) => opened.push([next, params])}
+        onOpenApp={(id) => openedApps.push(id)}
         back={() => opened.push(["back", {}])}
         apps={[weather, zigbee, moods]}
         me={me}
@@ -219,6 +223,48 @@ describe("Settings → Apps", () => {
     await act(async () => zigbeeRow.click());
 
     expect(opened).toEqual([["app", { id: "sanctum.zigbee" }]]);
+  });
+
+  it("opens an app just added as Apps does, not its settings", async () => {
+    const example: AppInfo = {
+      ...weather,
+      id: "sanctum.example",
+      name: "Example",
+      settings: null,
+    };
+    const available: AvailableApp = {
+      id: example.id,
+      name: example.name,
+      version: example.version,
+      icon: example.icon,
+      summary: null,
+      requests: [],
+      memory: 64,
+      data: 256,
+      adds: { devices: false },
+      shortfalls: [],
+    };
+    const read = vi.mocked(coreJson).getMockImplementation()!;
+    vi.mocked(coreJson).mockImplementation(async (path, init) => {
+      if (path === "/api/apps/available") return [available];
+      if (path === "/api/apps/add") return example;
+      return read(path, init);
+    });
+    await show(admin, "apps");
+
+    const add = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Add Example"]',
+    )!;
+    await act(async () => add.click());
+    const sheet = document.querySelector('[role="dialog"]');
+    const confirm = [
+      ...(sheet?.querySelectorAll<HTMLButtonElement>("button") ?? []),
+    ].at(-1);
+    expect(confirm?.textContent).toMatch(/^Add/);
+    await act(async () => confirm!.click());
+
+    expect(openedApps).toEqual(["sanctum.example"]);
+    expect(opened).toEqual([]);
   });
 });
 

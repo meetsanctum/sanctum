@@ -55,11 +55,13 @@ function matrixInstructionsOf(cpuinfo: string) {
 
 const kib = 1024;
 
+export function memoryField(meminfo: string, name: string) {
+  const match = new RegExp(`^${name}:[ \\t]+(\\d+) kB$`, "m").exec(meminfo);
+  return match ? Number(match[1]) * kib : null;
+}
+
 export function memoryOf(meminfo: string): MemoryReading | null {
-  const field = (name: string) => {
-    const match = new RegExp(`^${name}:\\s+(\\d+) kB$`, "m").exec(meminfo);
-    return match ? Number(match[1]) * kib : null;
-  };
+  const field = (name: string) => memoryField(meminfo, name);
   const total = field("MemTotal");
   const available = field("MemAvailable");
   if (total === null || available === null) return null;
@@ -68,6 +70,45 @@ export function memoryOf(meminfo: string): MemoryReading | null {
     available,
     swapTotal: field("SwapTotal") ?? 0,
     swapFree: field("SwapFree") ?? 0,
+  };
+}
+
+// What the page cache holds for the disks and how far it is from the point
+// where the kernel writes it out in the background. Above that point the
+// disks are draining a backlog, and every fsync on them waits its turn
+// behind it: on an SD card, a large pull's backlog keeps an fsync waiting
+// for minutes.
+export type WriteoutReading = {
+  // Dirty pages and pages under writeback, in bytes.
+  pendingBytes: number;
+  // Where background writeback starts, in bytes.
+  thresholdBytes: number;
+};
+
+// Linux's auxiliary vector holds the page size at AT_PAGESZ (6). Entries on
+// the manager's arm64 and amd64 builds are pairs of little-endian 64-bit words.
+function pageSizeOf(auxv: Buffer) {
+  for (let offset = 0; offset + 16 <= auxv.length; offset += 16) {
+    const type = auxv.readBigUInt64LE(offset);
+    if (type === 0n) break;
+    if (type === 6n) return Number(auxv.readBigUInt64LE(offset + 8));
+  }
+  return null;
+}
+
+/** The backlog in meminfo and the kernel's effective threshold in vmstat. */
+export function writeoutOf(
+  meminfo: string,
+  vmstat: string,
+  pageSize: number,
+): WriteoutReading | null {
+  const dirty = memoryField(meminfo, "Dirty");
+  const writeback = memoryField(meminfo, "Writeback");
+  const threshold = /^nr_dirty_background_threshold[ \t]+(\d+)$/m.exec(vmstat);
+  if (dirty === null || writeback === null || !threshold) return null;
+  return {
+    pendingBytes: dirty + writeback,
+    thresholdBytes: Number(threshold[1]) * pageSize,
   };
 }
 
@@ -130,6 +171,14 @@ export function createHostReadings(
   const path = (...parts: string[]) => join(root, ...parts);
   const text = (...parts: string[]) =>
     readFile(path(...parts), "utf8").catch(() => null);
+  let pageSize: number | null = null;
+  async function hostPageSize() {
+    if (pageSize !== null) return pageSize;
+    const auxv = await readFile(path("proc/self/auxv")).catch(() => null);
+    const size = auxv && pageSizeOf(auxv);
+    if (size && Number.isSafeInteger(size)) pageSize = size;
+    return pageSize;
+  }
   const number = async (...parts: string[]) => {
     const value = Number.parseInt((await text(...parts)) ?? "", 10);
     return Number.isFinite(value) ? value : null;
@@ -169,6 +218,19 @@ export function createHostReadings(
     async memory() {
       const meminfo = await text("proc/meminfo");
       return meminfo ? memoryOf(meminfo) : null;
+    },
+
+    // Read afresh each time, since the threshold can change while the
+    // manager runs.
+    async writeout() {
+      const [meminfo, vmstat, size] = await Promise.all([
+        text("proc/meminfo"),
+        text("proc/vmstat"),
+        hostPageSize(),
+      ]);
+      return meminfo && vmstat && size
+        ? writeoutOf(meminfo, vmstat, size)
+        : null;
     },
 
     async cpuTimes() {

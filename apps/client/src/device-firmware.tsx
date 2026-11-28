@@ -1,6 +1,7 @@
 import type { DeviceInfo, FirmwareInfo } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
 import { useEffect, useRef, useState } from "react";
+import { plural } from "@meetsanctum/app-sdk/words";
 
 import {
   Dialog,
@@ -43,23 +44,22 @@ const hourMs = 60 * minuteMs;
 // How long the line says a device was updated.
 const updatedShownMs = 24 * hourMs;
 
-const plural = (count: number, word: string) =>
-  `${count} ${word}${count === 1 ? "" : "s"}`;
-
 /** How long ago something happened, as a line says it. */
 export function ago(at: string, now: number) {
   const ms = Math.max(0, now - Date.parse(at));
   if (ms < minuteMs) return "just now";
-  if (ms < hourMs) return `${plural(Math.floor(ms / minuteMs), "minute")} ago`;
-  return `${plural(Math.floor(ms / hourMs), "hour")} ago`;
+  if (ms < hourMs)
+    return `${plural("en", Math.floor(ms / minuteMs), { one: "# minute", other: "# minutes" })} ago`;
+  return `${plural("en", Math.floor(ms / hourMs), { one: "# hour", other: "# hours" })} ago`;
 }
 
 /** About how long an update has left. */
 export function timeLeft(seconds: number) {
   if (seconds < 60) return "less than a minute left";
   const minutes = Math.round(seconds / 60);
-  if (minutes < 90) return `about ${plural(minutes, "minute")} left`;
-  return `about ${plural(Math.round(minutes / 60), "hour")} left`;
+  if (minutes < 90)
+    return `about ${plural("en", minutes, { one: "# minute", other: "# minutes" })} left`;
+  return `about ${plural("en", Math.round(minutes / 60), { one: "# hour", other: "# hours" })} left`;
 }
 
 /** What a line says of a device that didn't answer Check connection. */
@@ -205,7 +205,9 @@ export function updatesHint(devices: readonly DeviceInfo[]) {
       device.firmware?.state === "available" ||
       device.firmware?.state === "failed",
   ).length;
-  return count ? plural(count, "update") : undefined;
+  return count
+    ? plural("en", count, { one: "# update", other: "# updates" })
+    : undefined;
 }
 
 /** What the row's own button does, if it has one: start an update or try again. */

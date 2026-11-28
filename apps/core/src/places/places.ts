@@ -1,4 +1,5 @@
 import {
+  compare,
   homeLocationSchema,
   temperatureUnits,
   type Floor,
@@ -176,8 +177,9 @@ export type LocationChange = {
   after: HomeLocation | null;
 };
 
+const compareNames = compare("en");
 const byName = <T extends { name: string }>(a: T, b: T) =>
-  a.name.localeCompare(b.name);
+  compareNames(a.name, b.name);
 
 /**
  * The rooms a room, a floor or a zone covers in these places, or undefined

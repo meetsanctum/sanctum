@@ -7,6 +7,7 @@ import type {
   ClientInfo,
   PersonInfo,
 } from "@meetsanctum/auth-protocol";
+import { list } from "@meetsanctum/app-sdk/words";
 
 import type { SignIn } from "./data";
 
@@ -16,8 +17,7 @@ import type { SignIn } from "./data";
 
 /** Names as people list them: "Alex", "Alex and Maya", "Alex, Maya and Sam". */
 export function listed(names: readonly string[]) {
-  if (names.length <= 1) return names.join("");
-  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  return list("en", names);
 }
 
 /** Settings' row: everyone up to three, then the first and how many more. */

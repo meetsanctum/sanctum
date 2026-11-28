@@ -1,9 +1,11 @@
-import type { EntityInfo } from "@meetsanctum/app-sdk";
+import { compare, type EntityInfo } from "@meetsanctum/app-sdk";
 import { and, eq, notInArray, sql, type SQL } from "drizzle-orm";
 
 import type { DeclaredEntityType } from "../app-host/contract.js";
 import type { CoreDatabase } from "../database.js";
 import { entities } from "./schema.js";
+
+const compareNames = compare("en");
 
 // The Entities module: the latest state of everything installed apps bring
 // to the home, by app and key. The app host checks each publication against
@@ -136,7 +138,7 @@ export function createEntities(
       .sort(
         (a, b) =>
           a.app.localeCompare(b.app) ||
-          a.name.localeCompare(b.name) ||
+          compareNames(a.name, b.name) ||
           a.key.localeCompare(b.key),
       );
   }

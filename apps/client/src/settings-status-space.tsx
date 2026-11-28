@@ -2,6 +2,7 @@ import { Button } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { Check, CircleAlert, LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
+import { list } from "@meetsanctum/app-sdk/words";
 
 import { productName } from "./brand";
 import {
@@ -45,11 +46,6 @@ const groupOf = (service: string) =>
     ? productName
     : (serviceNames[service] ?? service);
 
-const andList = (items: string[]) =>
-  items.length <= 1
-    ? (items[0] ?? "")
-    : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
-
 /** What goes: "11 dev builds and an old version of Zigbee". */
 export function whatGoes(plan: SpacePlan) {
   const versions = new Map<string, Set<string>>();
@@ -59,7 +55,7 @@ export function whatGoes(plan: SpacePlan) {
     seen.add(image.version ?? `${image.service}-${seen.size}`);
     versions.set(group, seen);
   }
-  return andList([
+  return list("en", [
     ...(plan.devBuilds === 0
       ? []
       : [

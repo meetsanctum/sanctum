@@ -91,6 +91,7 @@ export function setUp(
     updateFailed,
     phase,
     fail,
+    logs,
   };
 }
 

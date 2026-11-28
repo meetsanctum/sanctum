@@ -38,12 +38,24 @@ export class TimedOut extends Error {}
 
 // App code keeps running after a timeout, since JavaScript cannot stop it;
 // its storage call ends, so it changes nothing more.
-export function withTimeout<T>(work: Promise<T>, ms: number) {
+export function withTimeout<T>(
+  work: Promise<T>,
+  ms: number,
+  schedule: (
+    ms: number,
+    expired: () => void,
+    set: (timer: NodeJS.Timeout) => void,
+  ) => void = (ms, expired, set) => set(setTimeout(expired, ms)),
+) {
   let timer: NodeJS.Timeout | undefined;
   return Promise.race([
     work,
     new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new TimedOut()), ms);
+      schedule(
+        ms,
+        () => reject(new TimedOut()),
+        (next) => (timer = next),
+      );
     }),
   ]).finally(() => clearTimeout(timer));
 }

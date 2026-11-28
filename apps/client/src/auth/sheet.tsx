@@ -1,11 +1,18 @@
 import { Button, Input } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
-import { ChevronRight, CircleAlert, type LucideIcon } from "lucide-react";
+import {
+  ChevronRight,
+  CircleAlert,
+  Eye,
+  EyeOff,
+  type LucideIcon,
+} from "lucide-react";
 import {
   useEffect,
   useEffectEvent,
   useId,
   useRef,
+  useState,
   type InputHTMLAttributes,
   type ReactNode,
   type Ref,
@@ -18,12 +25,15 @@ import { getShell } from "../shell";
 
 // The screens before the dashboard share one sheet: a single column of
 // frosted Carbon glass over the Graphite backdrop. Above it is the screen's
-// bar, which stays put while a tall sheet scrolls: Back at its leading edge
-// where there is a way back, named for where it goes, as Settings has it,
-// and the logo in the middle. The sheet holds only the task. Its head is
-// centred: a symbol on screens that start something, the title naming the
-// screen and one line on what it is for. What it asks for follows, then its
-// one primary action.
+// bar, which stays put while a tall sheet scrolls, with Back at its leading
+// edge where there is a way back, named for where it goes, as Settings has
+// it. The logo heads the sheet, clear of the bar, and both start at the same
+// height on every screen, so going from one step to the next changes only
+// what the sheet holds; a taller sheet grows down and scrolls with the logo.
+// The sheet holds only the task. Its head is centred: a symbol on screens
+// that start something, where a task takes steps the step it is at, the
+// title naming the screen and one line on what it is for. What it asks for
+// follows, then its one primary action.
 
 export function Sheet(props: {
   title: string;
@@ -36,10 +46,13 @@ export function Sheet(props: {
   back?: { to?: string; onBack: () => void; disabled?: boolean };
   // The pairing code and its steps need the width of a wall display.
   wide?: boolean;
+  // Where a task takes more than one sheet, the one this is.
+  step?: { at: number; of: number };
   children: ReactNode;
 }) {
   const Glyph = props.glyph;
   const title = useRef<HTMLHeadingElement>(null);
+  const stepId = useId();
   const back = props.back;
   const canGoBack = back !== undefined && !back.disabled;
   const goBack = useEffectEvent(() => back?.onBack());
@@ -75,10 +88,10 @@ export function Sheet(props: {
 
   // A step that follows a press starts at its title, where the control
   // pressed went with the screen before. A field the step focuses itself
-  // keeps its focus.
+  // keeps its focus. Focusing the heading keeps the logo in place.
   useEffect(() => {
     if (document.activeElement === document.body) {
-      title.current?.focus();
+      title.current?.focus({ preventScroll: true });
     }
   }, []);
 
@@ -88,15 +101,13 @@ export function Sheet(props: {
       data-platform={getShell().platform}
       className="sheet-screen"
     >
-      <header className="sheet-bar">
-        {back && <BackButton {...back} />}
-        <Logo className="sheet-logo" />
-      </header>
+      <header className="sheet-bar">{back && <BackButton {...back} />}</header>
       <main className="sheet-scroll">
+        <Logo className="sheet-logo" />
         <section
           aria-labelledby="sheet-title"
           className={cn(
-            "my-auto flex w-full min-w-0 flex-col gap-8 self-center rounded-xl bg-(--glass) p-10 text-foreground shadow-[inset_0_0_0_1px_var(--glass-line)] max-sm:px-6 max-sm:py-8",
+            "flex w-full min-w-0 flex-col gap-8 self-center rounded-xl bg-(--glass) p-10 text-foreground shadow-[inset_0_0_0_1px_var(--glass-line)] max-sm:px-6 max-sm:py-8",
             props.wide ? "max-w-190" : "max-w-120",
           )}
         >
@@ -115,9 +126,18 @@ export function Sheet(props: {
                 />
               </span>
             )}
+            {props.step && (
+              <p
+                id={stepId}
+                className="m-0 mb-0.5 text-[13px] leading-[18px] font-medium text-muted-foreground"
+              >
+                Step {props.step.at} of {props.step.of}
+              </p>
+            )}
             <h1
               ref={title}
               id="sheet-title"
+              aria-describedby={props.step ? stepId : undefined}
               tabIndex={-1}
               className="m-0 text-2xl leading-[30px] font-semibold tracking-[-0.01em] text-balance outline-none"
             >
@@ -137,7 +157,9 @@ export function Sheet(props: {
 }
 
 // A labelled field with its rule underneath and a link to its problem.
-// The sheet uses a 44 px input so a finger finds it on a wall display.
+// The sheet uses a 44 px input so a finger finds it on a wall display. A
+// new password can be shown, at its end, so it is checked by reading it
+// rather than typed twice.
 export function SheetField(
   props: {
     label: string;
@@ -149,12 +171,39 @@ export function SheetField(
     children?: ReactNode;
   } & Omit<
     InputHTMLAttributes<HTMLInputElement>,
-    "id" | "aria-invalid" | "aria-describedby"
-  >,
+    "id" | "aria-invalid" | "aria-describedby" | "type"
+  > &
+    (
+      | { revealable?: boolean; type: "password" }
+      | {
+          revealable?: false;
+          type?: InputHTMLAttributes<HTMLInputElement>["type"];
+        }
+    ),
 ) {
-  const { label, hint, problemId, compact, children, ...input } = props;
+  const { label, hint, problemId, compact, revealable, children, ...input } =
+    props;
   const id = useId();
   const hintId = `${id}-hint`;
+  const [shown, setShown] = useState(false);
+  const RevealIcon = shown ? EyeOff : Eye;
+  const field = (
+    <Input
+      className={cn(
+        !compact && "h-11 rounded-md px-3.5 text-[15px] md:text-[15px]",
+        revealable && (compact ? "pe-10" : "pe-12"),
+      )}
+      {...input}
+      type={revealable && shown ? "text" : input.type}
+      autoCorrect={revealable ? "off" : input.autoCorrect}
+      spellCheck={revealable ? false : input.spellCheck}
+      id={id}
+      aria-invalid={problemId ? true : undefined}
+      aria-describedby={
+        [hint && hintId, problemId].filter(Boolean).join(" ") || undefined
+      }
+    />
+  );
   return (
     <div className={cn("flex flex-col", compact ? "gap-2" : "gap-1.5")}>
       <label
@@ -163,19 +212,30 @@ export function SheetField(
       >
         {label}
       </label>
-      <Input
-        className={
-          compact
-            ? undefined
-            : "h-11 rounded-md px-3.5 text-[15px] md:text-[15px]"
-        }
-        {...input}
-        id={id}
-        aria-invalid={problemId ? true : undefined}
-        aria-describedby={
-          [hint && hintId, problemId].filter(Boolean).join(" ") || undefined
-        }
-      />
+      {revealable ? (
+        <div className="relative">
+          {field}
+          <Button
+            variant="ghost"
+            size={compact ? "icon-sm" : "bar"}
+            type="button"
+            aria-label="Show password"
+            aria-pressed={shown}
+            aria-controls={id}
+            onClick={() => setShown((was) => !was)}
+            className={
+              compact ? "absolute end-0.5 top-0.5" : "absolute end-1 top-1"
+            }
+          >
+            <RevealIcon
+              aria-hidden="true"
+              className={compact ? undefined : "size-5"}
+            />
+          </Button>
+        </div>
+      ) : (
+        field
+      )}
       {hint && (
         <span
           id={hintId}

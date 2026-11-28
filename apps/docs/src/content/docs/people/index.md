@@ -47,14 +47,14 @@ next try is right. Then it works again.
 On a Mac signed in as you, open your own page: choose your picture at the
 bottom of the sidebar, then **Profile**, or choose your name in **Settings →
 People**. Then choose **Change password** under **Sign-In**. Enter your
-current password, then your new one twice, and choose **Change password**.
+current password, then your new one, and choose **Change password**.
 
 Your current password is checked on your Mac before anything changes, and
 neither password leaves it. Your other devices stay signed in. To sign one
 out, choose **Sign out** beside it under **Linked Devices**.
 
 Forgot it? In the same dialog, choose **Forgot your password?** under
-**Current password**, then enter a new password twice. Your Mac is signed in
+**Current password**, then enter a new password. Your Mac is signed in
 as you, so the old one isn't needed. See
 [If you forget your password](/people/forgotten-password/).
 

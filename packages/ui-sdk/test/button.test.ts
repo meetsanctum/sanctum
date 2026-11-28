@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import { describe, expect, it } from "vitest";
 
 import { buttonVariants } from "../src/components/ui/button";
@@ -41,6 +42,14 @@ describe("Button", () => {
       "[&[aria-haspopup][aria-expanded=true]]:bg-foreground/12",
     );
     expect(ghost).not.toMatch(/(^| )aria-expanded:bg-/);
+  });
+
+  it("changes a destructive button's border immediately in either motion setting", () => {
+    const classes = cn(buttonVariants({ variant: "destructive" })).split(" ");
+    expect(classes.filter((name) => name.includes("transition-"))).toEqual([
+      "transition-transform",
+      "motion-reduce:transition-none",
+    ]);
   });
 
   it("turns the ink where a button is the place on show, on or chosen", () => {

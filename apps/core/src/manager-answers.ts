@@ -279,6 +279,14 @@ export const startedBody = z.object({
   lan: lanVersion.optional(),
 });
 
+// Whether the host is writing out a backlog of the page cache to its disks:
+// what waits to be written, and where the kernel starts writing it out.
+export const hostWriteout = z.object({
+  pendingBytes: z.number().nonnegative(),
+  thresholdBytes: z.number().nonnegative(),
+});
+export type HostWriteout = z.infer<typeof hostWriteout>;
+
 // What the manager can do. An update replaces the core before the manager, so a
 // new core can find itself under an old manager, which knows no such question.
 export const capabilities = z
@@ -322,6 +330,9 @@ const appCapacity = z.object({
   servicesMemoryMb: z.number().nonnegative().optional(),
   dataNeedsMb: z.number().nonnegative(),
   dataFreeBytes: z.number().nonnegative().nullable(),
+  // How much would have to be freed for its data to fit, which a manager
+  // that doesn't say leaves to be worked out from what's free.
+  dataShortBytes: z.number().nonnegative().nullable().optional(),
 });
 export type AppCapacity = z.infer<typeof appCapacity>;
 export const appCapacities = z.record(z.string(), appCapacity);
