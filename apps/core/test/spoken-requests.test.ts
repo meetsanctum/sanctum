@@ -4,7 +4,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NewActivityEntry } from "../src/activity/activity.js";
 import { ActionCallError } from "../src/app-host/errors.js";
 import { createAnnouncements } from "../src/speech/announcements.js";
-import { createListening } from "../src/speech/listening.js";
+import {
+  createListening,
+  listeningRunMs,
+  type HeardRun,
+} from "../src/speech/listening.js";
 import { createSpeech, type Speech } from "../src/speech/speech.js";
 import {
   createSpokenRequests,
@@ -66,6 +70,7 @@ function setup(
       errorChimes.push(device);
     },
   );
+  const playback: ((finished: boolean) => void)[] = [];
   const forgotten: string[] = [];
   let answers = options.answers ?? true;
   let room = true;
@@ -112,10 +117,11 @@ function setup(
     },
     speech: () =>
       options.speech ?? {
-        reply: async ({ text, confirmation, signal }) => {
+        reply: async ({ text, confirmation, signal, onPlayback }) => {
           replied.push({ text, ...(confirmation ? { confirmation } : {}) });
           await options.prepare?.(text, signal);
           signal?.throwIfAborted();
+          if (onPlayback) playback.push(onPlayback);
           return `http://192.168.1.2:4180/a/${encodeURIComponent(text)}.flac`;
         },
         speak: async (input) => {
@@ -128,10 +134,21 @@ function setup(
     record: (entry) => void recorded.push(entry),
     log: () => {},
   });
+  const runs = new Map<string, HeardRun>();
+  const handled = new Map<string, Promise<void>>();
   const listening = createListening({
     idFor: (by, key) => (by === driver ? `device:${key}` : null),
     listens: () => true,
-    hearer: spoken.hearer,
+    hearer(device) {
+      const hear = spoken.hearer(device);
+      if (typeof hear !== "function") return hear;
+      return (run) => {
+        runs.set(run.id, run);
+        const finished = Promise.resolve(hear(run));
+        handled.set(run.id, finished);
+        return finished;
+      };
+    },
     refused: spoken.refused,
     log: () => {},
   });
@@ -169,7 +186,10 @@ function setup(
     replied,
     errorChimes,
     playError,
+    playback,
     forgotten,
+    runs,
+    handled,
     wake,
     steps,
     until: (check: () => boolean) =>
@@ -266,10 +286,16 @@ describe("a smart speaker's request", () => {
       detail: {
         firstSoundMs: expect.any(Number),
         stoppedListeningMs: expect.any(Number),
+        heardWordsMs: expect.any(Number),
         replyReadyMs: expect.any(Number),
         finishedPlayingMs: expect.any(Number),
       },
     });
+    const moments = requestLines(recorded)[0]!.detail as Record<string, number>;
+    expect(moments.heardWordsMs).toBeGreaterThanOrEqual(
+      moments.stoppedListeningMs!,
+    );
+    expect(moments.replyReadyMs).toBeGreaterThanOrEqual(moments.heardWordsMs!);
     // Its request is over: the Assistant acts for it no more.
     expect(spoken.actsFor("device:speaker")).toBe(false);
   });
@@ -369,6 +395,30 @@ describe("a smart speaker's request", () => {
     );
     expect(unknown.replied).toEqual([{ text: notUnderstood }]);
     expect(unknown.asked).toEqual([]);
+    unknown.listening.close(driver, { run: opened.run, end: "played" });
+    await unknown.until(() => requestLines(unknown.recorded).length === 1);
+    const [line] = requestLines(unknown.recorded);
+    expect(line).toMatchObject({
+      outcome: "ok",
+      reason: "not_understood",
+      detail: {
+        stoppedListeningMs: expect.any(Number),
+        heardWordsMs: expect.any(Number),
+        finishedPlayingMs: expect.any(Number),
+      },
+    });
+    // The moments only, never what was heard or said.
+    expect(Object.keys(line!.detail!).sort()).toEqual(
+      [
+        "capability",
+        "capabilityKind",
+        "finishedPlayingMs",
+        "firstSoundMs",
+        "heardWordsMs",
+        "replyReadyMs",
+        "stoppedListeningMs",
+      ].sort(),
+    );
 
     const silent = setup({ heard: null, notUnderstood });
     const quiet = await silent.wake();
@@ -381,6 +431,119 @@ describe("a smart speaker's request", () => {
       error: "nothing-heard",
     });
     expect(silent.replied).toEqual([]);
+  });
+
+  it.each([
+    ["preparation", "disconnect"],
+    ["playback", "disconnect"],
+    ["preparation", "timeout"],
+    ["playback", "failure"],
+  ] as const)(
+    "keeps recognition timing when fallback %s ends with %s",
+    async (during, end) => {
+      vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+      const ready = deferredResult<void>();
+      const prepare = vi.fn(
+        (_text: string, _signal?: AbortSignal) => ready.promise,
+      );
+      const { wake, listening, replied, playback, steps, handled, recorded } =
+        setup({
+          heard: "",
+          notUnderstood: "I can only help with lights",
+          ...(during === "preparation" && { prepare }),
+        });
+      const opened = await wake();
+      if (!opened.accepted) throw new Error(opened.refusal);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(replied).toHaveLength(1);
+      expect(kinds(steps(opened.run)).includes("reply")).toBe(
+        during === "playback",
+      );
+
+      if (end === "timeout") {
+        await vi.advanceTimersByTimeAsync(listeningRunMs);
+        expect(prepare.mock.calls[0]?.[1]?.aborted).toBe(true);
+      } else if (end === "failure") {
+        playback[0]!(false);
+      } else {
+        listening.close(driver, { run: opened.run, end: "disconnected" });
+      }
+      await handled.get(opened.run);
+      ready.resolve();
+
+      expect(requestLines(recorded)).toMatchObject([
+        {
+          outcome: "ok",
+          reason: "not_understood",
+          detail: {
+            heardWordsMs: expect.any(Number),
+            replyReadyMs: during === "preparation" ? null : expect.any(Number),
+            finishedPlayingMs: null,
+          },
+        },
+      ]);
+    },
+  );
+
+  it.each(["preparation", "playback"] as const)(
+    "drops the unrecognised speech entry when a newer wake takes over during fallback %s",
+    async (during) => {
+      const ready = deferredResult<void>();
+      const { wake, listening, replied, until, steps, handled, recorded } =
+        setup({
+          heard: "",
+          notUnderstood: "I can only help with lights",
+          ...(during === "preparation" && { prepare: () => ready.promise }),
+        });
+      const first = await wake();
+      if (!first.accepted) throw new Error(first.refusal);
+      await until(() =>
+        during === "preparation"
+          ? replied.length === 1
+          : kinds(steps(first.run)).includes("reply"),
+      );
+
+      const second = await wake();
+      if (!second.accepted) throw new Error(second.refusal);
+      ready.resolve();
+      await handled.get(first.run);
+      expect(requestLines(recorded)).toEqual([]);
+
+      listening.close(driver, { run: second.run, end: "stopped" });
+      await handled.get(second.run);
+    },
+  );
+
+  it("keeps recognition timing when the fallback reply can't be synthesised", async () => {
+    const { wake, listening, replied, handled, recorded } = setup({
+      heard: "",
+      notUnderstood: "I can only help with lights",
+      prepare: async () => {
+        throw new Error("Speech synthesis failed");
+      },
+    });
+    const opened = await wake();
+    if (!opened.accepted) throw new Error(opened.refusal);
+    await handled.get(opened.run);
+
+    const steps = await listening.read(driver, { run: opened.run, after: 0 });
+    expect(replied).toHaveLength(1);
+    expect(steps).toContainEqual({
+      step: "error",
+      error: "not-understood",
+    });
+    expect(steps.at(-1)).toEqual({ step: "done" });
+    expect(requestLines(recorded)).toMatchObject([
+      {
+        outcome: "ok",
+        reason: "not_understood",
+        detail: {
+          heardWordsMs: expect.any(Number),
+          replyReadyMs: null,
+          finishedPlayingMs: null,
+        },
+      },
+    ]);
   });
 
   it("ends in an error the speaker shows when the Assistant can't answer", async () => {
@@ -515,6 +678,26 @@ describe("a smart speaker's request", () => {
     expect(errorChimes).toEqual([]);
   });
 
+  it("records no recognition time when transcription fails", async () => {
+    const transcript = deferredResult<string>();
+    const { wake, asked, until, recorded, steps } = setup({
+      transcript: transcript.promise,
+    });
+    const opened = await wake();
+    if (!opened.accepted) throw new Error(opened.refusal);
+    await until(() => kinds(steps(opened.run)).includes("stopped"));
+    transcript.reject(new Error("Speech recognition failed"));
+    await until(() => kinds(steps(opened.run)).includes("done"));
+    expect(steps(opened.run)).toContainEqual({
+      step: "error",
+      error: "failed",
+    });
+    expect(asked).toEqual([]);
+    expect(requestLines(recorded)).toMatchObject([
+      { outcome: "failed", reason: "failed", detail: { heardWordsMs: null } },
+    ]);
+  });
+
   it("ends the first request when a second wake word comes, and says nothing of its answer", async () => {
     const { wake, asked, until, recorded, steps } = setup();
     const first = await wake();
@@ -548,14 +731,16 @@ describe("a smart speaker's request", () => {
     async (heard, error) => {
       vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
       const transcript = deferredResult<string | null>();
-      const { wake, asked, replied, steps } = setup({
+      const { wake, asked, replied, recorded, runs, steps } = setup({
         transcript: transcript.promise,
       });
       const opened = await wake();
       if (!opened.accepted) throw new Error(opened.refusal);
+      const { moments } = runs.get(opened.run)!;
       await vi.advanceTimersByTimeAsync(0);
       await vi.advanceTimersByTimeAsync(oneMomentAfterMs + 1);
       expect(kinds(steps(opened.run))).toEqual(["stopped"]);
+      expect(moments.heardWords).toBeNull();
 
       transcript.resolve(heard);
       await vi.advanceTimersByTimeAsync(0);
@@ -566,6 +751,19 @@ describe("a smart speaker's request", () => {
       ]);
       expect(asked).toEqual([]);
       expect(replied).toEqual([]);
+      expect(moments.heardWords).toBe(moments.heard + oneMomentAfterMs + 1);
+      // Speech it doesn't know leaves one plain line; silence, none.
+      expect(requestLines(recorded)).toMatchObject(
+        heard === null
+          ? []
+          : [
+              {
+                outcome: "ok",
+                reason: "not_understood",
+                detail: { heardWordsMs: oneMomentAfterMs + 1 },
+              },
+            ],
+      );
     },
   );
 
@@ -603,6 +801,7 @@ describe("a smart speaker's request", () => {
     expect(requestLines(recorded)[0]).toMatchObject({
       outcome: "ok",
       detail: {
+        heardWordsMs: 2_000,
         lateReplyMs: expect.any(Number),
         replyReadyMs: null,
         finishedPlayingMs: null,

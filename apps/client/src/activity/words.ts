@@ -343,6 +343,16 @@ function deviceEntry(
       );
     // What someone asked a smart speaker, never the words: its moments.
     case "device.request":
+      // Speech it doesn't know: plain information, as a TV's can be.
+      if (entry.reason === "not_understood") {
+        return {
+          ...said(
+            "Heard something it didn't understand",
+            requestMomentWords(entry.detail),
+          ),
+          problem: false,
+        };
+      }
       return said(
         entry.outcome === "ok"
           ? "Answered a request"

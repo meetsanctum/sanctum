@@ -68,22 +68,34 @@ const causes = new AsyncLocalStorage<Cause>();
 // The AI agent's tool call behind what runs now.
 const calls = new AsyncLocalStorage<string>();
 
+type DeviceCapabilities = Record<
+  string,
+  Readonly<Record<string, CapabilityKind>>
+>;
+
+type AgentActivityQuery = {
+  /** Omit timing entries for speech a smart speaker did not understand. */
+  forAgents: true;
+  deviceCapabilities: DeviceCapabilities;
+};
+
 export type ActivityQuery = {
   subjectId?: string;
   kind?: Kind;
-  /** When set, only entries about these devices and their visible capabilities. */
-  deviceCapabilities?: Record<string, Readonly<Record<string, CapabilityKind>>>;
   // An entry's id: those older than it.
   before?: string;
   limit: number;
-};
+} & (
+  | AgentActivityQuery
+  | { forAgents?: false; deviceCapabilities?: DeviceCapabilities }
+);
 
 const same = (a: string | null | undefined, b: string | null | undefined) =>
   (a ?? null) === (b ?? null);
 
-function deviceActivityIn(
-  visible: NonNullable<ActivityQuery["deviceCapabilities"]>,
-) {
+const withoutUnrecognisedSpeech = sql`not (${activity.action} = 'device.request' and coalesce(${activity.reason}, '') = 'not_understood')`;
+
+function deviceActivityIn(visible: DeviceCapabilities) {
   const devices = JSON.stringify(visible);
   const capabilities = sql`json_extract(${devices}, '$.' || json_quote(${activity.subjectId}))`;
   const capability = sql`json_extract(${activity.detail}, '$.capability')`;
@@ -166,7 +178,13 @@ export function createActivity(
   const lastAbout = db
     .select()
     .from(activity)
-    .where(eq(activity.subjectId, sql.placeholder("subjectId")))
+    // Hidden timing entries must not change how visible entries group.
+    .where(
+      and(
+        eq(activity.subjectId, sql.placeholder("subjectId")),
+        withoutUnrecognisedSpeech,
+      ),
+    )
     .orderBy(desc(activity.at), desc(rowid))
     .limit(1)
     .prepare();
@@ -366,7 +384,12 @@ export function createActivity(
       if (query.subjectId)
         conditions.push(eq(activity.subjectId, query.subjectId));
       if (query.kind) conditions.push(eq(activity.kind, query.kind));
-      if (query.deviceCapabilities) {
+      if (query.forAgents) {
+        conditions.push(
+          deviceActivityIn(query.deviceCapabilities),
+          withoutUnrecognisedSpeech,
+        );
+      } else if (query.deviceCapabilities) {
         conditions.push(deviceActivityIn(query.deviceCapabilities));
       }
       const anchor = query.before
