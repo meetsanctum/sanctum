@@ -140,8 +140,8 @@ export function PressesPage(props: DevicePageProps) {
         setFinding(null);
         if (reason === "failed") {
           setProblem({
-            title: "Couldn't listen for the remote",
-            reason: "Moods didn't start listening. Try again in a moment.",
+            title: "Find a press didn't finish",
+            reason: "Select Find a press to try again.",
           });
         }
       },
@@ -168,8 +168,9 @@ export function PressesPage(props: DevicePageProps) {
       return true;
     } catch {
       setProblem({
-        title: "That press didn't change",
-        reason: "Nothing was changed. Try again in a moment.",
+        title: "Couldn't confirm the change to this press",
+        reason:
+          "Close the device detail and reopen it to check what this press does.",
       });
       return false;
     } finally {

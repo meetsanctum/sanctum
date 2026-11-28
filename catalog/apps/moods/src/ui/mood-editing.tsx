@@ -42,21 +42,21 @@ export function useMoodEditing(options: {
   const restore = useRef<PreviewLight[] | null>(null);
   // One preview at a time, then the latest one asked for meanwhile.
   const sending = useRef<{
-    next: PreviewLight[] | null;
+    next: { lights: PreviewLight[]; isRestore: boolean } | null;
     done?: Promise<void>;
   }>({
     next: null,
   });
   const send = useCallback(
-    (sent: PreviewLight[]) => {
+    (lights: PreviewLight[], isRestore = false) => {
       const queue = sending.current;
-      queue.next = sent;
+      queue.next = { lights, isRestore };
       queue.done ??= (async () => {
         while (queue.next) {
           const next = queue.next;
           queue.next = null;
           try {
-            const result = await preview(roomId, next);
+            const result = await preview(roomId, next.lights);
             if (result.failed.length === 0) continue;
             setFailures((current) => {
               const counted = new Map(current);
@@ -67,10 +67,18 @@ export function useMoodEditing(options: {
               return counted;
             });
           } catch {
-            setError({
-              title: "The lights didn't show the mood",
-              reason: "Moods couldn't send it to them. Try again in a moment.",
-            });
+            setError(
+              next.isRestore
+                ? {
+                    title: "Couldn't restore the previous light settings",
+                    reason: "Check the lights and adjust them if needed.",
+                  }
+                : {
+                    title: "The lights didn't show the mood",
+                    reason:
+                      "Moods couldn't send it to them. Try again in a moment.",
+                  },
+            );
           }
         }
         queue.done = undefined;
@@ -98,7 +106,7 @@ export function useMoodEditing(options: {
   // preview still on its way.
   useEffect(
     () => () => {
-      if (restore.current?.length) void send(restore.current);
+      if (restore.current?.length) void send(restore.current, true);
     },
     [send],
   );
@@ -106,7 +114,7 @@ export function useMoodEditing(options: {
   const putBack = async () => {
     const saved = restore.current;
     restore.current = null;
-    if (saved?.length) await send(saved);
+    if (saved?.length) await send(saved, true);
   };
 
   const togglePreview = async () => {
@@ -132,8 +140,11 @@ export function useMoodEditing(options: {
       leave();
     } catch {
       setError({
-        title: mood ? `${mood.name} wasn't saved` : "The mood wasn't saved",
-        reason: "Nothing was changed. Try again in a moment.",
+        title: mood
+          ? `Couldn't confirm that ${mood.name} was saved`
+          : "Couldn't confirm that the mood was saved",
+        reason:
+          "Close Moods and reopen it to check the room's moods before trying again.",
       });
       setBusy(false);
     }
@@ -158,10 +169,11 @@ export function useMoodEditing(options: {
       // It is off its room's schedule now.
       void schedules.load().catch(() => undefined);
       leave();
-    } catch (failure) {
+    } catch {
       setError({
-        title: mood ? `${mood.name} wasn't deleted` : "The mood wasn't deleted",
-        reason: "It's still there. Try again in a moment.",
+        title: `Couldn't confirm that ${mood.name} was deleted`,
+        reason:
+          "Close Moods and reopen it to check the room's moods before trying again.",
       });
       setConfirming(false);
       setBusy(false);

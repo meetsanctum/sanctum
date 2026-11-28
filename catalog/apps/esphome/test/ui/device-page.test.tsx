@@ -32,10 +32,11 @@ afterEach(() => {
   host.remove();
 });
 
-async function show(facts: DeviceFacts) {
+async function show(facts: DeviceFacts | Error) {
   const client = {
     async call(id: string, input: unknown) {
       expect([id, input]).toEqual(["esphome.device", { device: "device:1" }]);
+      if (facts instanceof Error) throw facts;
       return facts;
     },
   } as unknown as AppClient;
@@ -56,6 +57,18 @@ const rows = () =>
   ]);
 
 describe("ESPHome's device page", () => {
+  it("explains how to retry a failed connection load", async () => {
+    await show(new Error("offline"));
+
+    const alert = host.querySelector('[role="alert"]');
+    expect(alert?.querySelector("[data-slot=alert-title]")?.textContent).toBe(
+      "How it's connected didn't load",
+    );
+    expect(
+      alert?.querySelector("[data-slot=alert-description]")?.textContent,
+    ).toBe("Close its detail and open it again.");
+  });
+
   it("says how an encrypted device is reached and what else it has", async () => {
     await show({
       address: "192.168.1.40:6053",

@@ -260,6 +260,13 @@ describe("a remote's presses", () => {
     });
     expect(button("Evening").getAttribute("aria-checked")).toBe("true");
 
+    client.call.mockRejectedValueOnce(new Error("save failed"));
+    await click(button("Dimmer"));
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "Couldn't confirm the change to this press",
+    );
+    expect(button("Evening").getAttribute("aria-checked")).toBe("true");
+
     await click(button("Presses"));
     expect(
       [...container.querySelectorAll("li")].map((each) => each.textContent),
@@ -467,17 +474,27 @@ describe("a remote's presses", () => {
     expect(button("Stop")).toBeTruthy();
     await click(button("Stop"));
     expect(stop).toHaveBeenCalledTimes(2);
-    expect(text()).not.toContain("Couldn't stop listening");
+    expect(container.querySelector('[role="alert"]')).toBeNull();
     expect(button("Find a press")).toBeTruthy();
   });
 
-  it("say when listening could not start", async () => {
+  it("says how to retry when listening ends after a press", async () => {
     await show();
     await click(button("Find a press"));
+    await act(async () => {
+      listener!.press({
+        type: "press",
+        device: "remote",
+        capability: "button",
+        action: "hold",
+        at: "2026-10-30T12:00:00.000Z",
+        isCaptured: true,
+      });
+    });
     await act(async () => listener!.ended?.("failed"));
 
     expect(text()).toContain(
-      "Couldn't listen for the remoteMoods didn't start listening. Try again in a moment.",
+      "Find a press didn't finishSelect Find a press to try again.",
     );
   });
 });
@@ -722,7 +739,7 @@ describe("a dimmer's presses", () => {
     client.call.mockRejectedValueOnce(new Error("save failed"));
     await click(button("Shelf"));
     expect(text()).toContain(
-      "That press didn't changeNothing was changed. Try again in a moment.",
+      "Couldn't confirm the change to this pressClose the device detail and reopen it to check what this press does.",
     );
     expect(button("Shelf").getAttribute("aria-checked")).toBe("true");
   });

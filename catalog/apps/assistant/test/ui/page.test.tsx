@@ -146,6 +146,23 @@ const office = speaker("office-speaker", "Office Speaker", "office");
 const playback = speaker("playback", "Playback only", null, { listens: false });
 
 describe("the Assistant's page", () => {
+  it("shows a failed settings load and clears the alert after retrying", async () => {
+    const { client } = fakeClient({
+      hearing: { state: "ready", language: "en", activeLanguage: "en" },
+      devices: [office],
+    });
+    vi.mocked(client.devices).mockRejectedValueOnce(new Error("offline"));
+    await show(client);
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      "The Assistant's settings didn't load",
+    );
+    await press("Try again");
+
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.querySelector("select")?.value).toBe("en");
+  });
+
   it("says it's ready, with something to try in a speaker's room", async () => {
     const { client } = fakeClient({
       hearing: { state: "ready", language: "en", activeLanguage: "en" },
@@ -589,7 +606,7 @@ describe("Setup", () => {
       ].map((line) => line.textContent),
     ).toEqual([
       "The language didn't change",
-      "The Assistant couldn't save it. Choose it again in a moment.",
+      "The Assistant couldn't save it. Press Continue again in a moment.",
     ]);
     expect(button("Continue").disabled).toBe(false);
   });

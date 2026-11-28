@@ -139,8 +139,9 @@ function Editor(props: {
       leave();
     } catch {
       setError({
-        title: "The schedule wasn't saved",
-        reason: "Nothing was changed. Try again in a moment.",
+        title: "Couldn't confirm that the schedule was saved",
+        reason:
+          "Close Moods and reopen it to check the room's schedule before trying again.",
       });
       setBusy(false);
     }
@@ -155,8 +156,8 @@ function Editor(props: {
       leave();
     } catch {
       setError({
-        title: "This time wasn't taken off the schedule",
-        reason: "It's still scheduled. Try again in a moment.",
+        title: "Couldn't confirm that this time was removed",
+        reason: "Close Moods and reopen it to check the room's schedule.",
       });
       setBusy(false);
     }

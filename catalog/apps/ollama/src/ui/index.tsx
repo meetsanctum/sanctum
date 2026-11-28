@@ -385,8 +385,8 @@ function MainPage() {
                     "ollama.remove",
                     { model: model.id },
                     {
-                      title: `${model.name} wasn’t removed`,
-                      reason: "It’s still on Sanctum. Try again in a moment.",
+                      title: `Couldn’t confirm that ${model.name} was removed`,
+                      reason: "Check the model list before trying again.",
                     },
                   )
                 }
@@ -402,10 +402,15 @@ function MainPage() {
                 void run(
                   "ollama.stop",
                   { model: download.id },
-                  {
-                    title: `${download.name} didn’t stop downloading`,
-                    reason: "Press Stop again in a moment.",
-                  },
+                  download.problem
+                    ? {
+                        title: `Couldn’t cancel the download of ${download.name}`,
+                        reason: "Press Cancel again in a moment.",
+                      }
+                    : {
+                        title: `${download.name} didn’t stop downloading`,
+                        reason: "Press Stop download again in a moment.",
+                      },
                 )
               }
               onRetry={() =>

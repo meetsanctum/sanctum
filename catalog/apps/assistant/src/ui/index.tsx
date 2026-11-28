@@ -316,10 +316,10 @@ function LoadFailed(props: { onRetry: () => void }) {
   );
 }
 
-function LanguageChangeError() {
+function LanguageChangeError(props: { retry: string }) {
   return (
     <Problem title="The language didn't change">
-      The Assistant couldn't save it. Choose it again in a moment.
+      {`The Assistant couldn't save it. ${props.retry}`}
     </Problem>
   );
 }
@@ -400,7 +400,9 @@ function MainPage(page: PageProps) {
             It listens and replies in one language. Switching takes a few
             minutes.
           </p>
-          {choiceFailed && <LanguageChangeError />}
+          {choiceFailed && (
+            <LanguageChangeError retry="Choose it again in a moment." />
+          )}
         </div>
       </section>
       <PageSection id="assistant-say" title="What you can say">
@@ -469,7 +471,9 @@ function SetupPage(page: PageProps) {
             isChoosing={assistant.isChoosing}
             onChoose={setChosen}
           />
-          {choiceFailed && <LanguageChangeError />}
+          {choiceFailed && (
+            <LanguageChangeError retry="Press Continue again in a moment." />
+          )}
           <div className={card}>
             <h3 className="m-0 text-[13px] font-semibold text-muted-foreground">
               Things you can say
