@@ -2,6 +2,7 @@ import {
   announcePermission,
   assistantAppId,
   moodType,
+  speechLanguage,
   speechLanguages,
   type Hearing,
   type Language,
@@ -12,6 +13,7 @@ import type { AgentsCanUse } from "../agents/can-use.js";
 import type { Entities } from "../entities/entities.js";
 import type { ManagerClient } from "../manager.js";
 import { createAnnouncements } from "./announcements.js";
+import { readChime } from "./chimes.js";
 import { assembleHearing, hasListeningPart } from "./hearing.js";
 import { createLearning } from "./learning.js";
 import { createSpeech, speechService } from "./speech.js";
@@ -44,7 +46,7 @@ export function assembleSpeakerAudio(
 ) {
   const { manager } = config;
   const { devices, places, apps } = options;
-  const language = () => places.language();
+  const language = () => speechLanguage(places.language());
   // The Assistant's, while it answers requests.
   const assistant = () =>
     apps().answersRequests() ? apps().manifest(assistantAppId) : undefined;
@@ -79,6 +81,7 @@ export function assembleSpeakerAudio(
             };
           },
           language,
+          homeLanguage: () => places.language(),
           onWanted: () => speech.speech?.hearingChanged(),
           onHearing: options.onHearing,
           speakersListen: () => devices.list().some(hasListeningPart),
@@ -110,8 +113,8 @@ export function assembleSpeakerAudio(
     ...options,
     transcriber: config.transcriber ?? (() => learning?.transcriber() ?? null),
     notHearing: () => learning?.notHearing() ?? "no_speech_to_text",
-    // The language speech recognition hears in: the home's, or until it
-    // has learned that, the one before.
+    // The language speech recognition hears in: the home's speech language,
+    // or until it has learned that, the one before.
     language: () => learning?.hearsIn() ?? language(),
     notUnderstood: (language) => assistant()?.notUnderstood?.[language] ?? null,
     log: config.log,
@@ -125,7 +128,8 @@ export function assembleSpeakerAudio(
       return (
         learning?.hearing() ?? {
           state: "failed",
-          language: language(),
+          language: places.language(),
+          speechLanguage: language(),
           activeLanguage: null,
           failure: "unavailable",
         }
@@ -181,7 +185,8 @@ export function assembleSpeech(options: {
           devices,
           areaOn,
           hears: options.hears,
-          chime: [successChime()],
+          chime: [readChime("success")],
+          errorChime: [readChime("error")],
           publishedPort: speaker.publishedPort,
           keptPhrases: () => [
             ...Object.values(spokenPhrases).flatMap((phrase) =>
@@ -229,19 +234,4 @@ export function assembleSpeech(options: {
       await announcements?.stop();
     },
   };
-}
-
-// Two soft, rising notes with fades to avoid clicks at their edges.
-function successChime() {
-  const rate = 22_050;
-  const noteLength = Math.round(rate * 0.14);
-  const samples = new Int16Array(noteLength * 2);
-  for (const [note, frequency] of [660, 880].entries()) {
-    for (let i = 0; i < noteLength; i++) {
-      const fade = Math.sin((Math.PI * i) / noteLength) ** 2;
-      const wave = Math.sin((2 * Math.PI * frequency * i) / rate);
-      samples[note * noteLength + i] = Math.round(4_000 * fade * wave);
-    }
-  }
-  return { rate, samples };
 }

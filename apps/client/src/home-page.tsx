@@ -36,6 +36,7 @@ import { SetupGuide, SetupLeft } from "./setup-guide";
 import {
   automationsApp,
   devicesSettingsPage,
+  householdSettingsPage,
   maintenanceSettingsPage,
   settingsApp,
   systemSettingsPage,
@@ -321,6 +322,12 @@ function HomePageWithDevices({
               open={opener(route.app)}
               back={back}
               openSettings={settingsOf(route.app)}
+              openHousehold={(title) =>
+                opener(settingsApp.id)(
+                  householdSettingsPage,
+                  title ? { from: title } : {},
+                )
+              }
               openDevice={(id) => {
                 // A device's detail opens on its first tile, as from a room.
                 const tile = devices.tiles.find((each) => each.deviceId === id);

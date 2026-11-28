@@ -1,7 +1,6 @@
 import { ActionError, requestReplySchema } from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
-import { app } from "../src/index.js";
 import { ask, json, lit, overview } from "./request-support.js";
 
 describe("the Assistant's requests", () => {
@@ -558,20 +557,5 @@ describe("the Assistant's requests", () => {
 
   it("doesn't answer a request that has ended", async () => {
     expect((await ask("lights off", { aborted: true })).replies).toEqual([]);
-  });
-});
-
-describe("the Assistant's language", () => {
-  it("sets the home's language for speech", async () => {
-    const set: string[] = [];
-    const action = app.actions.find(({ id }) => id === "assistant.language")!;
-    const ctx = {
-      speech: {
-        setLanguage: async (language: string) => void set.push(language),
-      },
-    };
-    await action.run(ctx as never, action.input.parse({ language: "de" }));
-    expect(set).toEqual(["de"]);
-    expect(() => action.input.parse({ language: "fr" })).toThrow();
   });
 });

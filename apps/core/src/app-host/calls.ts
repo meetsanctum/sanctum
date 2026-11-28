@@ -1,8 +1,6 @@
 import {
   aiAssistantPermission,
   aiToolCallSchema,
-  assistantAppId,
-  speechLanguages,
   requestReplySchema,
   blobOf,
   ActionError,
@@ -57,10 +55,6 @@ import { secretName, secretValue, type AppSecrets } from "./secrets.js";
 
 // The protocol whose apps may say a reply is a confirmation.
 const confirmationFrom = 26;
-
-const speechLanguageSchema = z.strictObject({
-  language: z.enum(speechLanguages),
-});
 
 const isTurnOpener = (
   actor: Actor,
@@ -179,7 +173,7 @@ export function createCoreCalls(options: {
   // What this start on a new version has claimed so far (commits.ts).
   claims?: () => Claims | undefined;
   people: Pick<People, "list">;
-  places: Pick<PlacesModule, "list" | "location" | "clock" | "setLanguage">;
+  places: Pick<PlacesModule, "list" | "location" | "clock">;
   devices: Devices;
   presses: Pick<Presses, "press" | "released">;
   firmware: Pick<Firmware, "report">;
@@ -706,34 +700,6 @@ export function createCoreCalls(options: {
         throw new Error("A reply is its words, up to 4,000 characters");
       }
       options.reply(parsed.data);
-    },
-
-    // The home's language for speech: Sanctum's Assistant sets it for
-    // someone in the home, never on its own or for an AI agent.
-    async setSpeechLanguage(set) {
-      need(aiAssistantPermission);
-      notForAgents();
-      if (appId !== assistantAppId || !isTurnOpener(actor)) {
-        throw new ActionError("forbidden");
-      }
-      const parsed = speechLanguageSchema.safeParse(set);
-      if (!parsed.success) {
-        throw new Error(
-          `A language for speech is one of ${speechLanguages.join(", ")}`,
-        );
-      }
-      if (!options.assistant.canActFor(actor)) {
-        throw new ActionError("forbidden");
-      }
-      options.places.setLanguage(
-        {
-          actor: `app:${appId}`,
-          ...(actor.kind === "user"
-            ? { personId: actor.id }
-            : { clientId: actor.id }),
-        },
-        parsed.data.language,
-      );
     },
 
     // An assistant app's tools, as for an AI agent acting for whoever opened

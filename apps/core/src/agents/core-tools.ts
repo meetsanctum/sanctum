@@ -529,6 +529,7 @@ export function createCoreTools(options: CoreToolsOptions) {
         ),
         before: parsed.data.before,
         limit: parsed.data.limit,
+        forAgents: true,
       });
       const entries = page.entries.map((entry) => {
         const device = devices.get(entry.subjectId!)!;

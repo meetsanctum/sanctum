@@ -6,6 +6,7 @@ import Fastify, {
 } from "fastify";
 import fastifyPlugin from "fastify-plugin";
 import { createServer as createHttpsServer, type Server } from "node:https";
+import { speechLanguage } from "@meetsanctum/app-sdk";
 
 import { registerActivityRoutes } from "./activity/routes.js";
 import { createAgentLimiter } from "./agents/limits.js";
@@ -230,7 +231,7 @@ export function createServer(
         offers: options.hardwareOffers,
         gate,
         authenticate: auth.authenticate,
-        language: () => places.language(),
+        language: () => speechLanguage(places.language()),
       });
       registerWorkflowRoutes(core, { workflows: options.workflows, gate });
       registerBlobRoutes(core, { blobs: options.blobs, gate });

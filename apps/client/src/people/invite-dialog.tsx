@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { PairingCode } from "../auth/pairing-code";
 import { Busy } from "../auth/sheet";
 import { useAuthAttempt } from "../auth/use-auth-attempt";
+import { useCopyCode } from "../auth/use-copy-code";
 import { productName } from "../brand";
 import {
   Dialog,
@@ -21,26 +22,36 @@ import {
 import { CoreError } from "../core-fetch";
 import { problemReason } from "../device-parts";
 import { makeInvite } from "./invites";
+import { printRecoveryCode } from "./print-recovery";
 import { firstName, untilText } from "./words";
 
-// Inviting a person to sign in, or making a code for a new password: this
-// device makes the code and shows it once, in the boxes every code uses and
-// as text to copy, with the steps on the person's own device and when it
-// ends. Nothing can show it again: New invite code makes another. Right
-// after a person is added, it first asks whether they will sign in, since a
-// child or a guest may not.
+// Inviting a person to sign in, making a code for a new password, or your
+// own recovery code: this device makes the code and shows it once, in the
+// boxes every code uses, with the steps on the person's own device and when
+// it ends. Its text is for screen readers and Copy code, and shows only if
+// copying fails. Nothing can show it again: New invite code makes another.
+// Right after a person is added, it first asks whether they will sign in,
+// since a child or a guest may not. A recovery code can also be printed.
 
 export type Inviting = {
   person: PersonInfo;
   kind: InviteInfo["kind"];
   ask?: boolean;
   replacesInviteId?: string;
+  // For the printed recovery code.
+  username?: string;
 };
 
 type OpeningStage = "ask" | "replace" | "making";
 type Stage =
   | { name: OpeningStage }
-  | { name: "shown"; code: string; endsAt: string; signal: AbortSignal }
+  | {
+      name: "shown";
+      code: string;
+      endsAt: string;
+      madeAt: string;
+      signal: AbortSignal;
+    }
   | { name: "failed"; problem: string; retry: boolean };
 
 function openingStage(inviting: Inviting | undefined): OpeningStage {
@@ -62,14 +73,13 @@ export function InviteDialog(props: {
   const [stage, setStage] = useState<Stage>({
     name: openingStage(props.inviting),
   });
-  const [copyStatus, setCopyStatus] = useState<"copied" | "failed">();
-  const codeText = useRef<HTMLSpanElement>(null);
+  const clipboard = useCopyCode();
   const attempt = useAuthAttempt();
 
   const make = async (target: Inviting) => {
     const signal = attempt.start();
     setStage({ name: "making" });
-    setCopyStatus(undefined);
+    clipboard.reset();
     try {
       const made = await makeInvite(
         {
@@ -84,6 +94,7 @@ export function InviteDialog(props: {
         name: "shown",
         code: made.code,
         endsAt: made.info.endsAt,
+        madeAt: made.info.createdAt,
         signal,
       });
       props.onRefresh();
@@ -119,7 +130,7 @@ export function InviteDialog(props: {
   if (shown !== props.inviting) {
     setShown(props.inviting);
     if (props.inviting) {
-      setCopyStatus(undefined);
+      clipboard.reset();
       setStage({ name: openingStage(props.inviting) });
     }
   }
@@ -139,22 +150,10 @@ export function InviteDialog(props: {
   const { person, kind } = inviting;
   const name = firstName(person.name);
   const reset = kind === "reset";
+  const recovery = kind === "recovery";
+  const replacing = !!inviting.replacesInviteId;
   const formatted = stage.name === "shown" ? formatInviteCode(stage.code) : "";
   const making = stage.name === "making";
-
-  const copy = async () => {
-    if (stage.name !== "shown") return;
-    const { signal } = stage;
-    try {
-      await navigator.clipboard.writeText(formatted);
-      if (!signal.aborted) setCopyStatus("copied");
-    } catch {
-      if (signal.aborted) return;
-      setCopyStatus("failed");
-      if (codeText.current)
-        window.getSelection()?.selectAllChildren(codeText.current);
-    }
-  };
 
   return (
     <Dialog
@@ -195,7 +194,11 @@ export function InviteDialog(props: {
         ) : stage.name === "replace" ? (
           <>
             <DialogHeader>
-              <DialogTitle>Replace {name}’s invite code?</DialogTitle>
+              <DialogTitle>
+                {recovery
+                  ? "Replace your recovery code?"
+                  : `Replace ${name}’s invite code?`}
+              </DialogTitle>
               <DialogDescription>
                 The previous code will stop working as soon as the new one is
                 made.
@@ -212,22 +215,37 @@ export function InviteDialog(props: {
           <>
             <DialogHeader>
               <DialogTitle>
-                {reset
-                  ? `Reset ${person.name}’s password`
-                  : `Invite ${person.name} to sign in`}
+                {recovery
+                  ? replacing
+                    ? "Your new recovery code"
+                    : "Your recovery code"
+                  : reset
+                    ? `Reset ${person.name}’s password`
+                    : `Invite ${person.name} to sign in`}
               </DialogTitle>
               <DialogDescription>
-                {stage.name === "shown"
-                  ? [
-                      reset
-                        ? `Give ${name} this code to choose a new password. ${name}’s current password works until then.`
-                        : `Give ${name} this code.`,
-                      `It works once, until ${untilText(clock, stage.endsAt)}.`,
-                      "You can’t see it again after you close this.",
-                    ].join(" ")
-                  : reset
-                    ? `A code lets ${name} choose a new password.`
-                    : `A code lets ${name} join from the ${productName} Mac app.`}
+                {recovery
+                  ? stage.name === "shown"
+                    ? [
+                        replacing ? "Your earlier code no longer works." : "",
+                        "If you forget your password, this code lets you choose a new one.",
+                        "It works once, even with no device signed in as you.",
+                        "You can’t see it again after you close this.",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")
+                    : "A recovery code lets you choose a new password if you forget it."
+                  : stage.name === "shown"
+                    ? [
+                        reset
+                          ? `Give ${name} this code to choose a new password. ${name}’s current password works until then.`
+                          : `Give ${name} this code.`,
+                        `It works once, until ${untilText(clock, stage.endsAt)}.`,
+                        "You can’t see it again after you close this.",
+                      ].join(" ")
+                    : reset
+                      ? `A code lets ${name} choose a new password.`
+                      : `A code lets ${name} join from the ${productName} Mac app.`}
               </DialogDescription>
             </DialogHeader>
             {stage.name === "making" && (
@@ -253,35 +271,50 @@ export function InviteDialog(props: {
               <>
                 <div className="flex flex-col items-center gap-2">
                   <PairingCode code={stage.code} />
-                  <p className="m-0 text-sm tracking-wider select-all">
+                  {/* The boxes show it; the text is for screen readers, and
+                      for copying by hand if Copy code fails. */}
+                  <p
+                    className={
+                      clipboard.status === "failed"
+                        ? "m-0 text-sm tracking-wider select-all"
+                        : "sr-only"
+                    }
+                  >
                     <span className="sr-only">The code is </span>
-                    <span ref={codeText}>{formatted}</span>
+                    <span ref={clipboard.codeText}>{formatted}</span>
                   </p>
                 </div>
-                <ol className="m-0 flex list-decimal flex-col gap-2 ps-5 text-sm">
-                  <li>
-                    On {name}’s Mac, open {productName} and choose your home.
-                  </li>
-                  <li>Choose Just me, then I have an invite code.</li>
-                  <li>
-                    {reset
-                      ? "Enter this code, then choose a new password."
-                      : "Enter this code, then choose a username and password."}
-                  </li>
-                </ol>
+                {recovery ? (
+                  <p className="m-0 text-sm text-muted-foreground">
+                    Save it in a password manager, or print it and keep it with
+                    your important papers.
+                  </p>
+                ) : (
+                  <ol className="m-0 flex list-decimal flex-col gap-2 ps-5 text-sm">
+                    <li>
+                      On {name}’s Mac, open {productName} and choose your home.
+                    </li>
+                    <li>
+                      {reset
+                        ? "Choose Just me, then Forgot your password?"
+                        : "Choose Just me, then I have an invite code."}
+                    </li>
+                    <li>
+                      {reset
+                        ? "Enter this code, then choose a new password."
+                        : "Enter this code, then choose a username and password."}
+                    </li>
+                  </ol>
+                )}
                 <p
                   role="status"
                   className={
-                    copyStatus === "failed"
+                    clipboard.status === "failed"
                       ? "m-0 text-sm text-muted-foreground"
                       : "sr-only"
                   }
                 >
-                  {copyStatus === "failed"
-                    ? "Couldn’t copy the code. Copy it manually from the text above."
-                    : copyStatus === "copied"
-                      ? "Copied"
-                      : ""}
+                  {clipboard.message}
                 </p>
               </>
             )}
@@ -303,9 +336,31 @@ export function InviteDialog(props: {
                   </>
                 ) : (
                   <>
-                    <Button variant="outline" onClick={() => void copy()}>
-                      {copyStatus === "copied" ? "Copied" : "Copy code"}
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (stage.name === "shown")
+                          void clipboard.copy(formatted, stage.signal);
+                      }}
+                    >
+                      {clipboard.status === "copied" ? "Copied" : "Copy code"}
                     </Button>
+                    {recovery && stage.name === "shown" && (
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          printRecoveryCode({
+                            clock,
+                            person: person.name,
+                            username: inviting.username ?? "",
+                            code: formatted,
+                            madeAt: stage.madeAt,
+                          })
+                        }
+                      >
+                        Print
+                      </Button>
+                    )}
                     <Button onClick={close}>Done</Button>
                   </>
                 )}

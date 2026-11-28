@@ -6,6 +6,7 @@ import type { SetupTarget } from "./setup-guide";
 import {
   appSettingsPage,
   devicesSettingsPage,
+  householdSettingsPage,
   peopleSettingsPage,
   personSettingsPage,
   settingsApp,
@@ -96,7 +97,9 @@ export function useSettingsNavigation(
   const backTo =
     parent?.app === settingsApp.id
       ? settingsPageTitle(parent.page, parent.params, apps)
-      : route?.page === devicesSettingsPage && route.app === settingsApp.id
+      : route?.app === settingsApp.id &&
+          (route.page === devicesSettingsPage ||
+            route.page === householdSettingsPage)
         ? (route.params.from ??
           apps.find((app) => app.id === parent?.app)?.name)
         : undefined;

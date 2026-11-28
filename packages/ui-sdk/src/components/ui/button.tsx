@@ -9,6 +9,11 @@ import { Slot } from "radix-ui";
 // button is pointing at, current, pressed or checked turns the ink wherever
 // that applies.
 
+// Only a press moves a button: it sinks a pixel, or a card shrinks a
+// little, and that movement is all it animates. Its colours change at once,
+// which costs a weak display nothing, and under Reduce motion a press
+// doesn't move it at all.
+
 // What turns a button the ink: the place on show; a switch that is on, or
 // a button whose own words say it is on (data-on), such as On Home; and a
 // choice that is chosen, where nothing else shows it. Written out whole, so
@@ -24,7 +29,7 @@ const cardSize =
   "h-auto w-full justify-start rounded-md p-3.5 text-start font-normal whitespace-normal";
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 items-center justify-center rounded-md border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-transform outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 motion-safe:active:not-aria-[haspopup]:translate-y-px motion-reduce:transition-none disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
@@ -90,7 +95,7 @@ const buttonVariants = cva(
         // hairline, a little lighter under the pointer, such as a way to add
         // devices. What it leads to is said on it in the primary look.
         choice:
-          "bg-linear-to-b from-white/12 to-white/6 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.1),inset_0_0_0_1px_rgb(255_255_255/0.12),0_16px_40px_rgb(0_0_0/0.24)] reduce-effects:shadow-[inset_0_1px_0_rgb(255_255_255/0.1),inset_0_0_0_1px_rgb(255_255_255/0.12)] hover:from-white/15 hover:to-white/8 active:not-aria-[haspopup]:translate-y-0 active:scale-[0.98] disabled:opacity-100",
+          "bg-linear-to-b from-white/12 to-white/6 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.1),inset_0_0_0_1px_rgb(255_255_255/0.12),0_16px_40px_rgb(0_0_0/0.24)] reduce-effects:shadow-[inset_0_1px_0_rgb(255_255_255/0.1),inset_0_0_0_1px_rgb(255_255_255/0.12)] hover:from-white/15 hover:to-white/8 motion-safe:active:not-aria-[haspopup]:translate-y-0 motion-safe:active:scale-[0.98] disabled:opacity-100",
       },
       size: {
         // Words, with or without an icon, such as Done.

@@ -340,6 +340,9 @@ describe("setting up a new home", () => {
 
     await act(async () => saving.resolve());
 
+    // Then the first person saves a recovery code, or goes on without one.
+    expect(title()).toBe("Save a recovery code");
+    await click("Continue");
     expect(container.querySelector(".home-screen")).not.toBeNull();
   });
 
@@ -367,6 +370,8 @@ describe("setting up a new home", () => {
     await click("Continue");
     await click("Set up");
     expect(claimHost).toHaveBeenCalledTimes(2);
+    expect(title()).toBe("Save a recovery code");
+    await click("Continue");
     expect(container.querySelector(".home-screen")).not.toBeNull();
   });
 

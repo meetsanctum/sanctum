@@ -42,6 +42,8 @@ COPY apps/core apps/core
 COPY catalog/apps catalog/apps
 RUN pnpm --filter @meetsanctum/core... --filter "{./catalog/apps/**}..." build
 RUN pnpm --filter @meetsanctum/core deploy --prod --legacy /out
+# Load the cues from the deployed layout the runtime uses.
+RUN node --input-type=module -e 'import { readChime } from "/out/dist/speech/chimes.js"; readChime("success"); readChime("error");'
 # The kit: React and ui-sdk as the modules apps' pages import, built with
 # this image, so a home's kit is the one its core came with.
 RUN cp -R packages/ui-sdk/dist/kit /out/kit

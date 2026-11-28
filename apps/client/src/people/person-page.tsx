@@ -217,7 +217,10 @@ export function PersonPage(props: {
             replacesInviteId:
               kind === "invite" && signIn.state === "invited"
                 ? signIn.invite.id
-                : undefined,
+                : kind === "recovery" && signIn.state === "signs-in"
+                  ? signIn.recovery?.id
+                  : undefined,
+            username: signIn.state === "signs-in" ? signIn.username : undefined,
           })
         }
         onCancelCode={askCancelCode}

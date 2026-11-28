@@ -30,8 +30,10 @@ const zurichHome = {
   coordinates: { latitude: 47.3769, longitude: 8.5417, elevation: 408 },
   temperatureUnit: "celsius",
   hourCycle: "24h",
+  language: "en",
 };
-type Home = Omit<typeof zurichHome, "timeZone" | "coordinates"> & {
+type Home = Omit<typeof zurichHome, "timeZone" | "coordinates" | "language"> & {
+  language?: string;
   timeZone: string | null;
   coordinates: {
     latitude: number;
@@ -124,6 +126,26 @@ async function type(field: HTMLInputElement, value: string) {
 }
 
 describe("Settings → Household", () => {
+  it("saves the selected language", async () => {
+    await act(async () => root.render(<HouseholdSection />));
+    const language = container.querySelector<HTMLSelectElement>(
+      'select[id$="-language"]',
+    )!;
+    expect(language.value).toBe("en");
+    expect(button("Save").disabled).toBe(true);
+
+    await act(async () => {
+      language.value = "de";
+      language.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(button("Save").disabled).toBe(false);
+    await act(async () => button("Save").click());
+
+    expect(saved).toEqual([{ language: "de" }]);
+    expect(language.value).toBe("de");
+    expect(button("Save").disabled).toBe(true);
+  });
+
   it("lets anyone fill the location from the suggestion and save it", async () => {
     await act(async () => root.render(<HouseholdSection />));
     expect(input("Name").value).toBe("Lake house");

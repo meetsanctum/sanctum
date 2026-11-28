@@ -1,14 +1,10 @@
 import {
   aiAssistantPermission,
   assistantAppId,
-  defineAction,
   defineApp,
   placesReadPermission,
   readPermission,
-  speechLanguages,
 } from "@meetsanctum/app-sdk";
-import { z } from "zod";
-
 import { answerRequest } from "./requests.js";
 import { notUnderstood, sentences } from "./sentences.js";
 
@@ -20,19 +16,6 @@ import { notUnderstood, sentences } from "./sentences.js";
 // home; a room's mood by its name; and putting back a direct light change
 // when no mood has run since. It asks no model. Its page is in ./ui.
 
-/** Sets the home's one language, which smart speakers hear and speak. */
-const language = defineAction({
-  id: "assistant.language",
-  title: "Language",
-  tier: "write",
-  input: z.object({ language: z.enum(speechLanguages) }),
-  output: z.object({}),
-  async run(ctx, input) {
-    await ctx.speech.setLanguage(input.language);
-    return {};
-  },
-});
-
 export const app = defineApp({
   id: assistantAppId,
   name: "Assistant",
@@ -41,7 +24,9 @@ export const app = defineApp({
   // 0.3.0: a room's mood, by its name.
   // 0.3.1: lights a brightness leaves off are not said to be missed.
   // 0.3.2: lights a room's rule keeps off are not said to be missed.
-  version: "0.3.2",
+  // 0.4.0: no language of its own: Household sets the home's, and its page
+  // shows it and links there.
+  version: "0.4.0",
   core: "^2.0.0",
   summary: "Controls lights by voice or typed request.",
   icon: { glyph: "message-circle-more", color: "iris" },
@@ -63,7 +48,7 @@ export const app = defineApp({
       needed: true,
     },
   ],
-  actions: [language],
+  actions: [],
   events: [],
   sentences,
   notUnderstood,

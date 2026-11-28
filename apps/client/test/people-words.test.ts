@@ -83,6 +83,7 @@ describe("signing in", () => {
       state: "signs-in",
       username: "alex",
       reset: null,
+      recovery: null,
     });
     expect(signInOf(household, "maya")).toMatchObject({
       state: "signs-in",
@@ -94,6 +95,19 @@ describe("signing in", () => {
     });
     expect(signInOf({ ...household, invites: [] }, "sam")).toEqual({
       state: "none",
+    });
+  });
+
+  it("keeps a recovery code apart from an invite or reset", () => {
+    const recovery = invite({ personId: "maya", kind: "recovery" });
+    const withRecovery = {
+      ...household,
+      invites: [...household.invites, recovery],
+    };
+    expect(signInOf(withRecovery, "maya")).toMatchObject({
+      state: "signs-in",
+      reset: household.invites[1],
+      recovery,
     });
   });
 

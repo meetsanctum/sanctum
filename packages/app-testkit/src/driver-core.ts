@@ -247,7 +247,6 @@ export function createDriverCore(
     aiTools: absent,
     callAiTool: absent,
     replyRequest: absent,
-    setSpeechLanguage: absent,
     ...listening.calls,
     devices: async () => [...registered.values()].map(infoOf),
     async device(id) {

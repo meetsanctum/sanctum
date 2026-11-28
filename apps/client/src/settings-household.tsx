@@ -1,12 +1,18 @@
 import {
+  languageIds,
+  languages,
+  speechLanguage,
   temperatureUnits,
   type HomeLocation,
+  type Language,
   type TemperatureUnit,
 } from "@meetsanctum/app-sdk";
 import type { HourCycle } from "@meetsanctum/app-sdk/clock";
 import {
   Button,
   Input,
+  NativeSelect,
+  NativeSelectOption,
   Problem,
   SegmentedControl,
   Switch,
@@ -34,7 +40,9 @@ import { problemReason } from "./device-parts";
 // and save. The temperature unit is how the home shows temperatures, in
 // rooms, sensors and Weather alike; what sensors and forecasts say stays in
 // Celsius. 24-hour time is how the home writes times, 14:30 or 2:30 PM, on
-// every screen and device alike.
+// every screen and device alike. The language is the home's one language,
+// which smart speakers hear and speak, or English where Sanctum can't hear
+// or speak it; the Assistant's page shows it and links here.
 
 type Coordinates = {
   latitude: number;
@@ -47,6 +55,7 @@ type HomeInfo = {
   coordinates: Coordinates | null;
   temperatureUnit: TemperatureUnit;
   hourCycle: HourCycle;
+  language: Language;
 };
 
 const unitNames: Record<TemperatureUnit, string> = {
@@ -91,6 +100,7 @@ type Draft = {
   timeZone: string;
   temperatureUnit: TemperatureUnit;
   hourCycle: HourCycle;
+  language: Language;
 };
 
 const numberText = (value: number | null | undefined) =>
@@ -108,6 +118,7 @@ const draftOf = (home: HomeInfo): Draft => ({
   timeZone: home.timeZone ?? "",
   temperatureUnit: home.temperatureUnit,
   hourCycle: home.hourCycle,
+  language: home.language,
 });
 
 // Where the fields put the home: no coordinates, nor elevation, when both
@@ -186,6 +197,7 @@ function HomeForm() {
       temperatureUnit: draft.temperatureUnit,
     }),
     ...(draft.hourCycle !== home.hourCycle && { hourCycle: draft.hourCycle }),
+    ...(draft.language !== home.language && { language: draft.language }),
   };
   const unchanged = Object.keys(changes).length === 0;
   const hasCoordinates = !!(draft.latitude.trim() || draft.longitude.trim());
@@ -405,6 +417,31 @@ function HomeForm() {
         <span id={`${ids}-hours-hint`} className={label}>
           How the home writes times, as 14:30 or 2:30 PM: on every screen and
           device.
+        </span>
+      </div>
+      <div className="flex flex-col gap-2">
+        <label htmlFor={`${ids}-language`} className={label}>
+          Language
+        </label>
+        <NativeSelect
+          id={`${ids}-language`}
+          aria-describedby={`${ids}-language-hint`}
+          className="w-56"
+          value={draft.language}
+          onChange={(event) =>
+            change("language")(event.currentTarget.value as Language)
+          }
+        >
+          {languageIds.map((language) => (
+            <NativeSelectOption key={language} value={language} lang={language}>
+              {languages[language].name}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+        <span id={`${ids}-language-hint`} className={label}>
+          {speechLanguage(draft.language) === draft.language
+            ? "Smart speakers speak it, and take a few minutes to learn a new language."
+            : `Smart speakers speak English, since ${languages[draft.language].name} isn’t available for speech.`}
         </span>
       </div>
       {problem ? (

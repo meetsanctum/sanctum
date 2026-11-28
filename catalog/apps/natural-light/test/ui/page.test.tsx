@@ -184,6 +184,7 @@ async function show(
             back={() => undefined}
             openSettings={openSettings}
             openDevice={() => undefined}
+            openHousehold={() => undefined}
             addDevices={() => undefined}
           />
         </AppScope>

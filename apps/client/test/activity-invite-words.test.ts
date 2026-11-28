@@ -17,7 +17,15 @@ describe("Activity for invites", () => {
       "Made Jonas a code for a new password",
       false,
     ],
+    ["invite.create", "ok", "recovery", "Made a recovery code", false],
     ["invite.cancel", "ok", null, "Cancelled Jonas's invite", false],
+    [
+      "invite.redeem",
+      "ok",
+      "recovery",
+      "Chose a new password with a recovery code",
+      false,
+    ],
     ["invite.redeem", "ok", null, "Joined with an invite code", false],
     ["invite.redeem", "ok", "reset", "Chose a new password with a code", false],
     [

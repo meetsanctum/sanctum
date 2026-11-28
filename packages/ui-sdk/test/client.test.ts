@@ -114,7 +114,12 @@ function setup(
       if (path === "/api/entities") return [ownCard, sun, forecast];
       if (path === "/api/apps/test.lights/settings") return { dim: true };
       if (path === "/api/speech/hearing")
-        return { state: "ready", language: "en", activeLanguage: "en" };
+        return {
+          state: "ready",
+          language: "en",
+          speechLanguage: "en",
+          activeLanguage: "en",
+        };
       return { ok: true };
     },
   );
@@ -577,6 +582,7 @@ describe("how speech recognition is doing", () => {
     const hearing = {
       state: "learning",
       language: "de",
+      speechLanguage: "de",
       activeLanguage: "en",
     } as const;
     const assistant = setup(["ai.assistant"], [], "sanctum.assistant");
@@ -587,6 +593,7 @@ describe("how speech recognition is doing", () => {
     expect(await assistant.client.hearing()).toEqual({
       state: "ready",
       language: "en",
+      speechLanguage: "en",
       activeLanguage: "en",
     });
     assistant.live.publish({ type: "hearing", hearing });
