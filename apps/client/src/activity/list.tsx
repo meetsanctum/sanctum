@@ -3,7 +3,7 @@ import type {
   AppIcon as AppIconInfo,
   AppInfo,
 } from "@meetsanctum/app-sdk";
-import { Button, useHomeClock } from "@meetsanctum/ui-sdk";
+import { Button, Problem, useHomeClock } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import {
   ArchiveRestore,
@@ -213,16 +213,9 @@ export function ActivitySkeleton() {
 export function ActivityProblem(props: { what: string; onRetry: () => void }) {
   return (
     <div className="flex flex-col items-start gap-2">
-      <p
-        role="alert"
-        className="m-0 flex items-center gap-1.5 text-sm font-medium text-destructive"
-      >
-        <CircleAlert aria-hidden="true" className="size-3.5 shrink-0" />
-        {props.what}
-      </p>
-      <p className="m-0 text-[13px] font-medium text-muted-foreground">
-        {productName} didn't answer in time. Try again in a moment.
-      </p>
+      <Problem title={props.what}>
+        {`${productName} didn't answer in time. Try again in a moment.`}
+      </Problem>
       <Button variant="outline" size="sm" onClick={props.onRetry}>
         Try again
       </Button>

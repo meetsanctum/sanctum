@@ -1,7 +1,7 @@
 import type { DeviceQuestion } from "@meetsanctum/app-sdk";
 import { Input } from "@meetsanctum/ui-sdk";
-import { CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
+import { SheetProblem } from "./auth/sheet";
 
 // A question a device's driver asks, as adding or repairing it does: its
 // label, its field, and under it where to find the answer or, once the
@@ -92,19 +92,7 @@ export function QuestionField(props: {
         </div>
         {props.beside}
       </div>
-      {why && (
-        <p
-          id={refusalId}
-          role="alert"
-          className="m-0 flex items-start gap-1.5 text-sm text-destructive"
-        >
-          <CircleAlert
-            aria-hidden="true"
-            className="mt-0.5 size-3.5 shrink-0"
-          />
-          <span>{why}</span>
-        </p>
-      )}
+      {why && <SheetProblem id={refusalId}>{why}</SheetProblem>}
       {showHelp && (
         <p id={helpId} className="m-0 text-sm text-muted-foreground">
           {help}

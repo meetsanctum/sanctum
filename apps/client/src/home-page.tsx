@@ -3,6 +3,7 @@ import type { Me } from "@meetsanctum/auth-protocol";
 import {
   Button,
   mainPage,
+  Problem,
   type createLiveFeed,
   type PageParams,
   type Tile,
@@ -453,8 +454,10 @@ class SystemPageBoundary extends Component<
   override render() {
     if (!this.state.failed) return this.props.children;
     return (
-      <div className="flex flex-col items-start gap-3">
-        <p role="alert">Couldn't open {this.props.name}.</p>
+      <div className="flex flex-col items-start gap-2">
+        <Problem title={`${this.props.name} didn't open`}>
+          Something went wrong while showing it. Reload to try again.
+        </Problem>
         <Button variant="outline" onClick={() => location.reload()}>
           Reload
         </Button>

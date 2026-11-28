@@ -12,6 +12,7 @@ import { SidebarPins, type PinnedApp } from "../src/sidebar-pins";
 import { useSidebarLayout } from "../src/sidebar-state";
 import { TopBar } from "../src/top-bar";
 import type { Account } from "../src/user-menu";
+import { problemLines } from "./problem-lines";
 
 const opened: string[] = [];
 const apps: ListedApp[] = [
@@ -330,9 +331,10 @@ describe("the dashboard's menu", () => {
     await type(dialog.querySelector("input")!, "Living room");
     await act(async () => button("Save").click());
 
-    expect(dialog.querySelector("[role=alert]")?.textContent).toBe(
-      "That did not work. Try again.",
-    );
+    expect(problemLines(dialog.querySelector("[role=alert]"))).toEqual([
+      "Night wasn't renamed",
+      "Sanctum didn't answer. Check that it's on, then try again.",
+    ]);
     expect(button("Save").disabled).toBe(false);
   });
 

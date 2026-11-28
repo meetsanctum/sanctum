@@ -1,4 +1,4 @@
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, Problem } from "@meetsanctum/ui-sdk";
 import { useEffect, useState } from "react";
 
 import { forgetHost } from "./auth/session";
@@ -176,7 +176,8 @@ export function ChooseAnotherHome(props: {
     try {
       await forgetHost(host);
     } catch {
-      setProblem("That did not work. Try again.");
+      // Forgetting it is this device's own storage, never a call to the home.
+      setProblem("This device couldn't save the change. Try again.");
       setForgetting(false);
       return;
     }
@@ -213,9 +214,7 @@ export function ChooseAnotherHome(props: {
           </DialogDescription>
         </DialogHeader>
         {problem && (
-          <p role="alert" className="m-0 text-sm text-destructive">
-            {problem}
-          </p>
+          <Problem title={`${host.name} wasn't forgotten`}>{problem}</Problem>
         )}
         <DialogFooter>
           <DialogClose asChild>

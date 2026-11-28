@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CoreError, coreJson } from "../src/core-fetch";
 import { MaintenancePage } from "../src/settings-maintenance";
+import { problemLines } from "./problem-lines";
 
 // The Maintenance page lists every battery and update, and keeps resolved
 // rows in place until it closes.
@@ -399,9 +400,10 @@ describe("the Maintenance page", () => {
     expect(
       vi.mocked(coreJson).mock.calls.map(([, init]) => init?.json),
     ).toEqual([{ id: "office-light" }, { id: "porch" }]);
-    expect(container.querySelector("[role=alert]")?.textContent).toBe(
-      "Porch light: Couldn't check for an update: it didn't answer. Check it's switched on.",
-    );
+    expect(problemLines(container.querySelector("[role=alert]"))).toEqual([
+      "Porch light wasn't checked for an update",
+      "Zigbee didn't answer in time. Try again in a moment.",
+    ]);
   });
 
   it("says there are no devices on batteries yet, and leaves Done to close it", async () => {
@@ -418,8 +420,13 @@ describe("the Maintenance page", () => {
     vi.mocked(coreJson).mockRejectedValue(new CoreError(504, "timeout"));
     await show([officeLight, porch]);
     await click(button("Check for updates"));
-    const failures = container.querySelector("[role=alert]")?.textContent;
-    expect(failures).toContain("Office light:");
-    expect(failures).toContain("Porch light:");
+    expect(
+      [...container.querySelectorAll("[role=alert]")].map(
+        (alert) => problemLines(alert)[0],
+      ),
+    ).toEqual([
+      "Office light wasn't checked for an update",
+      "Porch light wasn't checked for an update",
+    ]);
   });
 });

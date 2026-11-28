@@ -4,7 +4,7 @@ import type {
   DeviceQuestion,
   FoundDevice,
 } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, Problem } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
@@ -33,7 +33,7 @@ import {
   useNow,
   type Asking,
 } from "./device-asking";
-import { deviceProblem } from "./device-parts";
+import { problemReason } from "./device-parts";
 import { QuestionField, refusalWords, type Refused } from "./device-questions";
 
 // Add devices' page of what drivers found, as on the home's network: a card
@@ -51,14 +51,14 @@ function addProblem(error: unknown, appName: string | null) {
       case "unavailable":
         return `${appName ?? "Its app"} isn't running, so it can't add it now.`;
       case "timeout":
-        return "It didn't answer in time. Check it's switched on, then try again.";
+        return `${appName ?? "Its app"} didn't answer in time. Try again in a moment.`;
       case "not_found":
         return "It's no longer on your network.";
       case "app_failed":
-        return `${appName ?? "Its app"} couldn't add it. Try again.`;
+        return `${appName ?? "Its app"} ran into a problem. Try again in a moment.`;
     }
   }
-  return deviceProblem(error);
+  return problemReason(error);
 }
 
 export function FoundPage(props: {
@@ -414,9 +414,9 @@ function FoundCard(props: {
         <CardFoot>{start}</CardFoot>
       )}
       {failure && (
-        <p role="alert" className="m-0 mt-2 text-sm text-(--ruby-on-carbon)">
+        <Problem title={`Couldn't add ${found.name}`} className="mt-2">
           {failure}
-        </p>
+        </Problem>
       )}
     </DeviceCard>
   );

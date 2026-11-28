@@ -4,7 +4,7 @@ import type {
   DeviceInfo,
   DeviceQuestion,
 } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, Problem } from "@meetsanctum/ui-sdk";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
 import {
@@ -31,7 +31,7 @@ import {
   useNow,
   type Asking,
 } from "./device-asking";
-import { deviceProblem } from "./device-parts";
+import { problemReason } from "./device-parts";
 import { QuestionField, refusalWords, type Refused } from "./device-questions";
 
 // Repair: what a device's driver asks to set it right, in the words it
@@ -53,16 +53,16 @@ function repairProblem(error: unknown, appName: string | null) {
       case "unavailable":
         return `${appName ?? "Its app"} isn't running, so it can't repair it now.`;
       case "timeout":
-        return "It didn't answer in time. Check it's switched on, then try again.";
+        return `${appName ?? "Its app"} didn't answer in time. Try again in a moment.`;
       case "conflict":
         return "It doesn't need repairing any more.";
       case "app_failed":
-        return `${appName ?? "Its app"} couldn't repair it. Try again.`;
+        return `${appName ?? "Its app"} ran into a problem. Try again in a moment.`;
       case "limited":
         return "Too many devices are being added or repaired at once. Try again in a few minutes.";
     }
   }
-  return deviceProblem(error);
+  return problemReason(error);
 }
 
 export function RepairDevice(props: {
@@ -273,9 +273,9 @@ export function RepairDevice(props: {
             ))
           )}
           {failure && (
-            <p role="alert" className="m-0 text-sm text-destructive">
+            <Problem title={`${props.device?.name} wasn't repaired`}>
               {failure}
-            </p>
+            </Problem>
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={cancel}>

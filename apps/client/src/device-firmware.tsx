@@ -1,5 +1,5 @@
 import type { DeviceInfo, FirmwareInfo } from "@meetsanctum/app-sdk";
-import { Button } from "@meetsanctum/ui-sdk";
+import { Button, Problem } from "@meetsanctum/ui-sdk";
 import { useEffect, useRef, useState } from "react";
 import { plural } from "@meetsanctum/app-sdk/words";
 
@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import { CoreError } from "./core-fetch";
-import { deviceProblem } from "./device-parts";
+import { deviceProblem, problemReason } from "./device-parts";
 
 // A device's firmware and Check connection in Settings → Devices: what the
 // line says of an update and of the checks run from this page, which comes
@@ -275,6 +275,34 @@ export function firmwareProblem(
 }
 
 /**
+ * Why a firmware action didn't go through, for a problem notice whose title
+ * says which: only what the core reports, so an app that failed is never
+ * put down to the device's power.
+ */
+export function firmwareReason(
+  error: unknown,
+  what: "check" | "update" | "stop",
+  appName: string | null,
+) {
+  if (error instanceof CoreError) {
+    const app = appName ?? "Its app";
+    switch (error.code) {
+      case "unavailable":
+        return `${app} isn't running.`;
+      case "conflict":
+        return what === "update"
+          ? "Something else is updating. Try again once it has finished."
+          : "It can't be done right now. Try again in a moment.";
+      case "timeout":
+        return `${app} didn't answer in time. Try again in a moment.`;
+      case "app_failed":
+        return `${app} ran into a problem. Try again in a moment.`;
+    }
+  }
+  return problemReason(error);
+}
+
+/**
  * Asks before an update starts: how long it takes, what the device does
  * meanwhile and at the end, and that losing power is safe. A device that
  * sleeps updates once it wakes. Starting it is the dialog's one primary
@@ -333,7 +361,7 @@ export function UpdateDialog(props: {
     } catch (error) {
       if (shown.current?.id !== device.id) return;
       setWorking(false);
-      setProblem(firmwareProblem(error, "update", props.appName));
+      setProblem(firmwareReason(error, "update", props.appName));
     }
   };
 
@@ -369,9 +397,9 @@ export function UpdateDialog(props: {
           </DialogDescription>
         </DialogHeader>
         {problem && (
-          <p role="alert" className="m-0 text-sm text-destructive">
+          <Problem title={`${device?.name}'s update didn't start`}>
             {problem}
-          </p>
+          </Problem>
         )}
         <DialogFooter>
           <Button type="button" variant="outline" onClick={props.onClose}>

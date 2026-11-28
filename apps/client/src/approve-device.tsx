@@ -15,6 +15,7 @@ import {
   InputOTPGroup,
   InputOTPSeparator,
   InputOTPSlot,
+  Problem,
 } from "@meetsanctum/ui-sdk";
 import { Globe, Monitor, Tablet } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -28,7 +29,9 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import { productName } from "./brand";
+import { SheetProblem } from "./auth/sheet";
 import { CoreError } from "./core-fetch";
+import { problemReason } from "./device-parts";
 import {
   approvePairing,
   lookupPairing,
@@ -76,7 +79,33 @@ class ExchangeFailed extends Error {
   }
 }
 
-function problemText(error: unknown, code?: string) {
+// What went wrong: with the code or name typed, said under its field, or
+// with Sanctum, said as a notice of what didn't happen.
+type Trouble = { field: string } | { title: string; reason: string };
+
+function troubleOf(
+  error: unknown,
+  step: "code" | "details",
+  code: string | undefined,
+  name: string,
+): Trouble {
+  const said = fieldText(error, code);
+  // On the name's step only the name is a field; what the code says there
+  // is why the device wasn't approved.
+  const isName = error instanceof CoreError && error.code === "invalid_request";
+  if (said && (step === "code" || isName)) return { field: said };
+  return {
+    title:
+      step === "code" ? "Couldn't find the device" : `${name} wasn't approved`,
+    reason:
+      said ??
+      (error instanceof CoreError && error.code === "busy"
+        ? `${productName} can’t check this device right now. Try again in a moment.`
+        : problemReason(error)),
+  };
+}
+
+function fieldText(error: unknown, code?: string) {
   if (error instanceof ExchangeFailed) {
     switch (error.reason) {
       case "wrong_code":
@@ -94,16 +123,13 @@ function problemText(error: unknown, code?: string) {
     switch (error.code) {
       case "not_found":
         return `No device is showing ${code ? formatPairingCode(code) : "this code"}. Its code changes every 10 minutes, so check the one it shows now.`;
-      case "busy":
-        return "Can’t check this device right now. Try again in a moment.";
       case "too_many_attempts":
         return "Too many codes were tried for this device. Enter the new code it shows.";
       case "invalid_request":
         return "Check the name.";
     }
-    return `${productName} ran into a problem. Try again.`;
   }
-  return `Can't reach ${productName}. Try again.`;
+  return undefined;
 }
 
 // The name a device suggests, unless it only names its kind: a browser
@@ -133,7 +159,7 @@ export function ApproveDevice(props: {
   const [step, setStep] = useState<Step>({ name: "code" });
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
-  const [problem, setProblem] = useState<string>();
+  const [problem, setProblem] = useState<Trouble>();
   // A character the code never uses was typed, and left out.
   const [lookAlike, setLookAlike] = useState(false);
   const [pasteNote, setPasteNote] = useState<string>();
@@ -159,6 +185,7 @@ export function ApproveDevice(props: {
 
   const run = async (
     action: (signal: AbortSignal) => Promise<void>,
+    on: "code" | "details",
     typed?: string,
   ) => {
     const signal = start();
@@ -167,7 +194,7 @@ export function ApproveDevice(props: {
     try {
       await action(signal);
     } catch (error) {
-      if (!signal.aborted) setProblem(problemText(error, typed));
+      if (!signal.aborted) setProblem(troubleOf(error, on, typed, name.trim()));
     } finally {
       if (!signal.aborted) setWorking(false);
     }
@@ -181,54 +208,58 @@ export function ApproveDevice(props: {
       return;
     }
     setPasteNote(undefined);
-    void run(async (signal) => {
-      const previous = verified.current;
-      const exchange =
-        previous?.code === normalised
-          ? previous.exchange
-          : await lookupPairing(normalised, signal);
-      signal.throwIfAborted();
-      const deadline = new AbortController();
-      const checking = AbortSignal.any([signal, deadline.signal]);
-      const timer = setTimeout(
-        () => deadline.abort(new ExchangeFailed("timeout")),
-        exchangeLimitMs,
-      );
-      try {
-        for (;;) {
-          checking.throwIfAborted();
-          const status = await pairingExchange(exchange, checking);
-          checking.throwIfAborted();
-          if (status.status === "failed") {
-            throw new ExchangeFailed(status.reason);
+    void run(
+      async (signal) => {
+        const previous = verified.current;
+        const exchange =
+          previous?.code === normalised
+            ? previous.exchange
+            : await lookupPairing(normalised, signal);
+        signal.throwIfAborted();
+        const deadline = new AbortController();
+        const checking = AbortSignal.any([signal, deadline.signal]);
+        const timer = setTimeout(
+          () => deadline.abort(new ExchangeFailed("timeout")),
+          exchangeLimitMs,
+        );
+        try {
+          for (;;) {
+            checking.throwIfAborted();
+            const status = await pairingExchange(exchange, checking);
+            checking.throwIfAborted();
+            if (status.status === "failed") {
+              throw new ExchangeFailed(status.reason);
+            }
+            if (status.status === "verified") {
+              verified.current = { code: normalised, exchange };
+              setName(suggestedName(status.request));
+              setStep({
+                name: "details",
+                code: normalised,
+                exchange,
+                request: status.request,
+              });
+              return;
+            }
+            await waitForPairingPoll(exchangeMs, checking);
           }
-          if (status.status === "verified") {
-            verified.current = { code: normalised, exchange };
-            setName(suggestedName(status.request));
-            setStep({
-              name: "details",
-              code: normalised,
-              exchange,
-              request: status.request,
-            });
-            return;
+        } catch (error) {
+          checking.throwIfAborted();
+          if (
+            verified.current?.exchange === exchange &&
+            error instanceof CoreError &&
+            error.code === "not_found"
+          ) {
+            verified.current = undefined;
           }
-          await waitForPairingPoll(exchangeMs, checking);
+          throw error;
+        } finally {
+          clearTimeout(timer);
         }
-      } catch (error) {
-        checking.throwIfAborted();
-        if (
-          verified.current?.exchange === exchange &&
-          error instanceof CoreError &&
-          error.code === "not_found"
-        ) {
-          verified.current = undefined;
-        }
-        throw error;
-      } finally {
-        clearTimeout(timer);
-      }
-    }, normalised);
+      },
+      "code",
+      normalised,
+    );
   };
 
   const approve = (event: FormEvent) => {
@@ -241,7 +272,7 @@ export function ApproveDevice(props: {
       verified.current = undefined;
       setStep({ name: "done", deviceName });
       props.onApproved();
-    });
+    }, "details");
   };
 
   const named = step.name === "details" && suggestedName(step.request);
@@ -274,7 +305,7 @@ export function ApproveDevice(props: {
             </DialogHeader>
             <InputOTP
               aria-label="Code shown on the device"
-              aria-invalid={problem ? true : undefined}
+              aria-invalid={problem && "field" in problem ? true : undefined}
               maxLength={pairingCodeLength}
               value={code}
               readOnly={working}
@@ -346,7 +377,7 @@ export function ApproveDevice(props: {
                 {codeNote}
               </p>
             )}
-            <Problem text={problem} />
+            <TroubleLine trouble={problem} />
             <DialogFooter>
               <Button
                 type="submit"
@@ -393,7 +424,7 @@ export function ApproveDevice(props: {
                 autoFocus
               />
             </label>
-            <Problem text={problem} />
+            <TroubleLine trouble={problem} />
             <DialogFooter>
               <Button
                 type="button"
@@ -431,10 +462,12 @@ export function ApproveDevice(props: {
   );
 }
 
-function Problem(props: { text?: string }) {
-  return props.text ? (
-    <p role="alert" className="m-0 text-sm text-destructive">
-      {props.text}
-    </p>
-  ) : null;
+function TroubleLine(props: { trouble?: Trouble }) {
+  const { trouble } = props;
+  if (!trouble) return null;
+  return "field" in trouble ? (
+    <SheetProblem>{trouble.field}</SheetProblem>
+  ) : (
+    <Problem title={trouble.title}>{trouble.reason}</Problem>
+  );
 }
