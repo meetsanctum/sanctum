@@ -91,6 +91,7 @@ type Announcement = {
   onFetched?: () => Promise<void>;
   // A request's reply, said whether or not AI agents may speak.
   finishing: boolean;
+  replaceable: boolean;
   playbackGraceMs: number;
   complete(outcome: Playback): void;
 };
@@ -276,8 +277,9 @@ export function createAnnouncements(options: {
      * address straight away, the sound as `speech` yields it, `ready` once
      * there is sound to play and `turn` once those before it on the device
      * have played. Refused while the device has too many waiting, or the
-     * home has too many. Calls `onUnfetched` if the address expires, a
-     * minute into its turn, without a fetch.
+     * home has too many. A regular announcement can replace an error cue
+     * whose address hasn't been fetched. Calls `onUnfetched` if the address
+     * expires, a minute into its turn, without a fetch.
      */
     create(
       device: string,
@@ -289,18 +291,35 @@ export function createAnnouncements(options: {
       {
         finishing = false,
         playbackGraceMs = 1_000,
+        replaceable = false,
         readyWithinMs,
       }: {
         finishing?: boolean;
         playbackGraceMs?: number;
+        replaceable?: boolean;
         // From then on, any playable sound is ready, short of the lead: a
         // reply that has to start before "One moment" is said.
         readyWithinMs?: number;
       } = {},
     ) {
       const queue = byDevice.get(device) ?? [];
-      if (queue.length >= maxPerSpeaker) throw new AnnouncementRefused("busy");
-      if (count >= maxAnnouncements) throw new AnnouncementRefused("full");
+      if (queue.length >= maxPerSpeaker) {
+        const replaced = replaceable
+          ? undefined
+          : [...queue]
+              .reverse()
+              .find((entry) => entry.replaceable && byPath.has(entry.path));
+        if (!replaced) throw new AnnouncementRefused("busy");
+        end(replaced);
+      }
+      if (count >= maxAnnouncements) {
+        // Once a speaker takes an address, its sound is left to play.
+        const replaced = replaceable
+          ? undefined
+          : [...byPath.values()].find((entry) => entry.replaceable);
+        if (!replaced) throw new AnnouncementRefused("full");
+        end(replaced);
+      }
       const path = `/a/${randomBytes(20).toString("base64url")}.flac`;
       const url = `http://${network.host}:${publishedPort}${path}`;
       let sounded: (ready: boolean) => void = () => {};
@@ -334,6 +353,7 @@ export function createAnnouncements(options: {
         onUnfetched,
         onFetched: onFetched && (() => onFetched(url)),
         finishing,
+        replaceable,
         playbackGraceMs,
         complete,
       };

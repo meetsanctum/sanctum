@@ -11,6 +11,8 @@ import {
 } from "@meetsanctum/app-sdk";
 import { expect, it, vi } from "vitest";
 
+import { readChime } from "../src/speech/chimes.js";
+import { createFlacEncoder } from "../src/speech/flac.js";
 import { base, running, useCleanUps } from "./app-apart-support.js";
 import { fakeManager } from "./manager-support.js";
 import { fakePiper } from "./speech-support.js";
@@ -56,6 +58,7 @@ it("answers a smart speaker's request through the Assistant, for the speaker, in
       }
     },
   });
+  const errorChimeUrl = deferredResult<string>();
   let driverCtx: AppContext | undefined;
   let lampId = "";
   const driver = defineApp({
@@ -93,6 +96,10 @@ it("answers a smart speaker's request through the Assistant, for the speaker, in
     },
     driver: {
       command: async (ctx, command) => {
+        if (command.kind === "audio" && "announce" in command.command) {
+          errorChimeUrl.resolve(command.command.announce.url);
+          return;
+        }
         await ctx.devices.report({
           key: command.key,
           availability: "online",
@@ -236,6 +243,15 @@ it("answers a smart speaker's request through the Assistant, for the speaker, in
     const failedSteps: ListenStep[] = [];
     for await (const step of failed.steps()) failedSteps.push(step);
     expect(failedSteps).toContainEqual({ step: "error", error: "failed" });
+    expect(failedSteps.at(-1)).toEqual({ step: "done" });
+    await failed.close("done");
+    const cue = await fetch(await errorChimeUrl.promise);
+    expect(cue.status).toBe(200);
+    expect(cue.headers.get("content-type")).toBe("audio/flac");
+    const { rate, samples } = readChime("error");
+    const encoder = createFlacEncoder(rate);
+    const expected = Buffer.concat([encoder.push(samples), encoder.end()]);
+    expect(Buffer.from(await cue.arrayBuffer()).equals(expected)).toBe(true);
     expect(core.activity.recent()).toContainEqual(
       expect.objectContaining({
         action: "device.request",
