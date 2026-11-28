@@ -8,7 +8,7 @@ import type {
 import { act } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { CoreError, coreJson } from "../src/core-fetch";
+import { CoreError, coreFetch, coreJson } from "../src/core-fetch";
 import { light, office } from "./settings-devices-fixtures";
 import {
   admin,
@@ -201,7 +201,8 @@ describe("Devices found on a category's page", () => {
 
     await pressAdd("garage");
     expect(dialog()!.querySelector("h2")?.textContent).toBe("Add garage");
-    expect(segments()).toHaveLength(1);
+    // The key, then naming it.
+    expect(segments()).toHaveLength(2);
     expect(reached()).toBe(1);
     // Nothing is sent before it's answered, and it can't close by a click
     // beside it, only Cancel or Escape.
@@ -226,7 +227,7 @@ describe("Devices found on a category's page", () => {
     expect(dialog()).toBe(original);
     await act(async () => reply.resolve(register(added)));
     expect(dialog()!.querySelector("h2")?.textContent).toBe("Added to Lights");
-    expect(stepLabel()).toBe("Adding complete");
+    expect(stepLabel()).toBe("Step 2 of 2");
     expect(addRequests()).toHaveLength(1);
   });
 
@@ -236,7 +237,6 @@ describe("Devices found on a category's page", () => {
     type: "media-player",
     description: "Apple TV 4K",
     later: ["airplayCode", "companionCode"],
-    addLaterInOrder: true,
   });
   const addedTv = light("tv", tv.name, {
     driver: apple,
@@ -379,22 +379,23 @@ describe("Devices found on a category's page", () => {
     expect(dialog()).toBeNull();
   });
 
-  it.each([
-    { source: "an older core", later: undefined },
-    { source: "an unordered declaration", later: ["first", "second"] },
-  ])(
-    "shows pairing progress without a fixed total with $source",
-    async ({ later }) => {
-      withFound(found("kitchen-bulb", { later }));
-      answerAdding((json) =>
-        prompt(json.attempt, 1, code("first"), code("second")),
-      );
-      await show(admin);
-      await pressAdd("kitchen-bulb");
-      expect(dialog()!.querySelectorAll("input")).toHaveLength(2);
-      expect(stepLabel()).toBe("Pairing in progress");
-    },
-  );
+  it("closes at once on Cancel while one that asks nothing is being added", async () => {
+    withFound(found("kitchen-bulb"));
+    // Its app never answers.
+    answerAdding(() => pendingReply().promise);
+    await show(admin);
+    await pressAdd("kitchen-bulb");
+    expect(button("Adding…")).toBeDefined();
+
+    await act(async () => button("Cancel").click());
+    expect(dialog()).toBeNull();
+    // The attempt ends quietly as the dialog goes.
+    expect(
+      vi
+        .mocked(coreFetch)
+        .mock.calls.some(([path]) => path === "/api/devices/add/cancel"),
+    ).toBe(true);
+  });
 
   const bulb = light("bulb", "kitchen-bulb", { identify: true });
   const hall = { ...office, id: "hall", name: "Hall" };

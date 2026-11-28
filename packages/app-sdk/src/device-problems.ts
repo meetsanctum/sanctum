@@ -190,7 +190,6 @@ type DriverWithProblems = {
   readonly questions?: Readonly<Record<string, DriverQuestion>>;
   readonly refusals?: Readonly<Record<string, string>>;
   readonly addLater?: readonly string[];
-  readonly addLaterInOrder?: true;
 } & { readonly [hook in DeclaredHook]?: unknown };
 
 /**
@@ -297,9 +296,6 @@ export function staticProblems(driver: DriverWithProblems) {
       : {}),
     ...(Object.keys(refusals).length > 0 ? { refusals: { ...refusals } } : {}),
     ...(addLater.length > 0 ? { addLater: [...addLater] } : {}),
-    ...(addLater.length > 0 && driver.addLaterInOrder === true
-      ? { addLaterInOrder: true as const }
-      : {}),
   };
 }
 

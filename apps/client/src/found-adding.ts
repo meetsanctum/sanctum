@@ -262,16 +262,19 @@ export function useFoundAdding(
     if (isComplete(found.asks, answers)) add();
   };
 
-  /** Stops the current attempt and reports whether the dialog can close. */
+  /**
+   * Stops the attempt its driver is asking in, answering whether it
+   * stopped. With nothing asked, there's nothing to wait for: what's under
+   * way ends quietly as the one adding goes.
+   */
   const cancel = async () => {
     if (request.current?.what === "stopping") return false;
-    const id = asking?.attempt ?? attempt.current;
-    if (!id) return true;
+    if (!asking) return true;
     const result = await send(
       "stopping",
       "/api/devices/add/cancel",
-      { attempt: id },
-      asking?.asks ?? found.asks,
+      { attempt: asking.attempt },
+      asking.asks,
     );
     return (
       result !== undefined && isEnded(result) && result.ended === "cancelled"

@@ -718,7 +718,6 @@ export default defineApp({
       },
     },
     addLater: ["firstCode", "secondCode"],
-    addLaterInOrder: true,
     problems: {
       pairingLost: {
         words: "Its pairing was removed",

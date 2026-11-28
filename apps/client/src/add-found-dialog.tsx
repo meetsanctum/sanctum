@@ -36,9 +36,11 @@ import { useFoundAdding } from "./found-adding";
 // its own later. It asks what the device's app asks first, adds it, asks
 // each step adding asks once started (a TV's codes), then names and places
 // the device where it ended up. Short segments at the top fill as it goes;
-// the total follows the driver's plan when it has one. Cancel and Escape
-// check whether adding stopped or finished. Once added, Done, × and
-// Escape save any focused name edit and close.
+// how many is planned from what its app declares, and never shrinks. Until
+// the device is in, a click beside the dialog does nothing; Cancel and
+// Escape close it, and where its app is asking, only once the core says
+// adding stopped, so a pairing never ends half done. Once it's in, what is
+// shown is saved as it changes, and Done, × and Escape close.
 
 export type AddFoundWork = {
   rooms: readonly Room[];
@@ -115,17 +117,38 @@ function AddFlow(props: {
     return () => window.clearTimeout(timer);
   }, [asksFirst]);
 
-  // A driver can declare a fixed sequence of single-question steps. Retrying
-  // a code within that sequence leaves it on the same segment.
-  const plan = found.addLaterInOrder ? found.later : undefined;
-  const step =
-    asking?.asks.length === 1 ? (plan?.indexOf(asking.asks[0]!.id) ?? -1) : -1;
-  const prompts = useRef<number | null>(found.later?.length === 0 ? 0 : null);
-  if (asking) prompts.current = step < 0 ? null : (plan?.length ?? null);
+  // One segment for what it asks first, or for adding where it asks
+  // nothing, and one to name it. An app declares what adding may ask once
+  // started for all its devices, not each, so those steps are planned once
+  // this device's app asks the first of them, as a TV shows its first code.
+  // A wrong answer or a new code stays on the same segment.
+  const asksLater = useRef(false);
+  if (asking?.asks.some((question) => found.later.includes(question.id)))
+    asksLater.current = true;
   const first = asksFirst ? 1 : 0;
-  const total =
-    prompts.current === null ? null : Math.max(1, first + prompts.current) + 1;
-  const reached = device ? (total ?? 1) : Math.max(1, first + step + 1);
+  const asksAhead = Math.max(
+    1,
+    first + (asksLater.current ? found.later.length : 0),
+  );
+  const reachedNow = device
+    ? asksAhead + 1
+    : asking
+      ? first +
+        1 +
+        Math.max(
+          0,
+          ...asking.asks.map((question) => found.later.indexOf(question.id)),
+        )
+      : 1;
+  // A step its app didn't plan for adds a segment; none ever empties.
+  const most = useRef(asksAhead + 1);
+  most.current = Math.max(
+    most.current,
+    reachedNow + (device ? 0 : 1),
+    asksAhead + 1,
+  );
+  const total = most.current;
+  const reached = device ? total : Math.min(reachedNow, total - 1);
 
   const groupTitle = device ? deviceGroupTitle(deviceGroupOf(device)) : null;
   const title = device ? `Added to ${groupTitle}` : `Add ${found.name}`;
@@ -202,20 +225,7 @@ function AddFlow(props: {
       }}
     >
       <form onSubmit={submit} className="flex flex-col gap-5">
-        <StepSegments
-          total={total}
-          reached={reached}
-          status={
-            device
-              ? "Adding complete"
-              : asking
-                ? "Pairing in progress"
-                : doing === "adding"
-                  ? "Adding in progress"
-                  : undefined
-          }
-          id={`${ids}-step`}
-        />
+        <StepSegments total={total} reached={reached} id={`${ids}-step`} />
         <DialogHeader>
           <DialogTitle>
             {title}
@@ -320,12 +330,7 @@ function AddFlow(props: {
 // the step on show, in the ink, since nothing on them can be pressed. They
 // change in place, never moving. A screen reader hears the step with the
 // dialog's description instead.
-function StepSegments(props: {
-  total: number | null;
-  reached: number;
-  status?: string;
-  id: string;
-}) {
+function StepSegments(props: { total: number; reached: number; id: string }) {
   return (
     <>
       <div
@@ -333,7 +338,7 @@ function StepSegments(props: {
         data-slot="step-segments"
         className="-mt-2.5 mb-2 flex justify-center gap-1.5"
       >
-        {Array.from({ length: props.total ?? 1 }, (_, index) => (
+        {Array.from({ length: props.total }, (_, index) => (
           <span
             key={index}
             data-reached={index < props.reached ? "" : undefined}
@@ -345,9 +350,7 @@ function StepSegments(props: {
         ))}
       </div>
       <span id={props.id} className="sr-only">
-        {props.total === null
-          ? props.status
-          : `Step ${props.reached} of ${props.total}`}
+        {`Step ${props.reached} of ${props.total}`}
       </span>
     </>
   );

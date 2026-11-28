@@ -66,8 +66,7 @@
     "addLater": [
       "airplayCode",
       "companionCode"
-    ],
-    "addLaterInOrder": true
+    ]
   },
   "permissions": [
     {
