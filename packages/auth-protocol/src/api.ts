@@ -317,8 +317,6 @@ export type InviteInfo = {
 export type InviteStart = {
   personId: string;
   kind: InviteInfo["kind"];
-  /** The recovery code format the registering device generates. */
-  recoveryVersion?: number;
   /** The active code the sender confirmed they want to replace, if any. */
   replacesInviteId?: string;
   registrationRequest: string;

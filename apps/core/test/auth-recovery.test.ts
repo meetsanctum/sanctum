@@ -18,8 +18,6 @@ import {
   claimed,
   get,
   maya,
-  post,
-  registration,
   setLogin,
   sharedClient,
   signIn,
@@ -84,24 +82,6 @@ describe("a recovery code", () => {
 
     expect(forJonas.response.statusCode).toBe(403);
     expect(onKitchen.response.statusCode).toBe(403);
-  });
-
-  it("refuses registration from a device using the short format", async () => {
-    const core = await testCore();
-    const claim = await claimed(core);
-    const response = await post(
-      core,
-      "/api/auth/invites/start",
-      {
-        personId: claim.person.id,
-        kind: "recovery",
-        registrationRequest: registration("QXM4PD").registrationRequest,
-      },
-      { token: claim.token },
-    );
-
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({ error: "invalid_request" });
   });
 
   it("chooses a new password after the ordinary invite lifetime, then is spent", async () => {

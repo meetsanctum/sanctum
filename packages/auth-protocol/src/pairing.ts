@@ -60,7 +60,7 @@ export const pairingExchangesPerRequest = 3;
 /** How long a started exchange waits for the device's answer. */
 export const pairingAnswerMs = 30_000;
 
-export function randomCode(length: number) {
+function randomCode(length: number) {
   const size = pairingCodeAlphabet.length;
   // The largest multiple of the alphabet's size a byte reaches, so every
   // character is equally likely.

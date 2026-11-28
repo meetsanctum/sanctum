@@ -65,8 +65,8 @@ const logins: LoginInfo[] = [
   { personId: "alex", username: "alex" },
   { personId: "maya", username: "maya" },
 ];
-const code = "UK7QXM4PD23456789ABCDEFGHJKMNPQR";
-const formattedCode = "UK7Q-XM4P-D234-5678-9ABC-DEFG-HJKM-NPQR";
+const code = "K7QXM4PD";
+const formattedCode = "K7QX-M4PD";
 
 function recoveryCode(createdAt = new Date().toISOString()): InviteInfo {
   return {

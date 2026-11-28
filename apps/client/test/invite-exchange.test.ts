@@ -4,7 +4,6 @@ import {
   inviteFinishBinding,
   keyStretching,
   pairingCodeAlphabet,
-  recoveryCodeVersion,
 } from "@meetsanctum/auth-protocol";
 import { client } from "@serenity-kit/opaque";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -96,22 +95,14 @@ describe("the client invite exchange", () => {
       const made = await makeInvite({ personId: person.id, kind }, signal);
       const secret = vi.mocked(client.startRegistration).mock.calls[0]![0]
         .password;
-      const recovery = kind === "recovery";
-      expect(secret).toMatch(
-        new RegExp(`^[${pairingCodeAlphabet}]{${recovery ? 29 : 6}}$`),
-      );
-      if (recovery) {
-        expect(
-          secret.length * Math.log2(pairingCodeAlphabet.length),
-        ).toBeGreaterThanOrEqual(128);
-      }
+      expect(secret).toMatch(new RegExp(`^[${pairingCodeAlphabet}]{6}$`));
       expect(client.finishRegistration).toHaveBeenCalledWith({
         clientRegistrationState: "registration-state",
         registrationResponse: "registration-response",
         password: secret,
         keyStretching: keyStretching.profile,
       });
-      expect(made).toEqual({ code: `${recovery ? "U" : ""}K7${secret}`, info });
+      expect(made).toEqual({ code: `K7${secret}`, info });
       expect(fetchResponse).toHaveBeenCalledTimes(2);
       expectRequest(
         1,
@@ -119,7 +110,6 @@ describe("the client invite exchange", () => {
         {
           personId: person.id,
           kind,
-          ...(recovery && { recoveryVersion: recoveryCodeVersion }),
           registrationRequest: "registration-request",
         },
         signal,

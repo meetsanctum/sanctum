@@ -4,9 +4,6 @@ import {
   inviteFinishBinding,
   keyStretching,
   newInviteSecret,
-  newRecoverySecret,
-  recoveryCodePrefix,
-  recoveryCodeVersion,
   splitInviteCode,
   verifyInviteConfirmation,
   type HostView,
@@ -54,8 +51,7 @@ export async function startInvite(
   kind: InviteInfo["kind"] = "invite",
   replacesInviteId?: string,
 ) {
-  const recovery = kind === "recovery";
-  const secret = recovery ? newRecoverySecret() : newInviteSecret();
+  const secret = newInviteSecret();
   const started = registration(secret);
   const response = await post(
     core,
@@ -63,7 +59,6 @@ export async function startInvite(
     {
       personId,
       kind,
-      ...(recovery && { recoveryVersion: recoveryCodeVersion }),
       replacesInviteId,
       registrationRequest: started.registrationRequest,
     },
@@ -77,7 +72,7 @@ export async function startInvite(
   return {
     response,
     lookup,
-    code: `${recovery ? recoveryCodePrefix : ""}${lookup}${secret}`,
+    code: `${lookup}${secret}`,
     finish: () => {
       return post(
         core,

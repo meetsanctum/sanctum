@@ -1,9 +1,6 @@
 import {
   keyStretching,
   newInviteSecret,
-  newRecoverySecret,
-  recoveryCodePrefix,
-  recoveryCodeVersion,
   type CancelInvite,
   type InviteFinish,
   type InviteInfo,
@@ -24,23 +21,18 @@ import { coreJson } from "../core-fetch";
 export type MadeInvite = { code: string; info: InviteInfo };
 
 export async function makeInvite(
-  target: Omit<InviteStart, "registrationRequest" | "recoveryVersion">,
+  target: Omit<InviteStart, "registrationRequest">,
   signal?: AbortSignal,
 ): Promise<MadeInvite> {
   const opaque = await loadOpaque();
   signal?.throwIfAborted();
-  const recovery = target.kind === "recovery";
-  const secret = recovery ? newRecoverySecret() : newInviteSecret();
+  const secret = newInviteSecret();
   const { clientRegistrationState, registrationRequest } =
     opaque.client.startRegistration({ password: secret });
   const started = await coreJson<InviteStarted>("/api/auth/invites/start", {
     method: "POST",
     signal,
-    json: {
-      ...target,
-      ...(recovery && { recoveryVersion: recoveryCodeVersion }),
-      registrationRequest,
-    } satisfies InviteStart,
+    json: { ...target, registrationRequest } satisfies InviteStart,
   });
   const { registrationRecord } = opaque.client.finishRegistration({
     clientRegistrationState,
@@ -57,8 +49,7 @@ export async function makeInvite(
       keyStretching: keyStretching.version,
     } satisfies InviteFinish,
   });
-  const prefix = recovery ? recoveryCodePrefix : "";
-  return { code: `${prefix}${started.lookup}${secret}`, info };
+  return { code: `${started.lookup}${secret}`, info };
 }
 
 export async function cancelInvite(personId: string, inviteId: string) {

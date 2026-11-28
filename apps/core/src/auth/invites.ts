@@ -9,7 +9,6 @@ import {
   normaliseUsername,
   pairingCodeAlphabet,
   pairingLookupLength,
-  recoveryCodeVersion,
   verifyInviteCheckBinding,
   verifyInviteFinishBinding,
   type CancelInvite,
@@ -289,12 +288,6 @@ export function createInvites(
       input: InviteStart,
     ): InviteStarted {
       checkMake(principal, input.personId, input.kind, input.replacesInviteId);
-      if (
-        input.kind === "recovery" &&
-        input.recoveryVersion !== recoveryCodeVersion
-      ) {
-        throw new AuthError("invalid_request");
-      }
       const inviteId = randomUUID();
       // A lookup no invite holds, ended ones included, since those keep
       // theirs to tell a late code it ended.

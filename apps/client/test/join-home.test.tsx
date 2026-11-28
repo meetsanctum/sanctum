@@ -404,11 +404,9 @@ describe("Forgot your password?", () => {
     } as RedeemFinished);
     await click("Just me");
     await click("Forgot your password?");
-    await type(forgotField(), "uk7q-xm4p");
-    expect(checkInviteCode).not.toHaveBeenCalled();
-    await type(forgotField(), "uk7q-xm4p-d234-5678-9abc-defg-hjkm-npqr");
+    await type(forgotField(), "K7QXM4PD");
     expect(checkInviteCode).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ code: "UK7QXM4PD23456789ABCDEFGHJKMNPQR" }),
+      expect.objectContaining({ code: "K7QXM4PD" }),
     );
 
     expect(title()).toBe("Welcome back, Maya Keller");
@@ -428,18 +426,6 @@ describe("Forgot your password?", () => {
       expect.objectContaining({ token: "recovered_token", kind: "personal" }),
     ]);
     expect(container.querySelector(".home-screen")).not.toBeNull();
-  });
-
-  it("still checks a short password code when its last character lands", async () => {
-    vi.mocked(checkInviteCode).mockResolvedValue(checked("mayak"));
-    await click("Just me");
-    await click("Forgot your password?");
-    await type(forgotField(), "K7QX-M4PD");
-
-    expect(checkInviteCode).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ code: "K7QXM4PD" }),
-    );
-    expect(title()).toBe("Welcome back, Maya Keller");
   });
 });
 
