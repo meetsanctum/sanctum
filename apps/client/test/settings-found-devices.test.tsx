@@ -91,8 +91,12 @@ function register(device: DeviceInfo) {
 
 function pendingReply<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => (resolve = done));
-  return { promise, resolve };
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
 }
 
 const dialog = () => document.querySelector<HTMLElement>("[role=dialog]");
@@ -309,6 +313,31 @@ describe("Devices found on a category's page", () => {
     expect(field().value).toBe(tv.name);
   });
 
+  it("keeps reached segments filled when adding again", async () => {
+    withFound(tv);
+    answerAdding((json) => {
+      if (json.step === undefined)
+        return prompt(json.attempt, 1, code("airplayCode"));
+      if (json.step === 1)
+        return prompt(json.attempt, 2, code("companionCode"));
+      return { ended: "wrong" };
+    });
+    await show(admin, "media");
+    await pressAdd(tv.name);
+
+    await type(field(), "1234");
+    await act(async () => button("Continue").click());
+    expect(reached()).toBe(2);
+    await type(field(), "0042");
+    await act(async () => button("Continue").click());
+    expect(reached()).toBe(2);
+
+    await act(async () => button("Add again").click());
+    expect(dialog()!.textContent).toContain("Code on the TV");
+    expect(segments()).toHaveLength(3);
+    expect(reached()).toBe(2);
+  });
+
   it.each(["Cancel", "Escape"])(
     "%s waits for the core to cancel pairing",
     async (action) => {
@@ -452,6 +481,39 @@ describe("Devices found on a category's page", () => {
         },
       ]);
       expect(container.textContent).toContain("Kitchen Light");
+    },
+  );
+
+  it.each(["focused", "blurred"])(
+    "keeps the dialog open if the %s name edit fails to save on Done",
+    async (focus) => {
+      await openPlacement();
+      const reply = pendingReply<DeviceInfo>();
+      const updated = { ...bulb, name: "Kitchen Light" };
+      const save = vi
+        .fn()
+        .mockImplementationOnce(() => reply.promise)
+        .mockResolvedValueOnce(updated);
+      answerRoute("/api/devices/update", save);
+      const name = field();
+      await act(async () => name.focus());
+      await type(name, updated.name);
+      if (focus === "blurred") await act(async () => name.blur());
+      await act(async () => button("Done").click());
+      expect(save).toHaveBeenCalledExactlyOnceWith({
+        id: bulb.id,
+        name: updated.name,
+      });
+      expect(dialog()).not.toBeNull();
+
+      await act(async () => reply.reject(new CoreError(504, "timeout")));
+      expect(dialog()!.textContent).toContain("changes weren't saved");
+
+      await act(async () => name.focus());
+      await type(name, updated.name);
+      await act(async () => button("Done").click());
+      expect(dialog()).toBeNull();
+      expect(container.textContent).toContain(updated.name);
     },
   );
 

@@ -40,7 +40,8 @@ import { useFoundAdding } from "./found-adding";
 // the device is in, a click beside the dialog does nothing; Cancel and
 // Escape close it, and where its app is asking, only once the core says
 // adding stopped, so a pairing never ends half done. Once it's in, what is
-// shown is saved as it changes, and Done, × and Escape close.
+// shown is saved as it changes, and Done, × and Escape wait for the name
+// to save before closing.
 
 export type AddFoundWork = {
   rooms: readonly Room[];
@@ -95,6 +96,7 @@ function AddFlow(props: {
   const [justAdded, setJustAdded] = useState<DeviceInfo>();
   const [namingRoom, setNamingRoom] = useState(false);
   const nameInput = useRef<HTMLInputElement>(null);
+  const nameSave = useRef<Promise<boolean> | null>(null);
   const adding = useFoundAdding(found, appName, (device) => {
     setAddedId(device.id);
     setJustAdded(device);
@@ -148,7 +150,9 @@ function AddFlow(props: {
     asksAhead + 1,
   );
   const total = most.current;
-  const reached = device ? total : Math.min(reachedNow, total - 1);
+  const furthest = useRef(1);
+  furthest.current = Math.max(furthest.current, reachedNow);
+  const reached = device ? total : Math.min(furthest.current, total - 1);
 
   const groupTitle = device ? deviceGroupTitle(deviceGroupOf(device)) : null;
   const title = device ? `Added to ${groupTitle}` : `Add ${found.name}`;
@@ -163,6 +167,14 @@ function AddFlow(props: {
   const close = async () => {
     if (device) {
       nameInput.current?.blur();
+      // Clicking Done can blur the field before it submits the form.
+      const saving = nameSave.current;
+      if (saving) {
+        const saved = await saving;
+        if (nameSave.current !== saving) return;
+        nameSave.current = null;
+        if (!saved || nameInput.current?.matches(":focus")) return;
+      }
       props.onClose();
     } else if (await adding.cancel()) {
       props.onClose();
@@ -248,6 +260,7 @@ function AddFlow(props: {
             device={device}
             work={work}
             nameInput={nameInput}
+            nameSave={nameSave}
             namingRoom={namingRoom}
             setNamingRoom={setNamingRoom}
           />
@@ -363,6 +376,7 @@ function Placing(props: {
   device: DeviceInfo;
   work: AddFoundWork;
   nameInput: RefObject<HTMLInputElement | null>;
+  nameSave: RefObject<Promise<boolean> | null>;
   namingRoom: boolean;
   setNamingRoom: (naming: boolean) => void;
 }) {
@@ -396,7 +410,9 @@ function Placing(props: {
         id={`${ids}-name`}
         device={device}
         input={props.nameInput}
-        onSave={(name) => void save({ name })}
+        onSave={(name) => {
+          props.nameSave.current = save({ name });
+        }}
       />
       {showAs && (
         <div className="flex flex-col gap-1.5">
