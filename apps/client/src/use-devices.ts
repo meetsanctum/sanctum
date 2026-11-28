@@ -27,7 +27,13 @@ import { coreDevices } from "./core-devices";
 import { coreJson } from "./core-fetch";
 import { sameData } from "./same-data";
 import { useMinuteClock } from "./device-firmware";
-import { supportsBrightness, tileKey, tilesOf } from "./device-tiles";
+import {
+  supportsBrightness,
+  supportsColour,
+  supportsWhite,
+  tileKey,
+  tilesOf,
+} from "./device-tiles";
 import { playPauseCommand } from "./media";
 
 // The home's devices and places as the shell shows them, for the sidebar,
@@ -549,14 +555,16 @@ export function useDevices(live: LiveFeed) {
   );
 
   // Every light in a room or another place set together, as a room's Lights
-  // tile and its detail set them: a brightness, a white or a colour. While
-  // any is on the core changes only those, so a brightness shows on them
-  // as pending at once, as a light's own drag does; while none is on the
-  // place comes on by its rooms' rules, which only the core knows, so they
-  // wait for its live state. A brightness of 0 switches them off. It goes
-  // in turn with the room's other presses. The core names the lights it
-  // could not set; when the whole call fails, each that it would have set
-  // failed.
+  // tile and its detail set them: a brightness, a white or a colour. A
+  // brightness changes only the lights that are on while any is, so it
+  // shows on them as pending at once, as a light's own drag does; while
+  // none is on the place comes on by its rooms' rules, which only the core
+  // knows. A colour or a white reaches lights that can show it, even those
+  // that are off. A white also turns on fixed-white lights. Appearance
+  // requests wait for the core's live state. A brightness of 0 switches
+  // them off. Requests go in turn with the room's other presses. The core
+  // names the lights it could not set. When the whole call fails, each
+  // that it would have set failed.
   const setLights = useCallback(
     async (
       place: LightsPlace,
@@ -569,23 +577,25 @@ export function useDevices(live: LiveFeed) {
       }
       const reachable = lights.filter((tile) => !tile.disabled);
       const lit = reachable.filter((tile) => tile.on);
-      const setting = lit.length > 0 ? lit : reachable;
+      let setting = lit.length > 0 ? lit : reachable;
+      if (set.hue !== undefined) {
+        setting = reachable.filter(supportsColour);
+      } else if (set.colorTemperature !== undefined) {
+        setting = reachable.filter(
+          (tile) => !tile.on || supportsWhite(tile) || supportsColour(tile),
+        );
+      }
+      const keys = setting.map((tile) => tile.key);
       const answered =
         set.brightness !== undefined && lit.length > 0
           ? ask(
               lit.filter(supportsBrightness).map((tile) => tile.key),
               { on: true, brightness: set.brightness },
             )
-          : ask(
-              setting.map((tile) => tile.key),
-              null,
-            );
+          : ask(keys, null);
       const request = async () => {
         const confirmation = followLights(failureKey);
-        const commands = send(
-          setting.map((tile) => tile.key),
-          confirmation?.onFailure,
-        );
+        const commands = send(keys, confirmation?.onFailure);
         try {
           const result = await coreJson<LightsResult>("/api/devices/lights", {
             method: "POST",
@@ -594,9 +604,13 @@ export function useDevices(live: LiveFeed) {
           const failed = new Set(
             result.failed.map((each) => tileKey(each.device, each.capability)),
           );
-          const failedCommands = commands.filter(([key]) => failed.has(key));
+          const untracked = new Set(failed);
+          const failedCommands = commands.filter(([key]) =>
+            untracked.delete(key),
+          );
           forget(failedCommands);
           failOnce(failedCommands);
+          fail([...untracked]);
           confirmation?.delivered(result.switched, failed);
           return result;
         } catch (error) {
@@ -610,7 +624,7 @@ export function useDevices(live: LiveFeed) {
       };
       return inTurn(place, request);
     },
-    [send, followLights, forget, failOnce, ask, switchLights, inTurn],
+    [send, followLights, forget, failOnce, fail, ask, switchLights, inTurn],
   );
 
   // Read whenever the shell refreshes its live feed, which it first does

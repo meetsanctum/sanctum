@@ -138,12 +138,13 @@ function lightsReply(
     return { text: words.allOff(subject) };
   }
   const changed = lights.some(done);
-  const missed = lights.filter((light) => !done(light) && !already(light));
+  const missed = lights.filter(
+    (light) => !done(light) && !already(light) && !off(light),
+  );
   if (missed.length === 0) {
-    return { text: words.changed(subject, state), confirmation: true };
-  }
-  if (!changed && missed.every(off)) {
-    return { text: words.nothingChanged };
+    return changed
+      ? { text: words.changed(subject, state), confirmation: true }
+      : { text: words.nothingChanged };
   }
   return {
     text: words.missedLights(

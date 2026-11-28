@@ -3,6 +3,7 @@ import type { CapabilityInfo, DeviceInfo } from "@meetsanctum/app-sdk";
 import { ActionCallError } from "../app-host/errors.js";
 import type { AgentCaller } from "../app-host/gate.js";
 import type { Devices } from "../devices/devices.js";
+import { matchesField } from "../devices/sync.js";
 import type { View } from "../devices/views.js";
 import type { ChangedCapability } from "./changes.js";
 
@@ -98,16 +99,16 @@ export function createRestoreCapability(options: {
     const state: Record<string, unknown> = { ...capability.state };
     if (capability.kind === "light") state.colorMode = colorModeOf(state);
     const differentFields = Object.keys(item.asked).filter(
-      (field) => state[field] !== item.asked[field],
+      (field) => !matchesField(state, item.asked, field),
     );
     if (differentFields.length > 0) {
       const setBy = capability.setBy;
       const app =
         setBy?.app &&
         Date.parse(setBy.at) >= item.at.getTime() &&
-        Object.entries(setBy.asked).some(
-          ([field, value]) =>
-            differentFields.includes(field) && value === state[field],
+        differentFields.some(
+          (field) =>
+            field in setBy.asked && matchesField(state, setBy.asked, field),
         )
           ? (options.appName(setBy.app) ?? setBy.app)
           : null;

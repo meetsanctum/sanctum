@@ -276,7 +276,7 @@ describe("a room's Lights tile", () => {
     ).not.toBeNull();
   });
 
-  it("offers only power while the only lit light cannot dim or change colour", async () => {
+  it("offers the colour of a light that is off, but no level, while the only lit light cannot dim", async () => {
     devices = [
       officeLight("desk", { on: true }, plainLight),
       officeLight("shelf", null, withColour),
@@ -289,9 +289,68 @@ describe("a room's Lights tile", () => {
     ).toBeNull();
     await click(button("Lights in Office, 1 of 2 on"));
     expect(tabs()).toEqual([]);
+    await click(button("Colour", dialog()!));
+    await click(button("Blue", dialog()!));
+    expect(posted()).toEqual([
+      {
+        place: { kind: "room", id: "office" },
+        set: { hue: 220, saturation: 100 },
+      },
+    ]);
+  });
+
+  it("shows the lit light's colour when an off light remembers a different colour", async () => {
+    devices = [
+      officeLight(
+        "desk",
+        { on: false, colorMode: "color", hue: 220, saturation: 100 },
+        withColour,
+      ),
+      officeLight(
+        "shelf",
+        {
+          on: true,
+          brightness: 60,
+          colorMode: "color",
+          hue: 0,
+          saturation: 100,
+        },
+        withColour,
+      ),
+    ];
+    await show();
+    await click(button("Lights in Office, 1 of 2 on · 60%"));
+    await click(button("Colour", dialog()!));
+    expect(button("Red", dialog()!)?.getAttribute("aria-pressed")).toBe("true");
+    expect(button("Blue", dialog()!)?.getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+  });
+
+  it("offers only power while every light can do no more than switch", async () => {
+    devices = [
+      officeLight("desk", { on: true }, plainLight),
+      officeLight("shelf", null, plainLight),
+    ];
+    await show();
+    await click(button("Lights in Office, 1 of 2 on"));
+    expect(tabs()).toEqual([]);
     await click(button("Lights in Office", dialog()!));
     expect(posted()).toEqual([
       { place: { kind: "room", id: "office" }, to: "off" },
+    ]);
+  });
+
+  it("offers a white preset when only an off light can change its white", async () => {
+    devices = [
+      officeLight("desk", { on: true }, plainLight),
+      officeLight("shelf", null, { ...withColour, color: false }),
+    ];
+    await show();
+    await click(button("Lights in Office, 1 of 2 on"));
+    await click(button(`${new Intl.NumberFormat().format(2000)} K`, dialog()!));
+    expect(posted()).toEqual([
+      { place: { kind: "room", id: "office" }, set: { colorTemperature: 500 } },
     ]);
   });
 

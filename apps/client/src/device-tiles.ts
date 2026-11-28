@@ -101,10 +101,18 @@ export const isSwitchable = (
 ): capability is Switchable =>
   capability.kind === "light" || capability.kind === "switch";
 
-type LightTile = Tile & { supportsBrightness?: boolean };
+type LightTile = Tile & {
+  supportsBrightness?: boolean;
+  supportsColour?: boolean;
+  supportsWhite?: boolean;
+};
 
 export const supportsBrightness = (tile: LightTile) =>
   tile.supportsBrightness ?? tile.dims;
+
+export const supportsColour = (tile: LightTile) => tile.supportsColour === true;
+
+export const supportsWhite = (tile: LightTile) => tile.supportsWhite === true;
 
 function tileOf(
   device: DeviceInfo,
@@ -125,6 +133,12 @@ function tileOf(
     dims: false,
     ...(capability.kind === "light" && capability.features.brightness
       ? { supportsBrightness: true }
+      : {}),
+    ...(capability.kind === "light" && capability.features.color
+      ? { supportsColour: true }
+      : {}),
+    ...(capability.kind === "light" && capability.features.colorTemperature
+      ? { supportsWhite: true }
       : {}),
     disabled: false,
   };
