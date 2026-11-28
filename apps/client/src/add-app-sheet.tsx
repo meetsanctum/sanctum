@@ -211,7 +211,6 @@ export function useShortfallFix(
     : undefined;
 }
 
-/** Why adding an app did not work, from the core's answer. */
 /** Why an app wasn't added, or, added, didn't start. */
 export function addProblemOf(error: unknown, app: AvailableApp) {
   const code = error instanceof CoreError ? error.code : null;
