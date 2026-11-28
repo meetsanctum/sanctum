@@ -9,7 +9,13 @@ import {
   type RequestReply,
 } from "@meetsanctum/app-sdk";
 
-import { match, normalized, type HomeNames, type Matched } from "./matching.js";
+import {
+  match,
+  matchesRoomMood,
+  normalized,
+  type HomeNames,
+  type Matched,
+} from "./matching.js";
 import {
   replies,
   type LightsState,
@@ -174,29 +180,32 @@ function lightsIn(place: Place, overview: Overview) {
     inPlace = (device) => device.roomId !== null && rooms.has(device.roomId);
   }
   return overview.devices.flatMap((device) =>
-    lightsOf(device).filter((capability) => inPlace(device, capability.id)),
+    lightsOf(device)
+      .filter((capability) => inPlace(device, capability.id))
+      .map(({ features }) => ({ features, availability: device.availability })),
   );
 }
 
 // What the lights tool sets for a look. The white a picker starts on is
-// the middle of the whites across every range the place's lights take, as
-// the room's Lights tile spreads them.
+// the middle of the whites across its reachable lights' ranges. When all
+// are offline, use all their ranges, as the room's Lights tile does.
 function lookSet(look: Look, place: Place, overview: Overview) {
   if ("colour" in look) {
     const { hue } = lightColours.find(({ name }) => name === look.colour)!;
     return { hue, saturation: 100 };
   }
-  const brightness = look.bright ? { brightness: 100 } : {};
-  if (look.white === "warm") {
-    return { colorTemperature: warmWhite, ...brightness };
-  }
-  if (look.white === "cool") {
-    return { colorTemperature: coolWhite, ...brightness };
-  }
-  const ranges = lightsIn(place, overview).flatMap((light) => {
-    const range = whiteRangeOf(light.features);
-    return range ? [range] : [];
-  });
+  if (look.white === "warm") return { colorTemperature: warmWhite };
+  if (look.white === "cool") return { colorTemperature: coolWhite };
+  const lights = lightsIn(place, overview);
+  const reachable = lights.filter(
+    ({ availability }) => availability !== "offline",
+  );
+  const ranges = (reachable.length > 0 ? reachable : lights).flatMap(
+    (light) => {
+      const range = whiteRangeOf(light.features);
+      return range ? [range] : [];
+    },
+  );
   const colorTemperature =
     ranges.length > 0
       ? middleWhite({
@@ -204,7 +213,7 @@ function lookSet(look: Look, place: Place, overview: Overview) {
           max: Math.max(...ranges.map(({ max }) => max)),
         })
       : neutralWhite;
-  return { colorTemperature, ...brightness };
+  return { colorTemperature, ...(look.bright ? { brightness: 100 } : {}) };
 }
 
 // What the lights tool did, in a reply.
@@ -213,6 +222,7 @@ function lightsReply(
   subject: Subject,
   state: LightsState,
   words: Replies,
+  reserved = 0,
 ): RequestReply {
   if (answered.length === 0) return { text: words.noLights(subject) };
   // A colour leaves the lights that can't show one as they are, as the
@@ -223,19 +233,15 @@ function lightsReply(
       return { text: words.noColour(subject) };
     }
     if (cannot.length > 0) {
+      const warning = words.cannotShowColour(cannot.map((light) => light.name));
       const reply = lightsReply(
         answered.filter((light) => !unsupported(light)),
         subject,
         state,
         words,
+        warning.minimumLength,
       );
-      return {
-        ...reply,
-        text: words.cannotShowColour(
-          reply.text,
-          cannot.map((light) => light.name),
-        ),
-      };
+      return { text: warning.appendTo(reply.text) };
     }
   }
   // A white leaves only lights that are as white as they get.
@@ -282,6 +288,7 @@ function lightsReply(
       changed ? changedText() : words.nothingChanged,
       missed.map((light) => light.name),
       missed.every(offline),
+      reserved,
     ),
   };
 }
@@ -404,11 +411,31 @@ export async function answerRequest(
     const overview = read.value as Overview;
     const names = namesOf(overview);
     const matched = match(request.text, language, names);
-    if (matched)
+    if (matched) {
+      if (
+        matched.intent.do === "look" &&
+        matchesRoomMood(request.text, language, names.room)
+      ) {
+        const lookedUp = await readMoods(ctx);
+        if (!lookedUp.ok) {
+          return { text: words.failed(lookedUp.words, lookedUp.error) };
+        }
+        for (const room of overview.rooms) {
+          const moodNames = lookedUp.moods
+            .filter((mood) => mood.state.placeId === room.id)
+            .map((mood) => mood.name);
+          if (
+            moodNames.length > 0 &&
+            matchesRoomMood(request.text, language, [room.name], moodNames)
+          ) {
+            return { text: words.lightOrMood };
+          }
+        }
+      }
       return await changeLights(ctx, matched, overview, request, words);
+    }
 
-    // A mood's name only after nothing else matched: its list is a read of
-    // its own, which lights don't wait for.
+    // Other lighting requests don't need to wait for the list of moods.
     const lookedUp = await readMoods(ctx);
     if (!lookedUp.ok) {
       return { text: words.failed(lookedUp.words, lookedUp.error) };

@@ -1,4 +1,4 @@
-import type { RequestContext } from "@meetsanctum/app-sdk";
+import type { Availability, RequestContext } from "@meetsanctum/app-sdk";
 
 // The tools every AI agent gets, as the Assistant calls them, and what it
 // reads of their answers.
@@ -17,6 +17,7 @@ export type Overview = {
     id: string;
     name: string;
     roomId: string | null;
+    availability: Availability;
     capabilities: { id: string; kind: string; features?: unknown }[];
   }[];
   notAllowed: { title: string; where: string }[];

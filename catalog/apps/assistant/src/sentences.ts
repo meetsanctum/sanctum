@@ -1,9 +1,10 @@
-import type {
-  AssistantSentences,
-  LightColourName,
-  NotUnderstood,
-  SentenceBlank,
-  SpeechLanguage,
+import {
+  lightColours,
+  type AssistantSentences,
+  type LightColourName,
+  type NotUnderstood,
+  type SentenceBlank,
+  type SpeechLanguage,
 } from "@meetsanctum/app-sdk";
 
 // What the Assistant understands, in each language: templates in hassil's
@@ -38,7 +39,8 @@ export type ChoiceName = "switch" | "step" | "percent" | "look";
  * one of the picker's colours.
  */
 export type Look =
-  | { white: "picker" | "warm" | "cool"; bright?: true }
+  | { white: "picker"; bright?: true }
+  | { white: "warm" | "cool"; bright?: never }
   | { colour: LightColourName };
 
 /** Each choice's words, and what each means. */
@@ -278,7 +280,8 @@ const en: LanguageSentences = {
       template: "(set|change|turn) [the] (light|lights) to <look>",
       intent: lookOf("here"),
     },
-    // A room's mood, by its name: after the lights, so a light's name wins.
+    // A room's mood, by its name. A look that also matches a mood asks
+    // which was meant before changing the lights.
     {
       template: "(set|switch|change) [the] {room} to {mood}",
       intent: { do: "mood" },
@@ -318,6 +321,17 @@ const en: LanguageSentences = {
   notUnderstood: "I can only help with lights and moods.",
 };
 
+export const deColourNames: Record<LightColourName, string> = {
+  Red: "rot",
+  Orange: "orange",
+  Yellow: "gelb",
+  Lime: "limettengrün",
+  Green: "grün",
+  Cyan: "cyan",
+  Blue: "blau",
+  Magenta: "magenta",
+};
+
 // German names rooms with an article of their own ("im Büro", "in der
 // Küche"), which the sentences take in any form.
 const de: LanguageSentences = {
@@ -346,14 +360,9 @@ const de: LanguageSentences = {
       kaltweiß: { white: "cool" },
       hell: { white: "picker", bright: true },
       "ganz hell": { white: "picker", bright: true },
-      rot: { colour: "Red" },
-      orange: { colour: "Orange" },
-      gelb: { colour: "Yellow" },
-      limettengrün: { colour: "Lime" },
-      grün: { colour: "Green" },
-      cyan: { colour: "Cyan" },
-      blau: { colour: "Blue" },
-      magenta: { colour: "Magenta" },
+      ...Object.fromEntries(
+        lightColours.map(({ name }) => [deColourNames[name], { colour: name }]),
+      ),
     },
   },
   sentences: [

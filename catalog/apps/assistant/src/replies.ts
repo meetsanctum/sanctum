@@ -1,10 +1,6 @@
-import {
-  replyTextMaxLength,
-  type LightColourName,
-  type SpeechLanguage,
-} from "@meetsanctum/app-sdk";
+import { replyTextMaxLength, type SpeechLanguage } from "@meetsanctum/app-sdk";
 
-import type { Look } from "./sentences.js";
+import { deColourNames, type Look } from "./sentences.js";
 import { agentsPage } from "./tools.js";
 
 // What the Assistant answers, in each language: short, since a smart speaker
@@ -26,6 +22,11 @@ export type LightsState =
 
 type RestoreIssue = "changed" | "offline" | "uncertain" | "limited" | "failed";
 
+type ColourWarning = {
+  minimumLength: number;
+  appendTo(summary: string): string;
+};
+
 export type Replies = {
   changed(subject: Subject, state: LightsState): string;
   already(subject: Subject, state: LightsState): string;
@@ -36,12 +37,13 @@ export type Replies = {
   notAnswering(subject: Subject): string;
   /** A colour, where no light can show one. */
   noColour(subject: Subject): string;
-  /** What changed, then the lights a colour left as they were. */
-  cannotShowColour(summary: string, names: readonly string[]): string;
+  /** A notice about the lights a colour left as they were. */
+  cannotShowColour(names: readonly string[]): ColourWarning;
   missedLights(
     summary: string,
     names: readonly string[],
     allOffline: boolean,
+    reserved?: number,
   ): string;
   nothingChanged: string;
   putBack: string;
@@ -63,6 +65,7 @@ export type Replies = {
   duplicateMood(mood: string, room: string | null): string;
   /** Several rooms have a mood of that name, and none was said. */
   whichMoodRoom(mood: string): string;
+  lightOrMood: string;
   noTimers: string;
   notInARoom: string;
   whichRoom: string;
@@ -83,8 +86,10 @@ function withNames(
   and: string,
   more: (count: number) => string,
   ending: string,
+  reserved = 0,
 ) {
-  const limit = replyTextMaxLength - summary.length - 1 - ending.length;
+  const limit =
+    replyTextMaxLength - reserved - summary.length - 1 - ending.length;
   const full = list(names, and);
   if (full.length <= limit) return `${summary} ${full}${ending}`;
 
@@ -99,6 +104,18 @@ function withNames(
   }
   const shortened = list([...shown, more(names.length - shown.length)], and);
   return `${summary} ${shortened}${ending}`;
+}
+
+function colourWarning(
+  names: readonly string[],
+  and: string,
+  more: (count: number) => string,
+  ending: string,
+): ColourWarning {
+  return {
+    minimumLength: 1 + more(names.length).length + ending.length,
+    appendTo: (summary) => withNames(summary, names, and, more, ending),
+  };
 }
 
 const enWhites = { picker: "white", warm: "warm white", cool: "cool white" };
@@ -137,21 +154,21 @@ const en: Replies = {
       : subject.kind === "place"
         ? `No light in ${subject.name} can show colours.`
         : `${subject.name} can't show colours.`,
-  cannotShowColour: (summary, names) =>
-    withNames(
-      summary,
+  cannotShowColour: (names) =>
+    colourWarning(
       names,
       "and",
       (count) => `${count} more`,
       " can't show colours.",
     ),
-  missedLights: (summary, names, allOffline) =>
+  missedLights: (summary, names, allOffline, reserved) =>
     withNames(
       summary,
       names,
       "and",
       (count) => `${count} more`,
       allOffline ? " didn't answer." : " couldn't be changed.",
+      reserved,
     ),
   nothingChanged: "Nothing changed.",
   putBack: "Put back.",
@@ -179,6 +196,8 @@ const en: Replies = {
       : `More than one mood in the same room is called ${mood}.`,
   whichMoodRoom: (mood) =>
     `Which room? Several have a mood called ${mood}. Say the room too.`,
+  lightOrMood:
+    "Did you mean to change the lights or start a mood? Say ‘make’ for lights or ‘start’ for a mood.",
   noTimers: "I can't set timers yet.",
   notInARoom: "I'm not in a room yet. Choose my room in Settings, Devices.",
   whichRoom: "Which room's lights? Say the room too.",
@@ -187,16 +206,6 @@ const en: Replies = {
   failed: (toolWords) => toolWords,
 };
 
-const deColours: Record<LightColourName, string> = {
-  Red: "rot",
-  Orange: "orange",
-  Yellow: "gelb",
-  Lime: "limettengrün",
-  Green: "grün",
-  Cyan: "cyan",
-  Blue: "blau",
-  Magenta: "magenta",
-};
 const deWhites = { picker: "weiß", warm: "warmweiß", cool: "kaltweiß" };
 
 const deState = (state: LightsState) => {
@@ -207,9 +216,8 @@ const deState = (state: LightsState) => {
     ];
   }
   const { look } = state;
-  if ("colour" in look) return deColours[look.colour];
-  if (!look.bright) return deWhites[look.white];
-  return look.white === "picker" ? "hell" : `hell ${deWhites[look.white]}`;
+  if ("colour" in look) return deColourNames[look.colour];
+  return look.bright ? "hell" : deWhites[look.white];
 };
 
 // "Küche: Licht an", since a room's article in German goes by its name.
@@ -242,9 +250,8 @@ const de: Replies = {
       : subject.kind === "place"
         ? `${subject.name}: Kein Licht kann Farben zeigen.`
         : `${subject.name} kann keine Farben zeigen.`,
-  cannotShowColour: (summary, names) =>
-    withNames(
-      summary,
+  cannotShowColour: (names) =>
+    colourWarning(
       names,
       "und",
       (count) => `${count} weitere`,
@@ -252,7 +259,7 @@ const de: Replies = {
         ? " können keine Farben zeigen."
         : " kann keine Farben zeigen.",
     ),
-  missedLights: (summary, names, allOffline) =>
+  missedLights: (summary, names, allOffline, reserved) =>
     withNames(
       summary,
       names,
@@ -265,6 +272,7 @@ const de: Replies = {
         : names.length > 1
           ? " konnten nicht geändert werden."
           : " konnte nicht geändert werden.",
+      reserved,
     ),
   nothingChanged: "Nichts geändert.",
   putBack: "Zurückgestellt.",
@@ -299,6 +307,8 @@ const de: Replies = {
       : `Mehrere Stimmungen im selben Raum heißen „${mood}“.`,
   whichMoodRoom: (mood) =>
     `Welcher Raum? Mehrere haben die Stimmung „${mood}“. Sag den Raum mit dazu.`,
+  lightOrMood:
+    "Möchtest du das Licht ändern oder eine Stimmung starten? Sag „mach“ für das Licht oder „starte“ für die Stimmung.",
   noTimers: "Ich kann noch keine Timer stellen.",
   notInARoom:
     "Ich bin noch in keinem Raum. Wähle meinen Raum unter Settings, Devices.",

@@ -1,4 +1,8 @@
-import type { SpeechLanguage } from "@meetsanctum/app-sdk";
+import {
+  requestReplySchema,
+  type Availability,
+  type SpeechLanguage,
+} from "@meetsanctum/app-sdk";
 import { describe, expect, it } from "vitest";
 
 import { ask, json, lit, overview } from "./request-support.js";
@@ -8,10 +12,12 @@ describe("the Assistant's whites and colours", () => {
     id: string,
     roomId: string,
     colorTemperature: { min: number; max: number } | null,
+    availability: Availability = "online",
   ) => ({
     id: `device-${id}`,
     name: id,
     roomId,
+    availability,
     capabilities: [
       {
         id: "light",
@@ -93,6 +99,45 @@ describe("the Assistant's whites and colours", () => {
     });
   });
 
+  it.each([
+    ["online", 325],
+    ["unknown", 325],
+    ["offline", 437],
+  ] as const)(
+    "chooses the picker white with one %s light and one offline",
+    async (availability, colorTemperature) => {
+      const { calls } = await ask("make the office white", {
+        tools: {
+          home_overview: () =>
+            json({
+              ...overview,
+              devices: [
+                light(
+                  "Desk",
+                  "room-office",
+                  { min: 153, max: 454 },
+                  availability,
+                ),
+                light(
+                  "Shelf",
+                  "room-office",
+                  { min: 450, max: 650 },
+                  "offline",
+                ),
+              ],
+            }),
+        },
+      });
+      expect(calls.at(-1)).toEqual({
+        name: "lights",
+        input: {
+          place: { kind: "room", id: "room-office" },
+          set: { colorTemperature },
+        },
+      });
+    },
+  );
+
   const replyTo = async (
     text: string,
     lights: object[],
@@ -127,7 +172,6 @@ describe("the Assistant's whites and colours", () => {
     ).toEqual([
       {
         text: "Office lights blue. Shelf and Strip can't show colours.",
-        confirmation: true,
       },
     ]);
     expect(
@@ -157,6 +201,34 @@ describe("the Assistant's whites and colours", () => {
     ).toEqual([{ text: "No light can show colours." }]);
   });
 
+  it.each([
+    ["en", "make all the lights blue", "didn't answer.", "can't show colours."],
+    [
+      "de",
+      "mach alle Lichter blau",
+      "antworten nicht.",
+      "kann keine Farben zeigen.",
+    ],
+  ] as const)(
+    "keeps both mixed colour notices within the reply limit in %s",
+    async (language, request, missed, unsupported) => {
+      const offline = Array.from({ length: 33 }, (_, index) =>
+        lit(
+          `Lamp ${index.toString().padStart(2, "0")} ${"x".repeat(110)}`,
+          "offline",
+        ),
+      );
+      const [reply] = await replyTo(
+        request,
+        [lit("Desk Lamp"), ...offline, lit("Shelf", "skipped", "unsupported")],
+        language,
+      );
+      expect(reply?.text).toContain(missed);
+      expect(reply?.text).toContain(unsupported);
+      expect(requestReplySchema.safeParse(reply).success).toBe(true);
+    },
+  );
+
   it("answers in German", async () => {
     expect(
       await replyTo("mach das Licht blau", [lit("Desk Lamp")], "de"),
@@ -173,7 +245,6 @@ describe("the Assistant's whites and colours", () => {
     ).toEqual([
       {
         text: "Office: Licht magenta. Shelf kann keine Farben zeigen.",
-        confirmation: true,
       },
     ]);
     expect(

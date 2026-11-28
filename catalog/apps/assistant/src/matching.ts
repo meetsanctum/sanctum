@@ -65,6 +65,7 @@ export function compile(
   template: string,
   choices: Choices,
   names: HomeNames,
+  openMood = false,
 ): RegExp | null {
   let pattern = "";
   const tokens =
@@ -79,7 +80,8 @@ export function compile(
     else if (/^\s+$/u.test(token)) pattern += "\\s*";
     else if (token.startsWith("{")) {
       const blank = token.slice(1, -1) as SentenceBlank;
-      const alternatives = wordsPattern(names[blank] ?? []);
+      const alternatives =
+        openMood && blank === "mood" ? ".+" : wordsPattern(names[blank] ?? []);
       if (!alternatives) return null;
       pattern += `${notLetter}(?<${blank}>${alternatives})${notLetterAfter}`;
     } else if (token.startsWith("<percent>") && token !== "<percent>") {
@@ -95,6 +97,25 @@ export function compile(
     }
   }
   return new RegExp(`^\\s*${pattern}\\s*$`, "u");
+}
+
+/** Whether the words name a room's mood, even before its names are read. */
+export function matchesRoomMood(
+  text: string,
+  language: LanguageSentences,
+  room: readonly string[],
+  mood?: readonly string[],
+) {
+  const words = normalized(text);
+  const names: HomeNames = { room, mood: mood ?? [], floor: [], light: [] };
+  return language.sentences.some(
+    ({ template, intent }) =>
+      intent.do === "mood" &&
+      template.includes("{room}") &&
+      compile(template, language.choices, names, mood === undefined)?.test(
+        words,
+      ),
+  );
 }
 
 // The name as the home writes it, for the words that matched it.
