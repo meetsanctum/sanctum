@@ -8,7 +8,15 @@ import {
 } from "@meetsanctum/ui-sdk";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 
 import { CoreError, coreJson } from "../src/core-fetch";
 import type { CoreStatus } from "../src/core-status";
@@ -156,13 +164,18 @@ afterEach(async () => {
 const offline = { state: "offline" } as const;
 const online = { state: "online", version: "dev-ed4f70b" } as const;
 
-async function render(timeZone?: string, core: CoreStatus = offline) {
+async function render(
+  timeZone?: string,
+  core: CoreStatus = offline,
+  openAt?: { card: string },
+) {
   await act(async () => {
     root.render(
       <HomeTimeZoneProvider timeZone={timeZone}>
         <TemperatureUnitProvider unit="celsius">
           <SystemPage
             apps={statusApps}
+            openAt={openAt}
             core={core}
             onUpdating={() => {}}
             onDone={() => {}}
@@ -378,6 +391,34 @@ describe("free up space", () => {
     await act(async () => vi.advanceTimersByTimeAsync(5_000));
     expect(storage.textContent).toContain("About 1.3 GB to free");
     expect(buttonIn(storage, "Free up space").disabled).toBe(false);
+  });
+
+  it("opens at Storage after the card first becomes available", async () => {
+    vi.useFakeTimers();
+    const shown: Element[] = [];
+    Element.prototype.scrollIntoView = function (this: Element) {
+      shown.push(this);
+    };
+    onTestFinished(() => {
+      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+    });
+    answers["/api/system/status"] = async () => {
+      throw new CoreError(503, "manager_unavailable");
+    };
+    await render(undefined, offline, { card: "storage" });
+    expect(shown).toEqual([]);
+    answers["/api/system/status"] = async () => status;
+    await act(async () => vi.advanceTimersByTimeAsync(5_000));
+    expect(shown).toEqual([section("status-storage")]);
+
+    // Losing and regaining the card runs the jump effect again.
+    answers["/api/system/status"] = async () => ({ ...status, host: null });
+    await act(async () => vi.advanceTimersByTimeAsync(5_000));
+    expect(container.querySelector("#status-storage")).toBeNull();
+    answers["/api/system/status"] = async () => status;
+    await act(async () => vi.advanceTimersByTimeAsync(5_000));
+    expect(section("status-storage")).not.toBeNull();
+    expect(shown).toHaveLength(1);
   });
 
   it("says what it would free and what goes, then what stays, asked first", async () => {

@@ -44,7 +44,9 @@ import { EditDevice, type Editing } from "./edit-device";
 import { DeviceLine } from "./device-line";
 import { SanctumAttentionRow } from "./settings-status";
 import type { SystemStatus } from "./system-status";
-import { plural } from "./plural";
+import { compare, list, plural } from "@meetsanctum/app-sdk/words";
+
+const compareNames = compare("en");
 
 // Settings' Needs attention: first on the page while Sanctum itself, any app
 // or any device needs someone. Sanctum leads, with its first problem, and
@@ -96,10 +98,11 @@ function hintOf(sanctum: boolean, apps: readonly AppInfo[], devices: number) {
       : apps.length > 1
         ? [`${apps.length} apps`]
         : []),
-    ...(devices > 0 ? [plural(devices, "device")] : []),
+    ...(devices > 0
+      ? [plural("en", devices, { one: "# device", other: "# devices" })]
+      : []),
   ];
-  if (parts.length <= 1) return parts[0];
-  return `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+  return parts.length === 0 ? undefined : list("en", parts);
 }
 
 // A row: its icon, its words and its fix, which a phone puts under them.
@@ -198,7 +201,7 @@ export function NeedsAttentionSection(props: {
     const second = positionOf(b);
     return (
       rankOf(first.reason) - rankOf(second.reason) ||
-      first.name.localeCompare(second.name)
+      compareNames(first.name, second.name)
     );
   });
   const sanctum =
@@ -341,6 +344,7 @@ export function NeedsAttentionSection(props: {
         {apps.map((app) => (
           <li key={app.id} className={rowLayout}>
             <AppIcon
+              appId={app.id}
               icon={app.icon ?? plainIcon}
               className="size-8 [&_svg]:size-4"
             />

@@ -10,6 +10,7 @@ import { Button, SegmentedControl, Switch } from "@meetsanctum/ui-sdk";
 import { cn } from "cn";
 import { ChevronDown, CircleAlert, LoaderCircle } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { plural } from "@meetsanctum/app-sdk/words";
 
 import {
   Dialog,
@@ -70,18 +71,15 @@ const sensitivityLabels: Record<MotionSensitivity, string> = {
 export const sensitivityLabel = (level: MotionSensitivity) =>
   sensitivityLabels[level];
 
-const plural = (count: number, word: string) =>
-  `${count} ${word}${count === 1 ? "" : "s"}`;
-
 /** How long a sensor waits before it says no motion, such as "2 minutes" or "90 seconds". */
 export function clearAfterWords(seconds: number) {
   if (seconds >= 3600 && seconds % 3600 === 0) {
-    return plural(seconds / 3600, "hour");
+    return plural("en", seconds / 3600, { one: "# hour", other: "# hours" });
   }
   if (seconds >= 60 && seconds % 60 === 0) {
-    return plural(seconds / 60, "minute");
+    return plural("en", seconds / 60, { one: "# minute", other: "# minutes" });
   }
-  return plural(seconds, "second");
+  return plural("en", seconds, { one: "# second", other: "# seconds" });
 }
 
 // The choices of how long it waits, within the sensor's range.

@@ -52,6 +52,9 @@ jobs:
         env:
           SANCTUM_CONTRACT_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
       - run: pnpm build
+      - name: Check the connector archive
+        working-directory: packages/mcp
+        run: bash tools/check-archive.sh "$RUNNER_TEMP/connector"
       # Only this run's tasks are kept, so the cache stays the size of one
       # run instead of growing with every one.
       - name: Prune Turbo's cache

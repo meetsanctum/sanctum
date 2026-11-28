@@ -44,8 +44,8 @@ vi.mock("../src/core-fetch", async () => ({
 }));
 
 const info = (over: Partial<AppInfo> = {}): AppInfo => ({
-  id: "sanctum.weather",
-  name: "Weather",
+  id: "sanctum.example",
+  name: "Example",
   version: "0.3.0",
   icon: null,
   pages: ["main"],
@@ -228,15 +228,40 @@ describe("an app's page in its frame", () => {
     }
   });
 
-  it("shows the app's name, and the loader only after 0.4 s", async () => {
+  it("shows the app's name, and the page's sections only after 0.4 s", async () => {
     await show();
-    expect(container.querySelector("h1")?.textContent).toBe("Weather");
-    expect(text()).not.toContain("Opening Weather");
+    expect(container.querySelector("h1")?.textContent).toBe("Example");
     expect(frame().className).toContain("opacity-0");
     expect(frame().getAttribute("sandbox")).toBe("allow-scripts");
     expect(frame().getAttribute("allow")).toBe("");
-    await after(400);
-    expect(text()).toContain("Opening Weather");
+    await after(399);
+    expect(text()).not.toContain("Opening Example");
+    expect(container.querySelector("[data-slot=skeleton]")).toBeNull();
+    await after(1);
+    expect(text()).toContain("Opening Example…");
+    expect(container.querySelectorAll("[data-slot=skeleton]")).toHaveLength(4);
+  });
+
+  it("says it's taking longer than usual after 5 s, and goes once it's ready", async () => {
+    await show();
+    await after(4_999);
+    const status = container.querySelector("[role=status]");
+    expect(status?.textContent).toBe("Opening Example…");
+    await after(1);
+    expect(container.querySelector("[role=status]")).toBe(status);
+    expect(status?.textContent).toBe(
+      "Opening Example is taking longer than usual.",
+    );
+    const port = hello();
+    try {
+      port.postMessage({ type: "ready" });
+      await vi.waitFor(() => expect(status?.isConnected).toBe(false));
+      expect(container.querySelector("[data-slot=skeleton]")).toBeNull();
+      expect(frame().classList.contains("opacity-0")).toBe(false);
+      expect(frame().classList.contains("hidden")).toBe(false);
+    } finally {
+      port.close();
+    }
   });
 
   it("says it didn't open when it doesn't answer in 10 s, and tries again", async () => {
@@ -244,9 +269,8 @@ describe("an app's page in its frame", () => {
     await after(9_999);
     expect(text()).not.toContain("didn't open");
     await after(1);
-    expect(text()).toContain("Weather's page didn't open");
-    expect(text()).toContain(
-      "It didn't answer in time. What Weather adds to the home keeps working.",
+    expect(container.querySelector("[role=alert]")?.textContent).toBe(
+      "Example's page didn't openWhat Example adds to the home keeps working.Try again",
     );
     expect(address.calls).toBe(1);
     expect(frame().src).toContain("/pages/page_ticket1/");
@@ -257,6 +281,14 @@ describe("an app's page in its frame", () => {
     expect(frame().src).toContain("/pages/page_ticket2/");
     expect(address.calls).toBe(2);
     expect(text()).not.toContain("didn't open");
+    await after(4_999);
+    expect(container.querySelector("[role=status]")?.textContent).toBe(
+      "Opening Example…",
+    );
+    await after(1);
+    expect(container.querySelector("[role=status]")?.textContent).toBe(
+      "Opening Example is taking longer than usual.",
+    );
   });
 
   it("opens a new frame with a full timeout when the app's version changes", async () => {
@@ -269,7 +301,7 @@ describe("an app's page in its frame", () => {
     await after(9_999);
     expect(text()).not.toContain("didn't open");
     await after(1);
-    expect(text()).toContain("It didn't answer in time.");
+    expect(text()).toContain("Example's page didn't open");
   });
 
   it("shows the page's title, and the app's name again when another page shows", async () => {
@@ -285,7 +317,7 @@ describe("an app's page in its frame", () => {
       expect(container.querySelector("h1")?.textContent).toBe("Forecast"),
     );
     await show({ shown: "2" });
-    expect(container.querySelector("h1")?.textContent).toBe("Weather");
+    expect(container.querySelector("h1")?.textContent).toBe("Example");
     port.close();
   });
 
@@ -333,7 +365,7 @@ describe("an app's page in its frame", () => {
     });
     await show();
     expect(frame().getAttribute("src")).toBeNull();
-    expect(text()).toContain("Its files didn't load.");
+    expect(text()).toContain("Example's page didn't open");
   });
 
   it("draws the page's actions in the top bar, and says which was pressed, at which revision", async () => {
@@ -412,7 +444,7 @@ describe("an app's page in its frame", () => {
     ],
     [
       "pages",
-      "This page needs an update of Weather",
+      "This page needs an update of Example",
       "It was made for an older Sanctum.",
     ],
   ])(
@@ -426,7 +458,7 @@ describe("an app's page in its frame", () => {
       expect(container.querySelector("iframe[src]")).toBeNull();
       expect(text()).toContain(title);
       expect(text()).toContain(line);
-      expect(text()).toContain("What Weather adds to the home keeps working.");
+      expect(text()).toContain("What Example adds to the home keeps working.");
     },
   );
 
@@ -466,11 +498,27 @@ describe("an app's page in its frame", () => {
     expect(frame()).not.toBe(first);
   });
 
-  it("says its files didn't load when the core has none", async () => {
-    address.answer = () => Promise.reject(new Error("not_found"));
+  it("says it didn't open when the core has no files for it", async () => {
+    address.pages = () =>
+      Promise.reject(new CoreError(404, "not_found", { error: "not_found" }));
     await show();
-    expect(text()).toContain("Weather's page didn't open");
-    expect(text()).toContain("Its files didn't load.");
+    expect(frame().getAttribute("src")).toBeNull();
+    expect(container.querySelector("[role=alert]")?.textContent).toContain(
+      "Example's page didn't open",
+    );
+  });
+
+  it("uses the plain icon if the app's icon colour is unknown", async () => {
+    const icon = {
+      glyph: "cloud-sun",
+      color: "unknown",
+    } as unknown as AppInfo["icon"];
+    await show({ app: info({ icon }) });
+    await after(10_000);
+    const iconTile = container.querySelector<HTMLSpanElement>(
+      "[role=alert] [data-slot=empty-icon] > span",
+    );
+    expect(iconTile?.style.background).toBe("var(--graphite)");
   });
 
   it("waits while the home is away", async () => {
@@ -479,7 +527,30 @@ describe("an app's page in its frame", () => {
     expect(text()).not.toContain("didn't open");
     await show({ isAway: false });
     await after(10_000);
-    expect(text()).toContain("Weather's page didn't open");
+    expect(text()).toContain("Example's page didn't open");
+  });
+
+  it("waits another 5 s before showing the slow message when the home returns", async () => {
+    await show();
+    await after(5_000);
+    expect(container.querySelector("[role=status]")?.textContent).toBe(
+      "Opening Example is taking longer than usual.",
+    );
+
+    await show({ isAway: true });
+    await after(10_000);
+    await show();
+    expect(container.querySelector("[role=status]")?.textContent).toBe(
+      "Opening Example…",
+    );
+    await after(4_999);
+    expect(container.querySelector("[role=status]")?.textContent).toBe(
+      "Opening Example…",
+    );
+    await after(1);
+    expect(container.querySelector("[role=status]")?.textContent).toBe(
+      "Opening Example is taking longer than usual.",
+    );
   });
 
   it("leaves a paused app's notice to the shell", async () => {

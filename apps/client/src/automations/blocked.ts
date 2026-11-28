@@ -4,6 +4,7 @@ import {
   type PieceInfo,
   type WorkflowInfo,
 } from "@meetsanctum/app-sdk";
+import { list } from "@meetsanctum/app-sdk/words";
 
 import { looksRunning, pausedFor } from "../app-state";
 import { productName } from "../brand";
@@ -98,9 +99,10 @@ export function blockedBy(
 
 // "“See your remotes' presses” and “Know when there's motion”".
 function quoted(titles: readonly string[]) {
-  const each = titles.map((title) => `“${title}”`);
-  if (each.length <= 1) return each.join("");
-  return `${each.slice(0, -1).join(", ")} and ${each.at(-1)}`;
+  return list(
+    "en",
+    titles.map((title) => `“${title}”`),
+  );
 }
 
 /** The list's line: "Can't run while Moods is paused". */

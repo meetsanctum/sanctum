@@ -17,6 +17,10 @@
       "types": "./dist/languages.d.ts",
       "default": "./dist/languages.js"
     },
+    "./words": {
+      "types": "./dist/words.d.ts",
+      "default": "./dist/words.js"
+    },
     "./protocol": {
       "types": "./dist/protocol.d.ts",
       "default": "./dist/protocol.js"

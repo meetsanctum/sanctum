@@ -589,6 +589,38 @@ export async function setLogin(
   );
 }
 
+// Choosing a new password on a device signed in as you, without the
+// current one.
+export async function choosePassword(
+  core: TestCore,
+  token: string,
+  next: string,
+  between?: () => Promise<unknown>,
+) {
+  const started = registration(next);
+  const start = await post(
+    core,
+    "/api/auth/password/choose/start",
+    { registrationRequest: started.registrationRequest },
+    { token },
+  );
+  if (start.statusCode !== 200) {
+    return start;
+  }
+  const { registrationId, registrationResponse } = start.json();
+  await between?.();
+  return post(
+    core,
+    "/api/auth/password/choose/finish",
+    {
+      registrationId,
+      registrationRecord: started.finish(registrationResponse),
+      keyStretching: keyStretching.version,
+    },
+    { token },
+  );
+}
+
 export async function changePassword(
   core: TestCore,
   token: string,

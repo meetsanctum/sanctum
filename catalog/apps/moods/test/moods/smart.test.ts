@@ -99,6 +99,28 @@ describe("smart moods", () => {
     ]);
   });
 
+  it("keeps assigned colours for numbered lights in a saved smart mood", () => {
+    const light2 = light("light-2", { on: false }, { features: colour });
+    light2.device.name = "Light 2";
+    const light10 = light("light-10", { on: false }, { features: colour });
+    light10.device.name = "Light 10";
+
+    expect(
+      smartLights(testSmart, { brightness: 30, off: [] }, [light2, light10]),
+    ).toEqual([
+      {
+        device: "light-10",
+        capability: "light",
+        state: { on: true, brightness: 30, hue: 10, saturation: 80 },
+      },
+      {
+        device: "light-2",
+        capability: "light",
+        state: { on: true, brightness: 30, hue: 120, saturation: 70 },
+      },
+    ]);
+  });
+
   it("resolves active smart moods from catalog expectations", () => {
     const officeLight = light(
       "office-light",

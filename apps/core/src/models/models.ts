@@ -1,14 +1,15 @@
-import type {
-  AddModelSource,
-  ChangeModelSource,
-  LookAtModelSource,
-  ModelChoice,
-  ModelSourceInfo,
-  ModelSourceLook,
-  ModelSourceShown,
-  ModelsInfo,
-  ModelTokens,
-  ModelUsage,
+import {
+  compare,
+  type AddModelSource,
+  type ChangeModelSource,
+  type LookAtModelSource,
+  type ModelChoice,
+  type ModelSourceInfo,
+  type ModelSourceLook,
+  type ModelSourceShown,
+  type ModelsInfo,
+  type ModelTokens,
+  type ModelUsage,
 } from "@meetsanctum/app-sdk";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -32,6 +33,8 @@ import {
   type SourceReach,
 } from "./endpoints.js";
 import { modelSources, modelTokens } from "./schema.js";
+
+const compareNames = compare("en");
 
 // The home's AI models: the sources the household added in Settings, one of
 // them in use. The core is the only one that reaches a source or holds its
@@ -264,7 +267,7 @@ export function createModels(
     const sources = rows();
     const apps = options
       .appsUsing()
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => compareNames(a.name, b.name));
     const daily = usage(
       sources.map(({ id }) => id),
       apps.map(({ id }) => id),

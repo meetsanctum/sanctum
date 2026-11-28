@@ -330,6 +330,9 @@ const appCapacity = z.object({
   servicesMemoryMb: z.number().nonnegative().optional(),
   dataNeedsMb: z.number().nonnegative(),
   dataFreeBytes: z.number().nonnegative().nullable(),
+  // How much would have to be freed for its data to fit, which a manager
+  // that doesn't say leaves to be worked out from what's free.
+  dataShortBytes: z.number().nonnegative().nullable().optional(),
 });
 export type AppCapacity = z.infer<typeof appCapacity>;
 export const appCapacities = z.record(z.string(), appCapacity);

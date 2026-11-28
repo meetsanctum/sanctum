@@ -648,6 +648,7 @@ export function AddDevices(props: {
       </ScrollArea>
       {props.open && page.kind === "choose" && offered && (
         <OfferedAppSheet
+          apps={props.apps}
           key={offered.offer.app}
           offer={offered.offer}
           onAdded={() => {

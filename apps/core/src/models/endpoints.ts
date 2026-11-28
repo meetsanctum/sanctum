@@ -1,4 +1,8 @@
-import type { ModelChoice, ModelProvider } from "@meetsanctum/app-sdk";
+import {
+  compare,
+  type ModelChoice,
+  type ModelProvider,
+} from "@meetsanctum/app-sdk";
 import { z } from "zod";
 
 import { addressText, isHomeAddress, type HomeAddress } from "./addresses.js";
@@ -10,6 +14,8 @@ import {
   type ModelApi,
   type ModelEndpoint,
 } from "./client.js";
+
+const compareNames = compare("en");
 
 // Where each kind of source answers. Ollama on Sanctum is reached at the
 // address the manager gives for its service, never one typed in; a
@@ -168,7 +174,7 @@ async function ollamaModels(
       name: ollamaModelName(model.name),
       ...(model.size === undefined ? {} : { size: model.size }),
     }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => compareNames(a.name, b.name));
 }
 
 /**
@@ -230,7 +236,7 @@ export async function listModels(
       if (!found.success) throw new ModelError("answer", "not a model list");
       return found.data.data
         .map((model) => ({ id: model.id, name: model.name ?? model.id }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort((a, b) => compareNames(a.name, b.name));
     }
     case "anthropic": {
       // Anthropic's own headers; a key's models fit in one page of 1,000.
@@ -249,7 +255,7 @@ export async function listModels(
           id: model.id,
           name: model.display_name || model.id,
         }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort((a, b) => compareNames(a.name, b.name));
     }
     case "openai": {
       const found = openAiModels.safeParse(
@@ -264,7 +270,7 @@ export async function listModels(
       return found.data.data
         .filter((model) => openAiChat(model.id))
         .map((model) => ({ id: model.id, name: model.id }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort((a, b) => compareNames(a.name, b.name));
     }
   }
 }

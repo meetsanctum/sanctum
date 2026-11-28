@@ -55,20 +55,21 @@ function matrixInstructionsOf(cpuinfo: string) {
 
 const kib = 1024;
 
-function memoryField(meminfo: string, name: string) {
-  const match = new RegExp(`^${name}:\\s+(\\d+) kB$`, "m").exec(meminfo);
+export function memoryField(meminfo: string, name: string) {
+  const match = new RegExp(`^${name}:[ \\t]+(\\d+) kB$`, "m").exec(meminfo);
   return match ? Number(match[1]) * kib : null;
 }
 
 export function memoryOf(meminfo: string): MemoryReading | null {
-  const total = memoryField(meminfo, "MemTotal");
-  const available = memoryField(meminfo, "MemAvailable");
+  const field = (name: string) => memoryField(meminfo, name);
+  const total = field("MemTotal");
+  const available = field("MemAvailable");
   if (total === null || available === null) return null;
   return {
     total,
     available,
-    swapTotal: memoryField(meminfo, "SwapTotal") ?? 0,
-    swapFree: memoryField(meminfo, "SwapFree") ?? 0,
+    swapTotal: field("SwapTotal") ?? 0,
+    swapFree: field("SwapFree") ?? 0,
   };
 }
 

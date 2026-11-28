@@ -11,6 +11,7 @@ import {
 import { Button } from "@meetsanctum/ui-sdk";
 import { Search } from "lucide-react";
 import { useMemo, useRef, useState, type ReactNode } from "react";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import {
   Dialog,
@@ -32,6 +33,8 @@ import {
   sentenceParts,
   type Names,
 } from "./words";
+
+const compareNames = compare("en");
 
 // Add a trigger, a condition or a step: what it's about first, a room's
 // devices like the sidebar lists them, then the apps' pieces and the core's
@@ -214,7 +217,7 @@ function sectionsFor(
 
   // A room's devices and lights, in the sidebar's order.
   const rooms = [...(home.places?.rooms ?? [])].sort((a, b) =>
-    a.name.localeCompare(b.name),
+    compareNames(a.name, b.name),
   );
   const roomSections: Section[] = rooms.map((room) => {
     const entries: Entry[] = [];

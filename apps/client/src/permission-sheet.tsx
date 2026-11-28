@@ -1,6 +1,7 @@
 import { permissionWords, type AppInfo } from "@meetsanctum/app-sdk";
 import { Button } from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { list } from "@meetsanctum/app-sdk/words";
 
 import { AppIcon, plainIcon } from "./app-icon";
 import { permissionDetail, problemOf } from "./app-permissions";
@@ -32,11 +33,10 @@ type Asking = {
 
 // "see your remotes' presses and keep its own automations".
 function asWords(titles: readonly string[]) {
-  const words = titles.map(
-    (title) => title.charAt(0).toLowerCase() + title.slice(1),
+  return list(
+    "en",
+    titles.map((title) => title.charAt(0).toLowerCase() + title.slice(1)),
   );
-  if (words.length <= 1) return words.join("");
-  return `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`;
 }
 
 /** Asking for apps' permissions: `ask` for the bridge, and the sheet to draw. */
@@ -145,6 +145,7 @@ function PermissionSheet(props: {
         <DialogContent showCloseButton={false}>
           <DialogHeader className="gap-3">
             <AppIcon
+              appId={app.id}
               icon={app.icon ?? plainIcon}
               className="size-12 [&_svg]:size-7"
             />

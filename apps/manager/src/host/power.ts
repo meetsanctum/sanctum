@@ -1,12 +1,11 @@
-import { assertManaged, managedLabels } from "../docker-resources.js";
+import { managedLabels } from "../docker-resources.js";
 import {
   errorMessage,
-  inspectContainer,
   type DockerClientLike,
   type WaitableContainerLike,
 } from "../docker.js";
+import { prepareManagerHelper } from "../manager-helper.js";
 import { stack, stacked } from "../stack.js";
-import { managerContainerName } from "../update/manager-update.js";
 
 // Restart and Shut down, from Settings → System. The manager's container
 // cannot reboot the machine itself, so, as with its updater, it starts a
@@ -41,21 +40,14 @@ export function createPower(options: {
   let reservation = 0;
 
   async function makeHelper(action: PowerAction) {
-    const manager = await inspectContainer(docker, managerContainerName);
-    if (!manager) {
-      throw new Error(`No ${managerContainerName} container to start from`);
-    }
-    const stale = await inspectContainer(docker, powerContainerName);
-    if (stale) {
-      assertManaged(
-        { labels: stale.Config.Labels, name: stale.Name },
-        powerRole,
-      );
-      await docker.getContainer(stale.Id).remove({ force: true });
-    }
+    const image = await prepareManagerHelper(
+      docker,
+      powerContainerName,
+      powerRole,
+    );
     await docker.createContainer({
       name: powerContainerName,
-      Image: manager.Image,
+      Image: image,
       Entrypoint: ["nsenter"],
       Cmd: [
         "-t",

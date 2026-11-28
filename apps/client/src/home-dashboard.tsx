@@ -16,6 +16,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { compare } from "@meetsanctum/app-sdk/words";
 
 import { placeContacts } from "./contact";
 import { noRoomName, readingsOf, sensorReadings } from "./device-tiles";
@@ -39,6 +40,8 @@ import {
 } from "./room-sections";
 import { sameData, sameItems } from "./same-data";
 import { useTileHandlers, type Devices } from "./use-devices";
+
+const compareNames = compare("en");
 
 // Home's rooms: after the home's status, each room by name that has
 // something to show, under its name, which opens its page. A room's line
@@ -332,7 +335,7 @@ export function homePlaces(
     .sort(
       (a, b) =>
         position.get(a.deviceId)! - position.get(b.deviceId)! ||
-        a.name.localeCompare(b.name),
+        compareNames(a.name, b.name),
     );
   const rooms = devices.places?.rooms ?? [];
   return [

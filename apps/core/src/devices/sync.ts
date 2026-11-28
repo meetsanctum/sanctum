@@ -131,6 +131,34 @@ export function shownState(capability: CapabilitySync): State | null {
     : capability.observed;
 }
 
+/** Whether a reported field matches what was set, at the report's precision. */
+export function matchesField(observed: State, desired: State, field: string) {
+  const reported = observed[field];
+  const asked = desired[field];
+  if (reported === asked) return true;
+  if (
+    (field !== "hue" && field !== "saturation") ||
+    typeof reported !== "number" ||
+    typeof asked !== "number"
+  ) {
+    return false;
+  }
+  // At zero saturation the light has no hue. Some drivers report colour in
+  // whole degrees and percentages, and hue wraps around at 360 degrees.
+  if (
+    field === "hue" &&
+    observed.saturation === 0 &&
+    typeof desired.saturation === "number" &&
+    desired.saturation <= 0.5
+  ) {
+    return true;
+  }
+  const difference = Math.abs(reported - asked);
+  const distance =
+    field === "hue" ? Math.min(difference, 360 - difference) : difference;
+  return distance === 0 || (Number.isInteger(reported) && distance <= 0.5);
+}
+
 /**
  * Whether a report confirms what was asked. A field the device does not
  * report cannot be confirmed, so it does not hold the rest back, unless
@@ -141,8 +169,10 @@ export function confirms(
   desired: State,
   options: { reported?: boolean } = {},
 ) {
-  return Object.entries(desired).every(([field, value]) =>
-    field in observed ? observed[field] === value : !options.reported,
+  return Object.keys(desired).every((field) =>
+    field in observed
+      ? matchesField(observed, desired, field)
+      : !options.reported,
   );
 }
 

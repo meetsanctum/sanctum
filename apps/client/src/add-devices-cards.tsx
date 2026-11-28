@@ -84,13 +84,16 @@ export function stageText(joined: JoinedDevice, device?: DeviceInfo) {
 
 type Tone = "neutral" | "success" | "error";
 
+// A card's tint runs out before its foot, where a problem with Blink or a
+// new room appears in red: red words on a tint laid over the glass fall below
+// 4.5 : 1, and on the glass alone they keep it.
 const tones: Record<Tone, string> = {
   neutral:
-    "from-white/12 to-white/6 inset-shadow-[0_1px_0_rgb(255_255_255/0.1),0_0_0_1px_rgb(255_255_255/0.12)]",
+    "from-white/12 to-white/0 to-85% inset-shadow-[0_1px_0_rgb(255_255_255/0.1),0_0_0_1px_rgb(255_255_255/0.12)]",
   success:
-    "from-(--leaf)/20 to-(--leaf)/8 inset-shadow-[0_1px_0_rgb(255_255_255/0.08),0_0_0_1px_rgb(52_199_89/0.42)]",
+    "from-(--leaf)/20 to-(--leaf)/0 to-85% inset-shadow-[0_1px_0_rgb(255_255_255/0.08),0_0_0_1px_rgb(52_199_89/0.42)]",
   error:
-    "from-(--ruby)/20 to-(--ruby)/8 inset-shadow-[0_1px_0_rgb(255_255_255/0.08),0_0_0_1px_rgb(255_59_48/0.45)]",
+    "from-(--ruby)/20 to-(--ruby)/0 to-85% inset-shadow-[0_1px_0_rgb(255_255_255/0.08),0_0_0_1px_rgb(255_59_48/0.45)]",
 };
 
 const rounds: Record<Tone, string> = {
@@ -277,7 +280,7 @@ function BlinkButton(props: { device: DeviceInfo }) {
       {problem && (
         <p
           role="alert"
-          className="m-0 basis-full text-xs text-(--ruby-on-carbon)"
+          className="m-0 basis-full text-[13px] leading-[18px] text-(--ruby-on-carbon)"
         >
           {problem}
         </p>
@@ -452,7 +455,10 @@ function RoomChoice(props: {
           </Button>
         </div>
         {problem && (
-          <p role="alert" className="m-0 text-xs text-(--ruby-on-carbon)">
+          <p
+            role="alert"
+            className="m-0 text-[13px] leading-[18px] text-(--ruby-on-carbon)"
+          >
             {problem}
           </p>
         )}

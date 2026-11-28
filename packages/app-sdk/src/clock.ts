@@ -1,3 +1,5 @@
+import { dateFormatter, formatDate, invalidDate } from "./date-format.js";
+
 // The home clock works out dates and times in the home's time zone. Places
 // keeps the household's zone and hour preference. Workflows use the zone to
 // schedule time triggers, and Models uses it to count usage by day.
@@ -22,30 +24,8 @@ export type LocalParts = LocalDate & {
   second: number;
 };
 
-const formats = new Map<string, Intl.DateTimeFormat>();
-const maxFormats = 128;
-
-function formatter(
-  key: string,
-  locale: string,
-  options: Intl.DateTimeFormatOptions,
-) {
-  const found = formats.get(key);
-  if (found) {
-    formats.delete(key);
-    formats.set(key, found);
-    return found;
-  }
-  const created = new Intl.DateTimeFormat(locale, options);
-  if (formats.size === maxFormats) {
-    formats.delete(formats.keys().next().value!);
-  }
-  formats.set(key, created);
-  return created;
-}
-
 const partsFormat = (timeZone: string) =>
-  formatter(`parts|${timeZone}`, "en-US", {
+  dateFormatter(`parts|${timeZone}`, "en-US", {
     timeZone,
     hourCycle: "h23",
     year: "numeric",
@@ -283,20 +263,13 @@ export function hoursBetween(
   return hours;
 }
 
-const invalid = "Invalid Date";
-
-// What a formatter writes for an instant, or Invalid Date, as a Date says
-// itself, for one that isn't an instant, rather than failing to draw.
 function written(
   key: string,
   locale: string,
   options: Intl.DateTimeFormatOptions,
   at: Date | number,
 ) {
-  const time = typeof at === "number" ? at : at.getTime();
-  if (!Number.isFinite(time) || Math.abs(time) > 8_640_000_000_000_000)
-    return invalid;
-  return formatter(key, locale, options).format(time);
+  return formatDate(at, () => dateFormatter(key, locale, options));
 }
 
 // A time of day on the clock, with or without its seconds.
@@ -382,7 +355,7 @@ export function hourText(
     { timeZone, hour: "2-digit", hourCycle: "h23" },
     at,
   );
-  return hour === invalid ? hour : `${hour}:00`;
+  return hour === invalidDate ? hour : `${hour}:00`;
 }
 
 /** A day's name, such as Mon. */

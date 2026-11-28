@@ -1,4 +1,4 @@
-import type { AvailableApp, DeviceOffer } from "@meetsanctum/app-sdk";
+import type { AppInfo, AvailableApp, DeviceOffer } from "@meetsanctum/app-sdk";
 import { useEffect, useState } from "react";
 
 import { AddAppSheet } from "./add-app-sheet";
@@ -22,6 +22,7 @@ const leadWords = ({ name, found }: DeviceOffer) =>
 
 export function OfferedAppSheet(props: {
   offer: DeviceOffer;
+  apps: readonly AppInfo[];
   onAdded: () => void;
   onClose: () => void;
   restoreFocus: () => void;
@@ -55,6 +56,7 @@ export function OfferedAppSheet(props: {
   return (
     <AddAppSheet
       app={app}
+      apps={props.apps}
       lead={leadWords(offer)}
       onAdded={props.onAdded}
       onClose={onClose}

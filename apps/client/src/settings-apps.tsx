@@ -37,6 +37,7 @@ export function AppsSection(props: {
               className="-mx-2.5 w-[calc(100%+20px)]"
             >
               <AppIcon
+                appId={app.id}
                 icon={app.icon ?? plainIcon}
                 className="size-9 [&_svg]:size-5"
               />
@@ -77,6 +78,7 @@ export function AddAppsSection(props: {
               <li key={app.id} className="flex flex-col gap-1">
                 <div className="flex min-h-13 items-center gap-3">
                   <AppIcon
+                    appId={app.id}
                     icon={app.icon ?? plainIcon}
                     className="size-9 [&_svg]:size-5"
                   />
@@ -110,6 +112,7 @@ export function AddAppsSection(props: {
       <AddAppSheet
         key={shown?.id ?? "none"}
         app={shown}
+        apps={props.apps}
         onAdded={(app) => {
           // A late answer leaves alone a sheet opened since for another app.
           setAdding((current) =>

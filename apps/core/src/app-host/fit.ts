@@ -87,10 +87,15 @@ export function shortfallsOf(
     const dataNeeds = capacity.dataNeedsMb * mebibyte;
     const dataFree = capacity.dataFreeBytes;
     if (dataFree !== null && dataNeeds > dataFree) {
+      // Older managers clamp available space to zero, hiding any reserve deficit.
+      const toFree =
+        capacity.dataShortBytes ??
+        (dataFree > 0 ? dataNeeds - dataFree : undefined);
       shortfalls.push({
         kind: "space",
         needs: dataNeeds,
         free: dataFree,
+        ...(toFree !== undefined && { toFree }),
       });
     }
     return shortfalls;
@@ -113,8 +118,15 @@ export function shortfallsOf(
           sum + Math.max(0, image.sizeMb * mebibyte - image.bytes),
         0,
       );
-    const free = Math.max(0, storage.free - promised - keptForUpdates);
-    if (needs > free) shortfalls.push({ kind: "space", needs, free });
+    const spare = storage.free - promised - keptForUpdates;
+    if (needs > spare) {
+      shortfalls.push({
+        kind: "space",
+        needs,
+        free: Math.max(0, spare),
+        toFree: needs - spare,
+      });
+    }
   }
   return shortfalls;
 }

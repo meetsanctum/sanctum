@@ -1,10 +1,17 @@
 import type { DeviceInfo, EntityInfo, Places } from "@meetsanctum/app-sdk";
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
-import { useAppClient, useAppSettings } from "@meetsanctum/ui-sdk";
+import {
+  compare,
+  number,
+  useAppClient,
+  useAppSettings,
+} from "@meetsanctum/ui-sdk";
 import { useCallback, useEffect, useState } from "react";
 
 import type { Preview } from "../preview.js";
 import type { TargetState } from "../target.js";
+
+const compareNames = compare("en");
 
 // What natural light's page shows: the lights that take a colour
 // temperature, by room once it may read the home's rooms, where each that
@@ -179,7 +186,7 @@ export function useNaturalLight(): NaturalLightView {
           : [];
       }),
     )
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => compareNames(a.name, b.name));
   const rooms = places ? roomsOf(places, lights) : null;
 
   const follow = useCallback(
@@ -253,7 +260,7 @@ function roomsOf(places: Places, lights: readonly LightRow[]): RoomLights[] {
  * follows read alike.
  */
 export function kelvinLabel(kelvin: number) {
-  return `${(Math.round(kelvin / 50) * 50).toLocaleString()} K`;
+  return `${number("en", Math.round(kelvin / 50) * 50)} K`;
 }
 
 /** A colour temperature in mireds, as people read it. */

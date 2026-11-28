@@ -356,17 +356,34 @@ describe("failed commands", () => {
 describe("commands from here", () => {
   function showLight(
     id: string,
-    brightness: number,
+    brightness: number | null,
     sync: "synced" | "pending" | "conflict" = "synced",
+    color = false,
+    white = false,
   ) {
-    const lamp = light(id, id, "room", true);
+    const lamp = light(id, id, "room", brightness !== null);
     const capability = lamp.capabilities[0]!;
     if (capability.kind !== "light") throw new Error("Expected a light");
-    const state = { on: true, brightness };
+    const state =
+      brightness === null ? { on: false } : { on: true, brightness };
     devices.apply({
       type: "device",
       id,
-      device: { ...lamp, capabilities: [{ ...capability, state, sync }] },
+      device: {
+        ...lamp,
+        capabilities: [
+          {
+            ...capability,
+            features: {
+              ...capability.features,
+              color,
+              colorTemperature: white ? { min: 153, max: 500 } : null,
+            },
+            state,
+            sync,
+          },
+        ],
+      },
     });
   }
 
@@ -400,6 +417,124 @@ describe("commands from here", () => {
     ).toEqual([
       [60, 1],
       [30, undefined],
+    ]);
+  });
+
+  it("sends a room's colour to the lights that are off too, and fails one that could not take it", async () => {
+    act(() => {
+      devices.apply({ type: "places", places });
+      showLight("desk", 60, "synced", true);
+      showLight("shelf", null, "synced", true);
+    });
+    const result = deferred<LightsResult>();
+    client.lights.mockReturnValue(result.promise);
+    let setting!: Promise<LightsResult>;
+    act(() => {
+      setting = devices.setLights({ kind: "room", id: "room" }, devices.tiles, {
+        hue: 220,
+        saturation: 100,
+      });
+    });
+    await act(async () => {
+      result.resolve({
+        on: true,
+        switched: 1,
+        failed: [{ device: "shelf", capability: "light" }],
+      });
+      await setting;
+    });
+    expect(
+      devices.tiles.map(({ deviceId, failures }) => [deviceId, failures]),
+    ).toEqual([
+      ["desk", undefined],
+      ["shelf", 1],
+    ]);
+  });
+
+  it("still marks a dim-only light when it fails to turn off after a room colour is picked", async () => {
+    const place = { kind: "room", id: "room" } as const;
+    act(() => {
+      devices.apply({ type: "places", places });
+      showLight("desk", 60);
+      showLight("shelf", null, "synced", true);
+    });
+    client.lights.mockResolvedValueOnce({ on: false, switched: 1, failed: [] });
+    await act(async () => {
+      await devices.switchLights(place, devices.tiles, "off");
+      showLight("desk", null, "pending");
+    });
+
+    client.lights.mockResolvedValueOnce({ on: true, switched: 1, failed: [] });
+    await act(async () => {
+      await devices.setLights(place, devices.tiles, {
+        hue: 220,
+        saturation: 100,
+      });
+      showLight("desk", 60, "conflict");
+    });
+    expect(
+      devices.tiles.find((tile) => tile.deviceId === "desk")?.failures,
+    ).toBe(1);
+  });
+
+  it("marks only lights a failed room white would have changed", async () => {
+    act(() => {
+      devices.apply({ type: "places", places });
+      showLight("fixed-on", 60);
+      showLight("fixed-off", null);
+      showLight("tunable-white", 60, "synced", false, true);
+      showLight("colour-only", 60, "synced", true);
+    });
+    client.lights.mockRejectedValue(new Error("unavailable"));
+    await act(async () => {
+      await expect(
+        devices.setLights({ kind: "room", id: "room" }, devices.tiles, {
+          colorTemperature: 333,
+        }),
+      ).rejects.toThrow("unavailable");
+    });
+    expect(
+      devices.tiles.map(({ deviceId, failures }) => [deviceId, failures]),
+    ).toEqual([
+      ["fixed-on", undefined],
+      ["fixed-off", 1],
+      ["tunable-white", 1],
+      ["colour-only", 1],
+    ]);
+  });
+
+  it("marks every light the core says failed to take a room white", async () => {
+    act(() => {
+      devices.apply({ type: "places", places });
+      showLight("fixed-on", 60);
+      showLight("tunable-white", 60, "synced", false, true);
+    });
+    const result = deferred<LightsResult>();
+    client.lights.mockReturnValue(result.promise);
+    let setting!: Promise<LightsResult>;
+    act(() => {
+      setting = devices.setLights({ kind: "room", id: "room" }, devices.tiles, {
+        colorTemperature: 333,
+      });
+      showLight("tunable-white", 60, "pending", false, true);
+      showLight("tunable-white", 60, "conflict", false, true);
+    });
+    await act(async () => {
+      result.resolve({
+        on: false,
+        switched: 0,
+        failed: [
+          { device: "fixed-on", capability: "light" },
+          { device: "tunable-white", capability: "light" },
+        ],
+      });
+      await setting;
+    });
+    expect(
+      devices.tiles.map(({ deviceId, failures }) => [deviceId, failures]),
+    ).toEqual([
+      ["fixed-on", 1],
+      ["tunable-white", 1],
     ]);
   });
 

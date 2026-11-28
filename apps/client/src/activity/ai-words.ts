@@ -4,6 +4,7 @@ import {
   type ActivityInfo,
 } from "@meetsanctum/app-sdk";
 import type { HomeClock } from "@meetsanctum/app-sdk/clock";
+import { number } from "@meetsanctum/app-sdk/words";
 
 import { productName } from "../brand";
 import { providerNames } from "../models/words";
@@ -132,7 +133,7 @@ export function aiEntry(clock: HomeClock, entry: ActivityInfo): Words | null {
       const seconds =
         typeof entry.detail?.ms === "number" ? entry.detail.ms / 1000 : 0;
       return said(
-        `${app} asked ${source}: ${tokens.toLocaleString()} tokens in ${seconds.toFixed(1)} s`,
+        `${app} asked ${source}: ${number("en", tokens)} tokens in ${seconds.toFixed(1)} s`,
       );
     }
   }
