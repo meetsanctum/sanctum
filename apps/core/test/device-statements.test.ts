@@ -183,8 +183,10 @@ describe("a press of a room's six lights", () => {
         ).json() as EntityInfo[]
       ).filter((entity) => entity.type === type);
     const targets = () => published("naturalLight.target");
-    // Wait for all six lights to follow and for the room rule to include
-    // them. A later curve makes each light need a new look when it comes on.
+    // Let the curve reach all six lights before measuring a press. A later
+    // curve makes each light need a new look when it comes on. Natural Light
+    // publishes the room's rule for turning on after the lights' targets, and
+    // a rule from before it followed all six keeps the others off.
     await vi.waitFor(async () => {
       const current = await targets();
       expect(current).toHaveLength(6);
