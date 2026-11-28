@@ -366,17 +366,32 @@ describe("Settings → Apps → the app", () => {
   it("puts back what the core refused, and says so", async () => {
     await show(admin);
 
-    await type(field("Days"), "30");
-    await act(async () => leave(field("Days")));
+    const input = field("Days");
+    const hintId = input.getAttribute("aria-describedby")!;
+    expect(document.getElementById(hintId)?.textContent).toBe(
+      "How many days the page shows",
+    );
+    await type(input, "30");
+    await act(async () => leave(input));
 
-    expect(field("Days").value).toBe("7");
+    expect(input.value).toBe("7");
     // A field's own line, under it, saying what to use instead.
     const line =
-      field("Days").parentElement!.parentElement!.querySelector(
-        '[role="alert"]',
-      );
+      input.parentElement!.parentElement!.querySelector('[role="alert"]');
     expect(line?.textContent).toBe("Use a number from 1 to 14.");
     expect(line?.querySelector("[data-slot=alert-title]")).toBeNull();
+    expect(line?.id).toBeTruthy();
+    expect(input.getAttribute("aria-describedby")).toBe(
+      `${hintId} ${line!.id}`,
+    );
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+
+    await type(input, "8");
+    await act(async () => leave(input));
+
+    expect(input.getAttribute("aria-describedby")).toBe(hintId);
+    expect(input.hasAttribute("aria-invalid")).toBe(false);
+    expect(line?.isConnected).toBe(false);
   });
 
   it("says what step a refused number must use", async () => {

@@ -49,6 +49,7 @@ const createSession = () => ({
 
 export function PreferencesSection(props: { app: AppInfo; live: LiveFeed }) {
   const { app, live } = props;
+  const problemId = useId();
   const [values, setValues] = useState<AppSettings>();
   const [pending, setPending] = useState<PendingChange[]>([]);
   const sessionRef = useRef<ReturnType<typeof createSession> | undefined>(
@@ -165,10 +166,15 @@ export function PreferencesSection(props: { app: AppInfo; live: LiveFeed }) {
             <SettingField
               setting={setting}
               value={shown[name]}
+              problemId={
+                problem?.name === name && problem.refused
+                  ? problemId
+                  : undefined
+              }
               onChange={(value) => void save(name, value)}
             />
             {problem?.name === name && problem.refused && (
-              <SheetProblem>{problem.refused}</SheetProblem>
+              <SheetProblem id={problemId}>{problem.refused}</SheetProblem>
             )}
             {problem?.name === name && problem.failed && (
               <Problem title={`${setting.title} wasn't changed`}>
@@ -212,6 +218,7 @@ function refusedText(
 function SettingField(props: {
   setting: SettingSchema;
   value: SettingValue | undefined;
+  problemId?: string;
   onChange: (value: SettingValue | null) => void;
 }) {
   const { setting } = props;
@@ -286,10 +293,12 @@ function Toggle(props: {
 function TypedField(props: {
   setting: SettingSchema;
   value: SettingValue | undefined;
+  problemId?: string;
   onChange: (value: SettingValue | null) => void;
 }) {
-  const { setting, value } = props;
+  const { setting, value, problemId } = props;
   const id = useId();
+  const hintId = setting.description ? `${id}-hint` : undefined;
   const shown = value === undefined ? "" : String(value);
   const [draft, setDraft] = useState(shown);
   useEffect(() => setDraft(shown), [shown]);
@@ -315,6 +324,10 @@ function TypedField(props: {
       </label>
       <Input
         id={id}
+        aria-invalid={problemId ? true : undefined}
+        aria-describedby={
+          [hintId, problemId].filter(Boolean).join(" ") || undefined
+        }
         value={draft}
         inputMode={
           !isNumber
@@ -332,9 +345,14 @@ function TypedField(props: {
         onKeyDown={(event) => {
           if (event.key === "Enter") commit();
         }}
-        className={cn(field, isNumber && "max-w-32 tabular-nums")}
+        className={cn(
+          field,
+          isNumber && "max-w-32 tabular-nums",
+          // The refusal is shown below the field, which has its saved value back.
+          "aria-invalid:not-focus-visible:border-input aria-invalid:not-focus-visible:ring-0 aria-invalid:focus-visible:border-ring aria-invalid:focus-visible:ring-ring/50",
+        )}
       />
-      <Hint setting={setting} />
+      <Hint setting={setting} id={hintId} />
     </div>
   );
 }
