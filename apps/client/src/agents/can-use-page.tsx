@@ -24,7 +24,7 @@ import {
   CanUseRow,
   CanUseRows,
   switchProblem,
-  type SwitchProblem,
+  useSwitchProblem,
 } from "./rows";
 import {
   areaDetail,
@@ -59,7 +59,8 @@ export function CanUsePage(props: {
   } = useAiCanUse(props.live);
   const [pending, setPending] = useState<{ id: string; on: boolean }>();
   const [asking, setAsking] = useState<string>();
-  const [problem, setProblem] = useState<SwitchProblem>();
+  const areas = canUse?.areas ?? [];
+  const [problem, setProblem] = useSwitchProblem(areas);
   const focusAfterConfirm = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -103,7 +104,6 @@ export function CanUsePage(props: {
     );
   };
 
-  const areas = canUse?.areas ?? [];
   const offering = props.apps.filter(
     (app) => offersOf(canUse, app.id).length > 0,
   );
@@ -117,7 +117,9 @@ export function CanUsePage(props: {
       />
       {hasFailed && !canUse && (
         <div className="flex flex-col items-start gap-2">
-          <Problem title={`${canUseTitle} didn't load`}>{loadProblem}</Problem>
+          <Problem title="What AI agents can use didn't load">
+            {loadProblem}
+          </Problem>
           <Button variant="outline" onClick={() => void refresh()}>
             Try again
           </Button>

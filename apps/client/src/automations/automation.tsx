@@ -21,7 +21,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { blockedBy, blockedWords } from "./blocked";
 import { possessive } from "../frames/use-frame";
-import { pieceOf, problemOf, type Automations } from "./data";
+import { pieceOf, problemOf, runProblemOf, type Automations } from "./data";
 import { byHand } from "./list";
 import { MiniAvatar, PieceIcon, Sentence, Status } from "./parts";
 import { momentWords, runWords } from "./when";
@@ -95,6 +95,7 @@ export function AutomationPage(props: {
   const workflow = workflows?.find((each) => each.id === props.id);
   const [runs, setRuns] = useState<WorkflowRunInfo[]>();
   const [runsProblem, setRunsProblem] = useState<string>();
+  const [historyRefresh, setHistoryRefresh] = useState(0);
   // What didn't happen, and why.
   const [problem, setProblem] = useState<{ title: string; reason: string }>();
   const [working, setWorking] = useState(false);
@@ -138,7 +139,7 @@ export function AutomationPage(props: {
       current = false;
       clearTimeout(timer);
     };
-  }, [loadRuns, reload, props.id, updatedAt, lastRunId]);
+  }, [loadRuns, reload, props.id, updatedAt, lastRunId, historyRefresh]);
 
   if (!workflow || !pieces) {
     return <PageBar title="Automation" />;
@@ -153,13 +154,16 @@ export function AutomationPage(props: {
   const keptBy = workflow.app
     ? (props.names.app(workflow.app) ?? workflow.app)
     : undefined;
-  const act = async (failed: string, work: () => Promise<unknown>) => {
+  const act = async (
+    work: () => Promise<unknown>,
+    onFailure: (error: unknown) => { title: string; reason: string },
+  ) => {
     setWorking(true);
     setProblem(undefined);
     try {
       await work();
     } catch (error) {
-      setProblem({ title: failed, reason: problemOf(error) });
+      setProblem(onFailure(error));
     } finally {
       setWorking(false);
     }
@@ -185,8 +189,12 @@ export function AutomationPage(props: {
           label="Run"
           disabled={broken || !!blocked || working}
           onClick={() =>
-            void act(`${workflow.name} didn't run`, () =>
-              props.automations.run(workflow.id),
+            void act(
+              () => props.automations.run(workflow.id),
+              (error) => {
+                setHistoryRefresh((count) => count + 1);
+                return runProblemOf(workflow.name, error);
+              },
             )
           }
         />
@@ -312,12 +320,15 @@ export function AutomationPage(props: {
                       disabled={working}
                       onCheckedChange={(enabled) =>
                         void act(
-                          `“Runs on its own” wasn't turned ${enabled ? "on" : "off"}`,
                           () =>
                             props.automations.update({
                               id: workflow.id,
                               enabled,
                             }),
+                          (error) => ({
+                            title: `“Runs on its own” wasn't turned ${enabled ? "on" : "off"}`,
+                            reason: problemOf(error),
+                          }),
                         )
                       }
                     />

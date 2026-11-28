@@ -100,6 +100,17 @@ describe("removing an app", () => {
     expect(dialog()).toBeNull();
   });
 
+  it("explains why it can't show what removing an app takes", async () => {
+    vi.mocked(coreJson).mockRejectedValueOnce(new CoreError(404, "not_found"));
+    await press(container, "Remove Example");
+
+    expect(problemLines(container.querySelector('[role="alert"]'))).toEqual([
+      "Couldn't check what goes with Example",
+      "It isn't there any more.",
+    ]);
+    expect(dialog()).toBeNull();
+  });
+
   it("says when it can't be removed while it changes version", async () => {
     vi.mocked(coreJson).mockImplementation(async (path) => {
       if (path.endsWith("/removal")) return removal;

@@ -117,7 +117,7 @@ function PermissionSheet(props: {
       onDone(true);
     } catch (error) {
       const failed = off.find((id) => !current.permissions.includes(id))!;
-      setProblem(problemOf(error, app, permissionWords(failed).title, true));
+      setProblem(problemOf(error, app, permissionWords(failed), true));
     } finally {
       setPending(false);
     }

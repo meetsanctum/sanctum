@@ -42,6 +42,21 @@ export function problemOf(error: unknown) {
   return problemReason(error);
 }
 
+export function runProblemOf(name: string, error: unknown) {
+  if (
+    error instanceof CoreError &&
+    ((error.status < 500 && error.status !== 408) ||
+      error.code === "stopping" ||
+      error.code === "update_pending")
+  ) {
+    return { title: `${name} didn't run`, reason: problemOf(error) };
+  }
+  return {
+    title: `Couldn't confirm that ${name} ran`,
+    reason: "Check History before running it again.",
+  };
+}
+
 export function useAutomations(live: LiveFeed) {
   const [workflows, setWorkflows] = useState<WorkflowInfo[]>();
   const [pieces, setPieces] = useState<PieceInfo[]>();

@@ -178,7 +178,7 @@ export function AddSource(props: {
         setProblem({
           title:
             kind === "computer"
-              ? `Couldn't check ${address.trim()}`
+              ? "Couldn't check the address"
               : "Couldn't check the key",
           reason: problemReason(error),
         });

@@ -3,6 +3,7 @@ import type {
   PieceInfo,
   Places,
   WorkflowInfo,
+  WorkflowRunInfo,
 } from "@meetsanctum/app-sdk";
 
 import type { Names } from "../src/automations/words";
@@ -431,5 +432,39 @@ export function workflow(
     createdAt: "2026-10-30T08:00:00.000Z",
     updatedAt: "2026-10-30T08:00:00.000Z",
     ...fields,
+  };
+}
+
+export function workflowRun(
+  overrides: Partial<WorkflowRunInfo> = {},
+): WorkflowRunInfo {
+  return {
+    id: "run",
+    workflowId: "movie",
+    version: 1,
+    status: "succeeded",
+    trigger: { nodes: ["t"], key: null, data: {} },
+    startedBy: null,
+    startedOn: "Kitchen tablet",
+    reason: null,
+    error: null,
+    queuedAt: "2026-10-30T08:00:00.000Z",
+    startedAt: "2026-10-30T08:00:00.000Z",
+    endedAt: "2026-10-30T08:00:01.000Z",
+    steps: [
+      {
+        node: "s",
+        kind: "step",
+        app: null,
+        piece: "lights",
+        status: "succeeded",
+        input: { place: { kind: "room", id: "office" }, to: "on" },
+        output: null,
+        error: null,
+        startedAt: "2026-10-30T08:00:00.000Z",
+        endedAt: "2026-10-30T08:00:01.000Z",
+      },
+    ],
+    ...overrides,
   };
 }

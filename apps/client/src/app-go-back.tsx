@@ -69,8 +69,7 @@ export function GoBack(props: { app: AppInfo; to: AppGoBack | null }) {
   const clock = useHomeClock();
   const { app, to } = props;
   const [isAsking, setIsAsking] = useState(false);
-  const [problem, setProblem] = useState<string>();
-  const failed = `${app.name} didn't go back to ${to?.version}`;
+  const [problem, setProblem] = useState<{ version: string; reason: string }>();
   const path = pathOf(app);
   if (!to || !canGoBack(app)) return null;
   const goBack = () => {
@@ -78,7 +77,8 @@ export function GoBack(props: { app: AppInfo; to: AppGoBack | null }) {
     setProblem(undefined);
     // What it says next arrives as it changes, as any app's does.
     coreJson(path, { method: "POST", json: { id: to.id } }).catch(
-      (error: unknown) => setProblem(problemReason(error)),
+      (error: unknown) =>
+        setProblem({ version: to.version, reason: problemReason(error) }),
     );
   };
   return (
@@ -86,7 +86,11 @@ export function GoBack(props: { app: AppInfo; to: AppGoBack | null }) {
       <Button variant="outline" onClick={() => setIsAsking(true)}>
         Go back to {to.version}
       </Button>
-      {problem && <Problem title={failed}>{problem}</Problem>}
+      {problem && (
+        <Problem title={`${app.name} didn't go back to ${problem.version}`}>
+          {problem.reason}
+        </Problem>
+      )}
       <Dialog open={isAsking} onOpenChange={setIsAsking}>
         <DialogContent showCloseButton={false}>
           <DialogHeader>
