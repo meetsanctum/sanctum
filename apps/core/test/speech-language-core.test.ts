@@ -231,6 +231,9 @@ it("learns the language Household sets at once, and asks and replies in it", asy
     await vi.waitFor(() =>
       expect(home.stp.lessons.at(-1)).toMatchObject({
         language: "de",
+        // The model Sanctum's catalog names for German.
+        backend: "nemo",
+        model: "stt_de_citrinet_1024",
         templates: ["schalte das licht im {room} (ein|aus)"],
         lists: { room: ["Office"] },
       }),

@@ -2,18 +2,18 @@
 
 Upstream's Wyoming server, run without Home Assistant. It adds two events:
 
-- An authorized `train` event teaches it sentences in one language:
-  templates with blanks ("turn off the {room} lights") and the values of each
-  blank. It answers `trained` once the grammar is in place, while the grammar
-  it had keeps answering until then. A new language downloads its model
-  first, the old one still answering. The same sentences again answer at
-  once.
+- An authorized `train` event teaches it sentences in one language, with
+  the recognition model the core names for that language: templates with
+  blanks ("turn off the {room} lights") and the values of each blank. It
+  answers `trained` once the grammar is in place, while the grammar it had
+  keeps answering until then. A new language or model downloads first, the
+  old one still answering. The same lesson again answers at once.
 - A `voice-started` event says when speech began. The voice detector ends
   the utterance and sends the transcript. Speech outside the grammar
   gives an empty transcript.
 
 What it was taught stays in /data, with its models, so it answers from its
-last grammar after a restart until it is taught again.
+last grammar and model after a restart until it is taught again.
 """
 
 import argparse
@@ -48,10 +48,14 @@ from wyoming.vad import VoiceStarted  # noqa: E402
 
 _LOGGER = logging.getLogger("sanctum")
 
-# Parakeet for English and Citrinet for German: the models that heard every
-# command right on a Pi 4.
+# The core names a lesson's model from its language catalog (app-sdk's
+# languages.ts): Parakeet for English and Citrinet for German, the models
+# that heard every command right on a Pi 4. It takes only a model upstream
+# lists for the lesson's language on this backend, the one it has, so a
+# lesson can't fetch anything else. A lesson without one, from an older
+# core, gets that same model.
 BACKEND = "nemo"
-LANGUAGES = ("en", "de")
+_OMITTED_MODEL = object()
 
 # What one lesson may hold, far above a home's sentences and names.
 MAX_TEMPLATES = 2_000
@@ -95,8 +99,15 @@ class Taught:
             return {}
         return state if isinstance(state, dict) else {}
 
-    def write_state(self, language: str, digest: str) -> None:
-        state = {"version": 1, "language": language, "digest": digest}
+    def write_state(self, language: str, model: str, digest: str) -> None:
+        # Version 1 with the model beside it: an older image reads the rest
+        # and ignores the model, so going back to it keeps the grammar.
+        state = {
+            "version": 1,
+            "language": language,
+            "model": model,
+            "digest": digest,
+        }
         partial = self.state_path.with_name(".sanctum.json.tmp")
         partial.write_text(json.dumps(state))
         partial.replace(self.state_path)
@@ -109,16 +120,19 @@ class Taught:
         if (
             type(version) is not int
             or version != 1
-            or language not in LANGUAGES
+            or not isinstance(language, str)
             or not isinstance(digest, str)
             or not re.fullmatch(r"[0-9a-f]{64}", digest)
         ):
+            return
+        # An older image saved no model: it was the one for its language.
+        name = _model_for(language, state.get("model", _OMITTED_MODEL))
+        if name is None:
             return
         grammar = self.grammar(language, digest)
         if not grammar.is_file():
             return
         try:
-            name = models.model_name_for(language, BACKEND)
             model_dir = await asyncio.to_thread(
                 models.ensure_model, name, self.data / "models"
             )
@@ -159,13 +173,31 @@ async def _load_grammar(
     )
 
 
+def _model_for(language: Any, model: Any) -> Optional[str]:
+    """The model for a language, as named or upstream's, if upstream lists it."""
+    if not isinstance(language, str):
+        return None
+    listed = models.model_name_for(language, BACKEND)
+    if listed is None:
+        return None
+    return listed if model is _OMITTED_MODEL or model == listed else None
+
+
 def _lesson(data: Any) -> Dict[str, Any]:
     """The lesson a `train` event carries, checked, or ValueError."""
     if not isinstance(data, dict):
         raise ValueError("a lesson is an object")
     language = data.get("language")
-    if language not in LANGUAGES:
-        raise ValueError(f"no model for language {language!r}")
+    backend = data.get("backend", BACKEND)
+    if backend != BACKEND:
+        raise ValueError(f"no recognizer for backend {backend!r}")
+    model = _model_for(language, data.get("model", _OMITTED_MODEL))
+    if model is None:
+        raise ValueError(
+            f"no model {data.get('model')!r} for language {language!r}"
+            if "model" in data
+            else f"no model for language {language!r}"
+        )
     templates = data.get("templates")
     if (
         not isinstance(templates, list)
@@ -194,7 +226,12 @@ def _lesson(data: Any) -> Dict[str, Any]:
             )
         ):
             raise ValueError(f"list {name!r} is up to 2,000 names")
-    return {"language": language, "templates": templates, "lists": lists}
+    return {
+        "language": language,
+        "model": model,
+        "templates": templates,
+        "lists": lists,
+    }
 
 
 def _digest(lesson: Dict[str, Any]) -> str:
@@ -233,7 +270,7 @@ async def _train(taught: Taught, data: Any) -> Event:
             else None
         )
         try:
-            name = models.model_name_for(language, BACKEND)
+            name = lesson["model"]
             model_dir = await asyncio.to_thread(
                 models.ensure_model, name, taught.data / "models"
             )
@@ -247,7 +284,7 @@ async def _train(taught: Taught, data: Any) -> Event:
                 grammar,
             )
             holder, info = await _load_grammar(language, name, model_dir, grammar)
-            taught.write_state(language, digest)
+            taught.write_state(language, name, digest)
         except Exception as error:  # noqa: BLE001
             if grammar != previous:
                 shutil.rmtree(grammar.parent, ignore_errors=True)

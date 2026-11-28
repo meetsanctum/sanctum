@@ -13,7 +13,8 @@ import { createReader, SpeechError, type WyomingEvent } from "./wyoming.js";
 // `audio-chunk` events, and back `voice-started` once speech begins and
 // `transcript` once its voice detector hears it end, or after `audio-stop`.
 // A `train` event, with the service's token, teaches it a lesson, and it
-// answers `trained`.
+// answers `trained`. A lesson names its model, so the service hears each
+// language with the one Sanctum's catalog chose.
 
 /** How long a run may go without speech beginning: nobody spoke. */
 export const noVoiceMs = 4_000;
@@ -23,9 +24,15 @@ const connectMs = 5_000;
 /** How long a lesson may take, a model's first download included. */
 export const lessonMs = 15 * 60_000;
 
-/** What speech recognition learns: templates and each blank's names. */
+/**
+ * What speech recognition learns: templates and each blank's names, in a
+ * language, with the model the catalog names for it (app-sdk's
+ * languages.ts), which the service checks against its own list.
+ */
 export type Lesson = {
   language: string;
+  backend: string;
+  model: string;
   templates: readonly string[];
   lists: Record<string, readonly string[]>;
 };

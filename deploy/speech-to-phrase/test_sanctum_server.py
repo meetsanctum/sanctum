@@ -25,7 +25,7 @@ class TrainingTests(unittest.IsolatedAsyncioTestCase):
         tmp = self.enterContext(tempfile.TemporaryDirectory())
         self.data = Path(tmp)
         self.taught = server.Taught(self.data, train_token=TOKEN)
-        self.enterContext(
+        self.ensure = self.enterContext(
             patch.object(server.models, "ensure_model", return_value=self.data)
         )
         self.compiler = self.enterContext(
@@ -78,6 +78,96 @@ class TrainingTests(unittest.IsolatedAsyncioTestCase):
         await restored.restore()
         self.assertEqual(restored.digest, retried.data["digest"])
         self.assertEqual(restored.holder.file.read_text(), lesson["templates"][0])
+
+    def test_a_lesson_takes_the_model_listed_for_its_language(self):
+        # These are the backend and model pairs the core sends from its catalog.
+        for language, backend, model, sentence in (
+            ("en", "nemo", "stt_en_parakeet_tdt_ctc_110m", "turn on the light"),
+            ("de", "nemo", "stt_de_citrinet_1024", "mach das licht an"),
+        ):
+            with self.subTest(language=language):
+                lesson = {**LESSON, "language": language, "templates": [sentence]}
+                named = server._lesson({**lesson, "backend": backend, "model": model})
+                self.assertEqual(named["model"], model)
+                self.assertEqual(server._lesson(lesson), named)
+
+    def test_invalid_lesson_models_are_rejected(self):
+        english = server.models.model_name_for("en", server.BACKEND)
+        german = server.models.model_name_for("de", server.BACKEND)
+        for lesson in (
+            {**LESSON, "model": german},
+            {**LESSON, "model": "../elsewhere"},
+            {**LESSON, "model": None},
+            {**LESSON, "backend": "coqui", "model": english},
+            {**LESSON, "language": "xx"},
+            {**LESSON, "language": None},
+        ):
+            with self.assertRaises(ValueError):
+                server._lesson(lesson)
+
+    def test_the_lesson_digest_changes_with_the_model(self):
+        lesson = server._lesson(LESSON)
+        self.assertNotEqual(
+            server._digest(lesson), server._digest({**lesson, "model": "another-model"})
+        )
+
+    async def test_trains_with_the_lesson_model_and_keeps_it(self):
+        german = server.models.model_name_for("de", server.BACKEND)
+        lesson = {
+            **LESSON,
+            "language": "de",
+            "model": german,
+            "templates": ["mach das licht an"],
+        }
+        reply = await server._train(self.taught, lesson)
+        self.assertTrue(reply.data["changed"])
+        self.ensure.assert_called_with(german, self.data / "models")
+        state = self.taught.read_state()
+        self.assertEqual(
+            state,
+            {
+                "version": 1,
+                "language": "de",
+                "model": german,
+                "digest": reply.data["digest"],
+            },
+        )
+        restored = server.Taught(self.data)
+        self.ensure.reset_mock()
+        await restored.restore()
+        self.ensure.assert_called_once_with(german, self.data / "models")
+        self.assertEqual(restored.digest, reply.data["digest"])
+        self.assertEqual(restored.language, "de")
+
+    async def test_restores_an_older_image_state_with_its_language_model(self):
+        reply = await server._train(self.taught, LESSON)
+        digest = reply.data["digest"]
+        english = server.models.model_name_for("en", server.BACKEND)
+        self.taught.state_path.write_text(
+            server.json.dumps({"version": 1, "language": "en", "digest": digest})
+        )
+        restored = server.Taught(self.data)
+        self.ensure.reset_mock()
+        await restored.restore()
+        self.ensure.assert_called_once_with(english, self.data / "models")
+        self.assertEqual(restored.digest, digest)
+
+    async def test_restore_refuses_a_model_for_another_language(self):
+        reply = await server._train(self.taught, LESSON)
+        digest = reply.data["digest"]
+        self.taught.state_path.write_text(
+            server.json.dumps(
+                {
+                    "version": 1,
+                    "language": "en",
+                    "model": server.models.model_name_for("de", server.BACKEND),
+                    "digest": digest,
+                }
+            )
+        )
+        elsewhere = server.Taught(self.data)
+        await elsewhere.restore()
+        self.assertIsNone(elsewhere.digest)
 
     async def test_uncommitted_grammar_does_not_replace_the_saved_one(self):
         original = await server._train(self.taught, LESSON)

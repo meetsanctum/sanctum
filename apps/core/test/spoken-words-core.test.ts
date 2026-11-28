@@ -161,6 +161,8 @@ it("teaches the Assistant's sentences and hears a speaker's words with them", as
       () =>
         expect(stp.lessons[0]).toEqual({
           language: "en",
+          backend: "nemo",
+          model: "stt_en_parakeet_tdt_ctc_110m",
           templates: ["turn (on|off) [the] {light}"],
           // The name the core gave the lamp as it registered.
           lists: {
